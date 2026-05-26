@@ -1,26 +1,28 @@
-const { initializeApp, cert } = require('firebase-admin/app');
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 export default async function handler(req, res) {
   try {
-    // 1. Carga segura de credenciales
-    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-    if (!global.firebaseApp) {
+    // 1. Inicialización segura de Firebase (el "seguro" contra errores)
+    if (!getApps().length) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
       initializeApp({ credential: cert(serviceAccount) });
     }
     const db = getFirestore();
     
-    // 2. Configuración Gemini
+    // 2. Configuración de Gemini actualizada (modelo activo)
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     // 3. Ejecución
-    const result = await model.generateContent("Hola, Sublichat, confirma que estás activo.");
-    res.status(200).json({ respuesta: "Sistema activo, Lic. Esperando sus órdenes." });
+    const { consulta } = req.body;
+    const result = await model.generateContent("Eres Sublichat. Responde brevemente y siempre de usted: " + consulta);
+    const response = await result.response;
+    
+    res.status(200).json({ respuesta: response.text() });
     
   } catch (error) {
-    // Esto es lo que nos dirá el error real en pantalla
-    res.status(500).json({ error: "Error de conexión: " + error.message });
+    res.status(500).json({ error: error.message });
   }
 }
