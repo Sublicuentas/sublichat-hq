@@ -1,38 +1,44 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <meta charset="UTF-8">
+    <title>Sublichat | Cuartel General</title>
     <style>
-        body { background: #000; color: #00FF00; font-family: 'Orbitron', sans-serif; height: 100vh; display: flex; flex-direction: column; }
-        .hud-header { border-bottom: 2px solid #E60000; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .main-view { flex-grow: 1; display: grid; grid-template-columns: 300px 1fr; gap: 20px; padding: 20px; }
-        .panel { border: 1px solid #333; padding: 20px; background: rgba(20,20,20,0.8); }
-        .chat-log { height: 400px; overflow-y: auto; color: #fff; }
+        body { background: #050505; color: #fff; font-family: 'Orbitron', sans-serif; height: 100vh; margin: 0; display: flex; flex-direction: column; }
+        .hud-header { border-bottom: 2px solid #E60000; padding: 20px; display: flex; justify-content: space-between; align-items: center; background: #0a0a0a; }
+        .main-view { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; }
+        .chat-log { flex-grow: 1; overflow-y: auto; border: 1px solid #333; padding: 20px; margin-bottom: 20px; border-radius: 10px; background: rgba(0,0,0,0.5); }
+        .input-panel { display: flex; gap: 10px; }
+        input { flex-grow: 1; padding: 15px; background: #111; border: 1px solid #444; color: #fff; border-radius: 5px; }
+        button { background: #E60000; border: none; padding: 15px 30px; color: white; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="hud-header">
-        <img src="public/logo.png" style="height: 50px;">
-        <h2>CUARTEL GENERAL - SUBLICHAT</h2>
-        <img src="public/mascota.png" style="height: 60px; border-radius: 50%;">
+        <img src="/logo.png" style="height: 50px;" alt="Logo">
+        <h2>CENTRO DE MANDO - SUBLICHAT</h2>
+        <img src="/mascota.png" style="height: 60px; border-radius: 50%; border: 2px solid #00FFFF;" alt="Mascota">
     </div>
     <div class="main-view">
-        <div class="panel"><h3>DATOS CLIENTES</h3><div id="data-display">Esperando consulta...</div></div>
-        <div class="panel">
-            <div class="chat-log" id="chat"></div>
-            <input type="text" id="userInput" style="width:100%; background:#111; color:#fff; padding:10px;">
-            <button onclick="enviar()" style="background:#E60000; color:#fff;">CONSULTAR</button>
+        <div class="chat-log" id="chat"></div>
+        <div class="input-panel">
+            <input type="text" id="userInput" placeholder="Ej: Analizar cartera de clientes...">
+            <button onclick="enviar()">EJECUTAR</button>
         </div>
     </div>
     <script>
         async function enviar() {
-            const input = document.getElementById('userInput').value;
+            const input = document.getElementById('userInput');
             const chat = document.getElementById('chat');
+            const consulta = input.value;
+            chat.innerHTML += `<div>Lic: ${consulta}</div>`;
             const res = await fetch('/api/chat', { 
                 method: 'POST', 
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ consulta: input }) 
+                body: JSON.stringify({ consulta }) 
             }).then(r => r.json());
-            chat.innerHTML += `<div>Lic: ${input}</div><div style="color:#E60000;">Sublichat: ${res.respuesta || res.error}</div>`;
+            chat.innerHTML += `<div style="color: #E60000; margin-bottom:10px;">Sublichat: ${res.respuesta || res.error}</div>`;
+            input.value = "";
         }
     </script>
 </body>
