@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const db = getFirestore();
     
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const { consulta } = req.body;
     const result = await model.generateContent("Eres Sublichat, el secretario virtual de Sublicuentas. Responde brevemente, sé profesional y siempre trata al Licenciado de usted: " + consulta);
