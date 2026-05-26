@@ -2,42 +2,25 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Inicialización segura de Firebase
-if (!global.firebaseApp) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-  global.firebaseApp = initializeApp({ credential: cert(serviceAccount) });
-}
-const db = getFirestore();
-
-// Inicialización de Gemini Pro
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).send('Solo POST');
-
-  const { consulta } = req.body;
-
   try {
-    // 1. Extraer contexto de clientes (Solo Lectura)
-    const snapshot = await db.collection('clientes').limit(50).get();
-    let contextoClientes = "Cartera de clientes actual:\n";
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      contextoClientes += `- ${d.nombre}: Vence ${d.vencimiento}, Pagado: ${d.total_pagado} Lps\n`;
-    });
-
-    // 2. Ejecutar IA con Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const prompt = `Eres Sublichat, el secretario virtual de Sublicuentas. 
-    REGLA DE ORO: Siempre trata a los clientes de "Usted" en tus respuestas.
-    Contexto de la empresa: ${contextoClientes}
-    Orden del Licenciado: ${consulta}`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+    // 1. Carga segura de credenciales
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    if (!global.firebaseApp) {
+      initializeApp({ credential: cert(serviceAccount) });
+    }
+    const db = getFirestore();
     
-    res.status(200).json({ respuesta: response.text() });
+    // 2. Configuración Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+    // 3. Ejecución
+    const result = await model.generateContent("Hola, Sublichat, confirma que estás activo.");
+    res.status(200).json({ respuesta: "Sistema activo, Lic. Esperando sus órdenes." });
+    
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Esto es lo que nos dirá el error real en pantalla
+    res.status(500).json({ error: "Error de conexión: " + error.message });
   }
 }
