@@ -1,30 +1,43 @@
-// Este es el puente que conecta su consulta con sus datos
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Inicializamos con el .json que usted tiene
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-initializeApp({ credential: cert(serviceAccount) });
+// Inicialización segura de Firebase
+if (!global.firebaseApp) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+  global.firebaseApp = initializeApp({ credential: cert(serviceAccount) });
+}
 const db = getFirestore();
 
-// Aquí programamos al asistente con su regla inquebrantable
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Inicialización de Gemini Pro
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export default async function handler(req, res) {
-  const { consulta } = req.body;
-  
-  // 1. Consultar a Firebase (Solo lectura)
-  const snapshot = await db.collection('clientes').get();
-  
-  // 2. Enviar a OpenAI con la instrucción de tratar a los clientes de "usted"
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: "Eres el secretario virtual de Sublicuentas. Siempre redacta mensajes tratanto a los clientes de usted. Tu trabajo es analizar datos de Firebase y buscar información." },
-      { role: "user", content: consulta }
-    ]
-  });
+  if (req.method !== 'POST') return res.status(405).send('Solo POST');
 
-  res.status(200).json({ respuesta: completion.choices[0].message.content });
+  const { consulta } = req.body;
+
+  try {
+    // 1. Extraer contexto de clientes (Solo Lectura)
+    const snapshot = await db.collection('clientes').limit(50).get();
+    let contextoClientes = "Cartera de clientes actual:\n";
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      contextoClientes += `- ${d.nombre}: Vence ${d.vencimiento}, Pagado: ${d.total_pagado} Lps\n`;
+    });
+
+    // 2. Ejecutar IA con Gemini
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `Eres Sublichat, el secretario virtual de Sublicuentas. 
+    REGLA DE ORO: Siempre trata a los clientes de "Usted" en tus respuestas.
+    Contexto de la empresa: ${contextoClientes}
+    Orden del Licenciado: ${consulta}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    res.status(200).json({ respuesta: response.text() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
