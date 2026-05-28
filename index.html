@@ -214,69 +214,40 @@
 */
 const CONFIG = {
   firebase: {
-    apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
-    authDomain: "sublicuentasbot.firebaseapp.com",
-    projectId: "sublicuentasbot",
-    storageBucket: "sublicuentasbot.firebasestorage.app",
-    messagingSenderId: "17227154881",
-    appId: "1:17227154881:web:654a1c94c2c6a331d95b40",
-    measurementId: "G-40Z71BGE7E"
+    // apiKey: "AIza...",
+    // authDomain: "tu-proyecto.firebaseapp.com",
+    // projectId: "tu-proyecto",
+    // storageBucket: "tu-proyecto.appspot.com",
+    // messagingSenderId: "000000000000",
+    // appId: "1:000:web:abc123"
   },
-  collection: "clientes",            // ← tu colección
+  collection: "clientes",          // ← nombre de tu colección en Firestore
   fields: {
-    // --- nivel cliente (documento) ---
-    nombre:    "nombrePerfil",       // nombre del cliente
-    telefono:  "telefono",
-    vendedor:  "vendedor",
-    servicios: "servicios",          // ← array de servicios dentro del cliente
-    // --- nivel servicio (cada item del array) ---
-    s_plataforma: "plataforma",
-    s_precio:     "precio",
-    s_fecha:      "fechaRenovacion",
-    s_correo:     "correo"
+    nombre:     "nombre",          // ← campo del nombre del cliente
+    plataforma: "plataforma",      // ← campo de la plataforma/servicio
+    precio:     "precio",          // ← campo del precio (número)
+    renovacion: "fechaRenovacion", // ← campo de fecha de renovación
+    estado:     "estado"           // ← (opcional) campo de estado
   },
-  chatEndpoint: "/api/chat"          // tu función serverless de Gemini
+  chatEndpoint: "/api/chat"        // tu función serverless de Gemini
 };
 
-/* Códigos de plataforma → nombre bonito. Agregá los tuyos si faltan. */
-const PLAT_LABELS = {
-  netflix:"Netflix", disneyp:"Disney+", disney:"Disney+", hbomax:"HBO Max", hbo:"HBO Max",
-  primevideo:"Prime Video", prime:"Prime Video", spotify:"Spotify", vix:"ViX",
-  crunchyroll:"Crunchyroll", paramount:"Paramount+", star:"Star+", youtube:"YouTube Premium",
-  iptv:"IPTV", "vip netflix":"VIP Netflix"
-};
-const platLabel = p => {
-  const k=String(p||"").toLowerCase().trim();
-  return PLAT_LABELS[k] || (p ? p.charAt(0).toUpperCase()+p.slice(1) : "—");
-};
-
-/* ─── Datos DEMO (se usan si no hay firebaseConfig). Misma forma que tu Firestore. ─── */
+/* ─── Datos DEMO (se usan si no hay firebaseConfig) ─── */
 const today = new Date(); today.setHours(0,0,0,0);
-const offset = d => { const x=new Date(today); x.setDate(x.getDate()+d);
-  return String(x.getDate()).padStart(2,"0")+"/"+String(x.getMonth()+1).padStart(2,"0")+"/"+x.getFullYear(); };
+const offset = d => { const x=new Date(today); x.setDate(x.getDate()+d); return x.toISOString().slice(0,10); };
 const DEMO = [
-  {nombrePerfil:"Glenda Galeas", telefono:"95810001", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"netflix", precio:130, fechaRenovacion:offset(0), correo:"glenda@mail.com"}]},
-  {nombrePerfil:"Rosaly Garcia", telefono:"95810002", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"netflix", precio:150, fechaRenovacion:offset(0), correo:"rosaly@mail.com"}]},
-  {nombrePerfil:"Josue Sanchez", telefono:"95810003", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"disneyp", precio:60, fechaRenovacion:offset(0), correo:"josue@mail.com"}]},
-  {nombrePerfil:"Aaron Flores", telefono:"99979351", vendedor:"Sublicuentas",
-   servicios:[
-     {plataforma:"disneyp", precio:90, fechaRenovacion:offset(2), correo:"coconut@cap.com"},
-     {plataforma:"primevideo", precio:70, fechaRenovacion:offset(3), correo:"sublihn08@mail.com"}]},
-  {nombrePerfil:"Carlos Medina", telefono:"95810005", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"netflix", precio:130, fechaRenovacion:offset(5), correo:"carlos@mail.com"}]},
-  {nombrePerfil:"Andrea Flores", telefono:"95810006", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"disneyp", precio:60, fechaRenovacion:offset(6), correo:"andrea@mail.com"}]},
-  {nombrePerfil:"Luis Cruz", telefono:"95810007", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"hbomax", precio:70, fechaRenovacion:offset(11), correo:"luis@mail.com"}]},
-  {nombrePerfil:"Geisell Valle", telefono:"95810008", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"netflix", precio:150, fechaRenovacion:offset(-2), correo:"geisell@mail.com"}]},
-  {nombrePerfil:"Diego Ramos", telefono:"95810009", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"primevideo", precio:70, fechaRenovacion:offset(-5), correo:"diego@mail.com"}]},
-  {nombrePerfil:"Sofia Banegas", telefono:"95810010", vendedor:"Sublicuentas",
-   servicios:[{plataforma:"disneyp", precio:60, fechaRenovacion:offset(8), correo:"sofia@mail.com"}]}
+  {nombre:"Glenda Galeas",   plataforma:"Netflix",     precio:130, fechaRenovacion:offset(0)},
+  {nombre:"Rosaly Garcia",   plataforma:"VIP Netflix", precio:150, fechaRenovacion:offset(0)},
+  {nombre:"Josue Sanchez",   plataforma:"Disney+",     precio:60,  fechaRenovacion:offset(0)},
+  {nombre:"Nissy Villeda",   plataforma:"HBO Max",     precio:70,  fechaRenovacion:offset(2)},
+  {nombre:"Wendy Raudales",  plataforma:"Prime Video", precio:70,  fechaRenovacion:offset(3)},
+  {nombre:"Carlos Medina",   plataforma:"Netflix",     precio:130, fechaRenovacion:offset(5)},
+  {nombre:"Andrea Flores",   plataforma:"Disney+",     precio:60,  fechaRenovacion:offset(6)},
+  {nombre:"Luis Cruz",       plataforma:"HBO Max",     precio:70,  fechaRenovacion:offset(11)},
+  {nombre:"Maria Lopez",     plataforma:"Netflix",     precio:130, fechaRenovacion:offset(14)},
+  {nombre:"Geisell Valle",   plataforma:"VIP Netflix", precio:150, fechaRenovacion:offset(-2)},
+  {nombre:"Diego Ramos",     plataforma:"Prime Video", precio:70,  fechaRenovacion:offset(-5)},
+  {nombre:"Sofia Banegas",   plataforma:"Disney+",     precio:60,  fechaRenovacion:offset(8)}
 ];
 
 /* ─────────── ESTADO + HELPERS ─────────── */
@@ -302,23 +273,7 @@ function statusOf(date){
   if(n<=7) return {k:"soon",t:`En ${n} día${n>1?"s":""}`};
   return {k:"ok",t:`En ${n} días`};
 }
-// Aplana un cliente: 1 fila por cada servicio que tenga adentro.
-function flattenCliente(doc){
-  const F=CONFIG.fields;
-  const nombre = doc[F.nombre] || "—";
-  const tel    = doc[F.telefono] || "";
-  const vend   = doc[F.vendedor] || "";
-  const servs  = Array.isArray(doc[F.servicios]) ? doc[F.servicios] : [];
-  return servs.map(s=>({
-    nombre,
-    telefono: tel,
-    vendedor: vend,
-    plataforma: platLabel(s[F.s_plataforma]),
-    precio: Number(s[F.s_precio])||0,
-    correo: s[F.s_correo] || "",
-    fecha: parseDate(s[F.s_fecha])
-  }));
-}
+const norm = c => ({ nombre:c.nombre||"—", plataforma:c.plataforma||"—", precio:Number(c.precio)||0, fecha:parseDate(c.fechaRenovacion||c.renovacion) });
 
 /* ─────────── CARGA DE DATOS ─────────── */
 async function load(){
@@ -330,15 +285,18 @@ async function load(){
       const app = initializeApp(cfg);
       const db  = getFirestore(app);
       const snap= await getDocs(collection(db, CONFIG.collection));
-      DATA = snap.docs.flatMap(d=>flattenCliente(d.data()));
-      document.getElementById("srcLabel").textContent = `Firebase · ${DATA.length} servicios`;
+      const F=CONFIG.fields;
+      DATA = snap.docs.map(d=>{ const x=d.data(); return norm({
+        nombre:x[F.nombre], plataforma:x[F.plataforma], precio:x[F.precio], fechaRenovacion:x[F.renovacion], estado:x[F.estado]
+      });});
+      document.getElementById("srcLabel").textContent = `Firebase · ${DATA.length} clientes`;
     }catch(e){
       console.error(e);
-      DATA = DEMO.flatMap(flattenCliente);
+      DATA = DEMO.map(norm);
       document.getElementById("srcLabel").textContent = "Error Firebase · modo demo";
     }
   }else{
-    DATA = DEMO.flatMap(flattenCliente);
+    DATA = DEMO.map(norm);
     document.getElementById("srcLabel").textContent = "Modo demo (sin Firebase)";
   }
   render();
@@ -350,8 +308,7 @@ function render(){
   const hoy=DATA.filter(c=>c.fecha && daysTo(c.fecha)===0);
   const sem=DATA.filter(c=>c.fecha && daysTo(c.fecha)>0 && daysTo(c.fecha)<=7);
   document.getElementById("kCartera").textContent=fmt(tot);
-  const nClientes=new Set(DATA.map(c=>c.nombre)).size;
-  document.getElementById("kClientes").textContent=`${nClientes} clientes · ${DATA.length} servicios`;
+  document.getElementById("kClientes").textContent=`${DATA.length} clientes activos`;
   document.getElementById("kHoy").textContent=hoy.length;
   document.getElementById("kHoyMonto").textContent=fmt(hoy.reduce((s,c)=>s+c.precio,0));
   document.getElementById("kSemana").textContent=sem.length;
