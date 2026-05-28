@@ -1,62 +1,45 @@
-// api/tmdb.js  ·  Buscador de películas/series con disponibilidad de streaming
-// 1) Sacá tu API key gratis en https://www.themoviedb.org/settings/api
-//    (Crear cuenta → Settings → API → "API Read Access Token" NO; usá la "API Key (v3 auth)")
-// 2) En Vercel → Settings → Environment Variables agregá: TMDB_API_KEY = tu_key
-// 3) Redeploy. Listo.
+// api/chat.js  ·  Función serverless para Vercel (protege tu API key de Gemini)
+// 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
+// 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
+//    (la sacas en https://aistudio.google.com/apikey)
+// 3) Listo. El frontend ya le manda la pregunta + el contexto de tus clientes.
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
-  const { query } = req.body || {};
-  if (!query) return res.status(400).json({ error: "Falta el texto de búsqueda" });
 
-  const KEY = (process.env.TMDB_API_KEY || "").trim();
-  if (!KEY) return res.status(500).json({ error: "Falta TMDB_API_KEY en Vercel" });
+  const { pregunta, hoy, clientes } = req.body || {};
+  if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
 
-  const REGION = "HN"; // Honduras
+  const API_KEY = process.env.GEMINI_API_KEY;
+  if (!API_KEY) return res.status(500).json({ error: "Falta GEMINI_API_KEY en Vercel" });
+
+  // Contexto: le damos a Gemini los datos reales para que NO invente.
+  const systemPrompt = `Eres "Sublichat", el asistente analítico de Sublicuentas, un negocio hondureño
+de reventa de suscripciones (Netflix, Disney+, HBO Max, Prime Video, etc.).
+Hablas en español de Honduras, claro y directo, usando "usted". La moneda es Lempiras (Lps).
+Hoy es ${hoy}. SOLO usas los datos que te paso abajo; nunca inventes clientes ni montos.
+Si te piden listados, hazlos ordenados. Si piden finanzas, suma los precios exactos.
+Datos de clientes (n=nombre, p=plataforma, $=precio en Lps, d=fecha renovación, e=estado):
+${JSON.stringify(clientes || [])}`;
+
   try {
-    // 1. Buscar (pelis + series a la vez)
-    const sUrl = `https://api.themoviedb.org/3/search/multi?api_key=${KEY}&language=es-ES&query=${encodeURIComponent(query)}&include_adult=false`;
-    const sResp = await fetch(sUrl);
-    const sData = await sResp.json();
-
-    // Si TMDB rechaza la key, avisamos con el detalle real
-    if (sData.success === false || sData.status_code) {
-      return res.status(200).json({ error: "TMDB: " + (sData.status_message || "clave inválida") });
-    }
-
-    const items = (sData.results || [])
-      .filter(r => (r.media_type === "movie" || r.media_type === "tv") && (r.title || r.name))
-      .slice(0, 8);
-
-    if (!items.length) return res.status(200).json({ resultados: [] });
-
-    // 2. Para cada resultado, dónde verlo en HN
-    const out = await Promise.all(items.map(async r => {
-      const type = r.media_type;
-      let proveedores = [];
-      try {
-        const pUrl = `https://api.themoviedb.org/3/${type}/${r.id}/watch/providers?api_key=${KEY}`;
-        const pData = await (await fetch(pUrl)).json();
-        const hn = pData.results?.[REGION];
-        if (hn) {
-          const flat = [...(hn.flatrate||[]), ...(hn.free||[]), ...(hn.ads||[])];
-          proveedores = [...new Set(flat.map(p => p.provider_name))];
-        }
-      } catch(e){}
-      return {
-        titulo: r.title || r.name,
-        tipo: type === "movie" ? "Película" : "Serie",
-        anio: (r.release_date || r.first_air_date || "").slice(0,4),
-        poster: r.poster_path ? `https://image.tmdb.org/t/p/w200${r.poster_path}` : null,
-        rating: r.vote_average ? Math.round(r.vote_average*10)/10 : null,
-        sinopsis: r.overview || "",
-        proveedores
-      };
-    }));
-
-    return res.status(200).json({ resultados: out });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: pregunta }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 800 }
+      })
+    });
+    const data = await r.json();
+    const respuesta =
+      data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ||
+      "No obtuve respuesta de Gemini.";
+    return res.status(200).json({ respuesta });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: "Error consultando TMDB: " + (e.message || "desconocido") });
+    return res.status(500).json({ error: "Error al contactar Gemini" });
   }
 }
