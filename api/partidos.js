@@ -1,4 +1,4 @@
-// api/partidos.js  ·  VERSION 3  ·  Partidos de fútbol con hora de Honduras
+// api/partidos.js  ·  VERSION 4  ·  Partidos de fútbol con hora de Honduras
 // Usa API-Football (API-Sports). Plan gratis: https://www.api-football.com/
 // 1) Creá cuenta gratis en https://dashboard.api-football.com/register
 // 2) Account → My Access → copiá tu API key
@@ -11,7 +11,7 @@
 //   POST { modo:"hoy" }            -> partidos de hoy (ligas top)
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 3, msg: "partidos v3 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 4, msg: "partidos v4 activo. Usá POST." });
 
   const KEY = (process.env.APIFOOTBALL_KEY || "").trim();
   if (!KEY) return res.status(500).json({ error: "Falta APIFOOTBALL_KEY en Vercel" });
@@ -66,18 +66,12 @@ export default async function handler(req, res) {
   try {
     let fixtures = [];
     if (modo === "liga" && liga) {
-      // últimos 6 + próximos 12 de la liga (sin filtrar temporada: usa last/next)
-      const [lastResp, nextResp] = await Promise.all([
-        fetch(`${HOST}/fixtures?league=${liga}&last=6`, { headers }),
-        fetch(`${HOST}/fixtures?league=${liga}&next=25`, { headers })
-      ]);
-      const lastData = await lastResp.json();
+      // Plan gratis: solo "next" (el parámetro "last" es de pago). Próximos 30.
+      const nextResp = await fetch(`${HOST}/fixtures?league=${liga}&next=30`, { headers });
       const nextData = await nextResp.json();
-      if (lastData.errors && Object.keys(lastData.errors).length)
-        return res.status(200).json({ error: "API: " + JSON.stringify(lastData.errors) });
-      const seen = new Set();
-      fixtures = [...(lastData.response||[]), ...(nextData.response||[])]
-        .filter(fx => { const id=fx.fixture?.id; if(seen.has(id)) return false; seen.add(id); return true; })
+      if (nextData.errors && Object.keys(nextData.errors).length)
+        return res.status(200).json({ error: "API: " + JSON.stringify(nextData.errors) });
+      fixtures = (nextData.response || [])
         .sort((a,b)=> new Date(a.fixture.date) - new Date(b.fixture.date));
     } else if (modo === "equipo" && q) {
       const tResp = await fetch(`${HOST}/teams?search=${encodeURIComponent(q)}`, { headers });
@@ -86,15 +80,10 @@ export default async function handler(req, res) {
         return res.status(200).json({ error: "API: " + JSON.stringify(tData.errors) });
       const team = tData.response?.[0]?.team;
       if (!team) return res.status(200).json({ partidos: [] });
-      const [lastResp, nextResp] = await Promise.all([
-        fetch(`${HOST}/fixtures?team=${team.id}&last=4`, { headers }),
-        fetch(`${HOST}/fixtures?team=${team.id}&next=8`, { headers })
-      ]);
-      const lastData = await lastResp.json();
+      // Plan gratis: solo próximos (sin "last")
+      const nextResp = await fetch(`${HOST}/fixtures?team=${team.id}&next=15`, { headers });
       const nextData = await nextResp.json();
-      const seen = new Set();
-      fixtures = [...(lastData.response||[]), ...(nextData.response||[])]
-        .filter(fx => { const id=fx.fixture?.id; if(seen.has(id)) return false; seen.add(id); return true; })
+      fixtures = (nextData.response || [])
         .sort((a,b)=> new Date(a.fixture.date) - new Date(b.fixture.date));
     } else {
       const hoy = new Date().toISOString().slice(0,10);
