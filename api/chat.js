@@ -1,16 +1,16 @@
-// api/chat.js  ·  Función serverless para Vercel (protege tu API key de Gemini)
+// api/chat.js  ·  VERSION 2  (Gemini 2.5 + reporte de errores)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
 // 3) Listo. El frontend ya le manda la pregunta + el contexto de tus clientes.
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 2, msg: "chat v2 activo. Usá POST." });
 
   const { pregunta, hoy, clientes } = req.body || {};
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
 
-  const API_KEY = process.env.GEMINI_API_KEY;
+  const API_KEY = (process.env.GEMINI_API_KEY || "").trim();
   if (!API_KEY) return res.status(500).json({ error: "Falta GEMINI_API_KEY en Vercel" });
 
   // Contexto: le damos a Gemini los datos reales para que NO invente.
@@ -23,23 +23,29 @@ Datos de clientes (n=nombre, p=plataforma, $=precio en Lps, d=fecha renovación,
 ${JSON.stringify(clientes || [])}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: pregunta }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 800 }
+        generationConfig: { temperature: 0.4, maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } }
       })
     });
     const data = await r.json();
+
+    // Si Gemini devuelve un error, lo mostramos en vez de quedarnos callados
+    if (data.error) {
+      return res.status(200).json({ respuesta: "Gemini: " + (data.error.message || "error desconocido") });
+    }
+    const cand = data?.candidates?.[0];
     const respuesta =
-      data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ||
-      "No obtuve respuesta de Gemini.";
+      cand?.content?.parts?.map(p => p.text).join("") ||
+      (cand?.finishReason ? "Gemini cortó la respuesta (" + cand.finishReason + ")." : "No obtuve respuesta de Gemini.");
     return res.status(200).json({ respuesta });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: "Error al contactar Gemini" });
+    return res.status(500).json({ error: "Error al contactar Gemini: " + (e.message || "") });
   }
 }
