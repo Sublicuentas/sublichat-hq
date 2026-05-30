@@ -1,21 +1,22 @@
-// api/partidos.js  ·  VERSION 1  ·  Partidos de fútbol con hora de Honduras
+// api/partidos.js  ·  VERSION 3  ·  Partidos de fútbol con hora de Honduras
 // Usa API-Football (API-Sports). Plan gratis: https://www.api-football.com/
 // 1) Creá cuenta gratis en https://dashboard.api-football.com/register
-// 2) Copiá tu API key (Dashboard → "API Key")
+// 2) Account → My Access → copiá tu API key
 // 3) En Vercel → Environment Variables agregá: APIFOOTBALL_KEY = tu_key
 // 4) Redeploy.
 //
 // Modos:
-//   POST { modo:"hoy" }            -> partidos de hoy (varias ligas top)
-//   POST { modo:"equipo", q:"..."} -> próximos/recientes de un equipo
+//   POST { modo:"liga", liga:2 }   -> últimos + próximos de esa liga
+//   POST { modo:"equipo", q:"..."} -> próximos de un equipo
+//   POST { modo:"hoy" }            -> partidos de hoy (ligas top)
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 1, msg: "partidos v1 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 3, msg: "partidos v3 activo. Usá POST." });
 
   const KEY = (process.env.APIFOOTBALL_KEY || "").trim();
   if (!KEY) return res.status(500).json({ error: "Falta APIFOOTBALL_KEY en Vercel" });
 
-  const { modo, q } = req.body || {};
+  const { modo, q, liga } = req.body || {};
   const HOST = "https://v3.football.api-sports.io";
   const headers = { "x-apisports-key": KEY };
 
@@ -30,9 +31,12 @@ export default async function handler(req, res) {
     "Ligue 1": "ESPN (aprox.)",
     "Liga MX": "TUDN / ViX (aprox.)",
     "MLS": "Apple TV (aprox.)",
-    "Liga Nacional de Honduras": "Tigo Sports / TVC Deportes (aprox.)",
-    "World Cup": "Televisoras nacionales (aprox.)",
-    "CONCACAF Champions League": "Tigo Sports / ESPN (aprox.)"
+    "Liga Nacional de Honduras": "Tigo Sports / Deportes TVC (aprox.)",
+    "Honduras": "Tigo Sports / Deportes TVC (aprox.)",
+    "World Cup": "Televisoras nacionales / FIFA+ (aprox.)",
+    "World Cup - Qualification CONCACAF": "Tigo Sports / ESPN (aprox.)",
+    "CONCACAF Champions League": "Tigo Sports / ESPN (aprox.)",
+    "CONCACAF Gold Cup": "Tigo Sports / TUDN (aprox.)"
   };
   const canalDe = liga => TV[liga] || "Consultá en tu proveedor";
 
@@ -61,20 +65,38 @@ export default async function handler(req, res) {
 
   try {
     let fixtures = [];
-    if (modo === "equipo" && q) {
-      // 1. buscar el equipo
+    if (modo === "liga" && liga) {
+      // últimos 6 + próximos 12 de la liga (sin filtrar temporada: usa last/next)
+      const [lastResp, nextResp] = await Promise.all([
+        fetch(`${HOST}/fixtures?league=${liga}&last=6`, { headers }),
+        fetch(`${HOST}/fixtures?league=${liga}&next=25`, { headers })
+      ]);
+      const lastData = await lastResp.json();
+      const nextData = await nextResp.json();
+      if (lastData.errors && Object.keys(lastData.errors).length)
+        return res.status(200).json({ error: "API: " + JSON.stringify(lastData.errors) });
+      const seen = new Set();
+      fixtures = [...(lastData.response||[]), ...(nextData.response||[])]
+        .filter(fx => { const id=fx.fixture?.id; if(seen.has(id)) return false; seen.add(id); return true; })
+        .sort((a,b)=> new Date(a.fixture.date) - new Date(b.fixture.date));
+    } else if (modo === "equipo" && q) {
       const tResp = await fetch(`${HOST}/teams?search=${encodeURIComponent(q)}`, { headers });
       const tData = await tResp.json();
       if (tData.errors && Object.keys(tData.errors).length)
         return res.status(200).json({ error: "API: " + JSON.stringify(tData.errors) });
       const team = tData.response?.[0]?.team;
       if (!team) return res.status(200).json({ partidos: [] });
-      // 2. próximos 5 partidos del equipo
-      const fResp = await fetch(`${HOST}/fixtures?team=${team.id}&next=8`, { headers });
-      const fData = await fResp.json();
-      fixtures = fData.response || [];
+      const [lastResp, nextResp] = await Promise.all([
+        fetch(`${HOST}/fixtures?team=${team.id}&last=4`, { headers }),
+        fetch(`${HOST}/fixtures?team=${team.id}&next=8`, { headers })
+      ]);
+      const lastData = await lastResp.json();
+      const nextData = await nextResp.json();
+      const seen = new Set();
+      fixtures = [...(lastData.response||[]), ...(nextData.response||[])]
+        .filter(fx => { const id=fx.fixture?.id; if(seen.has(id)) return false; seen.add(id); return true; })
+        .sort((a,b)=> new Date(a.fixture.date) - new Date(b.fixture.date));
     } else {
-      // modo hoy
       const hoy = new Date().toISOString().slice(0,10);
       const fResp = await fetch(`${HOST}/fixtures?date=${hoy}`, { headers });
       const fData = await fResp.json();
