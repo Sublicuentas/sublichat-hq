@@ -11,12 +11,21 @@
 //   POST { modo:"hoy" }            -> partidos de hoy (ligas top)
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 10, msg: "partidos v10 activo. Usá POST." });
+  // CORS: permitir que el catalogo (otro dominio) consulte esta API
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  // Permitir GET con parametros por query (ademas del POST con body)
+  if (req.method !== "POST" && req.method !== "GET")
+    return res.status(200).json({ ok: true, version: 10, msg: "partidos v10 activo." });
 
   const KEY = (process.env.APIFOOTBALL_KEY || "").trim();
   if (!KEY) return res.status(500).json({ error: "Falta APIFOOTBALL_KEY en Vercel" });
 
-  const { modo, q, liga } = req.body || {};
+  const src = (req.method === "GET") ? (req.query || {}) : (req.body || {});
+  const { modo, q, liga } = src;
   const HOST = "https://v3.football.api-sports.io";
   const headers = { "x-apisports-key": KEY };
 
@@ -130,9 +139,9 @@ export default async function handler(req, res) {
         };
       });
       return res.status(200).json({ partidos });
-    } else if (modo === "ofliga" && req.body.archivo) {
+    } else if (modo === "ofliga" && src.archivo) {
       // Ligas desde openfootball football.json (gratis, sin key, temporada actual)
-      const url = "https://raw.githubusercontent.com/openfootball/football.json/master/" + req.body.archivo;
+      const url = "https://raw.githubusercontent.com/openfootball/football.json/master/" + src.archivo;
       const r = await fetch(url);
       if (!r.ok) return res.status(200).json({ error: "Esta liga no está disponible ahora (datos aún no publicados)." });
       const data = await r.json();
