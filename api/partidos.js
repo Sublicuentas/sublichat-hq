@@ -1,4 +1,4 @@
-// api/partidos.js  ·  VERSION 9  ·  Partidos de fútbol con hora de Honduras
+// api/partidos.js  ·  VERSION 10  ·  Partidos de fútbol con hora de Honduras
 // Usa API-Football (API-Sports). Plan gratis: https://www.api-football.com/
 // 1) Creá cuenta gratis en https://dashboard.api-football.com/register
 // 2) Account → My Access → copiá tu API key
@@ -11,7 +11,7 @@
 //   POST { modo:"hoy" }            -> partidos de hoy (ligas top)
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 9, msg: "partidos v9 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 10, msg: "partidos v10 activo. Usá POST." });
 
   const KEY = (process.env.APIFOOTBALL_KEY || "").trim();
   if (!KEY) return res.status(500).json({ error: "Falta APIFOOTBALL_KEY en Vercel" });
@@ -80,6 +80,25 @@ export default async function handler(req, res) {
       const r = await fetch("https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json");
       if (!r.ok) return res.status(200).json({ error: "No pude cargar el calendario del Mundial (intentá más tarde)." });
       const data = await r.json();
+      // Mapa país (inglés, como viene en el JSON) -> código ISO para la bandera (flagcdn.com)
+      const ISO = {
+        "Mexico":"mx","Canada":"ca","USA":"us","United States":"us","Argentina":"ar","Brazil":"br","France":"fr",
+        "England":"gb-eng","Spain":"es","Germany":"de","Portugal":"pt","Netherlands":"nl","Belgium":"be","Italy":"it",
+        "Croatia":"hr","Uruguay":"uy","Colombia":"co","Paraguay":"py","Ecuador":"ec","Peru":"pe","Chile":"cl",
+        "Japan":"jp","South Korea":"kr","Korea Republic":"kr","Australia":"au","Iran":"ir","Saudi Arabia":"sa",
+        "Qatar":"qa","Morocco":"ma","Senegal":"sn","Tunisia":"tn","Ghana":"gh","Cameroon":"cm","Nigeria":"ng",
+        "Egypt":"eg","Algeria":"dz","Ivory Coast":"ci","South Africa":"za","Switzerland":"ch","Denmark":"dk",
+        "Poland":"pl","Serbia":"rs","Austria":"at","Czech Republic":"cz","Turkey":"tr","Ukraine":"ua","Scotland":"gb-sct",
+        "Wales":"gb-wls","Norway":"no","Sweden":"se","Greece":"gr","Russia":"ru","Costa Rica":"cr","Panama":"pa",
+        "Honduras":"hn","Jamaica":"jm","New Zealand":"nz","Uzbekistan":"uz","Jordan":"jo","Bosnia & Herzegovina":"ba",
+        "Bosnia and Herzegovina":"ba","Cape Verde":"cv","Curacao":"cw","Curaçao":"cw","Haiti":"ht","Venezuela":"ve",
+        "Bolivia":"bo","Guatemala":"gt","El Salvador":"sv","Trinidad & Tobago":"tt","Suriname":"sr","DR Congo":"cd"
+      };
+      const bandera = nombre => {
+        if (!nombre) return null;
+        const code = ISO[nombre.trim()];
+        return code ? `https://flagcdn.com/w80/${code}.png` : null;
+      };
       const ahora = new Date(Date.now() - 3*60*60*1000);
       const matches = (data.matches || []);
       // separar próximos (incluye hoy/en curso) y mostrar primero esos; si no hay, mostrar todos
@@ -102,8 +121,8 @@ export default async function handler(req, res) {
         return {
           liga: "Mundial 2026 · " + (m.group || m.round || ""),
           logoLiga: null,
-          local: m.team1, logoLocal: null,
-          visita: m.team2, logoVisita: null,
+          local: m.team1, logoLocal: bandera(m.team1),
+          visita: m.team2, logoVisita: bandera(m.team2),
           golesLocal: (m.score1!=null?m.score1:null), golesVisita:(m.score2!=null?m.score2:null),
           estado: "NS",
           horaHN: horaHN + (m.ground ? " · " + m.ground : ""),
