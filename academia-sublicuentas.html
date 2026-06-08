@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>Aula de ventas</title>
+<!-- AULA_CURSOS_PRO_SUBLICUENTAS_20260608_6 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%;font-family:'Nunito',system-ui,sans-serif;color:#132B4C;background:#F4FAFF}
+body{background:radial-gradient(520px 330px at 0% 0%,#FFF1A8 0%,transparent 55%),radial-gradient(560px 340px at 100% 0%,#B9F2FF 0%,transparent 60%),linear-gradient(180deg,#FFFFFF,#EEF7FF 58%,#F7F4FF)}
+button{font:inherit;border:0;cursor:pointer;background:none;color:inherit}
+.app{max-width:540px;margin:0 auto;padding:18px 18px 106px}
+.top{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+.back{width:58px;height:58px;border-radius:22px;background:#fff;box-shadow:0 12px 0 #DDEAF5,0 20px 34px rgba(31,94,180,.10);font-size:32px;color:#132B4C;display:grid;place-items:center;flex:none}
+.title h1{font-family:'Fredoka';font-size:34px;line-height:.95;letter-spacing:-.8px}
+.title p{font-size:15px;color:#6E7D96;font-weight:900;margin-top:5px}
+.hero{border-radius:34px;padding:24px 21px;background:linear-gradient(135deg,#126CFF,#24C7FF);box-shadow:0 16px 0 #1186DC,0 28px 50px rgba(18,108,255,.22);color:white;position:relative;overflow:hidden;margin-bottom:17px}
+.hero:after{content:'🧠';position:absolute;right:10px;bottom:-23px;font-size:96px;opacity:.18}
+.badge{display:inline-flex;background:rgba(255,255,255,.24);border-radius:999px;padding:8px 12px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.14em}
+.hero h2{font-family:'Fredoka';font-size:39px;line-height:.98;margin-top:14px;max-width:335px}
+.hero p{font-size:15px;line-height:1.35;font-weight:900;opacity:.95;margin-top:11px;max-width:335px}
+.panel{display:none}.panel.active{display:block;animation:fade .22s ease both}@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.users{display:grid;gap:14px}
+.user{width:100%;display:flex;align-items:center;gap:15px;background:#fff;border-radius:30px;padding:15px;min-height:112px;box-shadow:0 16px 0 rgba(221,234,245,.75),0 28px 48px rgba(31,94,180,.10);text-align:left}
+.avatar{width:74px;height:74px;border-radius:26px;display:grid;place-items:center;font-size:42px;box-shadow:inset 0 1px rgba(255,255,255,.5),0 12px 24px rgba(34,67,118,.10);flex:none}
+.libni .avatar,.libniAvatar{background:linear-gradient(135deg,#FFE66D,#FFB44D)}.naara .avatar,.naaraAvatar{background:linear-gradient(135deg,#8BF5D2,#35D6B2)}
+.uinfo{flex:1}.role{font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#7B89A2}
+.user h3{font-family:'Fredoka';font-size:30px;line-height:1;margin-top:4px}.user small{display:block;color:#70809A;font-size:13.5px;font-weight:900;margin-top:6px}.go{font-size:36px;color:#90A2B9}
+.pinbox,.lesson,.dashHead,.stat,.info,.achievement-card,.case-card,.exercise-card,.choice,.module-filter{background:#fff;box-shadow:0 16px 0 rgba(221,234,245,.75),0 28px 48px rgba(31,94,180,.10)}
+.pinbox{border-radius:32px;padding:24px;text-align:center}.pinavatar{width:82px;height:82px;border-radius:29px;margin:0 auto 12px;display:grid;place-items:center;font-size:46px}
+.pinbox h2,.dashHead h2,.lesson h2{font-family:'Fredoka';font-size:30px}.pinbox p,.dashHead p{color:#71809A;font-weight:900;margin-top:4px}
+.dots{display:flex;justify-content:center;gap:12px;margin:18px 0}.dot{width:16px;height:16px;border-radius:50%;background:#DCE9F6}.dot.on{background:#16A8FF}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.keys button{height:58px;border-radius:22px;background:#EFF6FF;color:#14213D;font-family:'Fredoka';font-size:24px;box-shadow:0 7px 0 #DDEAF5}.keys .fn{font-size:13px}
+.dashHead{display:flex;align-items:center;gap:13px;border-radius:31px;padding:15px;margin-bottom:15px}.dashHead .avatar{width:66px;height:66px;font-size:38px}
+.xp{height:12px;background:#EAF3FC;border-radius:999px;margin-top:9px;overflow:hidden}.xp i{display:block;height:100%;width:0;background:linear-gradient(90deg,#FFE66D,#35D6B2,#24C7FF);border-radius:999px;transition:.4s}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:15px}.stat{border-radius:25px;padding:14px;text-align:center}.stat b{display:block;font-family:'Fredoka';font-size:24px}.stat span{font-size:11px;font-weight:900;color:#7B89A2}
+.achievement-card{border-radius:28px;padding:16px;margin-bottom:15px;background:linear-gradient(135deg,#fff,#F6FBFF)}
+.achievement-title{font-family:'Fredoka';font-size:22px;display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.badges{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.badges::-webkit-scrollbar{display:none}
+.badge-pill{flex:none;background:#EFF6FF;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:900;color:#638099}.badge-pill.on{background:#FFF1A8;color:#705000;box-shadow:0 6px 0 #E9C647}
+.module-filter{border-radius:28px;padding:12px;margin-bottom:15px;display:flex;gap:8px;overflow-x:auto}.module-filter::-webkit-scrollbar{display:none}
+.filter-btn{flex:none;border-radius:999px;background:#EFF6FF;color:#58718A;padding:9px 13px;font-weight:900;font-size:12px}.filter-btn.on{background:#21B7F3;color:#fff;box-shadow:0 7px 0 #1186DC}
+.section{font-size:13px;font-weight:900;color:#6E7D96;text-transform:uppercase;letter-spacing:.14em;margin:8px 2px 12px}
+.path{position:relative;padding:8px 0 18px}.path:before{content:'';position:absolute;left:50%;top:15px;bottom:15px;width:8px;border-radius:999px;background:linear-gradient(#FFE66D,#35D6B2,#24C7FF);opacity:.28;transform:translateX(-50%)}
+.node{position:relative;display:flex;align-items:center;min-height:94px;margin:10px 0;width:100%;text-align:left}
+.node:nth-child(odd){justify-content:flex-start;padding-right:39%}.node:nth-child(even){justify-content:flex-end;padding-left:39%}
+.bubble{width:84px;height:84px;border-radius:31px;display:grid;place-items:center;font-size:36px;background:#fff;box-shadow:0 14px 30px rgba(34,67,118,.12);z-index:2;position:relative}
+.done .bubble{background:linear-gradient(135deg,#8BF5D2,#35D6B2)}.current .bubble{background:linear-gradient(135deg,#FFE66D,#FFB44D);animation:pulse 1.5s ease-in-out infinite}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.locked{opacity:.46}
+.locked .bubble:after{content:'🔒';position:absolute;right:-7px;top:-8px;font-size:20px;background:#fff;border-radius:99px;padding:3px;box-shadow:0 6px 12px rgba(34,67,118,.12)}
+.info{position:absolute;top:50%;transform:translateY(-50%);width:43%;border-radius:22px;padding:10px 11px}
+.node:nth-child(odd) .info{left:94px}.node:nth-child(even) .info{right:94px}
+.info b{font-size:12.5px;line-height:1.08;display:block}.info small{display:block;color:#7B89A2;font-size:10.5px;font-weight:900;margin-top:4px}
+.info .cat{display:inline-block;margin-top:5px;background:#EFF6FF;color:#638099;border-radius:999px;padding:3px 7px;font-size:9.5px;font-weight:900}
+.lesson{border-radius:32px;padding:22px}
+.lesson .bigicon{font-size:58px;margin-bottom:8px}
+.lesson .meta{font-size:12px;color:#7B89A2;font-weight:900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px}
+.lesson p{color:#5F6F89;font-weight:800;line-height:1.45;margin:12px 0}
+.case-card,.exercise-card{border-radius:26px;padding:16px;margin:14px 0;background:#FDFEFF}
+.case-card h3,.exercise-card h3{font-family:'Fredoka';font-size:20px;margin-bottom:8px;color:#132B4C}
+.script{white-space:pre-wrap;background:#EFF8FF;border-radius:20px;padding:13px;font-size:14px;font-weight:900;color:#174466;line-height:1.45}
+.choices{display:grid;gap:10px;margin-top:10px}
+.choice{width:100%;border-radius:20px;padding:13px;text-align:left;font-weight:900;color:#132B4C;background:#fff}
+.choice.good{background:#D8FFE9;box-shadow:0 10px 0 #86DBA6}.choice.bad{background:#FFE3E8;box-shadow:0 10px 0 #FFACBB}
+.feedback{min-height:24px;margin-top:10px;font-weight:900;color:#4D6D8A}
+.primary,.ghost{width:100%;min-height:54px;border-radius:22px;font-weight:900;font-size:16px;margin-top:10px}
+.primary{background:#FF3F6E;color:#fff;box-shadow:0 10px 0 #D92954}.primary:disabled{opacity:.55;filter:grayscale(.25)}.ghost{background:#EFF6FF;color:#14213D;box-shadow:0 8px 0 #DDEAF5}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#14213D;color:#fff;border-radius:999px;padding:12px 18px;font-weight:900;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:20;white-space:nowrap}.toast.show{opacity:1;bottom:34px}
+@media(max-width:390px){.app{padding-left:15px;padding-right:15px}.hero h2{font-size:33px}.user h3{font-size:27px}.avatar{width:68px;height:68px}.node:nth-child(odd){padding-right:36%}.node:nth-child(even){padding-left:36%}.bubble{width:76px;height:76px;border-radius:28px}.node:nth-child(odd) .info{left:84px}.node:nth-child(even) .info{right:84px}.info{width:46%;padding:9px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top"><button class="back" id="homeBack" type="button">‹</button><div class="title"><h1>Aula de ventas</h1><p>Cursos, logros y casos comerciales</p></div></div>
+  <section id="select" class="panel active">
+    <div class="hero"><span class="badge">Academia Sublicuentas Pro</span><h2>Entrene su mente de ventas</h2><p>30 cursos interactivos de atención al cliente, motivación, soporte y técnicas de ventas para cuentas digitales.</p></div>
+    <div class="users">
+      <button class="user libni" data-user="libni" type="button"><span class="avatar">👩‍💼</span><span class="uinfo"><span class="role">Agente de ventas</span><h3>Libni</h3><small>Ruta comercial · acceso por PIN</small></span><span class="go">›</span></button>
+      <button class="user naara" data-user="naara" type="button"><span class="avatar">👩‍💼</span><span class="uinfo"><span class="role">Agente de ventas</span><h3>Naara</h3><small>Ruta comercial · acceso por PIN</small></span><span class="go">›</span></button>
+    </div>
+  </section>
+  <section id="pin" class="panel"><div class="pinbox"><div class="pinavatar" id="pinAvatar">👩‍💼</div><h2 id="pinName">Libni</h2><p id="pinHelp">Cree su PIN nuevo de 4 dígitos</p><div class="dots" id="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="keys" id="keys"></div></div></section>
+  <section id="dash" class="panel"></section>
+  <section id="lesson" class="panel"></section>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const USERS={
+  libni:{name:'Libni',emoji:'👩‍💼',bg:'linear-gradient(135deg,#FFE66D,#FFB44D)'},
+  naara:{name:'Naara',emoji:'👩‍💼',bg:'linear-gradient(135deg,#8BF5D2,#35D6B2)'}
+};
+const COURSES=[{"icon": "⚡", "cat": "Atención al cliente", "title": "Respuesta inmediata profesional", "subtitle": "Primeros 30 segundos", "goal": "Responder rápido sin sonar robótico y sin perder claridad.", "case": "Un cliente escribe: ‘¿Tiene Netflix ahorita y cuánto vale?’ Está comparando con otro vendedor y quiere respuesta inmediata.", "script": "Buen día. Sí tenemos disponible. Netflix VIP 1 pantalla por Lps. 130 al mes, acceso rápido y soporte Sublicuentas. ¿Desea que se lo active ahora?", "quiz": "¿Cuál respuesta vende mejor?", "answers": ["Sí hay, deposite.", "Buen día. Sí tenemos disponible, le indico precio, beneficio y puedo activarle ahora.", "Espere, ya le averiguo."], "correct": 1, "badge": "Velocidad"}, {"icon": "💬", "cat": "Atención al cliente", "title": "Saludo que abre venta", "subtitle": "Entrada amable y directa", "goal": "Saludar, detectar necesidad y mover al cliente al siguiente paso.", "case": "Un cliente nuevo dice: ‘Hola, quiero una cuenta’. No especifica plataforma ni dispositivo.", "script": "Buen día, con gusto le atiendo. ¿Qué plataforma desea y en qué dispositivo la usará? Así le recomiendo el plan correcto.", "quiz": "¿Qué debe pedir primero?", "answers": ["Solo el comprobante.", "Plataforma, dispositivo y tiempo que desea contratar.", "Que revise el catálogo solo."], "correct": 1, "badge": "Recepción"}, {"icon": "🎯", "cat": "Técnicas de ventas", "title": "Cierre sin presión", "subtitle": "Venta natural", "goal": "Cerrar con seguridad sin sonar desesperado.", "case": "El cliente ya preguntó precio, disponibilidad y forma de pago, pero no confirma compra.", "script": "Perfecto. Se lo puedo dejar activo hoy mismo. Cuando me envíe el comprobante le entrego acceso y datos de perfil.", "quiz": "¿Cuál cierre es más profesional?", "answers": ["Compre ya porque se acaban.", "Se lo puedo dejar activo hoy mismo; al confirmar pago le entrego acceso.", "Entonces sí o no."], "correct": 1, "badge": "Cierre"}, {"icon": "💸", "cat": "Técnicas de ventas", "title": "Objeción de precio", "subtitle": "Defender valor", "goal": "Responder rebajas sin bajar margen innecesariamente.", "case": "Cliente: ‘En otro lado me lo dan más barato’. Usted sabe que su valor está en soporte y estabilidad.", "script": "Entiendo. La diferencia con nosotros es que recibe acceso rápido, soporte y seguimiento de renovación. Prefiero darle algo estable antes que algo barato que le falle.", "quiz": "¿Qué debe evitar?", "answers": ["Explicar valor y soporte.", "Entrar en pelea por precio.", "Ofrecer alternativa de menor costo si aplica."], "correct": 1, "badge": "Valor"}, {"icon": "🔁", "cat": "Renovaciones", "title": "Renovación de hoy", "subtitle": "Cobro amable", "goal": "Cobrar renovaciones vencidas o del día sin incomodar.", "case": "Cliente vence hoy. Tiene buen historial, pero suele pagar tarde.", "script": "Buen día. Le recuerdo que su cuenta vence hoy. Para mantenerla activa puede renovar con Lps. ___ y seguimos con el mismo perfil.", "quiz": "¿Qué dato no debe faltar?", "answers": ["Monto y fecha de vencimiento.", "Solo un emoji.", "Una amenaza de corte."], "correct": 0, "badge": "Renovador"}, {"icon": "📅", "cat": "Renovaciones", "title": "Seguimiento semanal", "subtitle": "Orden de cartera", "goal": "Priorizar clientes que vencen en próximos 7 días.", "case": "Tiene 125 clientes por vencer esta semana y poco tiempo para escribir a todos.", "script": "Buen día. Su servicio vence pronto. Puede renovar desde hoy y asegurar continuidad sin quedarse sin acceso.", "quiz": "¿A quién atiende primero?", "answers": ["Clientes vencidos, luego vencen hoy, luego próximos días.", "Cualquier contacto al azar.", "Solo clientes nuevos."], "correct": 0, "badge": "Agenda"}, {"icon": "🧾", "cat": "Soporte", "title": "Entrega ordenada de cuenta", "subtitle": "Evitar confusión", "goal": "Entregar datos completos y reglas sin saturar al cliente.", "case": "Debe entregar una cuenta con correo, clave, perfil, PIN y fecha de renovación.", "script": "Datos de acceso:\nCorreo: ___\nClave: ___\nPerfil: ___\nPIN: ___\nRenueva: ___\nPor favor no cambie datos ni comparta el acceso.", "quiz": "¿Qué hace una buena entrega?", "answers": ["Datos claros, perfil, PIN, fecha y reglas.", "Solo correo y clave.", "Enviar todo mezclado sin orden."], "correct": 0, "badge": "Orden"}, {"icon": "🔐", "cat": "Soporte", "title": "Reglas sin sonar pesado", "subtitle": "Protección de cuenta", "goal": "Explicar reglas como beneficio, no como regaño.", "case": "Cliente pregunta por qué no puede cambiar clave o compartir perfil.", "script": "Es para mantenerle el servicio estable. Si se cambian datos o se comparte, la cuenta puede bloquearse y afectar su acceso.", "quiz": "¿Cuál tono conviene?", "answers": ["Amenazar al cliente.", "Explicar que las reglas protegen su acceso.", "Ignorar la pregunta."], "correct": 1, "badge": "Seguridad"}, {"icon": "🛠️", "cat": "Soporte", "title": "Problema de acceso", "subtitle": "Diagnóstico rápido", "goal": "Pedir datos útiles antes de cambiar cuenta.", "case": "Cliente dice: ‘No me abre’. No envía captura ni indica dispositivo.", "script": "Con gusto le ayudo. Envíeme captura del error, dispositivo donde intenta entrar y confirme si está usando el perfil correcto.", "quiz": "¿Qué debe pedir?", "answers": ["Captura, dispositivo y perfil.", "La clave del cliente personal.", "Que espere hasta mañana."], "correct": 0, "badge": "Soporte"}, {"icon": "🎬", "cat": "Ventas de contenido", "title": "Vender con estrenos", "subtitle": "Deseo por contenido", "goal": "Usar películas/series como gancho de venta.", "case": "Cliente no sabe qué app comprar, solo dice que quiere ver algo bueno el fin de semana.", "script": "Le recomiendo una app según lo que más ve: películas, series, novelas, anime o deportes. Así paga por algo que realmente va a usar.", "quiz": "¿Qué vende mejor?", "answers": ["Preguntar gustos y recomendar app.", "Mandar lista enorme de precios.", "Decir que todas son iguales."], "correct": 0, "badge": "Contenido"}, {"icon": "📦", "cat": "Técnicas de ventas", "title": "Venta por combo", "subtitle": "Subir ticket promedio", "goal": "Ofrecer paquetes sin parecer insistente.", "case": "Cliente compra Netflix. Usted quiere ofrecer Prime o Max sin sonar cargado.", "script": "También le puedo armar combo con Prime o Max para que tenga más contenido por mejor precio. ¿Desea que le pase opción?", "quiz": "¿Cómo se ofrece combo?", "answers": ["Como mejora opcional con beneficio.", "Obligando al cliente.", "Ocultando el precio."], "correct": 0, "badge": "Combo"}, {"icon": "🎮", "cat": "Ventas gamer", "title": "Cliente gamer", "subtitle": "Lenguaje dinámico", "goal": "Vender recargas y juegos con rapidez y seguridad.", "case": "Cliente pregunta por diamantes o Robux y quiere saber si es seguro.", "script": "Sí, se trabaja rápido y seguro. Indíqueme paquete, usuario correcto y le confirmo total para procesarlo.", "quiz": "¿Qué dato es crítico?", "answers": ["Usuario correcto y paquete.", "Color favorito.", "Que mande varios audios."], "correct": 0, "badge": "Gamer"}, {"icon": "📺", "cat": "IPTV / TV digital", "title": "Demo y expectativas", "subtitle": "Prometer bien", "goal": "Explicar TV digital sin prometer algo imposible.", "case": "Cliente pide fútbol y todos los canales, pero pregunta si nunca se cae.", "script": "Se brinda demo para que pruebe en su dispositivo. Como todo servicio digital depende de internet y app, pero tiene soporte para instalación.", "quiz": "¿Qué no debe prometer?", "answers": ["Soporte de instalación.", "Que jamás tendrá fallas.", "Demo antes de comprar."], "correct": 1, "badge": "IPTV"}, {"icon": "🧠", "cat": "Memoria comercial", "title": "Recordar preferencias", "subtitle": "Atención personalizada", "goal": "Usar historial para vender mejor.", "case": "Cliente siempre compra anime y música. Ahora pregunta qué promoción hay.", "script": "Por lo que suele usar, le puede convenir Crunchyroll + Spotify/Deezer. Le paso opción mensual para que compare.", "quiz": "¿Qué aprovecha aquí?", "answers": ["Historial y preferencias.", "Responder sin leer.", "Ofrecer algo que no usa."], "correct": 0, "badge": "Memoria"}, {"icon": "🤖", "cat": "IA en operaciones", "title": "Preguntar a Subli IA", "subtitle": "Asistente interno", "goal": "Usar IA para resumir cartera, cobros y respuestas.", "case": "Tiene clientes vencidos y necesita mensajes rápidos por plataforma.", "script": "Subli, dame resumen de renovaciones de hoy y redacta mensaje corto para cobrar Netflix y Disney.", "quiz": "¿Para qué ayuda la IA?", "answers": ["Resumir, redactar y priorizar.", "Reemplazar toda supervisión.", "Ocultar problemas."], "correct": 0, "badge": "IA"}, {"icon": "🧩", "cat": "Casos tipo Harvard", "title": "Caso: cliente molesto", "subtitle": "Control emocional", "goal": "Resolver reclamo sin perder venta ni reputación.", "case": "Cliente dice: ‘Siempre me falla, me voy con otro vendedor’. Está molesto pero aún quiere solución.", "script": "Lamento el inconveniente. Revisemos primero el error y le doy solución. Mi prioridad es que quede funcionando y sin perder su tiempo.", "quiz": "Primera acción correcta:", "answers": ["Discutir quién tiene la culpa.", "Validar molestia, pedir evidencia y ofrecer solución.", "Bloquear al cliente."], "correct": 1, "badge": "Caso Pro"}, {"icon": "🏆", "cat": "Motivación", "title": "Constancia comercial", "subtitle": "Disciplina diaria", "goal": "Crear hábito de ventas y renovaciones.", "case": "Un día lento baja su motivación. Aun así hay clientes por vencer y oportunidades.", "script": "Hoy hago mínimo: revisar vencidos, escribir renovaciones, publicar una oferta y ordenar inventario.", "quiz": "¿Qué vence a la improvisación?", "answers": ["Rutina diaria.", "Esperar suerte.", "Publicar una vez al mes."], "correct": 0, "badge": "Constancia"}, {"icon": "📣", "cat": "Marketing", "title": "Mensaje que vende", "subtitle": "Menos texto, más impacto", "goal": "Escribir publicaciones cortas con beneficio claro.", "case": "Quiere publicar Netflix, pero el texto está largo y nadie responde.", "script": "Netflix VIP disponible 🍿\n1 pantalla · acceso rápido · soporte Sublicuentas\nEscríbame y se lo activo hoy.", "quiz": "¿Qué debe tener un buen anuncio?", "answers": ["Beneficio, precio/plan y llamado a escribir.", "Muchos párrafos.", "Solo logos."], "correct": 0, "badge": "Copy"}, {"icon": "💎", "cat": "Valor de marca", "title": "Cliente VIP", "subtitle": "Experiencia premium", "goal": "Hacer que el cliente sienta diferencia por comprar con Sublicuentas.", "case": "Cliente renovó varias veces. Quiere sentirse tomado en cuenta.", "script": "Gracias por seguir con Sublicuentas. Le mantengo prioridad en soporte y le aviso antes de vencimiento para que no pierda acceso.", "quiz": "¿Qué genera fidelidad?", "answers": ["Seguimiento, prioridad y trato claro.", "Ignorar después del pago.", "Cambiar reglas cada día."], "correct": 0, "badge": "VIP"}, {"icon": "📊", "cat": "Gestión", "title": "Lectura de cartera", "subtitle": "Decisiones por datos", "goal": "Entender qué plataforma mueve más ingresos.", "case": "Netflix aparece como plataforma top. Debe decidir dónde enfocar promociones.", "script": "Hoy priorizo la plataforma top para renovaciones y uso combos para subir ticket promedio.", "quiz": "¿Qué mira primero?", "answers": ["Ingresos, vencimientos y plataforma top.", "Solo cantidad de emojis.", "El color de la app."], "correct": 0, "badge": "Datos"}, {"icon": "🥇", "cat": "Gestión", "title": "Prioridad diaria", "subtitle": "Orden de trabajo", "goal": "Saber qué hacer primero cada mañana.", "case": "Tiene mensajes nuevos, vencidos, clientes por vencer y problemas de soporte.", "script": "Orden: soporte urgente, vencidos, vencen hoy, nuevos clientes, publicaciones y seguimiento.", "quiz": "¿Qué evita perder ventas?", "answers": ["Priorizar por urgencia e ingreso.", "Responder al azar.", "Dejar vencidos para después."], "correct": 0, "badge": "Prioridad"}, {"icon": "🌟", "cat": "Fidelización", "title": "Después de vender", "subtitle": "Seguimiento postventa", "goal": "Confirmar funcionamiento y abrir puerta a recompra.", "case": "Cliente recibió cuenta hace 15 minutos. No ha dicho si entró bien.", "script": "¿Le abrió correctamente? Cualquier detalle me avisa para ayudarle. Gracias por preferir Sublicuentas.", "quiz": "¿Por qué sirve?", "answers": ["Reduce reclamos y aumenta confianza.", "No sirve de nada.", "Solo molesta al cliente."], "correct": 0, "badge": "Postventa"}, {"icon": "🧃", "cat": "Tono Sublicuentas", "title": "Voz de marca", "subtitle": "Amable, clara, segura", "goal": "Mantener estilo profesional con personalidad.", "case": "Debe responder rápido sin sonar seco ni demasiado formal.", "script": "Claro, con gusto. Le paso la opción más conveniente y se lo puedo activar hoy mismo.", "quiz": "El tono correcto es:", "answers": ["Claro, amable y seguro.", "Molesto y cortante.", "Demasiado largo y confuso."], "correct": 0, "badge": "Marca"}, {"icon": "⚽", "cat": "Deportes", "title": "Venta por partido", "subtitle": "Oportunidad en vivo", "goal": "Aprovechar partidos sin exagerar promesas.", "case": "Hay partido importante y clientes preguntan dónde verlo.", "script": "Tenemos TV digital con canales deportivos. Puede probar demo y verificar en su dispositivo antes de comprar.", "quiz": "¿Qué aumenta confianza?", "answers": ["Demo y claridad del dispositivo.", "Prometer todos los partidos del mundo.", "No explicar nada."], "correct": 0, "badge": "Sports"}, {"icon": "🚀", "cat": "Técnicas de ventas", "title": "Venta express en 3 mensajes", "subtitle": "Rapidez con orden", "goal": "Cerrar sin dar vueltas.", "case": "Cliente quiere comprar ya, pero usted debe mantener orden.", "script": "1) Plan y precio. 2) Forma de pago. 3) Entrega con datos y reglas.", "quiz": "¿Qué estructura funciona?", "answers": ["Plan, pago, entrega.", "Saludo eterno, lista enorme, audio largo.", "Solo pedir depósito."], "correct": 0, "badge": "Express"}, {"icon": "📌", "cat": "Casos tipo Harvard", "title": "Caso: descuento peligroso", "subtitle": "Margen y estrategia", "goal": "Decidir cuándo bajar precio y cuándo defenderlo.", "case": "Un cliente pide descuento en plan mensual, pero usted sabe que el margen es bajo. Si baja, todos pedirán lo mismo.", "script": "En mensual el precio ya está ajustado. Si desea ahorrar, le puedo ofrecer plan de más meses o combo con mejor valor.", "quiz": "Mejor salida:", "answers": ["Bajar siempre el precio.", "Ofrecer ahorro por plazo/combo sin destruir margen.", "Decir que no y cerrar chat."], "correct": 1, "badge": "Margen"}, {"icon": "🛡️", "cat": "Casos tipo Harvard", "title": "Caso: cuenta compartida", "subtitle": "Riesgo operativo", "goal": "Prevenir abuso sin perder educación.", "case": "Cliente comparte el perfil y luego reclama que se cerró sesión.", "script": "El plan es para un dispositivo/perfil según lo indicado. Si se comparte, el sistema puede bloquear acceso. Le ayudo a normalizarlo y evitar que pase otra vez.", "quiz": "¿Qué mezcla la respuesta?", "answers": ["Regla, causa y solución.", "Insulto y amenaza.", "Ignorar el problema."], "correct": 0, "badge": "Riesgo"}, {"icon": "🧨", "cat": "Errores comunes", "title": "Lo que no debe hacer", "subtitle": "Evitar pérdidas", "goal": "Identificar errores que dañan ventas.", "case": "Tiene prisa y manda datos incompletos, sin fecha, sin perfil ni reglas.", "script": "Antes de enviar: revise correo, clave, perfil, PIN, fecha, precio y reglas. Un minuto de orden evita reclamos.", "quiz": "Error grave:", "answers": ["Enviar datos incompletos.", "Confirmar fecha de renovación.", "Dar soporte claro."], "correct": 0, "badge": "Precisión"}, {"icon": "👑", "cat": "Nivel Pro", "title": "Rutina Sublicuentas Pro", "subtitle": "Sistema diario", "goal": "Integrar ventas, soporte, renovaciones y aprendizaje.", "case": "Quiere que Sublicuentas crezca sin depender del desorden ni de la improvisación.", "script": "Rutina: revisar alertas, cobrar vencidos, atender soporte, publicar oferta, actualizar cartera y completar un nivel del aula.", "quiz": "Mentalidad Pro:", "answers": ["Sistema diario y mejora constante.", "Improvisar siempre.", "Solo vender cuando hay ganas."], "correct": 0, "badge": "Pro"}];
+let current=null;
+let pin='';
+let activeCat='Todos';
+let selectedAnswer=null;
+let progress=JSON.parse(localStorage.getItem('aca_focus_progress')||'{}');
+let pins=JSON.parse(localStorage.getItem('aca_focus_pins')||'{}');
+function save(){localStorage.setItem('aca_focus_progress',JSON.stringify(progress));localStorage.setItem('aca_focus_pins',JSON.stringify(pins));}
+function goHome(){sessionStorage.setItem('sublichat_skip_intro','1');window.location.href='./index.html#inicio';}
+document.getElementById('homeBack').addEventListener('click',goHome);
+function show(id){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1700);}
+document.querySelectorAll('.user').forEach(btn=>btn.addEventListener('click',()=>{
+  current=btn.dataset.user; pin='';
+  document.getElementById('pinAvatar').textContent=USERS[current].emoji;
+  document.getElementById('pinAvatar').style.background=USERS[current].bg;
+  document.getElementById('pinName').textContent=USERS[current].name;
+  document.getElementById('pinHelp').textContent=pins[current]?'Ingrese su PIN':'Cree su PIN nuevo de 4 dígitos';
+  paintDots(); show('pin');
+}));
+function paintDots(){document.querySelectorAll('#dots .dot').forEach((d,i)=>d.classList.toggle('on',i<pin.length));}
+const keys=document.getElementById('keys');
+['1','2','3','4','5','6','7','8','9','Borrar','0','Volver'].forEach(k=>{
+  const b=document.createElement('button'); b.type='button'; b.textContent=k; b.className=isNaN(k)?'fn':'';
+  b.addEventListener('click',()=>press(k)); keys.appendChild(b);
+});
+function press(k){
+  if(k==='Volver'){show('select');return;}
+  if(k==='Borrar'){pin=pin.slice(0,-1);paintDots();return;}
+  if(pin.length<4){pin+=k;paintDots();}
+  if(pin.length===4){
+    if(!pins[current]){pins[current]=pin;save();toast('PIN guardado');renderDash();show('dash');}
+    else if(pin===pins[current]){renderDash();show('dash');}
+    else{pin='';paintDots();toast('PIN incorrecto');}
+  }
+}
+function doneList(){return progress[current]||[];}
+function pct(){return Math.round((doneList().length/COURSES.length)*100);}
+function unlockedIndex(){return doneList().length;}
+function xp(){return doneList().length*50;}
+function earnedBadges(){return COURSES.filter((c,i)=>doneList().includes(i) && ((i+1)%5===0 || i===COURSES.length-1)).map(c=>c.badge);}
+function categories(){return ['Todos',...Array.from(new Set(COURSES.map(c=>c.cat)))];}
+function renderDash(){
+  const done=doneList();
+  const cats=categories();
+  const visible=COURSES.map((c,i)=>({...c,i})).filter(c=>activeCat==='Todos'||c.cat===activeCat);
+  document.getElementById('dash').innerHTML=`<div class="dashHead"><span class="avatar" style="background:${USERS[current].bg}">${USERS[current].emoji}</span><div style="flex:1"><h2>Hola, ${USERS[current].name}</h2><p>Agente de ventas · ${pct()}% completado · ${xp()} XP</p><div class="xp"><i style="width:${pct()}%"></i></div></div></div>
+  <div class="stats"><div class="stat"><b>📚 ${done.length}</b><span>Cursos</span></div><div class="stat"><b>⭐ ${xp()}</b><span>XP</span></div><div class="stat"><b>🏆 ${earnedBadges().length}</b><span>Logros</span></div></div>
+  <div class="achievement-card"><div class="achievement-title">🏅 Logros de superación</div><div class="badges">${['Velocidad','Cierre','Renovador','Caso Pro','Marca','Pro'].map(b=>`<span class="badge-pill ${earnedBadges().includes(b)?'on':''}">${earnedBadges().includes(b)?'✅':'🔒'} ${b}</span>`).join('')}</div></div>
+  <div class="module-filter">${cats.map(c=>`<button type="button" class="filter-btn ${c===activeCat?'on':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  <div class="section">Ruta interactiva · desbloqueo por niveles</div>
+  <div class="path">${visible.map(c=>`<button type="button" class="node ${done.includes(c.i)?'done':''} ${c.i===unlockedIndex()?'current':''} ${c.i>unlockedIndex()?'locked':''}" data-i="${c.i}"><div class="bubble">${done.includes(c.i)?'✅':c.icon}</div><div class="info"><b>${c.title}</b><small>Nivel ${c.i+1} · ${c.subtitle}</small><span class="cat">${c.cat}</span></div></button>`).join('')}</div>
+  <button type="button" class="ghost" id="changeAgent">Cambiar agente</button><button type="button" class="ghost" id="backInicio">Volver a inicio</button>`;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.addEventListener('click',()=>{activeCat=b.dataset.cat;renderDash();}));
+  document.querySelectorAll('.node').forEach(n=>n.addEventListener('click',()=>{
+    const i=Number(n.dataset.i);
+    if(i>unlockedIndex()){toast('Complete el nivel anterior');return;}
+    renderLesson(i);show('lesson');
+  }));
+  document.getElementById('changeAgent').addEventListener('click',()=>show('select'));
+  document.getElementById('backInicio').addEventListener('click',goHome);
+}
+function renderLesson(i){
+  selectedAnswer=null;
+  const c=COURSES[i];
+  const done=doneList().includes(i);
+  document.getElementById('lesson').innerHTML=`<div class="lesson"><div class="meta">Nivel ${i+1} · ${c.cat}</div><div class="bigicon">${c.icon}</div><h2>${c.title}</h2><p><b>Objetivo:</b> ${c.goal}</p>
+  <div class="case-card"><h3>📚 Caso Sublicuentas</h3><p>${c.case}</p></div>
+  <div class="exercise-card"><h3>🧠 Respuesta modelo</h3><div class="script">${c.script}</div></div>
+  <div class="exercise-card"><h3>🎯 Reto interactivo</h3><p>${c.quiz}</p><div class="choices">${c.answers.map((a,idx)=>`<button type="button" class="choice" data-answer="${idx}">${idx+1}. ${a}</button>`).join('')}</div><div class="feedback" id="feedback">Seleccione la mejor respuesta para completar el nivel.</div></div>
+  <button type="button" class="primary" id="completeLevel" ${done?'':'disabled'}> ${done?'Nivel completado · volver a ruta':'Completar nivel'}</button><button type="button" class="ghost" id="backRoute">Volver a ruta</button></div>`;
+  document.querySelectorAll('.choice').forEach(btn=>btn.addEventListener('click',()=>{
+    const ans=Number(btn.dataset.answer);
+    selectedAnswer=ans;
+    document.querySelectorAll('.choice').forEach(x=>x.classList.remove('good','bad'));
+    if(ans===c.correct){btn.classList.add('good');document.getElementById('feedback').textContent='Correcto. Esta respuesta protege la venta y mantiene tono profesional.';document.getElementById('completeLevel').disabled=false;}
+    else{btn.classList.add('bad');document.querySelector(`.choice[data-answer="${c.correct}"]`).classList.add('good');document.getElementById('feedback').textContent='Casi. Revise la respuesta marcada en verde y complete el aprendizaje.';document.getElementById('completeLevel').disabled=false;}
+  }));
+  document.getElementById('completeLevel').addEventListener('click',()=>complete(i));
+  document.getElementById('backRoute').addEventListener('click',()=>{renderDash();show('dash');});
+}
+function complete(i){
+  progress[current]=progress[current]||[];
+  if(!progress[current].includes(i)){progress[current].push(i);progress[current].sort((a,b)=>a-b);save();
+    const msg=(i+1)%5===0 ? '🏆 Logro desbloqueado: '+COURSES[i].badge : '+50 XP · nuevo nivel desbloqueado';
+    toast(msg);
+  }
+  renderDash();show('dash');
+}
+</script>
+</body>
+</html>
