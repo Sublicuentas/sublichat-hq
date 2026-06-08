@@ -318,18 +318,20 @@ const Academia = (() => {
 /* ===========================================================================
    1)  CONFIG  —  pegá acá tu Firebase real y cambiá los PIN
 =========================================================================== */
-const firebaseConfig = {
-  apiKey: "PEGA_TU_API_KEY",          // <-- tu config de Firebase
-  authDomain: "PEGA.firebaseapp.com",
-  projectId: "PEGA_PROJECT_ID",
-  storageBucket: "PEGA.appspot.com",
-  messagingSenderId: "PEGA",
-  appId: "PEGA"
-};
-
+const CONFIG = {
+  firebase: {
+    apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
+    authDomain: "sublicuentasbot.firebaseapp.com",
+    projectId: "sublicuentasbot",
+    storageBucket: "sublicuentasbot.firebasestorage.app",
+    messagingSenderId: "17227154881",
+    appId: "1:17227154881:web:654a1c94c2c6a331d95b40",
+    measurementId: "G-40Z71BGE7E"
+  },
+  
 const USERS = {
-  libni: { name: "Libni", pin: "1111", color: "libni" },   // <-- cambiá el PIN
-  naara: { name: "Naara", pin: "2222", color: "naara" }    // <-- cambiá el PIN
+  libni: { name: "Libni", pin: "1992", color: "libni" },   // <-- cambiá el PIN
+  naara: { name: "Naara", pin: "8890", color: "naara" }    // <-- cambiá el PIN
 };
 
 const PASS = 0.7;          // 70% para aprobar un nivel
