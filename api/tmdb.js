@@ -1,19 +1,21 @@
-// api/tmdb.js  ·  VERSION 3  (región flexible HN→MX→US + timeouts anti-cuelgue)
+// api/tmdb.js  ·  VERSION 4  (timeouts más amplios + reintento + maxDuration)
 //
-// Qué arregla:
-// 1) El error "Unexpected token '<'": antes hacía hasta 9 llamadas a TMDB SIN
-//    límite de tiempo; si una se colgaba, Vercel cortaba la función y devolvía
-//    HTML. Ahora cada llamada tiene timeout (AbortController) y SIEMPRE responde JSON.
-// 2) "Dónde la veo": TMDB casi no tiene datos de Honduras (HN). Ahora si HN viene
-//    vacío, busca en MX, CR, GT, SV, CO, AR... (mismo catálogo de Latam para
-//    Netflix/Disney+/HBO Max/Prime/Vix, etc.) para mostrar SÍ o SÍ en qué plataforma está.
+// v3 ya está corriendo (el error pasó de "token '<'" a "operation was aborted"),
+// pero TMDB estaba tardando >6s desde Vercel (arranque en frío / lentitud) y el
+// timeout la cortaba. v4:
+//   - Sube el timeout de la búsqueda a 12s y reintenta 1 vez si se corta.
+//   - Da hasta 60s de duración a la función (maxDuration).
+//   - Si los proveedores fallan, igual muestra el título (no rompe todo).
+//   - Región flexible HN->MX->CR->GT->... para decir SI o SI dónde está.
 //
-// Vercel → Settings → Environment Variables:  TMDB_API_KEY = tu_key  (API Key v3 auth)
+// Vercel -> Settings -> Environment Variables:  TMDB_API_KEY = tu_key  (API Key v3 auth)
+
+export const config = { maxDuration: 60 };
 
 const PREF_REGIONS = ["HN", "MX", "CR", "GT", "SV", "NI", "CO", "AR", "CL", "PE", "US", "ES"];
 
-// fetch con timeout: si TMDB tarda demasiado, cortamos y seguimos (nunca se cuelga)
-async function jget(url, ms = 6000) {
+// fetch con timeout
+async function jget(url, ms) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -24,8 +26,20 @@ async function jget(url, ms = 6000) {
   }
 }
 
-// De todos los países que devuelve TMDB, elige el primero (según prioridad) que
-// tenga plataformas. Así siempre decimos en qué servicio está, aunque HN venga vacío.
+// fetch con timeout + 1 reintento (para la búsqueda, que es la crítica)
+async function jgetRetry(url, ms, intentos = 2) {
+  let ultimoError;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      return await jget(url, ms);
+    } catch (e) {
+      ultimoError = e;
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+  throw ultimoError;
+}
+
 function pickProviders(results) {
   const tryReg = reg => {
     const r = results && results[reg];
@@ -38,7 +52,6 @@ function pickProviders(results) {
     const hit = tryReg(reg);
     if (hit) return hit;
   }
-  // si ninguna de las preferidas tiene, agarramos cualquier país con plataforma
   for (const reg of Object.keys(results || {})) {
     const hit = tryReg(reg);
     if (hit) return hit;
@@ -48,7 +61,7 @@ function pickProviders(results) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 3, msg: "tmdb v3 activo. Usá POST para buscar." });
+    return res.status(200).json({ ok: true, version: 4, msg: "tmdb v4 activo. Usá POST para buscar." });
 
   const { query } = req.body || {};
   if (!query) return res.status(400).json({ error: "Falta el texto de búsqueda" });
@@ -57,31 +70,38 @@ export default async function handler(req, res) {
   if (!KEY) return res.status(500).json({ error: "Falta TMDB_API_KEY en Vercel" });
 
   try {
-    // 1. Buscar (pelis + series + novelas a la vez)
+    // 1. Buscar (pelis + series + novelas) — con reintento
     const sUrl = `https://api.themoviedb.org/3/search/multi?api_key=${KEY}&language=es-MX&query=${encodeURIComponent(query)}&include_adult=false`;
-    const sData = await jget(sUrl, 6000);
+    let sData;
+    try {
+      sData = await jgetRetry(sUrl, 12000, 2);
+    } catch (e) {
+      return res.status(200).json({
+        error: "TMDB no respondió a tiempo (probá de nuevo en unos segundos). Si sigue, puede ser que TMDB esté bloqueando el servidor."
+      });
+    }
 
     if (sData.success === false || sData.status_code)
       return res.status(200).json({ error: "TMDB: " + (sData.status_message || "clave inválida") });
 
     const items = (sData.results || [])
       .filter(r => (r.media_type === "movie" || r.media_type === "tv") && (r.title || r.name))
-      .slice(0, 6); // 6 (antes 8) para no saturar la función
+      .slice(0, 6);
 
     if (!items.length) return res.status(200).json({ resultados: [] });
 
-    // 2. Para cada resultado: una sola llamada de proveedores (trae TODOS los países)
-    //    y elegimos el mejor país disponible.
+    // 2. Proveedores (una llamada por título, trae todos los países). Best-effort:
+    //    si una se corta, ese título sale sin plataforma pero NO rompe la lista.
     const out = await Promise.all(items.map(async r => {
       const type = r.media_type;
       let proveedores = [], region = null;
       try {
         const pUrl = `https://api.themoviedb.org/3/${type}/${r.id}/watch/providers?api_key=${KEY}`;
-        const pData = await jget(pUrl, 4500);
+        const pData = await jget(pUrl, 7000);
         const pick = pickProviders(pData.results);
         proveedores = pick.lista;
         region = pick.region;
-      } catch (e) { /* si falla una, seguimos con las demás */ }
+      } catch (e) { /* sin proveedores para este título */ }
       return {
         titulo: r.title || r.name,
         tipo: type === "movie" ? "Película" : "Serie",
@@ -90,14 +110,13 @@ export default async function handler(req, res) {
         rating: r.vote_average ? Math.round(r.vote_average * 10) / 10 : null,
         sinopsis: r.overview || "",
         proveedores,
-        region // "HN", "MX", etc. (por si querés mostrarlo en el front)
+        region
       };
     }));
 
     return res.status(200).json({ resultados: out });
   } catch (e) {
     console.error(e);
-    // 200 (no 500) para que el front SIEMPRE reciba JSON y nunca vea "token '<'"
     return res.status(200).json({ error: "Error consultando TMDB: " + (e.message || "desconocido") });
   }
 }
