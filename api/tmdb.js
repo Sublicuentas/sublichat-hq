@@ -1,39 +1,33 @@
-// api/tmdb.js  ·  VERSION 5  (reintento contra los bloqueos intermitentes de TMDB)
+// api/tmdb.js  ·  VERSION 6  (SOLO datos de Honduras · sin rellenar con otros países)
 //
-// Diagnóstico real: TMDB (detrás de CloudFront/openresty) rechaza de forma
-// INTERMITENTE las IPs de datacenter de Vercel y devuelve en su JSON:
-//   {"success":false,"status_message":"Couldn't connect to the backend server."}
-// No es timeout ni la key. La cura para un fallo intermitente es REINTENTAR.
+// CORRECCIÓN IMPORTANTE:
+//   En v3-v5, si Honduras (HN) no tenía datos, yo rellenaba con México/EE.UU.
+//   Eso provocaba errores como "Rosario Tijeras en HBO Max" (en México sí, en
+//   Honduras NO). Para orientar clientes eso es inaceptable.
+//   v6 muestra EXCLUSIVAMENTE lo que TMDB reporta para Honduras. Si TMDB no tiene
+//   dato de HN para un título, se dice "sin datos" en vez de adivinar.
 //
-// v5:
-//   - tmdbGet() reintenta hasta 5 veces cuando: (a) la conexión se corta/aborta,
-//     o (b) TMDB responde con un error transitorio (success:false / "backend" /
-//     "unavailable" / "connect" / status 5xx). Backoff creciente entre intentos.
-//   - 60s de duración (maxDuration) para tener margen.
-//   - Región flexible HN->MX->CR->GT->... para decir SI o SI en qué plataforma está.
+//   Se mantiene el reintento contra los cortes intermitentes de TMDB.
 //
 // Vercel -> Settings -> Environment Variables:  TMDB_API_KEY = tu_key (API Key v3 auth)
 
 export const config = { maxDuration: 60 };
 
-const PREF_REGIONS = ["HN", "MX", "CR", "GT", "SV", "NI", "CO", "AR", "CL", "PE", "US", "ES"];
+const REGION = "HN"; // SOLO Honduras. No se usa ningún otro país.
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ¿La respuesta de TMDB es un error transitorio que vale la pena reintentar?
 function esTransitorio(data) {
-  if (!data || typeof data !== "object") return true;          // sin JSON válido
+  if (!data || typeof data !== "object") return true;
   if (data.success === false || data.status_code) {
     const msg = String(data.status_message || "").toLowerCase();
     if (msg.includes("backend") || msg.includes("connect") ||
         msg.includes("unavailable") || msg.includes("timeout") ||
         msg.includes("temporarily")) return true;
-    // status_code 7 (key inválida) o 34 (no encontrado) NO se reintentan
   }
   return false;
 }
 
-// GET a TMDB con timeout + reintentos contra fallos intermitentes
 async function tmdbGet(url, { ms = 9000, intentos = 5 } = {}) {
   let ultimo = null;
   for (let i = 0; i < intentos; i++) {
@@ -42,13 +36,12 @@ async function tmdbGet(url, { ms = 9000, intentos = 5 } = {}) {
     try {
       const r = await fetch(url, { signal: ctrl.signal });
       const data = await r.json().catch(() => null);
-      // si vino un error transitorio (o 5xx), reintentamos
       if (!r.ok || esTransitorio(data)) {
         ultimo = data || { status_message: "HTTP " + r.status };
         await sleep(500 + i * 600);
         continue;
       }
-      return data; // OK
+      return data;
     } catch (e) {
       ultimo = { status_message: e.message || "abort" };
       await sleep(500 + i * 600);
@@ -56,26 +49,21 @@ async function tmdbGet(url, { ms = 9000, intentos = 5 } = {}) {
       clearTimeout(t);
     }
   }
-  // se agotaron los intentos: devolvemos el último error para reportarlo
   return ultimo || { success: false, status_message: "sin respuesta tras varios intentos" };
 }
 
-function pickProviders(results) {
-  const tryReg = reg => {
-    const r = results && results[reg];
-    if (!r) return null;
-    const flat = [...(r.flatrate || []), ...(r.free || []), ...(r.ads || [])];
-    if (!flat.length) return null;
-    return { region: reg, lista: [...new Set(flat.map(p => p.provider_name))] };
-  };
-  for (const reg of PREF_REGIONS) { const h = tryReg(reg); if (h) return h; }
-  for (const reg of Object.keys(results || {})) { const h = tryReg(reg); if (h) return h; }
-  return { region: null, lista: [] };
+// Plataformas SOLO de Honduras. flatrate = suscripción; free/ads = gratis (Tubi, etc.)
+// rent/buy (alquiler/compra) se EXCLUYEN a propósito: el negocio vende suscripciones.
+function provadoresHN(results) {
+  const hn = results && results[REGION];
+  if (!hn) return [];
+  const flat = [...(hn.flatrate || []), ...(hn.free || []), ...(hn.ads || [])];
+  return [...new Set(flat.map(p => p.provider_name))];
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 5, msg: "tmdb v5 activo. Usá POST para buscar." });
+    return res.status(200).json({ ok: true, version: 6, msg: "tmdb v6 activo (solo HN). Usá POST." });
 
   const { query } = req.body || {};
   if (!query) return res.status(400).json({ error: "Falta el texto de búsqueda" });
@@ -84,7 +72,6 @@ export default async function handler(req, res) {
   if (!KEY) return res.status(500).json({ error: "Falta TMDB_API_KEY en Vercel" });
 
   try {
-    // 1. Buscar (pelis + series + novelas) — con reintentos
     const sUrl = `https://api.themoviedb.org/3/search/multi?api_key=${KEY}&language=es-MX&query=${encodeURIComponent(query)}&include_adult=false`;
     const sData = await tmdbGet(sUrl, { ms: 9000, intentos: 5 });
 
@@ -99,17 +86,14 @@ export default async function handler(req, res) {
 
     if (!items.length) return res.status(200).json({ resultados: [] });
 
-    // 2. Proveedores (best-effort, con reintentos cortos). Si falla, el título igual sale.
     const out = await Promise.all(items.map(async r => {
       const type = r.media_type;
-      let proveedores = [], region = null;
+      let proveedores = [];
       try {
         const pUrl = `https://api.themoviedb.org/3/${type}/${r.id}/watch/providers?api_key=${KEY}`;
         const pData = await tmdbGet(pUrl, { ms: 7000, intentos: 3 });
-        const pick = pickProviders(pData && pData.results);
-        proveedores = pick.lista;
-        region = pick.region;
-      } catch (e) { /* sin proveedores para este título */ }
+        proveedores = provadoresHN(pData && pData.results); // SOLO Honduras
+      } catch (e) { /* sin datos de proveedores */ }
       return {
         titulo: r.title || r.name,
         tipo: type === "movie" ? "Película" : "Serie",
@@ -117,8 +101,7 @@ export default async function handler(req, res) {
         poster: r.poster_path ? `https://image.tmdb.org/t/p/w200${r.poster_path}` : null,
         rating: r.vote_average ? Math.round(r.vote_average * 10) / 10 : null,
         sinopsis: r.overview || "",
-        proveedores,
-        region
+        proveedores // SIEMPRE datos de Honduras (o vacío si TMDB no tiene)
       };
     }));
 
