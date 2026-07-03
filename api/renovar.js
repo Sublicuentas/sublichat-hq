@@ -78,9 +78,20 @@ async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
   }
 }
 
+// Normaliza el nombre/código de plataforma para comparar sin fallar por
+// mayúsculas, espacios sobrantes o acentos. Así "Netflix", "netflix",
+// " netflix " y "NETFLIX" se consideran la misma plataforma.
+function normPlat(v) {
+  return String(v || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/\s+/g, " ");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 5, msg: "renovar v5 activo. Usá POST." });
+    return res.status(200).json({ ok: true, version: 6, msg: "renovar v6 activo. Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteNorm, telefono, plataforma } = body;
@@ -112,8 +123,9 @@ export default async function handler(req, res) {
       if (!plataforma || (!dias && !fechaExacta))
         return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
       let cambiados = 0;
+      const platBuscada = normPlat(plataforma);
       servicios = servicios.map(s => {
-        if (s.plataforma === plataforma) {
+        if (normPlat(s.plataforma) === platBuscada) {
           cambiados++;
           let nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
           return { ...s, fechaRenovacion: nuevaFecha };
@@ -125,7 +137,8 @@ export default async function handler(req, res) {
     } else if (acc === "eliminar") {
       if (!plataforma) return res.status(200).json({ error: "Falta la plataforma a eliminar." });
       // elimina solo la primera coincidencia de esa plataforma (por si hay varias)
-      const idx = servicios.findIndex(s => s.plataforma === plataforma);
+      const platElim = normPlat(plataforma);
+      const idx = servicios.findIndex(s => normPlat(s.plataforma) === platElim);
       if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
       const servEliminado = servicios[idx];
       servicios = servicios.filter((_, i) => i !== idx);
@@ -159,7 +172,8 @@ export default async function handler(req, res) {
       const { plataformaOriginal, servicio } = body;
       const buscar = plataformaOriginal || plataforma;
       if (!buscar || !servicio) return res.status(200).json({ error: "Faltan datos para editar." });
-      const idx = servicios.findIndex(s => s.plataforma === buscar);
+      const platEdit = normPlat(buscar);
+      const idx = servicios.findIndex(s => normPlat(s.plataforma) === platEdit);
       if (idx === -1) return res.status(200).json({ error: "No encontré ese servicio." });
       servicios[idx] = {
         plataforma: servicio.plataforma || servicios[idx].plataforma,
