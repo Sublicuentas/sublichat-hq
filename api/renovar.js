@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 8  ·  Renovar + gestionar servicios + ficha CRM/WhatsApp upsert
+// api/renovar.js  ·  VERSION 10  ·  Renovar + gestionar servicios + ficha CRM/WhatsApp upsert
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -70,6 +70,14 @@ function aFechaFB(f) {
 
 function isoNow() {
   return new Date().toISOString();
+}
+
+function parseMoney(v) {
+  if (v == null || v === "") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const clean = String(v).replace(/Lps\.?/gi, "").replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // Ajusta los cupos de una cuenta del inventario buscándola por correo.
@@ -156,11 +164,11 @@ function buildServicio(servicio = {}, fichaTexto = "") {
 
   const pinPerfil = servicio.pinPerfil != null
     ? String(servicio.pinPerfil || "")
-    : String(servicio.pin_perfil || servicio.perfilPin || (tieneClaveNueva && servicio.pin != null ? servicio.pin || "" : ""));
+    : String(servicio.pin_perfil || servicio.perfilPin || servicio.pinDePerfil || servicio.pin_de_perfil || (tieneClaveNueva && servicio.pin != null ? servicio.pin || "" : ""));
 
   const out = {
     plataforma: servicio.plataforma || "",
-    precio: Number(servicio.precio) || 0,
+    precio: parseMoney(servicio.precio || servicio.precioLps || servicio.pago || servicio.monto),
     fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
     correo: servicio.correo || "",
     clave,
@@ -197,7 +205,7 @@ function limpiarServicioCRM(servicio = {}) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 9, msg: "renovar v9 activo. Usá POST." });
+    return res.status(200).json({ ok: true, version: 10, msg: "renovar v10 activo. Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteNorm, telefono, plataforma } = body;
