@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 10  ·  Renovar + gestionar servicios + ficha CRM/WhatsApp upsert
+// api/renovar.js  ·  VERSION 13  ·  Reglas de campos por plataforma + ficha CRM/WhatsApp upsert
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -35,6 +35,36 @@ function normPlat(v) {
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function servicioNoUsaPinPerfil(plataforma) {
+  const p = normPlat(plataforma).replace(/\s+/g, "");
+  return (
+    p.includes("netflixvip") ||
+    (p.includes("netflix") && p.includes("vip")) ||
+    p.includes("spotify") ||
+    p.includes("deezer") ||
+    p.includes("youtube") ||
+    p.includes("office") ||
+    p.includes("vix") ||
+    p.includes("canva") ||
+    p.includes("gemini") ||
+    p.includes("chatgpt") ||
+    p.includes("duolingo") ||
+    p.includes("oleada") ||
+    p.includes("iptv")
+  );
+}
+
+function servicioNoUsaClave(plataforma) {
+  const p = normPlat(plataforma).replace(/\s+/g, "");
+  return (
+    p.includes("vix") ||
+    p.includes("canva") ||
+    p.includes("gemini") ||
+    p.includes("chatgpt") ||
+    p.includes("duolingo")
+  );
 }
 
 function normName(v) {
@@ -152,19 +182,24 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
 
 function buildServicio(servicio = {}, fichaTexto = "") {
   // Modelo limpio del CRM:
-  //   clave     = contraseña/acceso de la cuenta
+  //   clave     = contraseña/acceso de la cuenta cuando aplique
   //   pinPerfil = PIN del perfil cuando aplique
-  // No se vuelve a escribir el campo "pin" para evitar duplicados/confusión.
+  // Reglas principales:
+  //   Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
+  //   Netflix VIP, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
+  //   ViX+, Canva, Gemini, ChatGPT y Duolingo son solo correo.
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
+  const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
+  const sinClave = servicio.sinClave === true || servicio.removeClave === true || servicioNoUsaClave(servicio.plataforma);
 
-  const clave = servicio.clave != null
+  const clave = sinClave ? "" : (servicio.clave != null
     ? String(servicio.clave || "")
-    : String(servicio.password || servicio.contrasena || servicio.pinClave || (!tieneClaveNueva ? servicio.pin || "" : ""));
+    : String(servicio.password || servicio.contrasena || servicio.pinClave || (!tieneClaveNueva ? servicio.pin || "" : "")));
 
-  const pinPerfil = servicio.pinPerfil != null
+  const pinPerfil = sinPinPerfil ? "" : (servicio.pinPerfil != null
     ? String(servicio.pinPerfil || "")
-    : String(servicio.pin_perfil || servicio.perfilPin || servicio.pinDePerfil || servicio.pin_de_perfil || (tieneClaveNueva && servicio.pin != null ? servicio.pin || "" : ""));
+    : String(servicio.pin_perfil || servicio.perfilPin || servicio.pinDePerfil || servicio.pin_de_perfil || (tieneClaveNueva && servicio.pin != null ? servicio.pin || "" : "")));
 
   const out = {
     plataforma: servicio.plataforma || "",
@@ -172,10 +207,13 @@ function buildServicio(servicio = {}, fichaTexto = "") {
     fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
     correo: servicio.correo || "",
     clave,
-    pinPerfil,
     perfil: servicio.perfil || "",
     updatedAt: isoNow()
   };
+
+  if (sinClave) out.sinClave = true;
+  if (sinPinPerfil) out.sinPinPerfil = true;
+  else if (pinPerfil) out.pinPerfil = pinPerfil;
 
   if (fichaTexto) {
     out.fichaTexto = fichaTexto;
@@ -195,17 +233,44 @@ function limpiarServicioCRM(servicio = {}) {
   if (!tieneClave && s.pin != null) s.clave = String(s.pin || "");
   if (tieneClave && (s.pinPerfil == null || s.pinPerfil === "") && s.pin != null) s.pinPerfil = String(s.pin || "");
 
-  if (s.pinPerfil == null) s.pinPerfil = "";
+  if (servicioNoUsaClave(s.plataforma)) s.clave = "";
+  if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
+  if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
   delete s.pin;
   delete s.pin_perfil;
   delete s.perfilPin;
   delete s.pinClave;
+  delete s.sinClave;
+  delete s.removeClave;
+  delete s.sinPinPerfil;
+  delete s.removePinPerfil;
   return s;
+}
+
+function aplicarNuevoServicio(servicioAnterior, nuevo) {
+  const merged = { ...(servicioAnterior || {}), ...nuevo };
+  if (nuevo && nuevo.sinClave) {
+    merged.clave = "";
+    delete merged.password;
+    delete merged.contrasena;
+    delete merged.pinClave;
+  }
+  if (nuevo && nuevo.sinPinPerfil) {
+    delete merged.pinPerfil;
+    delete merged.pin_perfil;
+    delete merged.perfilPin;
+    delete merged.pin;
+  }
+  delete merged.sinClave;
+  delete merged.removeClave;
+  delete merged.sinPinPerfil;
+  delete merged.removePinPerfil;
+  return limpiarServicioCRM(merged);
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 10, msg: "renovar v10 activo. Usá POST." });
+    return res.status(200).json({ ok: true, version: 13, msg: "renovar v13 activo. Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteNorm, telefono, plataforma } = body;
@@ -258,8 +323,8 @@ export default async function handler(req, res) {
       );
       if (idx === -1) idx = servicios.findIndex(s => normPlat(s.plataforma) === pNorm);
 
-      if (idx >= 0) servicios[idx] = { ...servicios[idx], ...nuevo };
-      else servicios.push(nuevo);
+      if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
+      else servicios.push(aplicarNuevoServicio({}, nuevo));
 
       const update = {
         nombrePerfil: nombrePerfil || data.nombrePerfil || data.nombre || "—",
@@ -365,7 +430,7 @@ export default async function handler(req, res) {
         pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (servicios[idx].pinPerfil || servicios[idx].pin_perfil || servicios[idx].perfilPin || "")
       }, servicio.fichaTexto || servicios[idx].fichaTexto || "");
 
-      servicios[idx] = { ...servicios[idx], ...nuevo };
+      servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
 
     } else {
       return res.status(200).json({ error: "Acción no reconocida." });
