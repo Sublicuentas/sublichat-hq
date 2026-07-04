@@ -1,11 +1,11 @@
-// api/chat.js  ·  VERSION 6  (Gemini 2.5 + clave y pin separados)
+// api/chat.js  ·  VERSION 7  (Gemini 2.5 + reglas de clave/PIN por plataforma)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
 // 3) Listo. El frontend ya le manda la pregunta + el contexto de tus clientes.
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 6, msg: "chat v6 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 7, msg: "chat v7 activo. Usá POST." });
 
   const { pregunta, hoy, clientes } = req.body || {};
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
@@ -28,8 +28,12 @@ REGLAS IMPORTANTES:
 
 Cada cliente trae: nombre, tel (teléfono), vendedor (socio a cargo), y cuentas[] donde cada cuenta tiene:
 plataforma, precio (Lps), renueva (fecha de renovación AAAA-MM-DD), estado, correo, clave y pinPerfil.
-- clave = contraseña/acceso de la cuenta.
+- clave = contraseña/acceso de la cuenta cuando aplique.
 - pinPerfil = PIN del perfil cuando aplique.
+- Reglas de ficha/CRM:
+  * Netflix Premium, HBO Max, Disney Premium, Disney Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
+  * Netflix VIP, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan correo/usuario + clave, sin PIN.
+  * ViX+, Canva, Gemini, ChatGPT y Duolingo llevan solo correo, sin clave ni PIN.
 
 DATOS DE LA CARTERA (JSON):
 ${JSON.stringify(clientes || [])}`;
