@@ -1,11 +1,11 @@
-// api/chat.js  ·  VERSION 3  (Gemini 2.5 + reporte de errores)
+// api/chat.js  ·  VERSION 4  (Gemini 2.5 + clave y pin separados)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
 // 3) Listo. El frontend ya le manda la pregunta + el contexto de tus clientes.
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 3, msg: "chat v3 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 5, msg: "chat v5 activo. Usá POST." });
 
   const { pregunta, hoy, clientes } = req.body || {};
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
@@ -27,7 +27,9 @@ REGLAS IMPORTANTES:
 - Para finanzas, suma los precios exactos. Para listados, ordénalos.
 
 Cada cliente trae: nombre, tel (teléfono), vendedor (socio a cargo), y cuentas[] donde cada cuenta tiene:
-plataforma, precio (Lps), renueva (fecha de renovación AAAA-MM-DD), estado, correo y pin.
+plataforma, precio (Lps), renueva (fecha de renovación AAAA-MM-DD), estado, correo, clave y pinPerfil.
+- clave = contraseña/acceso de la cuenta.
+- pinPerfil = PIN del perfil cuando aplique.
 
 DATOS DE LA CARTERA (JSON):
 ${JSON.stringify(clientes || [])}`;
