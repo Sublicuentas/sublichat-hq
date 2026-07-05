@@ -1,4 +1,27 @@
-<!doctype html><html><head><meta charset="utf-8"><title>api/importar.js para copiar</title><style>body{font-family:monospace;white-space:pre-wrap;padding:20px;background:#0b1020;color:#e9f2ff}pre{white-space:pre-wrap}</style></head><body><pre>// api/importar.js · Respaldos Excel Sublichat
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>api/importar.js para copiar</title>
+<style>
+  body{margin:0;background:#0b1020;color:#e9f2ff;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  header{position:sticky;top:0;background:#101936;border-bottom:1px solid #26324f;padding:14px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between;}
+  h1{font-size:16px;margin:0;color:#fff;}
+  button{background:#20b15a;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:700;}
+  pre{white-space:pre-wrap;word-break:break-word;margin:0;padding:18px;font-size:13px;line-height:1.45;}
+  .note{font-size:12px;color:#aeb8d1;margin-top:4px;}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>api/importar.js · modo JS para copiar</h1>
+    <div class="note">Copie todo el código y péguelo en GitHub dentro de <b>/api/importar.js</b>.</div>
+  </div>
+  <button onclick="navigator.clipboard.writeText(document.getElementById('code').innerText).then(()=>this.textContent='Copiado ✓')">Copiar</button>
+</header>
+<pre id="code">// api/importar.js · Respaldos Excel Sublichat
 // Guarda, lista, abre y busca tablas de Excel guardadas en Firestore.
 // No modifica clientes, servicios, inventario operativo ni bot Telegram.
 // Requiere variables: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -557,18 +580,42 @@ function secCleanFilas(filas) {
   return filas.slice(0, 2000).map((r) =&gt; (Array.isArray(r) ? r : []).slice(0, 250).map(secCleanCell));
 }
 
+function secUploadId() {
+  return Date.now() + &quot;_&quot; + Math.random().toString(36).slice(2, 10);
+}
+
+function secHojaDocId(index) {
+  return secPad(index, 3);
+}
+
+async function secLeerBloquesOrdenados(collectionRef) {
+  let snap;
+  try {
+    snap = await collectionRef.orderBy(&quot;bloque&quot;, &quot;asc&quot;).get();
+  } catch (_) {
+    snap = await collectionRef.get();
+  }
+  return snap.docs
+    .map((d) =&gt; d.data() || {})
+    .sort((a, b) =&gt; (Number(a.bloque) || 0) - (Number(b.bloque) || 0));
+}
+
 async function secHojaIniciar(db, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
   if (!secOk(seccion)) return { status: 400, json: { ok: false, error: &quot;Sección no válida&quot; } };
   const index = Number(body.index) || 1;
   const name = String(body.name || (&quot;Hoja &quot; + index)).slice(0, 120);
-  const rows = Number(body.rows) || 0;
-  const cols = Number(body.cols) || 0;
+  const rows = Math.max(0, Number(body.rows) || 0);
+  const cols = Math.max(0, Number(body.cols) || 0);
   const now = new Date().toISOString();
-  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secPad(index, 3));
-  await deleteCollectionInBatches(hojaRef.collection(&quot;bloques&quot;));
-  await hojaRef.set({ index, name, rows, cols, updatedAt: now });
-  return { status: 200, json: { ok: true, seccion, index, name } };
+  const uploadId = String(body.uploadId || secUploadId()).slice(0, 80);
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secHojaDocId(index));
+
+  // IMPORTANTE: no borramos bloques viejos aquí.
+  // En Vercel esa limpieza puede tumbar la función si antes hubo cargas grandes.
+  // Cada carga nueva queda aislada por uploadId; solo se lee el uploadId activo.
+  await hojaRef.set({ index, name, rows, cols, uploadId, updatedAt: now, status: &quot;uploading&quot; }, { merge: true });
+  return { status: 200, json: { ok: true, seccion, index, name, uploadId } };
 }
 async function secHojaBloque(db, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
@@ -576,27 +623,50 @@ async function secHojaBloque(db, body) {
   const index = Number(body.index) || 1;
   const bloque = Number(body.bloque) || 1;
   const filas = secCleanFilas(body.filas || []);
-  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secPad(index, 3));
-  await hojaRef.collection(&quot;bloques&quot;).doc(secPad(bloque, 4)).set({ bloque, total: filas.length, filas });
-  return { status: 200, json: { ok: true, seccion, index, bloque, filas: filas.length } };
+  const now = new Date().toISOString();
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secHojaDocId(index));
+  const hd = await hojaRef.get();
+  let uploadId = hd.exists ? String((hd.data() || {}).uploadId || &quot;&quot;) : &quot;&quot;;
+  if (!uploadId) {
+    uploadId = secUploadId();
+    await hojaRef.set({ index, uploadId, updatedAt: now, status: &quot;uploading&quot; }, { merge: true });
+  }
+  await hojaRef.collection(&quot;uploads&quot;).doc(uploadId).collection(&quot;bloques&quot;).doc(secPad(bloque, 4)).set({ bloque, total: filas.length, filas, updatedAt: now });
+  return { status: 200, json: { ok: true, seccion, index, bloque, filas: filas.length, uploadId } };
 }
 async function secFinalizar(db, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
   if (!secOk(seccion)) return { status: 400, json: { ok: false, error: &quot;Sección no válida&quot; } };
   const cfg = SECCIONES[seccion];
   const hojasRaw = Array.isArray(body.hojas) ? body.hojas : [];
-  const hojas = hojasRaw.map((h, i) =&gt; ({ index: Number(h &amp;&amp; h.index) || i + 1, name: String((h &amp;&amp; h.name) || (&quot;Hoja &quot; + (i + 1))).slice(0, 120), rows: Number(h &amp;&amp; h.rows) || 0, cols: Number(h &amp;&amp; h.cols) || 0 }));
+  const now = new Date().toISOString();
+  const hojas = [];
+  for (let i = 0; i &lt; hojasRaw.length; i++) {
+    const h = hojasRaw[i] || {};
+    const index = Number(h.index) || i + 1;
+    const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secHojaDocId(index));
+    const hd = await hojaRef.get();
+    const meta = hd.exists ? (hd.data() || {}) : {};
+    const item = {
+      index,
+      name: String(h.name || meta.name || (&quot;Hoja &quot; + index)).slice(0, 120),
+      rows: Number(h.rows || meta.rows) || 0,
+      cols: Number(h.cols || meta.cols) || 0,
+      uploadId: String(meta.uploadId || &quot;&quot;).slice(0, 80)
+    };
+    hojas.push(item);
+    await hojaRef.set({ status: &quot;ready&quot;, updatedAt: now }, { merge: true });
+  }
   const totalFilas = hojas.reduce((a, h) =&gt; a + (h.rows || 0), 0);
   const editor = String(body.editor || body.usuario || &quot;sublicuentas&quot;).trim();
   const filename = String(body.filename || &quot;&quot;).slice(0, 180);
   const motivo = String(body.motivo || &quot;migracion&quot;).slice(0, 40);
-  const now = new Date().toISOString();
   await db.collection(SEC_COL).doc(seccion).set({
     id: seccion, label: cfg.label, kind: cfg.kind, owner: cfg.owner, emoji: cfg.emoji,
     hojas, totalHojas: hojas.length, totalFilas, filename, motivo,
     updatedAt: now, updatedBy: editor,
     noModificaCRM: true, noModificaInventario: true, noModificaBotTelegram: true
-  });
+  }, { merge: true });
   await db.collection(&quot;auditoria_eventos&quot;).add({ tipo: &quot;seccion_&quot; + motivo, seccion, totalHojas: hojas.length, totalFilas, editor, filename, createdAt: now, noModificaCRM: true });
   return { status: 200, json: { ok: true, seccion, totalHojas: hojas.length, totalFilas, updatedAt: now } };
 }
@@ -613,17 +683,28 @@ async function secHojaLeer(db, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
   if (!secOk(seccion)) return { status: 400, json: { ok: false, error: &quot;Sección no válida&quot; } };
   const index = Number(body.index) || 1;
-  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secPad(index, 3));
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(secHojaDocId(index));
   const hd = await hojaRef.get();
   if (!hd.exists) return { status: 404, json: { ok: false, error: &quot;No encontré esa hoja&quot; } };
   const meta = hd.data() || {};
-  const maxRows = Math.min(Math.max(Number(body.maxRows) || 5000, 50), 20000);
-  const snap = await hojaRef.collection(&quot;bloques&quot;).orderBy(&quot;bloque&quot;, &quot;asc&quot;).get();
+  const maxRows = Math.min(Math.max(Number(body.maxRows) || 5000, 50), 30000);
   let filas = [];
-  snap.docs.forEach((d) =&gt; { filas = filas.concat((d.data() || {}).filas || []); });
+
+  const uploadId = String(meta.uploadId || &quot;&quot;);
+  if (uploadId) {
+    const blocks = await secLeerBloquesOrdenados(hojaRef.collection(&quot;uploads&quot;).doc(uploadId).collection(&quot;bloques&quot;));
+    blocks.forEach((d) =&gt; { filas = filas.concat(d.filas || []); });
+  }
+
+  // Compatibilidad con cargas anteriores que guardaban en /bloques directamente.
+  if (!filas.length) {
+    const blocks = await secLeerBloquesOrdenados(hojaRef.collection(&quot;bloques&quot;));
+    blocks.forEach((d) =&gt; { filas = filas.concat(d.filas || []); });
+  }
+
   const recortado = filas.length &gt; maxRows;
   filas = filas.slice(0, maxRows);
-  return { status: 200, json: { ok: true, seccion, index, name: meta.name || (&quot;Hoja &quot; + index), rows: meta.rows || filas.length, cols: meta.cols || 0, filas, recortado } };
+  return { status: 200, json: { ok: true, seccion, index, name: meta.name || (&quot;Hoja &quot; + index), rows: meta.rows || filas.length, cols: meta.cols || 0, filas, recortado, uploadId } };
 }
 async function secEstado(db) {
   const out = {};
@@ -641,7 +722,7 @@ async function handler(req, res) {
   res.setHeader(&quot;Access-Control-Allow-Methods&quot;, &quot;GET,POST,OPTIONS&quot;);
   res.setHeader(&quot;Access-Control-Allow-Headers&quot;, &quot;Content-Type&quot;);
   if (req.method === &quot;OPTIONS&quot;) return res.status(200).end();
-  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot;) return res.status(200).json({ ok: true, version: &quot;importar-current-cjs-20260705&quot;, msg: &quot;api/importar activo&quot;, acciones: [&quot;sec_estado&quot;,&quot;sec_leer&quot;,&quot;sec_hoja_iniciar&quot;,&quot;sec_hoja_bloque&quot;,&quot;sec_finalizar&quot;,&quot;sec_hoja_leer&quot;] });
+  if (req.method === &quot;GET&quot; || req.method === &quot;HEAD&quot;) return res.status(200).json({ ok: true, version: &quot;importar-cjs-sec-uploadid-fallback-20260705&quot;, msg: &quot;api/importar activo&quot;, acciones: [&quot;sec_estado&quot;,&quot;sec_leer&quot;,&quot;sec_hoja_iniciar&quot;,&quot;sec_hoja_bloque&quot;,&quot;sec_finalizar&quot;,&quot;sec_hoja_leer&quot;] });
   if (req.method !== &quot;POST&quot;) return res.status(405).json({ ok: false, error: &quot;Método no permitido&quot; });
 
   try {
@@ -716,4 +797,6 @@ module.exports.config = {
     bodyParser: { sizeLimit: &quot;25mb&quot; }
   }
 };
-</pre></body></html>
+</pre>
+</body>
+</html>
