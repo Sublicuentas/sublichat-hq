@@ -1,5 +1,5 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>api/importar.js para copiar</title><style>body{font-family:Arial,sans-serif;background:#0e1117;color:#e8eef7;padding:20px}pre{white-space:pre-wrap;background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;overflow:auto}button{padding:12px 16px;border:0;border-radius:10px;background:#22c55e;font-weight:bold}</style></head><body><h1>api/importar.js</h1><p>Copie todo el contenido y pÃ©guelo en <b>api/importar.js</b>.</p><button onclick="navigator.clipboard.writeText(document.querySelector('code').innerText)">Copiar todo</button><pre><code>// api/importar.js Â· Sublichat Archivos de trabajo por usuario
-// VersiÃ³n robusta: guarda Bodega, AuditorÃ­a y Flujo diario en Firestore por hojas/bloques.
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>api/importar.js FIX 500</title><style>body{font-family:Arial,sans-serif;background:#0e1117;color:#e8eef7;padding:20px}pre{white-space:pre-wrap;background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;overflow:auto}button{padding:12px 16px;border:0;border-radius:10px;background:#22c55e;font-weight:bold}</style></head><body><h1>api/importar.js 路 FIX 500</h1><p>Copie solamente el c贸digo del bloque y p茅guelo en <b>api/importar.js</b>.</p><button onclick="navigator.clipboard.writeText(document.querySelector('code').innerText)">Copiar c贸digo</button><pre><code>// api/importar.js 路 Sublichat Archivos de trabajo por usuario
+// Versi贸n robusta: guarda Bodega, Auditor铆a y Flujo diario en Firestore por hojas/bloques.
 // No toca clientes, servicios, inventario operativo ni bot Telegram.
 
 import admin from &quot;firebase-admin&quot;;
@@ -19,7 +19,7 @@ function serviceAccountFromEnv() {
         privateKey: normalizePrivateKey(parsed.private_key || parsed.privateKey)
       };
     } catch (_) {
-      // continÃºa con variables separadas
+      // contin煤a con variables separadas
     }
   }
   return {
@@ -46,9 +46,9 @@ function getApp() {
 
 const SEC_COL = &quot;secciones_trabajo&quot;;
 const SECCIONES = {
-  bodega:       { label: &quot;Bodega&quot;,       kind: &quot;excel&quot;, owner: &quot;sublicuentas&quot;, emoji: &quot;ðŸ“¦&quot; },
-  auditoria:    { label: &quot;AuditorÃ­a&quot;,    kind: &quot;excel&quot;, owner: &quot;magdiel&quot;,      emoji: &quot;ðŸ“Š&quot; },
-  flujo_diario: { label: &quot;Flujo diario&quot;, kind: &quot;word&quot;,  owner: &quot;relojes&quot;,      emoji: &quot;ðŸ§¾&quot; }
+  bodega:       { label: &quot;Bodega&quot;,       kind: &quot;excel&quot;, owner: &quot;sublicuentas&quot;, emoji: &quot;馃摝&quot; },
+  auditoria:    { label: &quot;Auditor铆a&quot;,    kind: &quot;excel&quot;, owner: &quot;magdiel&quot;,      emoji: &quot;馃搳&quot; },
+  flujo_diario: { label: &quot;Flujo diario&quot;, kind: &quot;word&quot;,  owner: &quot;relojes&quot;,      emoji: &quot;馃Ь&quot; }
 };
 
 function ok(res, json = {}) { return res.status(200).json({ ok: true, ...json }); }
@@ -98,7 +98,7 @@ async function accionEstado(db, res) {
 
 async function accionLeer(db, res, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
-  if (!secOk(seccion)) return fail(res, &quot;SecciÃ³n no vÃ¡lida&quot;);
+  if (!secOk(seccion)) return fail(res, &quot;Secci贸n no v谩lida&quot;);
   const cfg = SECCIONES[seccion];
   const doc = await db.collection(SEC_COL).doc(seccion).get();
   if (!doc.exists) {
@@ -123,7 +123,7 @@ async function accionLeer(db, res, body) {
 
 async function accionHojaIniciar(db, res, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
-  if (!secOk(seccion)) return fail(res, &quot;SecciÃ³n no vÃ¡lida&quot;);
+  if (!secOk(seccion)) return fail(res, &quot;Secci贸n no v谩lida&quot;);
   const index = Number(body.index) || 1;
   const now = new Date().toISOString();
   const id = uploadId();
@@ -144,7 +144,7 @@ async function accionHojaIniciar(db, res, body) {
 
 async function accionHojaBloque(db, res, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
-  if (!secOk(seccion)) return fail(res, &quot;SecciÃ³n no vÃ¡lida&quot;);
+  if (!secOk(seccion)) return fail(res, &quot;Secci贸n no v谩lida&quot;);
   const index = Number(body.index) || 1;
   const bloque = Number(body.bloque) || 1;
   const filas = cleanFilas(body.filas || []);
@@ -164,7 +164,7 @@ async function accionHojaBloque(db, res, body) {
 
 async function accionFinalizar(db, res, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
-  if (!secOk(seccion)) return fail(res, &quot;SecciÃ³n no vÃ¡lida&quot;);
+  if (!secOk(seccion)) return fail(res, &quot;Secci贸n no v谩lida&quot;);
   const cfg = SECCIONES[seccion];
   const now = new Date().toISOString();
   const editor = String(body.editor || body.usuario || &quot;sublicuentas&quot;).trim();
@@ -223,12 +223,12 @@ async function accionFinalizar(db, res, body) {
 
 async function accionHojaLeer(db, res, body) {
   const seccion = String(body.seccion || &quot;&quot;).trim();
-  if (!secOk(seccion)) return fail(res, &quot;SecciÃ³n no vÃ¡lida&quot;);
+  if (!secOk(seccion)) return fail(res, &quot;Secci贸n no v谩lida&quot;);
   const index = Number(body.index) || 1;
   const maxRows = Math.min(Math.max(Number(body.maxRows) || 5000, 50), 25000);
   const hojaRef = db.collection(SEC_COL).doc(seccion).collection(&quot;hojas&quot;).doc(pad(index, 3));
   const hd = await hojaRef.get();
-  if (!hd.exists) return fail(res, &quot;No encontrÃ© esa hoja&quot;, 200, { vacio: true });
+  if (!hd.exists) return fail(res, &quot;No encontr茅 esa hoja&quot;, 200, { vacio: true });
   const meta = hd.data() || {};
   const up = meta.uploadId || &quot;&quot;;
   if (!up) return ok(res, { seccion, index, name: meta.name || `Hoja ${index}`, rows: meta.rows || 0, cols: meta.cols || 0, filas: [], vacio: true });
@@ -248,7 +248,7 @@ async function accionHojaLeer(db, res, body) {
   });
 }
 
-// Compatibilidad mÃ­nima con nombres anteriores. No debe usarse para los nuevos mÃ³dulos.
+// Compatibilidad m铆nima con nombres anteriores. No debe usarse para los nuevos m贸dulos.
 async function accionLegacyListar(db, res, body) {
   const tipo = String(body.tipo || &quot;&quot;).toLowerCase();
   const seccion = tipo.includes(&quot;stream&quot;) ? &quot;auditoria&quot; : tipo.includes(&quot;invent&quot;) ? &quot;bodega&quot; : &quot;bodega&quot;;
@@ -264,7 +264,7 @@ export default async function handler(req, res) {
   res.setHeader(&quot;Access-Control-Allow-Headers&quot;, &quot;Content-Type&quot;);
   if (req.method === &quot;OPTIONS&quot;) return res.status(200).end();
   if (req.method === &quot;GET&quot;) return res.status(200).json({ ok: true, version: &quot;archivos-trabajo-robusto-20260705&quot;, acciones: [&quot;sec_estado&quot;, &quot;sec_leer&quot;, &quot;sec_hoja_iniciar&quot;, &quot;sec_hoja_bloque&quot;, &quot;sec_finalizar&quot;, &quot;sec_hoja_leer&quot;] });
-  if (req.method !== &quot;POST&quot;) return fail(res, &quot;MÃ©todo no permitido&quot;);
+  if (req.method !== &quot;POST&quot;) return fail(res, &quot;M茅todo no permitido&quot;);
 
   try {
     const body = req.body || {};
@@ -279,7 +279,7 @@ export default async function handler(req, res) {
     if (accion === &quot;sec_hoja_leer&quot;) return accionHojaLeer(db, res, body);
     if (accion === &quot;listar_respaldos_excel&quot;) return accionLegacyListar(db, res, body);
 
-    return fail(res, `AcciÃ³n no reconocida: ${accion}`);
+    return fail(res, `Acci贸n no reconocida: ${accion}`);
   } catch (e) {
     console.error(&quot;IMPORTAR_API_ERROR&quot;, e);
     // Respondo 200 para que el navegador muestre el mensaje real en vez de solo HTTP 500.
