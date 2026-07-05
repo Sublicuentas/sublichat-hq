@@ -528,6 +528,114 @@ async function finalizarRespaldoExcel(db, body) {
   return { status: 200, json: { ok: true, id, estado: "guardado_editable", totalHojas: meta.totalHojas || 0, totalFilas: meta.totalFilas || 0 } };
 }
 
+
+
+/* ============================================================
+   MÓDULOS DE TRABAJO POR SECCIÓN · HOJA DE CÁLCULO COMPLETA
+   Todo el archivo entra a Sublichat (todas las hojas, todas las celdas)
+   y se trabaja aquí dentro. Guarda valores (los gráficos/fórmulas de
+   Excel se regeneran al exportar). No toca CRM, inventario ni el bot.
+       bodega       -> Sublicuentas (Excel inventario)
+       auditoria    -> Magdiel      (Excel streaming)
+       flujo_diario -> Relojes       (Word)
+   Estructura Firestore:
+     secciones_trabajo/{sec}                         (meta + lista de hojas)
+     secciones_trabajo/{sec}/hojas/{NNN}             (meta de hoja)
+     secciones_trabajo/{sec}/hojas/{NNN}/bloques/{CCCC}  (filas en bloques)
+   ============================================================ */
+const SEC_COL = "secciones_trabajo";
+const SECCIONES = {
+  bodega:       { label: "Bodega",       kind: "excel", owner: "sublicuentas", emoji: "📦" },
+  auditoria:    { label: "Auditoría",    kind: "excel", owner: "magdiel",      emoji: "📊" },
+  flujo_diario: { label: "Flujo diario", kind: "word",  owner: "relojes",       emoji: "🧾" }
+};
+function secOk(s) { return Object.prototype.hasOwnProperty.call(SECCIONES, String(s || "")); }
+function secPad(n, w) { return String(n).padStart(w, "0"); }
+function secCleanCell(v) { return v == null ? "" : String(v).slice(0, 900); }
+function secCleanFilas(filas) {
+  if (!Array.isArray(filas)) return [];
+  return filas.slice(0, 2000).map((r) => (Array.isArray(r) ? r : []).slice(0, 250).map(secCleanCell));
+}
+
+async function secHojaIniciar(db, body) {
+  const seccion = String(body.seccion || "").trim();
+  if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  const index = Number(body.index) || 1;
+  const name = String(body.name || ("Hoja " + index)).slice(0, 120);
+  const rows = Number(body.rows) || 0;
+  const cols = Number(body.cols) || 0;
+  const now = new Date().toISOString();
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection("hojas").doc(secPad(index, 3));
+  await deleteCollectionInBatches(hojaRef.collection("bloques"));
+  await hojaRef.set({ index, name, rows, cols, updatedAt: now });
+  return { status: 200, json: { ok: true, seccion, index, name } };
+}
+async function secHojaBloque(db, body) {
+  const seccion = String(body.seccion || "").trim();
+  if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  const index = Number(body.index) || 1;
+  const bloque = Number(body.bloque) || 1;
+  const filas = secCleanFilas(body.filas || []);
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection("hojas").doc(secPad(index, 3));
+  await hojaRef.collection("bloques").doc(secPad(bloque, 4)).set({ bloque, total: filas.length, filas });
+  return { status: 200, json: { ok: true, seccion, index, bloque, filas: filas.length } };
+}
+async function secFinalizar(db, body) {
+  const seccion = String(body.seccion || "").trim();
+  if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  const cfg = SECCIONES[seccion];
+  const hojasRaw = Array.isArray(body.hojas) ? body.hojas : [];
+  const hojas = hojasRaw.map((h, i) => ({ index: Number(h && h.index) || i + 1, name: String((h && h.name) || ("Hoja " + (i + 1))).slice(0, 120), rows: Number(h && h.rows) || 0, cols: Number(h && h.cols) || 0 }));
+  const totalFilas = hojas.reduce((a, h) => a + (h.rows || 0), 0);
+  const editor = String(body.editor || body.usuario || "sublicuentas").trim();
+  const filename = String(body.filename || "").slice(0, 180);
+  const motivo = String(body.motivo || "migracion").slice(0, 40);
+  const now = new Date().toISOString();
+  await db.collection(SEC_COL).doc(seccion).set({
+    id: seccion, label: cfg.label, kind: cfg.kind, owner: cfg.owner, emoji: cfg.emoji,
+    hojas, totalHojas: hojas.length, totalFilas, filename, motivo,
+    updatedAt: now, updatedBy: editor,
+    noModificaCRM: true, noModificaInventario: true, noModificaBotTelegram: true
+  });
+  await db.collection("auditoria_eventos").add({ tipo: "seccion_" + motivo, seccion, totalHojas: hojas.length, totalFilas, editor, filename, createdAt: now, noModificaCRM: true });
+  return { status: 200, json: { ok: true, seccion, totalHojas: hojas.length, totalFilas, updatedAt: now } };
+}
+async function secLeer(db, body) {
+  const seccion = String(body.seccion || "").trim();
+  if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  const cfg = SECCIONES[seccion];
+  const doc = await db.collection(SEC_COL).doc(seccion).get();
+  if (!doc.exists) return { status: 200, json: { ok: true, seccion, label: cfg.label, kind: cfg.kind, emoji: cfg.emoji, owner: cfg.owner, hojas: [], totalHojas: 0, totalFilas: 0, filename: "", updatedAt: "", updatedBy: "", vacio: true } };
+  const m = doc.data() || {};
+  return { status: 200, json: { ok: true, seccion, label: m.label || cfg.label, kind: m.kind || cfg.kind, emoji: m.emoji || cfg.emoji, owner: m.owner || cfg.owner, hojas: m.hojas || [], totalHojas: m.totalHojas || 0, totalFilas: m.totalFilas || 0, filename: m.filename || "", updatedAt: m.updatedAt || "", updatedBy: m.updatedBy || "", vacio: false } };
+}
+async function secHojaLeer(db, body) {
+  const seccion = String(body.seccion || "").trim();
+  if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  const index = Number(body.index) || 1;
+  const hojaRef = db.collection(SEC_COL).doc(seccion).collection("hojas").doc(secPad(index, 3));
+  const hd = await hojaRef.get();
+  if (!hd.exists) return { status: 404, json: { ok: false, error: "No encontré esa hoja" } };
+  const meta = hd.data() || {};
+  const maxRows = Math.min(Math.max(Number(body.maxRows) || 5000, 50), 20000);
+  const snap = await hojaRef.collection("bloques").orderBy("bloque", "asc").get();
+  let filas = [];
+  snap.docs.forEach((d) => { filas = filas.concat((d.data() || {}).filas || []); });
+  const recortado = filas.length > maxRows;
+  filas = filas.slice(0, maxRows);
+  return { status: 200, json: { ok: true, seccion, index, name: meta.name || ("Hoja " + index), rows: meta.rows || filas.length, cols: meta.cols || 0, filas, recortado } };
+}
+async function secEstado(db) {
+  const out = {};
+  for (const s of Object.keys(SECCIONES)) {
+    const cfg = SECCIONES[s];
+    const doc = await db.collection(SEC_COL).doc(s).get();
+    if (doc.exists) { const m = doc.data() || {}; out[s] = { label: m.label || cfg.label, kind: m.kind || cfg.kind, emoji: m.emoji || cfg.emoji, owner: m.owner || cfg.owner, totalHojas: m.totalHojas || 0, totalFilas: m.totalFilas || 0, filename: m.filename || "", updatedAt: m.updatedAt || "", updatedBy: m.updatedBy || "", vacio: false }; }
+    else out[s] = { label: cfg.label, kind: cfg.kind, emoji: cfg.emoji, owner: cfg.owner, totalHojas: 0, totalFilas: 0, filename: "", updatedAt: "", updatedBy: "", vacio: true };
+  }
+  return { status: 200, json: { ok: true, secciones: out, config: SECCIONES } };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -586,6 +694,13 @@ export default async function handler(req, res) {
       const out = await actualizarRespaldoWord(db, body);
       return res.status(out.status).json(out.json);
     }
+
+    if (accion === "sec_hoja_iniciar") { const out = await secHojaIniciar(db, body); return res.status(out.status).json(out.json); }
+    if (accion === "sec_hoja_bloque")  { const out = await secHojaBloque(db, body);  return res.status(out.status).json(out.json); }
+    if (accion === "sec_finalizar")    { const out = await secFinalizar(db, body);   return res.status(out.status).json(out.json); }
+    if (accion === "sec_leer")         { const out = await secLeer(db, body);        return res.status(out.status).json(out.json); }
+    if (accion === "sec_hoja_leer")    { const out = await secHojaLeer(db, body);    return res.status(out.status).json(out.json); }
+    if (accion === "sec_estado")       { const out = await secEstado(db);            return res.status(out.status).json(out.json); }
 
     return res.status(400).json({ ok: false, error: "Acción no reconocida" });
   } catch (e) {
