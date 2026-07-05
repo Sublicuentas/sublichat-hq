@@ -1,5 +1,5 @@
 // api/importar.js · Respaldos Excel Sublichat
-// Guarda SOLO respaldos Excel en Firestore, separados del CRM operativo.
+// Guarda respaldos Excel completos en Firestore, separados del CRM operativo.
 // No modifica clientes, servicios, inventario ni bot Telegram.
 // Requiere variables: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
@@ -20,6 +20,13 @@ function getApp() {
 function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function chunkString(str, size) {
+  const s = String(str || "");
+  const out = [];
+  for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
   return out;
 }
 
@@ -78,6 +85,8 @@ export default async function handler(req, res) {
     const usuario = String(body.usuario || "sublicuentas").trim();
     const rol = String(body.rol || "admin").trim();
     const destinoRol = String(body.destinoRol || (tipo === "streaming" ? "auditor" : "admin")).trim();
+    const archivoOriginal = body.archivoOriginal && typeof body.archivoOriginal === "object" ? body.archivoOriginal : null;
+    const archivoBase64 = archivoOriginal && archivoOriginal.base64 ? String(archivoOriginal.base64) : "";
     const now = new Date().toISOString();
 
     let sheets = cleanSheets(body.sheets || []);
@@ -100,7 +109,16 @@ export default async function handler(req, res) {
       totalHojas: sheets.length,
       totalFilas,
       hojas: resumenHojas,
-      estado: "respaldo_excel_solo_lectura",
+      archivoGuardado: !!archivoBase64,
+      archivoOriginal: archivoBase64 ? {
+        filename: String((archivoOriginal && archivoOriginal.filename) || filename || "respaldo.xlsx").slice(0, 180),
+        size: Number((archivoOriginal && archivoOriginal.size) || 0),
+        mime: String((archivoOriginal && archivoOriginal.mime) || "application/octet-stream").slice(0, 120),
+        ext: String((archivoOriginal && archivoOriginal.ext) || "").slice(0, 20),
+        base64Length: archivoBase64.length,
+        chunks: Math.ceil(archivoBase64.length / 450000)
+      } : null,
+      estado: "excel_guardado_completo_solo_respaldo",
       noModificaCRM: true,
       noModificaInventario: true,
       noModificaBotTelegram: true,
@@ -109,6 +127,27 @@ export default async function handler(req, res) {
     };
 
     await ref.set(resumen);
+
+    // Guarda el archivo Excel original en chunks para poder conservarlo como respaldo completo.
+    // No se guarda en clientes/servicios/inventario: queda solo bajo respaldos_excel/{id}/archivo_original.
+    if (archivoBase64) {
+      const chunksArchivo = chunkString(archivoBase64, 450000);
+      let batchFile = db.batch();
+      let opsFile = 0;
+      for (let i = 0; i < chunksArchivo.length; i++) {
+        const cRef = ref.collection("archivo_original").doc(String(i + 1).padStart(4, "0"));
+        batchFile.set(cRef, {
+          index: i + 1,
+          totalChunks: chunksArchivo.length,
+          base64: chunksArchivo[i],
+          filename: String((archivoOriginal && archivoOriginal.filename) || filename || "respaldo.xlsx").slice(0, 180),
+          createdAt: now
+        });
+        opsFile++;
+        if (opsFile >= 400) { await batchFile.commit(); batchFile = db.batch(); opsFile = 0; }
+      }
+      if (opsFile) await batchFile.commit();
+    }
 
     for (const sheet of sheets) {
       const sheetRef = ref.collection("hojas").doc(String(sheet.index).padStart(3, "0"));
@@ -132,6 +171,8 @@ export default async function handler(req, res) {
       filename,
       totalHojas: sheets.length,
       totalFilas,
+      archivoGuardado: !!archivoBase64,
+      archivoOriginalChunks: archivoBase64 ? Math.ceil(archivoBase64.length / 450000) : 0,
       usuario,
       rol,
       destinoRol,
@@ -139,7 +180,7 @@ export default async function handler(req, res) {
       createdAt: now
     });
 
-    return res.status(200).json({ ok: true, id: ref.id, totalHojas: sheets.length, totalFilas, estado: resumen.estado });
+    return res.status(200).json({ ok: true, id: ref.id, totalHojas: sheets.length, totalFilas, archivoGuardado: !!archivoBase64, archivoOriginalChunks: archivoBase64 ? Math.ceil(archivoBase64.length / 450000) : 0, estado: resumen.estado });
   } catch (e) {
     console.error("RESPALDO_EXCEL_ERROR", e);
     return res.status(500).json({ ok: false, error: String((e && e.message) || e) });
