@@ -438,6 +438,96 @@ async function actualizarRespaldoWord(db, body) {
   return { status: 200, json: { ok: true, id, totalFilas: rows.length, updatedAt: now } };
 }
 
+
+async function iniciarRespaldoExcel(db, body) {
+  const tipo = safeTipo(body.tipo);
+  const filename = String(body.filename || "respaldo.xlsx").trim();
+  const usuario = String(body.usuario || "sublicuentas").trim();
+  const rol = String(body.rol || "admin").trim();
+  const destinoRol = String(body.destinoRol || (tipo === "streaming" ? "auditor" : "admin")).trim();
+  const now = new Date().toISOString();
+  const hojasRaw = Array.isArray(body.hojas) ? body.hojas : [];
+  const hojas = hojasRaw.map((h, i) => ({
+    index: Number(h && h.index) || i + 1,
+    name: String((h && h.name) || `Hoja ${i + 1}`).slice(0, 80),
+    totalFilas: Number(h && h.totalFilas) || 0
+  })).filter(h => h.totalFilas > 0);
+  const totalFilas = Number(body.totalFilas) || hojas.reduce((a, h) => a + Number(h.totalFilas || 0), 0);
+  if (!hojas.length || !totalFilas) return { status: 400, json: { ok: false, error: "No hay hojas/filas para iniciar respaldo" } };
+  const ref = db.collection("respaldos_excel").doc();
+  await ref.set({
+    tipo,
+    tipoLabel: labelTipo(tipo),
+    filename,
+    usuario,
+    rol,
+    destinoRol,
+    totalHojas: hojas.length,
+    totalFilas,
+    hojas,
+    editable: true,
+    archivoGuardado: false,
+    estado: "subiendo_por_partes",
+    noModificaCRM: true,
+    noModificaInventario: true,
+    noModificaBotTelegram: true,
+    createdAt: now,
+    updatedAt: now
+  });
+  return { status: 200, json: { ok: true, id: ref.id, totalHojas: hojas.length, totalFilas, estado: "subiendo_por_partes" } };
+}
+
+async function guardarRespaldoExcelChunk(db, body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { status: 400, json: { ok: false, error: "Falta id del Excel" } };
+  const sheetIndex = Number(body.sheetIndex) || 1;
+  const sheetName = String(body.sheetName || `Hoja ${sheetIndex}`).slice(0, 80);
+  const chunkIndex = Number(body.chunkIndex) || 1;
+  const totalChunks = Number(body.totalChunks) || 1;
+  const rows = cleanRows(body.rows || []);
+  const now = new Date().toISOString();
+  const ref = db.collection("respaldos_excel").doc(id);
+  const doc = await ref.get();
+  if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese respaldo iniciado" } };
+  const sheetRef = ref.collection("hojas").doc(String(sheetIndex).padStart(3, "0"));
+  await sheetRef.set({ index: sheetIndex, name: sheetName, updatedAt: now, editable: true }, { merge: true });
+  await sheetRef.collection("filas").doc(String(chunkIndex).padStart(4, "0")).set({
+    index: chunkIndex,
+    totalChunks,
+    total: rows.length,
+    rows,
+    updatedAt: now
+  });
+  await ref.update({ updatedAt: now, estado: "subiendo_por_partes" });
+  return { status: 200, json: { ok: true, id, sheetIndex, chunkIndex, total: rows.length } };
+}
+
+async function finalizarRespaldoExcel(db, body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { status: 400, json: { ok: false, error: "Falta id del Excel" } };
+  const usuario = String(body.usuario || "sublicuentas").trim();
+  const rol = String(body.rol || "admin").trim();
+  const now = new Date().toISOString();
+  const ref = db.collection("respaldos_excel").doc(id);
+  const doc = await ref.get();
+  if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese respaldo Excel" } };
+  const meta = doc.data() || {};
+  await ref.update({ estado: "guardado_editable", editable: true, updatedAt: now, ultimoEditor: usuario, ultimoRol: rol });
+  await db.collection("auditoria_eventos").add({
+    tipo: "respaldo_excel_guardado_por_partes",
+    respaldoExcelId: id,
+    filename: meta.filename || "",
+    respaldoTipo: meta.tipo || "",
+    totalHojas: meta.totalHojas || 0,
+    totalFilas: meta.totalFilas || 0,
+    usuario,
+    rol,
+    noModificaCRM: true,
+    createdAt: now
+  });
+  return { status: 200, json: { ok: true, id, estado: "guardado_editable", totalHojas: meta.totalHojas || 0, totalFilas: meta.totalFilas || 0 } };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -450,6 +540,18 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const accion = body.accion || "guardar_respaldo_excel";
 
+    if (accion === "iniciar_respaldo_excel") {
+      const out = await iniciarRespaldoExcel(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "guardar_respaldo_excel_chunk") {
+      const out = await guardarRespaldoExcelChunk(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "finalizar_respaldo_excel") {
+      const out = await finalizarRespaldoExcel(db, body);
+      return res.status(out.status).json(out.json);
+    }
     if (accion === "guardar_respaldo_excel" || accion === "guardar_importacion") {
       const out = await guardarRespaldo(db, body);
       return res.status(out.status).json(out.json);
