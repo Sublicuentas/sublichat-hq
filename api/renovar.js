@@ -59,7 +59,7 @@ function servicioNoUsaPinPerfil(plataforma) {
 function servicioNoUsaClave(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   return (
-    p.includes("vix") ||
+    p.includes("universal") ||
     p.includes("canva") ||
     p.includes("gemini") ||
     p.includes("chatgpt") ||
