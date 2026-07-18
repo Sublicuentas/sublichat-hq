@@ -37,6 +37,63 @@ function normPlat(v) {
     .replace(/\s+/g, " ");
 }
 
+// Clave "dura": quita todo lo que no sea letra/número (espacios, +, -, /, etc.)
+// para poder comparar valores guardados con distinto formato (código interno de la
+// ficha vs. etiqueta importada de Excel/bot viejo) sin que un simple espacio o un
+// "+" rompan la coincidencia.
+function normPlatKey(v) {
+  return normPlat(v).replace(/[^a-z0-9]/g, "");
+}
+
+// Alias conocidos: distintas formas en que puede haber quedado guardada la misma
+// plataforma según de dónde vino el dato (ficha nueva, Excel importado, bot viejo).
+const PLAT_ALIASES = {
+  netflix: "netflix", netflixpremium: "netflix",
+  vipnetflix: "vipnetflix", vip: "vipnetflix",
+  disneyp: "disneyp", disneypremium: "disneyp",
+  disneys: "disneys", disneystandard: "disneys",
+  disney: "disney",
+  hbomax: "hbomax", hbo: "hbomax", max: "hbomax",
+  primevideo: "primevideo", prime: "primevideo",
+  paramount: "paramount", paramountp: "paramount",
+  crunchyroll: "crunchyroll",
+  vix: "vix",
+  appletv: "appletv", apple: "appletv",
+  universal: "universal", universalp: "universal",
+  spotify: "spotify", youtube: "youtube", deezer: "deezer", duolingo: "duolingo",
+  canva: "canva", gemini: "gemini", chatgpt: "chatgpt",
+  office: "office", microsoft: "office", star: "star"
+};
+function canonPlat(v) {
+  const key = normPlatKey(v);
+  if (PLAT_ALIASES[key]) return PLAT_ALIASES[key];
+  // oleada/iptv traen variantes con número de dispositivos (oleada1, iptv3, etc.):
+  // se agrupan por el prefijo para no perder la coincidencia por esa cifra.
+  if (key.startsWith("oleada")) return "oleada";
+  if (key.startsWith("iptv")) return "iptv";
+  return key;
+}
+
+// Busca el índice del servicio dentro del array guardado en Firestore.
+// Prioriza el índice explícito que manda el panel (identifica el servicio exacto
+// sin depender del texto de la plataforma). Si no viene o ya no es válido, cae a
+// comparar por plataforma (con alias). Si el cliente sólo tiene un servicio, ese
+// es el único candidato posible y se usa directo: así se evita el falso
+// "servicio no encontrado" cuando el texto guardado no coincide letra por letra.
+function resolveServicioIndex(servicios, { servicioIndex, plataforma } = {}) {
+  if (servicioIndex != null && Number.isInteger(Number(servicioIndex))) {
+    const i = Number(servicioIndex);
+    if (i >= 0 && i < servicios.length) return i;
+  }
+  if (plataforma) {
+    const buscado = canonPlat(plataforma);
+    const idx = servicios.findIndex(s => canonPlat(s.plataforma) === buscado);
+    if (idx !== -1) return idx;
+  }
+  if (servicios.length === 1) return 0;
+  return -1;
+}
+
 function servicioNoUsaPinPerfil(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   return (
@@ -367,26 +424,23 @@ export default async function handler(req, res) {
     let invResult = null;
 
     if (acc === "renovar") {
-      const { dias, fechaActual, fechaExacta } = body;
-      if (!plataforma || (!dias && !fechaExacta))
+      const { dias, fechaActual, fechaExacta, servicioIndex } = body;
+      if (!plataforma && servicioIndex == null)
+        return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
+      if (!dias && !fechaExacta)
         return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
 
-      let cambiados = 0;
-      const platBuscada = normPlat(plataforma);
-      servicios = servicios.map(s => {
-        if (normPlat(s.plataforma) === platBuscada) {
-          cambiados++;
-          const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
-          return { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
-        }
-        return s;
-      });
-      if (!cambiados) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
+      if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
+
+      const s = servicios[idx];
+      const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
+      servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
 
     } else if (acc === "eliminar") {
-      if (!plataforma) return res.status(200).json({ error: "Falta la plataforma a eliminar." });
-      const platElim = normPlat(plataforma);
-      const idx = servicios.findIndex(s => normPlat(s.plataforma) === platElim);
+      const { servicioIndex } = body;
+      if (!plataforma && servicioIndex == null) return res.status(200).json({ error: "Falta la plataforma a eliminar." });
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
       if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
 
       const servEliminado = servicios[idx];
@@ -413,12 +467,12 @@ export default async function handler(req, res) {
       });
 
     } else if (acc === "editar") {
-      const { plataformaOriginal, servicio } = body;
+      const { plataformaOriginal, servicio, servicioIndex } = body;
       const buscar = plataformaOriginal || plataforma;
-      if (!buscar || !servicio) return res.status(200).json({ error: "Faltan datos para editar." });
+      if (!buscar && servicioIndex == null) return res.status(200).json({ error: "Faltan datos para editar." });
+      if (!servicio) return res.status(200).json({ error: "Faltan datos para editar." });
 
-      const platEdit = normPlat(buscar);
-      const idx = servicios.findIndex(s => normPlat(s.plataforma) === platEdit);
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma: buscar });
       if (idx === -1) return res.status(200).json({ error: "No encontré ese servicio." });
 
       const nuevo = buildServicio({
