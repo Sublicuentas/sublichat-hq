@@ -13,6 +13,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -2011,93 +2012,195 @@ const finOpenBtn=document.getElementById("finOpenBtn"), finScreen=document.getEl
 if(finOpenBtn)finOpenBtn.addEventListener("click",()=>{ finScreen.classList.add("show"); renderFinanzas(); finRenderCharts(); });
 const finCloseBtn=document.getElementById("finClose");
 if(finCloseBtn)finCloseBtn.addEventListener("click",()=>finScreen.classList.remove("show"));
-// Exportar Excel PROFESIONAL (.xlsx real, varias hojas) con SheetJS
+// Exportar Excel PROFESIONAL (.xlsx real, con color, bordes, autofiltro y panes
+// congelados) usando ExcelJS. SheetJS community no soporta estilos; por eso el
+// reporte anterior salía "plano". Colores de marca Sublicuentas: azul + navy.
+const FIN_XLS_COLORS={
+  navy:"FF0F2D52", blue:"FF139CE8", blueLight:"FFE8F8FF",
+  zebra:"FFF2FBFF", white:"FFFFFFFF", border:"FFD5E4F1",
+  green:"FF166534", greenBg:"FFDCFCE7", red:"FFB91C1C", redBg:"FFFEE2E2"
+};
+function finXlsBorderThin(){
+  const c={style:"thin",color:{argb:FIN_XLS_COLORS.border}};
+  return {top:c,left:c,bottom:c,right:c};
+}
+function finXlsHeaderRow(ws,row){
+  row.eachCell(cell=>{
+    cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.blue}};
+    cell.font={bold:true,color:{argb:FIN_XLS_COLORS.white},size:11};
+    cell.alignment={vertical:"middle",horizontal:"center",wrapText:true};
+    cell.border=finXlsBorderThin();
+  });
+  row.height=22;
+}
+function finXlsTitleRow(ws,text,cols){
+  ws.mergeCells(1,1,1,cols);
+  const cell=ws.getCell(1,1);
+  cell.value=text;
+  cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.navy}};
+  cell.font={bold:true,color:{argb:FIN_XLS_COLORS.white},size:16};
+  cell.alignment={vertical:"middle",horizontal:"left",indent:1};
+  ws.getRow(1).height=30;
+}
+const finXlsMoneyFmt='"Lps" #,##0';
 const finXlsBtn=document.getElementById("finXls");
-if(finXlsBtn)finXlsBtn.addEventListener("click",()=>{
-  if(typeof XLSX==="undefined"){ mostrarToast("Cargando Excel… probá de nuevo en 2s."); return; }
+if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
+  if(typeof ExcelJS==="undefined"){ mostrarToast("Cargando Excel… probá de nuevo en 2s."); return; }
   const movs=(window._finMovs||[]).slice().sort((a,b)=>a.fecha-b.fecha);
   if(!movs.length){ mostrarToast("No hay movimientos para exportar."); return; }
+  const oldTxt=finXlsBtn.textContent; finXlsBtn.disabled=true; finXlsBtn.textContent="Generando…";
+  try{
+    const claveMes = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    const nombreMes = k => { const [y,m]=k.split("-"); return new Date(y,m-1,1).toLocaleDateString("es-HN",{month:"long",year:"numeric"}); };
 
-  const nLps = n => Number(n||0); // celda numérica cruda (Excel formatea)
-  const claveMes = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-  const nombreMes = k => { const [y,m]=k.split("-"); return new Date(y,m-1,1).toLocaleDateString("es-HN",{month:"long",year:"numeric"}); };
+    const meses={};
+    movs.forEach(m=>{ const k=claveMes(m.fecha); if(!meses[k])meses[k]={ing:0,egr:0,nMov:0};
+      if(m.tipo==="ingreso")meses[k].ing+=m.monto; else if(m.tipo==="egreso")meses[k].egr+=m.monto; meses[k].nMov++; });
+    const clavesOrd=Object.keys(meses).sort();
+    const totIng=movs.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
+    const totEgr=movs.filter(m=>m.tipo==="egreso").reduce((s,m)=>s+m.monto,0);
 
-  // ---- Agrupar por mes (histórico completo) ----
-  const meses={};
-  movs.forEach(m=>{ const k=claveMes(m.fecha); if(!meses[k])meses[k]={ing:0,egr:0,nMov:0}; 
-    if(m.tipo==="ingreso")meses[k].ing+=m.monto; else if(m.tipo==="egreso")meses[k].egr+=m.monto; meses[k].nMov++; });
-  const clavesOrd=Object.keys(meses).sort(); // viejo -> nuevo
+    const wb=new ExcelJS.Workbook();
+    wb.creator="Sublicuentas"; wb.created=new Date();
 
-  const totIng=movs.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
-  const totEgr=movs.filter(m=>m.tipo==="egreso").reduce((s,m)=>s+m.monto,0);
+    // ============ HOJA 1: RESUMEN ============
+    const wsR=wb.addWorksheet("Resumen",{views:[{state:"frozen",ySplit:9}]});
+    wsR.columns=[{width:26},{width:16},{width:16},{width:16},{width:26}];
+    finXlsTitleRow(wsR,"📊 SUBLICUENTAS · REPORTE FINANCIERO",5);
+    wsR.getCell(2,1).value="Generado"; wsR.getCell(2,2).value=new Date().toLocaleString("es-HN");
+    wsR.getCell(3,1).value="Período"; wsR.getCell(3,2).value=`${nombreMes(clavesOrd[0])} → ${nombreMes(clavesOrd[clavesOrd.length-1])}`;
+    wsR.getCell(4,1).value="Movimientos"; wsR.getCell(4,2).value=movs.length;
+    [2,3,4].forEach(r=>{ wsR.getCell(r,1).font={bold:true,color:{argb:FIN_XLS_COLORS.navy}}; });
 
-  const wb=XLSX.utils.book_new();
-  const moneyFmt='"Lps" #,##0';
+    // Tarjetas KPI (fila 6): Ingresos / Egresos / Ganancia neta con color
+    const gananciaTotal=totIng-totEgr;
+    const kpis=[
+      {label:"INGRESOS",valor:totIng,bg:FIN_XLS_COLORS.greenBg,fg:FIN_XLS_COLORS.green,col:1},
+      {label:"EGRESOS",valor:totEgr,bg:FIN_XLS_COLORS.redBg,fg:FIN_XLS_COLORS.red,col:2},
+      {label:"GANANCIA NETA",valor:gananciaTotal,bg:gananciaTotal>=0?FIN_XLS_COLORS.greenBg:FIN_XLS_COLORS.redBg,fg:gananciaTotal>=0?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red,col:3}
+    ];
+    kpis.forEach(k=>{
+      const cLabel=wsR.getCell(6,k.col), cVal=wsR.getCell(7,k.col);
+      cLabel.value=k.label; cLabel.font={bold:true,size:10,color:{argb:k.fg}};
+      cLabel.fill={type:"pattern",pattern:"solid",fgColor:{argb:k.bg}};
+      cLabel.alignment={horizontal:"center"}; cLabel.border=finXlsBorderThin();
+      cVal.value=k.valor; cVal.numFmt=finXlsMoneyFmt; cVal.font={bold:true,size:14,color:{argb:k.fg}};
+      cVal.fill={type:"pattern",pattern:"solid",fgColor:{argb:k.bg}};
+      cVal.alignment={horizontal:"center"}; cVal.border=finXlsBorderThin();
+    });
+    wsR.getRow(6).height=18; wsR.getRow(7).height=24;
 
-  // ============ HOJA 1: RESUMEN ============
-  const rsm=[
-    ["SUBLICUENTAS · REPORTE FINANCIERO"],
-    ["Generado", new Date().toLocaleString("es-HN")],
-    ["Período", `${nombreMes(clavesOrd[0])} → ${nombreMes(clavesOrd[clavesOrd.length-1])}`],
-    ["Movimientos", movs.length],
-    [],
-    ["TOTALES GENERALES"],
-    ["Ingresos", totIng],
-    ["Egresos", totEgr],
-    ["Ganancia neta", totIng-totEgr],
-    [],
-    ["COMPARACIÓN MES A MES"],
-    ["Mes","Ingresos","Egresos","Ganancia","Variación % vs mes anterior"]
-  ];
-  let gananciaPrev=null;
-  clavesOrd.forEach(k=>{
-    const g=meses[k].ing-meses[k].egr;
-    let varPct="—";
-    if(gananciaPrev!==null && gananciaPrev!==0) varPct=(((g-gananciaPrev)/Math.abs(gananciaPrev))*100).toFixed(1)+"%";
-    rsm.push([nombreMes(k), nLps(meses[k].ing), nLps(meses[k].egr), nLps(g), varPct]);
-    gananciaPrev=g;
-  });
-  const wsR=XLSX.utils.aoa_to_sheet(rsm);
-  wsR["!cols"]=[{wch:26},{wch:15},{wch:15},{wch:15},{wch:26}];
-  // formato moneda en columnas B,C,D de la tabla y totales
-  for(let R=6;R<rsm.length;R++){ for(const C of [1,2,3]){ const cell=wsR[XLSX.utils.encode_cell({r:R,c:C})]; if(cell&&typeof cell.v==="number")cell.z=moneyFmt; } }
-  XLSX.utils.book_append_sheet(wb,wsR,"Resumen");
+    wsR.getCell(9,1).value="Mes"; wsR.getCell(9,2).value="Ingresos"; wsR.getCell(9,3).value="Egresos";
+    wsR.getCell(9,4).value="Ganancia"; wsR.getCell(9,5).value="Variación % vs mes anterior";
+    finXlsHeaderRow(wsR,wsR.getRow(9));
+    let gananciaPrev=null, rIdx=10;
+    clavesOrd.forEach(k=>{
+      const g=meses[k].ing-meses[k].egr;
+      let varPct=null;
+      if(gananciaPrev!==null && gananciaPrev!==0) varPct=(g-gananciaPrev)/Math.abs(gananciaPrev);
+      const row=wsR.getRow(rIdx);
+      row.getCell(1).value=nombreMes(k);
+      row.getCell(2).value=meses[k].ing; row.getCell(2).numFmt=finXlsMoneyFmt;
+      row.getCell(3).value=meses[k].egr; row.getCell(3).numFmt=finXlsMoneyFmt;
+      row.getCell(4).value=g; row.getCell(4).numFmt=finXlsMoneyFmt;
+      row.getCell(4).font={bold:true,color:{argb:g>=0?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}};
+      if(varPct!=null){ row.getCell(5).value=varPct; row.getCell(5).numFmt="+0.0%;-0.0%";
+        row.getCell(5).font={color:{argb:varPct>=0?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}}; }
+      else row.getCell(5).value="—";
+      row.eachCell(c=>{ c.border=finXlsBorderThin(); if(rIdx%2===0) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.zebra}}; });
+      gananciaPrev=g; rIdx++;
+    });
+    wsR.autoFilter={from:{row:9,column:1},to:{row:9,column:5}};
 
-  // ============ HOJA 2: POR MES ============
-  const pm=[["Mes","Ingresos","Egresos","Ganancia","N° movimientos"]];
-  clavesOrd.forEach(k=>pm.push([nombreMes(k),nLps(meses[k].ing),nLps(meses[k].egr),nLps(meses[k].ing-meses[k].egr),meses[k].nMov]));
-  pm.push(["TOTAL",nLps(totIng),nLps(totEgr),nLps(totIng-totEgr),movs.length]);
-  const wsM=XLSX.utils.aoa_to_sheet(pm);
-  wsM["!cols"]=[{wch:26},{wch:15},{wch:15},{wch:15},{wch:16}];
-  for(let R=1;R<pm.length;R++){ for(const C of [1,2,3]){ const cell=wsM[XLSX.utils.encode_cell({r:R,c:C})]; if(cell&&typeof cell.v==="number")cell.z=moneyFmt; } }
-  XLSX.utils.book_append_sheet(wb,wsM,"Por Mes");
+    // ============ HOJA 2: POR MES ============
+    const wsM=wb.addWorksheet("Por Mes",{views:[{state:"frozen",ySplit:1}]});
+    wsM.columns=[{width:26},{width:16},{width:16},{width:16},{width:16}];
+    wsM.getCell(1,1).value="Mes"; wsM.getCell(1,2).value="Ingresos"; wsM.getCell(1,3).value="Egresos";
+    wsM.getCell(1,4).value="Ganancia"; wsM.getCell(1,5).value="N° movimientos";
+    finXlsHeaderRow(wsM,wsM.getRow(1));
+    let mIdx=2;
+    clavesOrd.forEach(k=>{
+      const row=wsM.getRow(mIdx);
+      row.getCell(1).value=nombreMes(k);
+      row.getCell(2).value=meses[k].ing; row.getCell(2).numFmt=finXlsMoneyFmt;
+      row.getCell(3).value=meses[k].egr; row.getCell(3).numFmt=finXlsMoneyFmt;
+      const g=meses[k].ing-meses[k].egr;
+      row.getCell(4).value=g; row.getCell(4).numFmt=finXlsMoneyFmt;
+      row.getCell(4).font={bold:true,color:{argb:g>=0?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}};
+      row.getCell(5).value=meses[k].nMov;
+      row.eachCell(c=>{ c.border=finXlsBorderThin(); c.alignment={horizontal:c.value&&typeof c.value==="string"?"left":"right"}; if(mIdx%2===0) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.zebra}}; });
+      mIdx++;
+    });
+    const totRow=wsM.getRow(mIdx);
+    totRow.getCell(1).value="TOTAL";
+    totRow.getCell(2).value=totIng; totRow.getCell(2).numFmt=finXlsMoneyFmt;
+    totRow.getCell(3).value=totEgr; totRow.getCell(3).numFmt=finXlsMoneyFmt;
+    totRow.getCell(4).value=gananciaTotal; totRow.getCell(4).numFmt=finXlsMoneyFmt;
+    totRow.getCell(5).value=movs.length;
+    totRow.eachCell(c=>{ c.font={bold:true,color:{argb:FIN_XLS_COLORS.navy}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.blueLight}}; c.border=finXlsBorderThin(); });
+    wsM.autoFilter={from:{row:1,column:1},to:{row:1,column:5}};
 
-  // ============ HOJA 3: POR BANCO ============
-  const bancos={};
-  movs.forEach(m=>{ const b=m.banco||"—"; if(!bancos[b])bancos[b]={ing:0,egr:0}; if(m.tipo==="ingreso")bancos[b].ing+=m.monto; else if(m.tipo==="egreso")bancos[b].egr+=m.monto; });
-  const pb=[["Banco / Método","Ingresos","Egresos","Neto"]];
-  Object.keys(bancos).sort((a,b)=>bancos[b].ing-bancos[a].ing).forEach(b=>pb.push([b,nLps(bancos[b].ing),nLps(bancos[b].egr),nLps(bancos[b].ing-bancos[b].egr)]));
-  pb.push(["TOTAL",nLps(totIng),nLps(totEgr),nLps(totIng-totEgr)]);
-  const wsB=XLSX.utils.aoa_to_sheet(pb);
-  wsB["!cols"]=[{wch:24},{wch:15},{wch:15},{wch:15}];
-  for(let R=1;R<pb.length;R++){ for(const C of [1,2,3]){ const cell=wsB[XLSX.utils.encode_cell({r:R,c:C})]; if(cell&&typeof cell.v==="number")cell.z=moneyFmt; } }
-  XLSX.utils.book_append_sheet(wb,wsB,"Por Banco");
+    // ============ HOJA 3: POR BANCO ============
+    const bancos={};
+    movs.forEach(m=>{ const b=m.banco||"—"; if(!bancos[b])bancos[b]={ing:0,egr:0}; if(m.tipo==="ingreso")bancos[b].ing+=m.monto; else if(m.tipo==="egreso")bancos[b].egr+=m.monto; });
+    const wsB=wb.addWorksheet("Por Banco",{views:[{state:"frozen",ySplit:1}]});
+    wsB.columns=[{width:24},{width:16},{width:16},{width:16}];
+    wsB.getCell(1,1).value="Banco / Método"; wsB.getCell(1,2).value="Ingresos"; wsB.getCell(1,3).value="Egresos"; wsB.getCell(1,4).value="Neto";
+    finXlsHeaderRow(wsB,wsB.getRow(1));
+    let bIdx=2;
+    Object.keys(bancos).sort((a,b)=>bancos[b].ing-bancos[a].ing).forEach(b=>{
+      const row=wsB.getRow(bIdx);
+      row.getCell(1).value=b;
+      row.getCell(2).value=bancos[b].ing; row.getCell(2).numFmt=finXlsMoneyFmt;
+      row.getCell(3).value=bancos[b].egr; row.getCell(3).numFmt=finXlsMoneyFmt;
+      const neto=bancos[b].ing-bancos[b].egr;
+      row.getCell(4).value=neto; row.getCell(4).numFmt=finXlsMoneyFmt;
+      row.getCell(4).font={bold:true,color:{argb:neto>=0?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}};
+      row.eachCell(c=>{ c.border=finXlsBorderThin(); if(bIdx%2===0) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.zebra}}; });
+      bIdx++;
+    });
+    const totRowB=wsB.getRow(bIdx);
+    totRowB.getCell(1).value="TOTAL";
+    totRowB.getCell(2).value=totIng; totRowB.getCell(2).numFmt=finXlsMoneyFmt;
+    totRowB.getCell(3).value=totEgr; totRowB.getCell(3).numFmt=finXlsMoneyFmt;
+    totRowB.getCell(4).value=gananciaTotal; totRowB.getCell(4).numFmt=finXlsMoneyFmt;
+    totRowB.eachCell(c=>{ c.font={bold:true,color:{argb:FIN_XLS_COLORS.navy}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.blueLight}}; c.border=finXlsBorderThin(); });
+    wsB.autoFilter={from:{row:1,column:1},to:{row:1,column:4}};
 
-  // ============ HOJA 4: MOVIMIENTOS (detalle) ============
-  const mov=[["Fecha","Tipo","Concepto","Banco / Método","Monto"]];
-  movs.slice().sort((a,b)=>b.fecha-a.fecha).forEach(m=>mov.push([
-    m.fecha.toLocaleDateString("es-HN"),
-    m.tipo==="ingreso"?"Ingreso":(m.tipo==="egreso"?"Egreso":m.tipo),
-    m.concepto||"—", m.banco||"—", nLps(m.monto)
-  ]));
-  const wsV=XLSX.utils.aoa_to_sheet(mov);
-  wsV["!cols"]=[{wch:12},{wch:10},{wch:38},{wch:20},{wch:14}];
-  for(let R=1;R<mov.length;R++){ const cell=wsV[XLSX.utils.encode_cell({r:R,c:4})]; if(cell&&typeof cell.v==="number")cell.z=moneyFmt; }
-  XLSX.utils.book_append_sheet(wb,wsV,"Movimientos");
+    // ============ HOJA 4: MOVIMIENTOS (detalle) ============
+    const wsV=wb.addWorksheet("Movimientos",{views:[{state:"frozen",ySplit:1}]});
+    wsV.columns=[{width:12},{width:11},{width:40},{width:20},{width:14}];
+    wsV.getCell(1,1).value="Fecha"; wsV.getCell(1,2).value="Tipo"; wsV.getCell(1,3).value="Concepto";
+    wsV.getCell(1,4).value="Banco / Método"; wsV.getCell(1,5).value="Monto";
+    finXlsHeaderRow(wsV,wsV.getRow(1));
+    const movsOrd=movs.slice().sort((a,b)=>b.fecha-a.fecha);
+    movsOrd.forEach((m,i)=>{
+      const row=wsV.getRow(i+2);
+      row.getCell(1).value=m.fecha.toLocaleDateString("es-HN");
+      row.getCell(2).value=m.tipo==="ingreso"?"Ingreso":(m.tipo==="egreso"?"Egreso":m.tipo);
+      row.getCell(3).value=m.concepto||"—";
+      row.getCell(4).value=m.banco||"—";
+      row.getCell(5).value=m.monto; row.getCell(5).numFmt=finXlsMoneyFmt;
+      row.getCell(2).font={bold:true,color:{argb:m.tipo==="ingreso"?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}};
+      row.eachCell(c=>{ c.border=finXlsBorderThin(); if((i+2)%2===0) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.zebra}}; });
+    });
+    wsV.autoFilter={from:{row:1,column:1},to:{row:1,column:5}};
 
-  // ---- Descargar ----
-  XLSX.writeFile(wb,`Finanzas_Sublicuentas_${today.toISOString().slice(0,10)}.xlsx`);
-  mostrarToast("📊 Excel profesional descargado");
+    // ---- Descargar ----
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`Finanzas_Sublicuentas_${today.toISOString().slice(0,10)}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    mostrarToast("📊 Excel profesional descargado");
+  }catch(e){
+    console.error(e);
+    mostrarToast("⚠️ Error generando el Excel: "+(e.message||e));
+  }finally{
+    finXlsBtn.disabled=false; finXlsBtn.textContent=oldTxt;
+  }
 });
 
 /* ===================== JUEGOS ===================== */
@@ -5830,6 +5933,12 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     .rbac-nav-arrow{bottom:34px!important;}
     .rbac-nav-arrow.left{left:max(18px,calc((100vw - 950px)/2))!important;}
     .rbac-nav-arrow.right{right:max(18px,calc((100vw - 950px)/2))!important;}
+  }
+  /* Inicio se ve "estiradísimo" en modo web porque hereda el ancho ancho de .wrap
+     (pensado para tablas/listas). Esto SOLO centra y angosta la pantalla de Inicio
+     a un ancho cómodo tipo app; ninguna otra pantalla se ve afectada. */
+  @media(min-width:700px){
+    #screen-inicio{max-width:520px!important;margin:0 auto!important;}
   }
 </style>
 <script>
