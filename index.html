@@ -5789,7 +5789,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const form=`<div class="tk-form"><input class="tk-input" id="tkTitulo" placeholder="Asunto / título corto" value="${esc(tk.formTitulo||'')}"><div class="tk-row"><select class="tk-input" id="tkDestino">${tkDestOptions()}</select><select class="tk-input" id="tkPrioridad">${['normal','alta','urgente'].map(p=>`<option value="${p}" ${(tk.formPrioridad||'normal')===p?'selected':''}>${p==='normal'?'Normal':(p==='alta'?'Alta':'Urgente')}</option>`).join('')}</select></div><textarea class="tk-input" id="tkDetalle" placeholder="Mensaje: cliente, plataforma, fila, fecha, precio o lo que necesita…">${esc(tk.formDetalle||'')}</textarea><button class="tk-btn good" id="tkCreate">📨 Enviar ticket</button></div>`;
     const openHtml=(tk.loading&&!tk.loaded)?'<div class="tk-empty">Cargando bandeja…</div>':(tk.err?`<div class="tk-status err">⚠️ ${esc(tk.err)}</div>`:(open.length?open.map(tkCardHtml).join(''):'<div class="tk-empty">No tiene tickets abiertos.</div>'));
     const histHtml=hist.length?`<div class="tk-sec-title">🗂️ Historial · resueltos (${hist.length})</div>${hist.map(tkCardHtml).join('')}`:'';
-    return `<div class="tk-wrap"><div class="tk-sec-title">✍️ Nuevo ticket</div>${form}<div id="tkStatus" class="tk-status ${tk.err?'err':''}">${esc(tk.status||'')}</div><div class="tk-sec-title">📥 Bandeja · ${open.length} abierto${open.length===1?'':'s'} <button class="tk-btn ghost mini tk-refresh" id="tkRefresh">↻ Actualizar</button></div>${openHtml}${histHtml}</div>`;
+    return `<div class="tk-wrap"><div class="tk-col-left"><div class="tk-sec-title">✍️ Nuevo ticket</div>${form}<div id="tkStatus" class="tk-status ${tk.err?'err':''}">${esc(tk.status||'')}</div></div><div class="tk-col-right"><div class="tk-sec-title">📥 Bandeja · ${open.length} abierto${open.length===1?'':'s'} <button class="tk-btn ghost mini tk-refresh" id="tkRefresh">↻ Actualizar</button></div>${openHtml}${histHtml}</div></div>`;
   }
   function ensureTkCss(){
     if(document.getElementById('tkCss'))return;
@@ -6950,21 +6950,28 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     /* Pantallas de overlay a todo el viewport (Control financiero, Materia cerebral,
        juego): el sidebar queda encima con z-index alto, así que su encabezado/botón
        de volver hay que correrlo para que no quede tapado. */
-    body.ready .fin-screen .fin-head{margin-left:242px!important}
-    body.ready .fin-screen .fin-body{margin-left:242px!important;margin-right:auto!important;width:auto!important;max-width:1040px!important;box-sizing:border-box!important}
+    /* Pantallas de overlay a todo el viewport (Control financiero, Materia cerebral,
+       juego): el sidebar queda encima con z-index alto, así que hay que reservarle
+       el espacio a TODO el overlay (no solo a .fin-head: Materia cerebral usa un
+       encabezado distinto, .focus-page-head, que también hay que correr) y centrar
+       el contenido en el espacio que queda, no pegarlo a la izquierda.  */
+    body.ready .fin-screen{padding-left:242px!important;box-sizing:border-box!important}
+    body.ready .fin-screen .fin-body,
+    body.ready .fin-screen .focus-games-body{
+      margin-left:auto!important;margin-right:auto!important;width:auto!important;
+      max-width:1040px!important;box-sizing:border-box!important;
+    }
+    /* Materia cerebral: con el overlay ya angosto, dejar más columnas para que las
+       tarjetas de juego no se vuelvan gigantes con aspect-ratio:1. */
+    body.ready .fin-screen .focus-games-grid{grid-template-columns:repeat(4,1fr)!important;gap:14px!important}
     /* Formulario de Tickets: es un diseño de una sola columna a propósito, pero se
        ve gigante si se estira a todo el ancho disponible en escritorio. Se limita
        a un ancho de formulario normal. */
     #screen-tickets .tk-wrap{
       max-width:1200px!important;display:grid!important;grid-template-columns:380px 1fr!important;
-      grid-auto-flow:row!important;gap:0 24px!important;align-items:start!important;
+      gap:0 24px!important;align-items:start!important;
     }
-    /* Los primeros 3 elementos (título "Nuevo ticket", formulario, estado) van a la
-       columna izquierda; el resto (título "Bandeja", tickets abiertos, historial)
-       va a la columna derecha, como bandeja de correo. */
-    #screen-tickets .tk-wrap>*:nth-child(-n+3){grid-column:1!important}
-    #screen-tickets .tk-wrap>*:nth-child(n+4){grid-column:2!important}
-    #screen-tickets .tk-wrap>*:nth-child(4){margin-top:0!important}
+    #screen-tickets .tk-col-left,#screen-tickets .tk-col-right{display:flex!important;flex-direction:column!important;gap:12px!important}
   }
 </style>
 <script id="licModoWebSidebarMoverScript">
