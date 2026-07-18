@@ -1583,13 +1583,14 @@ function flattenCliente(doc){
   const telefono=doc[F.telefono]||"";
   const nombreNorm=doc.nombre_norm||"";
   const servs=Array.isArray(doc[F.servicios])?doc[F.servicios]:[];
-  return servs.map(s=>{
+  return servs.map((s,srvIndex)=>{
     const rawClave=s.clave||s.contrasena||s.password||"";
     const rawPin=s[F.s_pin]||"";
     const clave=rawClave || rawPin; // compatibilidad: antes el campo pin era la clave
     const pinPerfil=s.pinPerfil||s.pin_perfil||s.perfilPin||(rawClave?rawPin:"");
     return {
       nombre,vendedor,telefono,nombreNorm,
+      srvIndex,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
@@ -3148,40 +3149,45 @@ const $cobro=id=>document.getElementById(id);
 const PLANTILLAS_COBRO=[
   // ---- Formales (usted) ----
   "Buen día, {n} 👋. Le saludo de Sublicuentas. Le recuerdo que {serv} está por renovar el {f}. El total es de {m}. ¿Desea que renovemos? ¡Quedo atento!",
-  "Saludos cordiales, {n}. Le escribimos de Sublicuentas para recordarle que {serv} ({m} en total). Con gusto le ayudamos a mantener todo activo. ¿Procedemos?",
-  "Estimado/a {n}, un gusto saludarle. {serv}, próximo a vencer el {f}. Para continuar disfrutando, la renovación es de {m}. Quedamos a la orden 🙌",
+  "Saludos cordiales, {n}. Le escribimos de Sublicuentas para recordarle que {serv} vence el {f} ({m} en total). Con gusto le ayudamos a mantener todo activo. ¿Procedemos?",
+  "Estimado/a {n}, un gusto saludarle. Le escribo para contarle que {serv} está por vencer el {f}. Para continuar disfrutando, la renovación es de {m}. Quedamos a la orden 🙌",
   "Hola, {n}. Le saluda su asesor de Sublicuentas. {serv} llega a su fecha de renovación el {f} y el monto es {m}. ¿Renovamos hoy mismo?",
   "Muy buenas, {n} 👋. Pasamos a recordarle que {serv} vence el {f}. La renovación tiene un costo de {m}. Quedamos pendientes para dejarle todo funcionando.",
   "Cordial saludo, {n}. Le recordamos que {serv} finaliza el {f}. Para renovar, el valor es de {m}. Estamos atentos a su confirmación. 🙏",
-  "{n}, reciba un cordial saludo de Sublicuentas. Su servicio {serv} está próximo a vencer el {f}. El monto de renovación es {m}. ¿Le apartamos su cupo?",
+  "{n}, reciba un cordial saludo de Sublicuentas. Le recordamos que {serv} está próximo a vencer el {f}. El monto de renovación es {m}. ¿Le apartamos su cupo?",
   "Estimado/a {n}, esperamos que se encuentre bien. Le informamos que {serv} renueva el {f} por {m}. Con gusto procesamos su renovación cuando guste.",
   // ---- Amigables (cercano) ----
-  "¡Hola, {n}! 😊 Espero se encuentre muy bien. {serv} y la renovación tiene un valor de {m}. Avíseme si la dejamos lista para que no pierda el acceso.",
+  "¡Hola, {n}! 😊 Espero se encuentre muy bien. Le recuerdo que {serv} está por vencer y la renovación tiene un valor de {m}. Avíseme si la dejamos lista para que no pierda el acceso.",
   "¡Buenas, {n}! 🎬 Le recordamos con cariño que {serv} renueva el {f}. El costo total es de {m}. Si desea seguir disfrutando sin interrupciones, con gusto activamos.",
-  "{n}, esperamos que esté disfrutando su servicio 🍿. Le recordamos que {serv}, con renovación el {f} por un total de {m}. Estamos para servirle.",
+  "{n}, esperamos que esté disfrutando su servicio 🍿. Le recordamos que {serv} vence el {f}, con una renovación de {m}. Estamos para servirle.",
   "¡Hola, {n}! 👋 Solo un recordatorio amistoso: {serv} vence el {f}. Para renovar son {m}. ¿Se lo dejamos listo? 😄",
   "¡Qué tal, {n}! Pasando a saludar y recordarle que {serv} está por renovarse el {f}. El total es {m}. Cualquier cosa aquí andamos. 🙌",
   "Hola {n} 😊, ¿cómo va todo? Le cuento que {serv} renueva el {f}. Son {m} en total. Avíseme y lo dejamos activo enseguida.",
-  "¡Hey, {n}! 🎉 Su {serv} está por vencer el {f}. Para que no se quede sin su contenido favorito, la renovación es de {m}. ¿Renovamos?",
-  "Buenas {n} 👋 esperamos la esté pasando genial con su servicio. {serv} vence el {f} y la renovación es {m}. Aquí estamos para ayudarle. 🍿",
+  "¡Hey, {n}! 🎉 Le cuento que {serv} está por vencer el {f}. Para que no se quede sin su contenido favorito, la renovación es de {m}. ¿Renovamos?",
+  "Buenas {n} 👋 esperamos la esté pasando genial con su servicio. Le recuerdo que {serv} vence el {f} y la renovación es {m}. Aquí estamos para ayudarle. 🍿",
   // ---- Cortos / directos ----
   "Hola {n} 👋 {serv} renueva el {f}. Total: {m}. ¿Le activamos? 🙌",
   "{n}, recordatorio: {serv} vence el {f}. Renovación {m}. Quedo atento. 😊",
   "¡Buenas {n}! {serv} por renovar el {f} — {m}. ¿Procedemos?",
-  "Hola {n}, su {serv} vence el {f}. Son {m}. Avíseme para renovar. 🎬",
+  "Hola {n}, le cuento que {serv} vence el {f}. Son {m}. Avíseme para renovar. 🎬",
   // ---- Con urgencia suave ----
   "Hola, {n} 👋. Le recordamos que {serv} vence el {f}. Para evitar que se corte el acceso, la renovación es de {m}. ¿La dejamos lista hoy?",
   "{n}, no queremos que pierda su acceso 😊. {serv} vence el {f} y renovar cuesta {m}. Confírmenos y lo mantenemos activo sin cortes.",
-  "¡Atención, {n}! ⏰ Su {serv} está por vencer el {f}. Renueve por {m} y siga disfrutando sin interrupciones. ¿Le ayudamos?",
+  "¡Atención, {n}! ⏰ Le recuerdo que {serv} está por vencer el {f}. Renueve por {m} y siga disfrutando sin interrupciones. ¿Le ayudamos?",
   "Hola {n}, un recordatorio importante: {serv} vence el {f}. Para no quedarse sin servicio, la renovación es {m}. Estamos listos cuando usted diga. 🙌",
   // ---- Cálidos / fidelización ----
   "{n}, ¡gracias por su preferencia! 💛 Le recordamos que {serv} renueva el {f} por {m}. Es un placer tenerle con nosotros. ¿Renovamos?",
-  "Hola {n} 😊, gracias por seguir confiando en Sublicuentas. Su {serv} vence el {f} y la renovación es {m}. Con gusto lo dejamos todo listo.",
+  "Hola {n} 😊, gracias por seguir confiando en Sublicuentas. Le recuerdo que {serv} vence el {f} y la renovación es {m}. Con gusto lo dejamos todo listo.",
   "¡Buen día, {n}! 🌟 Valoramos mucho que sea nuestro cliente. {serv} renueva el {f} por un total de {m}. Aquí estamos para lo que necesite.",
-  "{n}, esperamos que todo marche excelente 🍿. Su {serv} está por renovar el {f}. El monto es {m}. Gracias por preferirnos, ¿procedemos?",
+  "{n}, esperamos que todo marche excelente 🍿. Le cuento que {serv} está por renovar el {f}. El monto es {m}. Gracias por preferirnos, ¿procedemos?",
   // ---- Neutros / profesionales ----
   "Hola {n}. Le informamos que {serv} tiene fecha de renovación el {f}. El total a cancelar es {m}. Quedamos atentos a su respuesta.",
-  "Buenas, {n}. Este es un recordatorio de que {serv} renueva el {f} por {m}. Puede confirmarnos por este medio para procesarlo. 🙌"
+  "Buenas, {n}. Este es un recordatorio de que {serv} renueva el {f} por {m}. Puede confirmarnos por este medio para procesarlo. 🙌",
+  // ---- Más variedad (para que nunca se sienta repetido) ----
+  "{n}, buen día 🙌. {serv} tiene su renovación programada para el {f}, por un total de {m}. Quedo pendiente de su confirmación.",
+  "Hola {n} 🙋. Le aviso que {serv} está por vencer el {f}. El costo de la renovación es {m}. ¿Se la dejo activada?",
+  "¡Buenas, {n}! Le comparto que {serv} renueva el {f} por {m}. Si me confirma, lo dejo listo de una vez. 😊",
+  "{n}, le escribo porque {serv} vence el {f}. La renovación sale en {m}. Cualquier duda, aquí estoy. 🙌"
 ];
 
 function fechaLarga(d){ return d?d.toLocaleDateString("es-HN",{day:"numeric",month:"long"}):"su fecha de renovación"; }
@@ -3194,13 +3200,21 @@ function descServicios(g){
   return `sus servicios de ${plats.slice(0,-1).join(", ")} y ${ultimo}`;
 }
 
-let _ultimaPlantilla=-1;
+let _bolsaPlantillas=[];
+function _sacarPlantillaIndex(){
+  if(!_bolsaPlantillas.length){
+    _bolsaPlantillas=PLANTILLAS_COBRO.map((_,i)=>i);
+    // Fisher-Yates: mezcla real, no solo Math.random() puro
+    for(let i=_bolsaPlantillas.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [_bolsaPlantillas[i],_bolsaPlantillas[j]]=[_bolsaPlantillas[j],_bolsaPlantillas[i]];
+    }
+  }
+  return _bolsaPlantillas.pop();
+}
 function generarMensajeCobro(g){
   const total = g.total!=null ? g.total : g.precio;
-  let i=Math.floor(Math.random()*PLANTILLAS_COBRO.length);
-  // Evitar repetir la misma plantilla que se mostró recién
-  if(PLANTILLAS_COBRO.length>1){ let intentos=0; while(i===_ultimaPlantilla && intentos<10){ i=Math.floor(Math.random()*PLANTILLAS_COBRO.length); intentos++; } }
-  _ultimaPlantilla=i;
+  const i=_sacarPlantillaIndex();
   let msg=PLANTILLAS_COBRO[i]
     .replaceAll("{n}",g.nombre||"")
     .replaceAll("{serv}",descServicios(g))
@@ -3262,7 +3276,7 @@ async function renovarServicio(dias, fechaExacta){
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json();
       if(j.ok)ok++; else {fail++; hint.textContent="⚠️ "+(j.error||"Error");}
     }catch(e){fail++;}
@@ -3341,7 +3355,7 @@ async function eliminarServicio(s){
   $cobro("cgHint").textContent="Eliminando…";
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({accion:"eliminar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma})});
+      body:JSON.stringify({accion:"eliminar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,servicioIndex:(s.srvIndex!=null?s.srvIndex:null)})});
     const j=await r.json();
     if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}`); setTimeout(()=>{cerrarCobro();load();},1200); }
     else $cobro("cgHint").textContent="⚠️ "+(j.error||"Error");
@@ -3350,7 +3364,7 @@ async function eliminarServicio(s){
 
 // Formulario agregar/editar
 const servModal=$cobro("servModal");
-let servModo="agregar", servEditandoPlat=null;
+let servModo="agregar", servEditandoPlat=null, servEditandoIndex=null;
 function abrirServForm(modo, serv){
   servModo=modo;
   const g=cobroActual;
@@ -3360,6 +3374,7 @@ function abrirServForm(modo, serv){
   $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   if(modo==="editar" && serv){
     servEditandoPlat=serv.plataformaRaw||serv.plataforma;
+    servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
     // seleccionar la plataforma actual si está en la lista
     const raw=(serv.plataformaRaw||"").toLowerCase();
     if(raw && PLATS_DISPONIBLES.some(([v])=>v===raw)) $cobro("servPlat").value=raw;
@@ -3369,6 +3384,7 @@ function abrirServForm(modo, serv){
     $cobro("servPin").value=serv.pin||"";
   }else{
     servEditandoPlat=null;
+    servEditandoIndex=null;
     $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servCorreo").value=""; $cobro("servPin").value="";
   }
   $cobro("servHint").textContent="";
@@ -3392,7 +3408,7 @@ $cobro("servSave").addEventListener("click",async()=>{
   $cobro("servHint").textContent="Guardando…";
   const payload=servModo==="agregar"
     ? {accion:"agregar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",servicio}
-    : {accion:"editar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,servicio};
+    : {accion:"editar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,servicioIndex:servEditandoIndex,servicio};
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const j=await r.json();
@@ -4032,6 +4048,7 @@ function gCaminoBombas(){
     ["office","Office 365"],["oleada","Oleada TV"],["iptv","IPTV"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy"];
+  const FICHA_VENDEDOR_TELS={ heber:"32174922", abner:"94306551", jimena:"88501036", manuel:"87989267" };
   const FICHA_PRECIOS={
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
@@ -4504,13 +4521,19 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(n==="sublicuentas") return "💻";
     return "🌟";
   }
+  function fichaVendedorTel(v){
+    return FICHA_VENDEDOR_TELS[fichaNorm(v)] || "";
+  }
 
   function fichaRespaldoCore(){
     const tel=fichaGetVal("fichaTelefono");
     const vendedor=fichaVendedorActual();
     const lineas=[];
     if(tel) lineas.push(tel);
-    if(vendedor) lineas.push(fichaVendedorIcono(vendedor)+" Vendedor "+vendedor);
+    if(vendedor){
+      const vtel=fichaVendedorTel(vendedor);
+      lineas.push(fichaVendedorIcono(vendedor)+" Vendedor "+vendedor+(vtel?" · "+vtel:""));
+    }
     return lineas.join("\n");
   }
 
@@ -4827,10 +4850,14 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaQ("fichaWA").onclick=fichaWhatsApp;
   }
 
-  window.abrirEntregaFicha=function(g){
+  window.abrirEntregaFicha=function(g,opts){
     fichaCreateModal();
-    const grupo=g||cobroActual||null;
-    const serv=(grupo&&grupo.servicios&&grupo.servicios[0]) || (grupo?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil}:null);
+    // Si se pide explícitamente en blanco (botón "Crear / actualizar CRM + ficha"), NUNCA
+    // se debe rellenar con el último cliente visto en Cobro (cobroActual queda "pegado"
+    // de otra pantalla y por eso la ficha salía repetida al crear una cuenta nueva).
+    const forceBlank = !!(opts && opts.blank);
+    const grupo = forceBlank ? {} : (g || cobroActual || null);
+    const serv=(grupo&&grupo.servicios&&grupo.servicios[0]) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil}:null);
     fichaResetButtons();
     fichaPrefillFromService(grupo||{},serv||{plataformaRaw:"netflix"});
     fichaQ("fichaModal").style.display="flex";
@@ -4846,7 +4873,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       btn.className="cobro-btn ficha-open-btn";
       btn.style.cssText="width:100%;margin:-2px 0 12px 0";
       btn.textContent="➕ Crear / actualizar CRM + ficha WhatsApp";
-      btn.onclick=()=>window.abrirEntregaFicha(null);
+      btn.onclick=()=>window.abrirEntregaFicha(null,{blank:true});
       if(h2) h2.insertAdjacentElement("afterend",btn);
     }
     const cobroModal=document.getElementById("cobroModal");
@@ -5161,7 +5188,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const old=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     try{
       const user=currentUser()||'sublichat';
-      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
+      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,servicioIndex:(c.srvIndex!=null?c.srvIndex:null),dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
       const j=await r.json().catch(()=>({}));
       if(!j.ok) throw new Error(j.error||'No se pudo renovar.');
       await fetch('/api/finanzas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'registrar_cobro',clienteNombre:c.nombre,clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,monto:c.precio||0,metodoPago:'No especificado',cobradoPor:user,vendedor:c.vendedor||user,rol:currentRole(),fechaPago:dateISO(new Date())})}).catch(()=>null);
