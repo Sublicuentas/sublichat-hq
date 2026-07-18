@@ -6070,59 +6070,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     .rbac-nav-arrow.left{left:max(18px,calc((100vw - 950px)/2))!important;}
     .rbac-nav-arrow.right{right:max(18px,calc((100vw - 950px)/2))!important;}
   }
-  /* ===== MODO WEB (escritorio) ===== · SOLO afecta viewport ancho; en celular
-     todo queda exactamente igual, porque estas reglas están dentro de este media
-     query y los contenedores nuevos son simples <div> sin estilo en móvil. */
-  @media(min-width:900px){
-    body{padding-left:242px!important;padding-bottom:24px!important}
-    .wrap{max-width:none!important;margin:0!important;padding:22px 30px 40px!important}
-    /* Sidebar: el topbar (logo/marca) arriba, el nav debajo, como dos tarjetas
-       blancas apiladas en una columna fija a la izquierda. */
-    .topbar{
-      position:fixed!important;left:18px!important;top:18px!important;width:206px!important;height:172px!important;
-      flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;
-      background:var(--card)!important;border:1px solid var(--line)!important;border-radius:26px!important;
-      padding:18px 14px!important;box-shadow:var(--sh)!important;z-index:9998!important;gap:6px!important;
-    }
-    .topbar .tb-txt{align-items:center!important;text-align:center!important;display:flex!important;flex-direction:column!important}
-    .topbar > div:last-child{margin-top:4px!important}
-    .nav.focus-nav,.nav{
-      position:fixed!important;left:18px!important;top:198px!important;bottom:18px!important;right:auto!important;
-      transform:none!important;width:206px!important;max-width:206px!important;height:auto!important;
-      flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;
-      border-radius:26px!important;padding:12px 10px!important;gap:3px!important;overflow-y:auto!important;
-      background:var(--card)!important;border:1px solid var(--line)!important;box-shadow:var(--sh)!important;
-    }
-    .nav .nav-btn,.nav-btn{
-      flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
-      width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;
-      padding:11px 13px!important;border-radius:15px!important;text-align:left!important;
-    }
-    .nav .nav-btn span:last-child,.nav-btn span:last-child{font-size:13.5px!important}
-    .nav .nav-btn .nico,.nav-btn .nico{font-size:19px!important}
-    .nav .nav-btn.active,.nav-btn.active{transform:none!important}
-    .rbac-nav-arrow{display:none!important}
-    /* Inicio: hero + frase lado a lado, 4 tarjetas en fila, barra de stats abajo */
-    #screen-inicio .inicio-top-row{display:flex!important;gap:16px!important;align-items:stretch!important;margin-bottom:11px!important}
-    #screen-inicio .inicio-top-row .hero{flex:1.4!important;margin-bottom:0!important}
-    #screen-inicio .inicio-top-row .quote-card{flex:1!important;margin-bottom:0!important;align-items:flex-start!important}
-    #screen-inicio .inicio-cards-row{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:14px!important;margin-bottom:14px!important}
-    #screen-inicio .inicio-cards-row .focus-action-card{min-height:150px!important;flex-direction:column!important;align-items:flex-start!important;justify-content:space-between!important;padding:18px!important;margin-bottom:0!important}
-    #screen-inicio .inicio-cards-row .focus-action-card::after{display:block!important;margin:0!important;font-size:12.5px!important}
-    #screen-inicio .inicio-cards-row .focus-action-icon{width:48px!important;height:48px!important;font-size:24px!important;border-radius:16px!important;margin-bottom:4px!important}
-    #screen-inicio .inicio-cards-row .fob-arrow{position:absolute!important;right:16px!important;bottom:14px!important;top:auto!important;font-size:20px!important;width:30px!important;height:30px!important;border-radius:50%!important;background:rgba(255,255,255,.55)!important;display:grid!important;place-items:center!important}
-    #screen-inicio .inicio-cards-row .focus-action-card{position:relative!important}
-    #screen-inicio .objetivos-btn{display:flex!important}
-    #screen-inicio .focus-action-objetivos{background:linear-gradient(135deg,#FFD9E0,#FF6B84)!important}
-    #screen-inicio .objetivos-btn{background:linear-gradient(135deg,#FFE1E6,#FFB0BE)!important;box-shadow:0 12px 0 #E23E5C,0 24px 42px rgba(255,107,132,.18)!important;color:#7A0B24!important}
-    #screen-inicio .inicio-web-stats{display:flex!important;gap:12px;background:var(--card)!important;border:1px solid var(--line)!important;border-radius:22px!important;padding:16px 20px!important;box-shadow:var(--sh)!important}
-    #screen-inicio .inicio-web-stats .iws-item{display:flex!important;align-items:center!important;gap:10px!important;flex:1!important}
-    #screen-inicio .inicio-web-stats .iws-ico{width:38px!important;height:38px!important;border-radius:13px!important;background:var(--surface)!important;display:grid!important;place-items:center!important;font-size:18px!important;flex:none!important}
-    #screen-inicio .inicio-web-stats .iws-txt{display:flex!important;flex-direction:column!important}
-    #screen-inicio .inicio-web-stats .iws-txt b{font-family:var(--ff)!important;font-size:17px!important;color:var(--txt)!important;line-height:1.15!important}
-    #screen-inicio .inicio-web-stats .iws-txt small{font-size:11.5px!important;color:var(--txt2)!important;font-weight:700!important}
-  }
-</style>
+  </style>
 <script>
 (function(){
   'use strict';
@@ -6918,6 +6866,66 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 </script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
+<!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
+     Va al final del documento a propósito: licMenuPerfilPolish reescribe .nav con
+     selectores "body.ready .nav" y gana la cascada si esta regla queda antes. Acá
+     se repiten esos mismos selectores para empatar en especificidad y, al estar
+     después en el HTML, ganar el empate. Todo dentro de @media(min-width:900px),
+     así que en celular no cambia absolutamente nada. -->
+<style id="licModoWebSidebarInicio">
+  @media(min-width:900px){
+    body.ready{padding-left:242px!important;padding-bottom:24px!important}
+    body.ready .wrap{max-width:none!important;margin:0!important;padding:22px 30px 40px!important}
+    /* Sidebar: el topbar (logo/marca) arriba, el nav debajo, como dos tarjetas
+       blancas apiladas en una columna fija a la izquierda. */
+    body.ready .topbar{
+      position:fixed!important;left:18px!important;top:18px!important;width:206px!important;height:172px!important;
+      flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;
+      background:var(--card)!important;border:1px solid var(--line)!important;border-radius:26px!important;
+      padding:18px 14px!important;box-shadow:var(--sh)!important;z-index:9998!important;gap:6px!important;
+    }
+    body.ready .topbar .tb-txt{align-items:center!important;text-align:center!important;display:flex!important;flex-direction:column!important}
+    body.ready .topbar > div:last-child{margin-top:4px!important}
+    body.ready .nav.focus-nav,
+    body.ready .nav,
+    body.ready:not(.light) .nav.focus-nav,
+    body.ready:not(.light) .nav{
+      position:fixed!important;left:18px!important;top:198px!important;bottom:18px!important;right:auto!important;
+      transform:none!important;width:206px!important;max-width:206px!important;height:auto!important;
+      flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;
+      border-radius:26px!important;padding:12px 10px!important;gap:3px!important;overflow-y:auto!important;overflow-x:hidden!important;
+      background:var(--card)!important;border:1px solid var(--line)!important;box-shadow:var(--sh)!important;
+      backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+    }
+    body.ready .nav .nav-btn{
+      flex:0 0 auto!important;flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
+      width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;
+      padding:11px 13px!important;border-radius:15px!important;text-align:left!important;
+    }
+    body.ready .nav .nav-btn span:last-child{font-size:13.5px!important}
+    body.ready .nav .nav-btn .nico{font-size:19px!important}
+    body.ready .nav .nav-btn.active{transform:none!important}
+    body.ready .rbac-nav-arrow{display:none!important}
+    /* Inicio: hero + frase lado a lado, 4 tarjetas en fila, barra de stats abajo */
+    #screen-inicio .inicio-top-row{display:flex!important;gap:16px!important;align-items:stretch!important;margin-bottom:11px!important}
+    #screen-inicio .inicio-top-row .hero{flex:1.4!important;margin-bottom:0!important}
+    #screen-inicio .inicio-top-row .quote-card{flex:1!important;margin-bottom:0!important;align-items:flex-start!important}
+    #screen-inicio .inicio-cards-row{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:14px!important;margin-bottom:14px!important}
+    #screen-inicio .inicio-cards-row .focus-action-card{position:relative!important;min-height:150px!important;flex-direction:column!important;align-items:flex-start!important;justify-content:space-between!important;padding:18px!important;margin-bottom:0!important}
+    #screen-inicio .inicio-cards-row .focus-action-card::after{display:block!important;margin:0!important;font-size:12.5px!important}
+    #screen-inicio .inicio-cards-row .focus-action-icon{width:48px!important;height:48px!important;font-size:24px!important;border-radius:16px!important;margin-bottom:4px!important}
+    #screen-inicio .inicio-cards-row .fob-arrow{position:absolute!important;right:16px!important;bottom:14px!important;top:auto!important;font-size:20px!important;width:30px!important;height:30px!important;border-radius:50%!important;background:rgba(255,255,255,.55)!important;display:grid!important;place-items:center!important}
+    #screen-inicio .objetivos-btn{display:flex!important}
+    #screen-inicio .focus-action-objetivos{background:linear-gradient(135deg,#FFD9E0,#FF6B84)!important}
+    #screen-inicio .objetivos-btn{background:linear-gradient(135deg,#FFE1E6,#FFB0BE)!important;box-shadow:0 12px 0 #E23E5C,0 24px 42px rgba(255,107,132,.18)!important;color:#7A0B24!important}
+    #screen-inicio .inicio-web-stats{display:flex!important;gap:12px;background:var(--card)!important;border:1px solid var(--line)!important;border-radius:22px!important;padding:16px 20px!important;box-shadow:var(--sh)!important}
+    #screen-inicio .inicio-web-stats .iws-item{display:flex!important;align-items:center!important;gap:10px!important;flex:1!important}
+    #screen-inicio .inicio-web-stats .iws-ico{width:38px!important;height:38px!important;border-radius:13px!important;background:var(--surface)!important;display:grid!important;place-items:center!important;font-size:18px!important;flex:none!important}
+    #screen-inicio .inicio-web-stats .iws-txt{display:flex!important;flex-direction:column!important}
+    #screen-inicio .inicio-web-stats .iws-txt b{font-family:var(--ff)!important;font-size:17px!important;color:var(--txt)!important;line-height:1.15!important}
+    #screen-inicio .inicio-web-stats .iws-txt small{font-size:11.5px!important;color:var(--txt2)!important;font-weight:700!important}
+  }
+</style>
 </body>
 </html>
 
