@@ -245,6 +245,7 @@
   .hero .mascot-bg{position:absolute;right:-14px;bottom:-18px;width:120px;opacity:.22;pointer-events:none}
 
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:11px}
+  .inicio-web-stats{display:none}
   .stat{border-radius:var(--r);padding:12px 11px;background:var(--card);border:1px solid var(--line);box-shadow:var(--sh)}
   .stat .si{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:15px;margin-bottom:10px}
   .stat .sl{font-size:11px;color:var(--muted);line-height:1.3}
@@ -1292,37 +1293,53 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
       <div class="ab-body"><div class="ab-title" id="abTitle"></div><div class="ab-sub" id="abSub"></div></div>
       <button class="ab-go" id="abGo">Ver</button>
     </div>
-    <div class="hero">
-      <img class="mascot-bg" id="mascotBg" alt="">
-      <div class="hl">Cartera total</div>
-      <div class="hv" id="kCartera">—</div>
-      <div class="hs" id="kClientes">—</div>
-    </div>
-    <div class="quote-card" id="quoteCard">
-      <div class="quote-ico">✨</div>
-      <div class="quote-text" id="quoteText"></div>
+    <div class="inicio-top-row">
+      <div class="hero">
+        <img class="mascot-bg" id="mascotBg" alt="">
+        <div class="hl">Cartera total</div>
+        <div class="hv" id="kCartera">—</div>
+        <div class="hs" id="kClientes">—</div>
+      </div>
+      <div class="quote-card" id="quoteCard">
+        <div class="quote-ico">✨</div>
+        <div class="quote-text" id="quoteText"></div>
+      </div>
     </div>
     <div class="grid3">
       <div class="stat"><div class="si ic-warn"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div><div class="sl">Renuevan hoy</div><div class="sv" id="kHoy">—</div><div class="ss" id="kHoyMonto">Lps —</div></div>
       <div class="stat"><div class="si ic-good"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div class="sl">Próx. 7 días</div><div class="sv" id="kSemana">—</div><div class="ss">por vencer</div></div>
       <div class="stat"><div class="si ic-info"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M9 18h6M10 22h4M12 18v4"/></svg></div><div class="sl">Plataforma top</div><div class="sv" id="kTop" style="font-size:13px">—</div><div class="ss" id="kTopMonto">Lps —</div></div>
     </div>
-    <button class="fin-open-btn focus-action-card" id="finOpenBtn" data-sub="Ingresos, cartera y movimientos">
-      <span class="ico focus-action-icon focus-action-fin">📊</span>
-      <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
-      <span class="fob-arrow">›</span>
-    </button>
-    <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
-      <span class="ico focus-action-icon focus-action-aula">🏫</span>
-      <span class="focus-action-text"><b>Aula de clases</b><small>Cursos, logros y casos de ventas</small></span>
-      <span class="fob-arrow">›</span>
-    </button>
-    <button class="fin-open-btn games-btn focus-action-card" id="gamesOpenBtn" data-sub="Memoria, razonamiento y enfoque" style="margin-bottom:18px">
-      <span class="ico focus-action-icon focus-action-games">🧠</span>
-      <span class="focus-action-text"><b>Materia cerebral</b><small>Entrenaremos jugando, porque no todo es trabajo</small></span>
-      <span class="fob-arrow">›</span>
-    </button>
+    <div class="inicio-cards-row">
+      <button class="fin-open-btn focus-action-card" id="finOpenBtn" data-sub="Ingresos, cartera y movimientos">
+        <span class="ico focus-action-icon focus-action-fin">📊</span>
+        <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
+        <span class="fob-arrow">›</span>
+      </button>
+      <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
+        <span class="ico focus-action-icon focus-action-aula">🏫</span>
+        <span class="focus-action-text"><b>Aula de clases</b><small>Cursos, logros y casos de ventas</small></span>
+        <span class="fob-arrow">›</span>
+      </button>
+      <button class="fin-open-btn games-btn focus-action-card" id="gamesOpenBtn" data-sub="Memoria, razonamiento y enfoque" style="margin-bottom:18px">
+        <span class="ico focus-action-icon focus-action-games">🧠</span>
+        <span class="focus-action-text"><b>Materia cerebral</b><small>Entrenaremos jugando, porque no todo es trabajo</small></span>
+        <span class="fob-arrow">›</span>
+      </button>
+      <button class="fin-open-btn objetivos-btn focus-action-card" id="objetivosOpenBtn" data-sub="Metas diarias, semanales y mensuales" style="display:none;margin-bottom:18px">
+        <span class="ico focus-action-icon focus-action-objetivos">🎯</span>
+        <span class="focus-action-text"><b>Objetivos</b><small>Metas diarias, semanales y mensuales</small></span>
+        <span class="fob-arrow">›</span>
+      </button>
+    </div>
+    <div class="inicio-web-stats" id="inicioWebStats">
+      <div class="iws-item"><span class="iws-ico">👥</span><div class="iws-txt"><b id="iwsClientes">—</b><small>Clientes</small></div></div>
+      <div class="iws-item"><span class="iws-ico">🛍️</span><div class="iws-txt"><b id="iwsServicios">—</b><small>Servicios</small></div></div>
+      <div class="iws-item"><span class="iws-ico">💰</span><div class="iws-txt"><b id="iwsCartera">—</b><small>Cartera total</small></div></div>
+      <div class="iws-item"><span class="iws-ico">📈</span><div class="iws-txt"><b id="iwsDelta">—</b><small>vs mes anterior</small></div></div>
+    </div>
   </section>
+
 
   <!-- CLIENTES -->
   <section class="screen" id="screen-clientes">
@@ -1673,6 +1690,13 @@ function render(){
   if($("cPend"))countUp($("cPend"),pend,true);
   const dEl=$("cDelta");
   if(dEl){if(prev>0){const pct=Math.round((mes-prev)/prev*100);dEl.textContent=(pct>=0?"+":"")+pct+"%";dEl.style.color=pct>=0?"var(--good)":"var(--accent)";}else{dEl.textContent="—";dEl.style.color="var(--muted)";}}
+
+  // Barra de stats de Inicio en modo web (oculta en celular, ver CSS)
+  if($("iwsClientes"))$("iwsClientes").textContent=String(new Set(DATA.map(c=>c.nombre)).size);
+  if($("iwsServicios"))$("iwsServicios").textContent=String(DATA.length);
+  if($("iwsCartera"))$("iwsCartera").textContent=fmt(tot);
+  const iwsD=$("iwsDelta");
+  if(iwsD){ if(prev>0){ const pct=Math.round((mes-prev)/prev*100); iwsD.textContent=(pct>=0?"+":"")+pct+"%"; iwsD.style.color=pct>=0?"var(--good)":"var(--accent)"; } else { iwsD.textContent="—"; iwsD.style.color="var(--muted)"; } }
 
   if(!greeted){greeted=true;greetProactive();}
   // Banner de aviso al abrir
@@ -5041,14 +5065,14 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   };
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
-    finanzas:['inicio','clientes','agenda','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','agenda','importar','tickets','inventario','soporte','egresos','pelis','partidos','chat','perfil','configuracion'],
-    auditor:['inicio','crm-master','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
+    finanzas:['inicio','clientes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
+    admin:['inicio','clientes','agenda','objetivos','importar','tickets','inventario','soporte','egresos','pelis','partidos','chat','perfil','configuracion'],
+    auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
     importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], soporte:['🔧','Soporte'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
-    'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'],
+    'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
@@ -5161,6 +5185,18 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .rbac-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.rbac-btn{border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:12px;padding:9px 11px;font-weight:900;font-size:12px;cursor:pointer}.rbac-btn.good{background:#25d366;color:#062b16;border-color:#25d366}.rbac-btn.warn{background:rgba(232,163,23,.16);border-color:rgba(232,163,23,.35);color:var(--warn)}.rbac-btn.red{background:rgba(232,49,63,.16);border-color:rgba(232,49,63,.35);color:var(--accent)}
       .rbac-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.rbac-field{display:block}.rbac-field span{display:block;font-size:12px;color:var(--txt2);font-weight:900;margin:0 0 5px 2px}.rbac-input{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:13px;padding:12px;font-family:inherit;font-size:14px;outline:none}.rbac-wide{grid-column:1/-1}.rbac-table{width:100%;min-width:0}.rbac-table th,.rbac-table td{padding:10px;border-top:1px solid var(--line);font-size:12px;text-align:left}.rbac-table th{color:var(--muted);font-family:var(--ff);font-weight:700;background:var(--surface)}
       .rbac-badge{display:inline-flex;border-radius:999px;padding:4px 8px;background:var(--surface);border:1px solid var(--line);font-size:11px;font-weight:900;color:var(--txt2)}
+      .obj-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--sh);margin-bottom:12px}
+      .obj-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+      .obj-head h3{font-family:var(--ff);font-size:16px;margin:0;color:var(--txt)}
+      .obj-head .obj-pct{font-family:var(--ff);font-weight:900;font-size:18px}
+      .obj-nums{display:flex;justify-content:space-between;font-size:12px;color:var(--txt2);font-weight:800;margin-bottom:7px}
+      .obj-bar{height:14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+      .obj-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#35B9F6,#14A7ED);transition:width .4s ease}
+      .obj-fill.good{background:linear-gradient(90deg,#4BD11F,#21B58A)}
+      .obj-fill.warn{background:linear-gradient(90deg,#FFB931,#FF8A3F)}
+      .obj-foot{font-size:12px;color:var(--txt2);margin-top:8px;font-weight:700}
+      .obj-alert{border-radius:16px;padding:12px 14px;font-weight:900;font-size:13px;margin-bottom:12px;border:1px solid rgba(255,185,49,.35);background:rgba(255,185,49,.14);color:#8a5a00}
+      .obj-alert.good{border-color:rgba(75,209,31,.35);background:rgba(75,209,31,.14);color:#1e6b16}
       .profile-hero{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;background:linear-gradient(135deg,#fff,#EAF8FF);border:1px solid var(--line);border-radius:26px;padding:18px;margin-bottom:14px;box-shadow:var(--sh)}
       .profile-avatar{width:96px;height:96px;border-radius:30px;object-fit:cover;box-shadow:0 10px 0 rgba(20,148,216,.16),0 18px 28px rgba(22,72,118,.16);background:var(--surface)}
       .profile-name{font-family:var(--ff);font-size:28px;font-weight:900;letter-spacing:-.5px;color:#0F2D52;margin:0 0 4px}.profile-cargo{font-size:14px;font-weight:900;color:#45627F;line-height:1.35}.profile-role{display:inline-flex;margin-top:10px;border-radius:999px;padding:7px 10px;background:#E9F8FF;color:#1278B8;font-size:11px;font-weight:900;border:1px solid rgba(18,120,184,.18)}
@@ -5214,6 +5250,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
     ensureScreen('auditoria','Cuadre y auditoría','Detecta servicios sin precio, sin vendedor, vencidos o posibles fugas.','');
     ensureScreen('estadisticas','Métricas y rendimiento','Resumen por plataforma, vendedor y cartera.','');
+    ensureScreen('objetivos','Objetivos y metas','Módulo nuevo: metas de ventas diarias, semanales y mensuales con progreso en vivo. Las metas se guardan en este navegador y las puede editar Relojes, Sublicuentas o Magdiel.','');
   }
 
   function buildNav(){
@@ -5224,6 +5261,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     document.body.classList.toggle('role-auditor',role==='auditor');
     nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='importar'&&role==='admin')?'Mesas':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
+    const objBtn=document.getElementById('objetivosOpenBtn');
+    if(objBtn && !objBtn.dataset.wired){ objBtn.dataset.wired='1'; objBtn.addEventListener('click',()=>rbacGo('objetivos')); }
     /* relojes ya no queda atrapado en la mesa: entra en Inicio y navega libre a todas sus secciones */
   }
   function rbacGo(screen){
@@ -5379,6 +5418,103 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const topP=Object.entries(byPlat).sort((a,b)=>b[1]-a[1]).slice(0,8), topV=Object.entries(byVend).sort((a,b)=>b[1]-a[1]).slice(0,8);
     const activos=DATA.filter(c=>!c.fecha||daysTo(c.fecha)>=0).length;
     el.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${Math.round((activos/(DATA.length||1))*100)}%</b><span>Servicios al día</span></div><div class="rbac-card"><b>${fmt(DATA.reduce((s,c)=>s+c.precio,0))}</b><span>Cartera mensual</span></div><div class="rbac-card"><b>${new Set(DATA.map(c=>c.nombre)).size}</b><span>Clientes únicos</span></div></div><div class="rbac-grid"><div class="rbac-card" style="grid-column:span 1"><b>Top plataformas</b><span>${topP.map(([k,v])=>`${esc(k)}: ${fmt(v)}`).join('<br>')}</span></div><div class="rbac-card" style="grid-column:span 2"><b>Rendimiento por vendedor</b><span>${topV.map(([k,v])=>`${esc(k)}: ${fmt(v)}`).join('<br>')}</span></div></div>`;
+  }
+
+  /* =========================================================
+     OBJETIVOS · módulo nuevo (propuesta) — metas de ventas
+     Las metas se guardan en localStorage (no hay endpoint todavía);
+     los 3 roles (Relojes, Sublicuentas, Magdiel) pueden verlas y editarlas.
+     El "vendido" se calcula en vivo desde los movimientos de finanzas (ingresos).
+     ========================================================= */
+  const OBJ_METAS_KEY='sublichat_metas_v1';
+  function objReadMetas(){
+    try{ const v=JSON.parse(localStorage.getItem(OBJ_METAS_KEY)||'{}'); return {diaria:Number(v.diaria)||3500, semanal:Number(v.semanal)||25000, mensual:Number(v.mensual)||100000, premio:v.premio||''}; }
+    catch(e){ return {diaria:3500,semanal:25000,mensual:100000,premio:''}; }
+  }
+  function objSaveMetas(m){ localStorage.setItem(OBJ_METAS_KEY, JSON.stringify(m)); }
+  function objEsIngreso(m){ const t=norm(m.tipo||''); return t.includes('ingreso')||t.includes('cobro'); }
+  function objSumaRango(desde,hasta){
+    return FINANZAS.filter(m=>objEsIngreso(m)).filter(m=>{const d=movDate(m); return d&&d>=desde&&d<=hasta;}).reduce((s,m)=>s+Number(m.monto||0),0);
+  }
+  function objVarPct(actual,anterior){
+    if(!anterior) return actual>0?'—':'0%';
+    const p=Math.round(((actual-anterior)/Math.abs(anterior))*100);
+    return (p>=0?'+':'')+p+'%';
+  }
+  function objBarra(titulo,vendido,meta){
+    const pct=meta>0?Math.round((vendido/meta)*100):0;
+    const cls=pct>=100?'good':(pct>=60?'':'warn');
+    const falta=Math.max(0,meta-vendido);
+    return `<div class="obj-card">
+      <div class="obj-head"><h3>${esc(titulo)}</h3><span class="obj-pct" style="color:${pct>=100?'var(--good)':(pct>=60?'var(--info)':'var(--warn)')}">${pct}%</span></div>
+      <div class="obj-nums"><span>Vendido: ${fmt(vendido)}</span><span>Meta: ${fmt(meta)}</span></div>
+      <div class="obj-bar"><div class="obj-fill ${cls}" style="width:${Math.min(100,pct)}%"></div></div>
+      <div class="obj-foot">${pct>=100?`🎉 ¡Meta cumplida! Superada por ${fmt(vendido-meta)}.`:`Falta ${fmt(falta)} para llegar a la meta.`}</div>
+    </div>`;
+  }
+  function renderObjetivos(){
+    const el=document.getElementById('rbac-objetivos'); if(!el)return;
+    const metas=objReadMetas();
+    const ayer=new Date(today); ayer.setDate(today.getDate()-1);
+    const {start,end}=currentWeekRange();
+    const semAntStart=new Date(start); semAntStart.setDate(start.getDate()-7);
+    const semAntEnd=new Date(end); semAntEnd.setDate(end.getDate()-7);
+    const mesInicio=new Date(today.getFullYear(),today.getMonth(),1);
+    const mesFin=new Date(today.getFullYear(),today.getMonth()+1,0);
+    const mesAntInicio=new Date(today.getFullYear(),today.getMonth()-1,1);
+    const mesAntFin=new Date(today.getFullYear(),today.getMonth(),0);
+
+    const vDia=objSumaRango(today,today), vDiaAnt=objSumaRango(ayer,ayer);
+    const vSem=objSumaRango(start,end), vSemAnt=objSumaRango(semAntStart,semAntEnd);
+    const vMes=objSumaRango(mesInicio,mesFin), vMesAnt=objSumaRango(mesAntInicio,mesAntFin);
+
+    // Alerta: si la semana está cerca o ya cumplió la meta
+    const pctSem=metas.semanal>0?Math.round((vSem/metas.semanal)*100):0;
+    let alerta='';
+    if(pctSem>=100) alerta=`<div class="obj-alert good">🎉 ¡Meta semanal cumplida! Van ${fmt(vSem)} de ${fmt(metas.semanal)}.</div>`;
+    else if(pctSem>=80) alerta=`<div class="obj-alert">🔥 ¡Casi lo logran! Faltan ${fmt(metas.semanal-vSem)} para la meta semanal.</div>`;
+
+    // Progreso por vendedor (semana actual)
+    const porVend={};
+    FINANZAS.filter(objEsIngreso).filter(m=>{const d=movDate(m);return d&&d>=start&&d<=end;}).forEach(m=>{
+      const v=m.cobradoPor||m.vendedor||'Sin asignar';
+      porVend[v]=(porVend[v]||0)+Number(m.monto||0);
+    });
+    const rankVend=Object.entries(porVend).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+    el.innerHTML=`
+      ${alerta}
+      ${objBarra('🎯 Meta diaria',vDia,metas.diaria)}
+      ${objBarra('🎯 Meta semanal',vSem,metas.semanal)}
+      ${objBarra('🎯 Meta mensual',vMes,metas.mensual)}
+      <div class="count" style="margin-top:6px">Comparación con el periodo anterior</div>
+      <div class="rbac-grid">
+        <div class="rbac-card"><b>${objVarPct(vDia,vDiaAnt)}</b><span>Hoy vs ayer</span></div>
+        <div class="rbac-card"><b>${objVarPct(vSem,vSemAnt)}</b><span>Semana vs anterior</span></div>
+        <div class="rbac-card"><b>${objVarPct(vMes,vMesAnt)}</b><span>Mes vs anterior</span></div>
+      </div>
+      <div class="count">Progreso por vendedor (semana actual)</div>
+      <div class="rbac-list" style="margin-bottom:14px">${rankVend.length?rankVend.map(([v,monto])=>`<div class="rbac-row"><div><h3>${esc(v)}</h3><p>${fmt(monto)} vendidos esta semana</p></div><span class="rbac-badge">${metas.semanal>0?Math.round((monto/metas.semanal)*100):0}% de la meta</span></div>`).join(''):'<div class="empty">Aún no hay cobros registrados esta semana.</div>'}</div>
+      ${metas.premio?`<div class="rbac-card"><b>🏆 Premio / incentivo activo</b><span>${esc(metas.premio)}</span></div>`:''}
+      <div class="rbac-card"><b>Editar metas</b><div class="rbac-form">
+        <label class="rbac-field"><span>Meta diaria Lps.</span><input class="rbac-input" id="objMetaDia" type="number" inputmode="numeric" value="${metas.diaria}"></label>
+        <label class="rbac-field"><span>Meta semanal Lps.</span><input class="rbac-input" id="objMetaSem" type="number" inputmode="numeric" value="${metas.semanal}"></label>
+        <label class="rbac-field"><span>Meta mensual Lps.</span><input class="rbac-input" id="objMetaMes" type="number" inputmode="numeric" value="${metas.mensual}"></label>
+        <label class="rbac-field wide"><span>Premio / incentivo (opcional)</span><input class="rbac-input" id="objPremio" placeholder="Ej: Bono de Lps 500 al cumplir la meta semanal" value="${esc(metas.premio)}"></label>
+      </div><div class="rbac-actions" style="justify-content:flex-start;margin-top:10px"><button class="rbac-btn good" id="objGuardarMetas">💾 Guardar metas</button></div></div>
+      <div class="ficha-note" style="margin-top:10px">Propuesta nueva: las metas se guardan en este navegador y el "vendido" se calcula de los cobros registrados en Finanzas. Si querés que las metas se compartan entre todos los usuarios y dispositivos, se puede mover a Firebase.</div>`;
+    const btn=document.getElementById('objGuardarMetas');
+    if(btn) btn.onclick=()=>{
+      const nuevo={
+        diaria:Number(document.getElementById('objMetaDia').value||0)||metas.diaria,
+        semanal:Number(document.getElementById('objMetaSem').value||0)||metas.semanal,
+        mensual:Number(document.getElementById('objMetaMes').value||0)||metas.mensual,
+        premio:document.getElementById('objPremio').value.trim()
+      };
+      objSaveMetas(nuevo);
+      mostrarToast('✅ Metas guardadas.');
+      renderObjetivos();
+    };
   }
 
   function arrayBufferToBase64(buffer){
@@ -5749,7 +5885,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   function renderRBACAll(){
     updateTopAdvisor(); renderPerfil();
-    renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderSoporteConfig(); renderTickets();
+    renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderSoporteConfig(); renderTickets(); renderObjetivos();
   }
 
   function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); }
@@ -5934,11 +6070,57 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     .rbac-nav-arrow.left{left:max(18px,calc((100vw - 950px)/2))!important;}
     .rbac-nav-arrow.right{right:max(18px,calc((100vw - 950px)/2))!important;}
   }
-  /* Inicio se ve "estiradísimo" en modo web porque hereda el ancho ancho de .wrap
-     (pensado para tablas/listas). Esto SOLO centra y angosta la pantalla de Inicio
-     a un ancho cómodo tipo app; ninguna otra pantalla se ve afectada. */
-  @media(min-width:700px){
-    #screen-inicio{max-width:520px!important;margin:0 auto!important;}
+  /* ===== MODO WEB (escritorio) ===== · SOLO afecta viewport ancho; en celular
+     todo queda exactamente igual, porque estas reglas están dentro de este media
+     query y los contenedores nuevos son simples <div> sin estilo en móvil. */
+  @media(min-width:900px){
+    body{padding-left:242px!important;padding-bottom:24px!important}
+    .wrap{max-width:none!important;margin:0!important;padding:22px 30px 40px!important}
+    /* Sidebar: el topbar (logo/marca) arriba, el nav debajo, como dos tarjetas
+       blancas apiladas en una columna fija a la izquierda. */
+    .topbar{
+      position:fixed!important;left:18px!important;top:18px!important;width:206px!important;height:172px!important;
+      flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;
+      background:var(--card)!important;border:1px solid var(--line)!important;border-radius:26px!important;
+      padding:18px 14px!important;box-shadow:var(--sh)!important;z-index:9998!important;gap:6px!important;
+    }
+    .topbar .tb-txt{align-items:center!important;text-align:center!important;display:flex!important;flex-direction:column!important}
+    .topbar > div:last-child{margin-top:4px!important}
+    .nav.focus-nav,.nav{
+      position:fixed!important;left:18px!important;top:198px!important;bottom:18px!important;right:auto!important;
+      transform:none!important;width:206px!important;max-width:206px!important;height:auto!important;
+      flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;
+      border-radius:26px!important;padding:12px 10px!important;gap:3px!important;overflow-y:auto!important;
+      background:var(--card)!important;border:1px solid var(--line)!important;box-shadow:var(--sh)!important;
+    }
+    .nav .nav-btn,.nav-btn{
+      flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
+      width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;
+      padding:11px 13px!important;border-radius:15px!important;text-align:left!important;
+    }
+    .nav .nav-btn span:last-child,.nav-btn span:last-child{font-size:13.5px!important}
+    .nav .nav-btn .nico,.nav-btn .nico{font-size:19px!important}
+    .nav .nav-btn.active,.nav-btn.active{transform:none!important}
+    .rbac-nav-arrow{display:none!important}
+    /* Inicio: hero + frase lado a lado, 4 tarjetas en fila, barra de stats abajo */
+    #screen-inicio .inicio-top-row{display:flex!important;gap:16px!important;align-items:stretch!important;margin-bottom:11px!important}
+    #screen-inicio .inicio-top-row .hero{flex:1.4!important;margin-bottom:0!important}
+    #screen-inicio .inicio-top-row .quote-card{flex:1!important;margin-bottom:0!important;align-items:flex-start!important}
+    #screen-inicio .inicio-cards-row{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:14px!important;margin-bottom:14px!important}
+    #screen-inicio .inicio-cards-row .focus-action-card{min-height:150px!important;flex-direction:column!important;align-items:flex-start!important;justify-content:space-between!important;padding:18px!important;margin-bottom:0!important}
+    #screen-inicio .inicio-cards-row .focus-action-card::after{display:block!important;margin:0!important;font-size:12.5px!important}
+    #screen-inicio .inicio-cards-row .focus-action-icon{width:48px!important;height:48px!important;font-size:24px!important;border-radius:16px!important;margin-bottom:4px!important}
+    #screen-inicio .inicio-cards-row .fob-arrow{position:absolute!important;right:16px!important;bottom:14px!important;top:auto!important;font-size:20px!important;width:30px!important;height:30px!important;border-radius:50%!important;background:rgba(255,255,255,.55)!important;display:grid!important;place-items:center!important}
+    #screen-inicio .inicio-cards-row .focus-action-card{position:relative!important}
+    #screen-inicio .objetivos-btn{display:flex!important}
+    #screen-inicio .focus-action-objetivos{background:linear-gradient(135deg,#FFD9E0,#FF6B84)!important}
+    #screen-inicio .objetivos-btn{background:linear-gradient(135deg,#FFE1E6,#FFB0BE)!important;box-shadow:0 12px 0 #E23E5C,0 24px 42px rgba(255,107,132,.18)!important;color:#7A0B24!important}
+    #screen-inicio .inicio-web-stats{display:flex!important;gap:12px;background:var(--card)!important;border:1px solid var(--line)!important;border-radius:22px!important;padding:16px 20px!important;box-shadow:var(--sh)!important}
+    #screen-inicio .inicio-web-stats .iws-item{display:flex!important;align-items:center!important;gap:10px!important;flex:1!important}
+    #screen-inicio .inicio-web-stats .iws-ico{width:38px!important;height:38px!important;border-radius:13px!important;background:var(--surface)!important;display:grid!important;place-items:center!important;font-size:18px!important;flex:none!important}
+    #screen-inicio .inicio-web-stats .iws-txt{display:flex!important;flex-direction:column!important}
+    #screen-inicio .inicio-web-stats .iws-txt b{font-family:var(--ff)!important;font-size:17px!important;color:var(--txt)!important;line-height:1.15!important}
+    #screen-inicio .inicio-web-stats .iws-txt small{font-size:11.5px!important;color:var(--txt2)!important;font-weight:700!important}
   }
 </style>
 <script>
