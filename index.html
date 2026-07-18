@@ -5260,7 +5260,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='importar'&&role==='admin')?'Mesas':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
+    nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     const objBtn=document.getElementById('objetivosOpenBtn');
     if(objBtn && !objBtn.dataset.wired){ objBtn.dataset.wired='1'; objBtn.addEventListener('click',()=>rbacGo('objetivos')); }
@@ -6753,8 +6753,9 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 
 <!-- FIX LIC 20260706 · fullscreen fecha + tickets estados + admin mesas + egresos ordenados -->
 <style id="licTicketFechaFinalPatch">
-  body.role-admin .nav-btn[data-screen="importar"] span:last-child{font-size:0!important;}
-  body.role-admin .nav-btn[data-screen="importar"] span:last-child::after{content:"Mesas";font-size:12px!important;}
+  /* (etiqueta "Mesas de Trabajo" ahora se pone directo en buildNav(), ya no
+     hace falta el truco de font-size:0 + ::after — eso era lo que provocaba
+     que en el sidebar de escritorio se viera "MesasMesas" duplicado) */
   .docs-fullscreen-host .docs-max-on .docs-table tbody tr.fecha-odd:not(.row-selected) th,
   .docs-fullscreen-host .docs-max-on .docs-table tbody tr.fecha-odd:not(.row-selected) td,
   .docs-fullscreen-host .docs-max-on .docs-table tbody tr.fecha-odd:not(.row-selected) .docs-cell{background:#B3E5FC!important;color:#000!important;-webkit-text-fill-color:#000!important;}
@@ -6878,7 +6879,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   @media(min-width:900px){
     /* Nunca mostrar el sidebar mientras la app no esté lista (intro/login) */
     body:not(.ready) #sidebarWrap{display:none!important}
-    body.ready .wrap{margin-left:242px!important;width:auto!important;max-width:none!important;padding:22px 30px 40px!important;box-sizing:border-box!important}
+    body.ready .wrap{margin-left:242px!important;width:auto!important;max-width:none!important;padding:30px 30px 40px!important;box-sizing:border-box!important}
     /* El nav ya no vive abajo (se movió al sidebar): quitar el espacio reservado
        que dejaba un hueco enorme al final de cada pantalla. */
     body.ready{padding-bottom:0!important}
@@ -6950,11 +6951,20 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
        juego): el sidebar queda encima con z-index alto, así que su encabezado/botón
        de volver hay que correrlo para que no quede tapado. */
     body.ready .fin-screen .fin-head{margin-left:242px!important}
-    body.ready .fin-screen .fin-body{margin-left:242px!important;margin-right:0!important;width:auto!important;max-width:none!important;box-sizing:border-box!important}
+    body.ready .fin-screen .fin-body{margin-left:242px!important;margin-right:auto!important;width:auto!important;max-width:1040px!important;box-sizing:border-box!important}
     /* Formulario de Tickets: es un diseño de una sola columna a propósito, pero se
        ve gigante si se estira a todo el ancho disponible en escritorio. Se limita
        a un ancho de formulario normal. */
-    #screen-tickets .tk-wrap{max-width:640px!important}
+    #screen-tickets .tk-wrap{
+      max-width:1200px!important;display:grid!important;grid-template-columns:380px 1fr!important;
+      grid-auto-flow:row!important;gap:0 24px!important;align-items:start!important;
+    }
+    /* Los primeros 3 elementos (título "Nuevo ticket", formulario, estado) van a la
+       columna izquierda; el resto (título "Bandeja", tickets abiertos, historial)
+       va a la columna derecha, como bandeja de correo. */
+    #screen-tickets .tk-wrap>*:nth-child(-n+3){grid-column:1!important}
+    #screen-tickets .tk-wrap>*:nth-child(n+4){grid-column:2!important}
+    #screen-tickets .tk-wrap>*:nth-child(4){margin-top:0!important}
   }
 </style>
 <script id="licModoWebSidebarMoverScript">
