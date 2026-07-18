@@ -6876,12 +6876,18 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <style id="licModoWebSidebarInicio">
   #sidebarWrap{display:none}
   @media(min-width:900px){
+    /* Nunca mostrar el sidebar mientras la app no esté lista (intro/login) */
+    body:not(.ready) #sidebarWrap{display:none!important}
     body.ready .wrap{margin-left:242px!important;width:auto!important;max-width:none!important;padding:22px 30px 40px!important;box-sizing:border-box!important}
+    /* El nav ya no vive abajo (se movió al sidebar): quitar el espacio reservado
+       que dejaba un hueco enorme al final de cada pantalla. */
+    body.ready{padding-bottom:0!important}
     #sidebarWrap{
       display:flex!important;flex-direction:column!important;gap:12px!important;
       position:fixed!important;left:18px!important;top:18px!important;bottom:18px!important;width:206px!important;
       z-index:9998!important;
     }
+    body:not(.ready) #sidebarWrap{display:none!important}
     #sidebarWrap .topbar{
       position:static!important;flex:none!important;width:auto!important;height:auto!important;
       flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;
@@ -6940,6 +6946,15 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     #screen-inicio .inicio-web-stats .iws-txt{display:flex!important;flex-direction:column!important}
     #screen-inicio .inicio-web-stats .iws-txt b{font-family:var(--ff)!important;font-size:17px!important;color:var(--txt)!important;line-height:1.15!important}
     #screen-inicio .inicio-web-stats .iws-txt small{font-size:11.5px!important;color:var(--txt2)!important;font-weight:700!important}
+    /* Pantallas de overlay a todo el viewport (Control financiero, Materia cerebral,
+       juego): el sidebar queda encima con z-index alto, así que su encabezado/botón
+       de volver hay que correrlo para que no quede tapado. */
+    body.ready .fin-screen .fin-head{margin-left:242px!important}
+    body.ready .fin-screen .fin-body{margin-left:242px!important;margin-right:0!important;width:auto!important;max-width:none!important;box-sizing:border-box!important}
+    /* Formulario de Tickets: es un diseño de una sola columna a propósito, pero se
+       ve gigante si se estira a todo el ancho disponible en escritorio. Se limita
+       a un ancho de formulario normal. */
+    #screen-tickets .tk-wrap{max-width:640px!important}
   }
 </style>
 <script id="licModoWebSidebarMoverScript">
