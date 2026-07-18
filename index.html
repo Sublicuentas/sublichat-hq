@@ -4068,7 +4068,7 @@ function gCaminoBombas(){
 
 👤 Perfil: *_{perfil}_*
 *📧 Correo: {correo}*{claveLine}{pinLine}
-*📅 Renovación: {dia} de cada mes*
+*📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
 📌 No se modifica perfil
@@ -4136,7 +4136,7 @@ Le hacemos entrega oficial de sus credenciales de acceso:
 
 👤 Perfil: *_{perfil}_*
 *📧 Correo: {correo}*{claveLine}{pinLine}
-*📅 Renovación: {dia} de cada mes*
+*📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
 📌 No se modifica perfil
@@ -4170,7 +4170,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 
 👤 Perfil: *_{perfil}_*
 *📧 Correo: {correo}*{claveLine}{pinLine}
-*📅 Renovación: {dia} de cada mes*
+*📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
 📌 No modificar perfil
@@ -4188,7 +4188,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 
 👤 Perfil: *_{perfil}_*
 *📧 Correo: {correo}*{claveLine}{pinLine}
-*📅 Renovación: {dia} de cada mes*
+*📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
 📌 Acceso solo para un dispositivo
@@ -4295,7 +4295,7 @@ Ingrese estos datos manualmente en su app:
 Estimad@ *_{nombre}_*, le comparto su acceso:
 
 *📧 Correo: {correo}*
-*📅 Renovación: {dia} de cada mes*
+*📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
 📌 Acceso únicamente para el correo indicado
@@ -4403,7 +4403,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const wa=fichaQ("fichaWA"), save=fichaQ("fichaSave"), regen=fichaQ("fichaRegen"), copy=fichaQ("fichaCopy");
     if(wa){ wa.disabled=false; wa.textContent="✅ Guardar CRM + abrir WhatsApp"; }
     if(save){ save.disabled=false; save.textContent="💾 Guardar CRM"; }
-    if(regen){ regen.disabled=false; regen.textContent="🔄 Regenerar"; }
+    if(regen){ regen.disabled=false; regen.textContent="🆕 Ficha nueva"; }
     if(copy){ copy.disabled=false; copy.textContent="📋 Copiar"; }
     fichaStatus("","");
   }
@@ -4491,6 +4491,10 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const fecha=fichaGetVal("fichaFecha");
     const precio=fichaPrecioActual();
     const dia=fichaGetVal("fichaDia") || fichaDayFromDate(fecha);
+    // Si se eligió una fecha exacta (dd/mm/aaaa), la ficha debe mostrar esa fecha
+    // completa, no "X de cada mes" — eso solo aplica cuando NO hay fecha exacta,
+    // solamente el día del mes.
+    const renovTexto = fecha ? (fichaISOToDMY(fecha)||"—") : (dia ? (fichaD2(dia)+" de cada mes") : "—");
     const claveLine=fichaNeedsClave(plat)?`\n*🔑 Clave: ${clave||"—"}*`:"";
     const pinLine=fichaNeedsPin(plat)?`\n*📎 Pin: ${pin||"—"}*`:"";
     const iptvProv=fichaGetVal("fichaIptvProveedor")||"latintv";
@@ -4515,6 +4519,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .replaceAll("{iptvhora}",iptvhora)
       .replaceAll("{iptvpantallas}",iptvpantallas)
       .replaceAll("{oleadalimite}",oleadalimite)
+      .replaceAll("{renovTexto}",renovTexto)
       .replaceAll("{dia}",dia?fichaD2(dia):"—")
       .replaceAll("{fecha}",fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—")
       .replaceAll("{precio}",precio?String(precio):"—");
@@ -4830,7 +4835,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         </div>
         <label class="ficha-field"><span>Ficha para grupo WhatsApp / respaldo</span><div class="ficha-text ficha-preview" id="fichaTextoView" contenteditable="true"></div><textarea id="fichaTexto" style="display:none" aria-hidden="true"></textarea></label>
         <div class="ficha-actions three">
-          <button class="ficha-btn" id="fichaRegen" type="button">🔄 Regenerar</button>
+          <button class="ficha-btn" id="fichaRegen" type="button">🆕 Ficha nueva</button>
           <button class="ficha-btn crm" id="fichaSave" type="button">💾 Guardar CRM</button>
           <button class="ficha-btn" id="fichaCopy" type="button">📋 Copiar</button>
         </div>
@@ -4861,7 +4866,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaPrecio").addEventListener("input",()=>{ fichaQ("fichaPrecio").dataset.manual="1"; });
     fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
-    fichaQ("fichaRegen").onclick=()=>{ fichaRefreshTemplate(); fichaStatus("✅ Ficha regenerada.","ok"); };
+    fichaQ("fichaRegen").onclick=()=>{
+      const tieneDatos=fichaGetVal("fichaNombre")||fichaGetVal("fichaCorreo")||fichaGetVal("fichaTelefono");
+      if(tieneDatos && !confirm("¿Iniciar una ficha nueva para otro cliente? Se borrarán los datos de esta pantalla que no haya guardado en CRM."))return;
+      window.abrirEntregaFicha(null,{blank:true});
+    };
     fichaQ("fichaSave").onclick=()=>fichaGuardarCRM({button:fichaQ("fichaSave")});
     fichaQ("fichaCopy").onclick=()=>fichaCopy(false);
     fichaQ("fichaWA").onclick=fichaWhatsApp;
