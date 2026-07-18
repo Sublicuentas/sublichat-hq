@@ -4061,7 +4061,7 @@ function gCaminoBombas(){
   // solo correo: Canva, Gemini, ChatGPT y Duolingo
   const FICHA_SOLO_CORREO=new Set(["universal","canva","gemini","chatgpt","duolingo"]);
   const FICHA_SIN_PIN=new Set(["vipnetflix","vix","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
-  const IPTV_URLS={latintv:"http://latvgt.com:80", liontv:"http://liontv.es:80"};
+  const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
     default:
 `*🎬 Entrega de su acceso {plat} 🎬*
@@ -4072,7 +4072,7 @@ function gCaminoBombas(){
 
 🚨 Condiciones del servicio:
 📌 No se modifica perfil
-📌 Uso en 1 dispositivo
+📌 Acceso solo para un dispositivo
 📌 Uso solo en Honduras
 📌 No usar vpn
 📌 Garantía vigente
@@ -4090,7 +4090,7 @@ Le compartimos sus credenciales exclusivas:
 *📅 Próximo pago: {fecha}*
 
 🚨 Reglas de su cuenta:
-📌 1 pantalla vigente.
+📌 Acceso solo para un dispositivo.
 📌 El perfil no debe ser modificado.
 📌 Servicio exclusivo para Honduras.
 📌 Cuenta con garantía total activa.
@@ -4124,7 +4124,7 @@ Le hacemos entrega oficial de sus credenciales de acceso:
 *📅 Renovación: {fecha}*
 
 🚨 Reglas de su cuenta:
-📌 Límite autorizado: 1 dispositivo vigente.
+📌 Acceso solo para un dispositivo.
 📌 No se modifica el perfil.
 📌 Uso exclusivo en Honduras (No usar VPN).
 
@@ -4140,7 +4140,7 @@ Le hacemos entrega oficial de sus credenciales de acceso:
 
 🚨 Condiciones del servicio:
 📌 No se modifica perfil
-📌 Uso en 1 dispositivo, no se accede en más de uno
+📌 Acceso solo para un dispositivo
 📌 Uso solo en Honduras
 📌 No usar vpn
 📌 Garantía vigente
@@ -4158,7 +4158,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 *⏳ Próximo pago: {fecha}*
 
 ⚠️ Condiciones del servicio:
-📌 Se accede en 1 dispositivo.
+📌 Acceso solo para un dispositivo.
 📌 No se modifica perfil.
 📌 Conexión válida únicamente para Honduras.
 
@@ -4174,6 +4174,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 
 🚨 Condiciones del servicio:
 📌 No modificar perfil
+📌 Acceso solo para un dispositivo
 📌 Uso solo en Honduras
 📌 Garantía vigente
 
@@ -4190,7 +4191,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 *📅 Renovación: {dia} de cada mes*
 
 🚨 Condiciones del servicio:
-📌 Uso en 1 dispositivo
+📌 Acceso solo para un dispositivo
 📌 Uso solo en Honduras
 📌 No usar vpn
 📌 Garantía vigente
@@ -4225,6 +4226,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 *⏳ Próximo pago: {fecha}*
 
 ⚠️ Detalles del servicio:
+📌 Acceso solo para un dispositivo.
 🎬 Acceso a Pelis, Series y Novelas.
 ⚽ Deportes (Válido únicamente en USA/MX 🇺🇸🇲🇽).
 📺 Compatible con TV, Celular, Tablet y Web.
@@ -4247,7 +4249,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 
 🚀 Sublicuentas`,
     iptv:
-`*ACCESO IPTV | 1 MES - 1 DISPOSITIVO* 🎬🎬
+`*ACCESO IPTV | 1 MES - {iptvpantallas}* 🎬🎬
 
 📲 Compatible con: TV, Celular (iPhone o Android), Smarters Pro y SmartOne.
 
@@ -4495,6 +4497,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const iptvurl=IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
     const iptvlista=fichaGetVal("fichaIptvLista")||"—";
     const iptvhora=fichaGetVal("fichaIptvHora")||"";
+    const iptvPant=fichaGetVal("fichaIptvPantallas")||"1";
+    const iptvpantallas=iptvPant+" DISPOSITIVO"+(iptvPant==="1"?"":"S");
     const oleadaDisp=fichaGetVal("fichaOleadaDispositivos")||"1";
     const oleadalimite=oleadaDisp+" dispositivo"+(oleadaDisp==="1"?"":"s");
     return fichaTemplateFor(plat)
@@ -4509,6 +4513,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .replaceAll("{iptvurl}",iptvurl)
       .replaceAll("{iptvlista}",iptvlista)
       .replaceAll("{iptvhora}",iptvhora)
+      .replaceAll("{iptvpantallas}",iptvpantallas)
       .replaceAll("{oleadalimite}",oleadalimite)
       .replaceAll("{dia}",dia?fichaD2(dia):"—")
       .replaceAll("{fecha}",fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—")
@@ -4582,12 +4587,13 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const showIptv=fichaNorm(plat)==="iptv";
     const showOleada=fichaNorm(plat)==="oleada";
     const claveBox=fichaQ("fichaClaveBox"), pinBox=fichaQ("fichaPinBox"), iptvBox=fichaQ("fichaIptvBox"),
-          iptvListaBox=fichaQ("fichaIptvListaBox"), iptvHoraBox=fichaQ("fichaIptvHoraBox"), oleadaBox=fichaQ("fichaOleadaBox");
+          iptvListaBox=fichaQ("fichaIptvListaBox"), iptvHoraBox=fichaQ("fichaIptvHoraBox"), iptvPantallasBox=fichaQ("fichaIptvPantallasBox"), oleadaBox=fichaQ("fichaOleadaBox");
     if(claveBox)claveBox.style.display=showClave?"block":"none";
     if(pinBox)pinBox.style.display=showPin?"block":"none";
     if(iptvBox)iptvBox.style.display=showIptv?"block":"none";
     if(iptvListaBox)iptvListaBox.style.display=showIptv?"block":"none";
     if(iptvHoraBox)iptvHoraBox.style.display=showIptv?"block":"none";
+    if(iptvPantallasBox)iptvPantallasBox.style.display=showIptv?"block":"none";
     if(oleadaBox)oleadaBox.style.display=showOleada?"block":"none";
     const txt=fichaQ("fichaTexto");
     if(txt) txt.value=fichaFullPreviewText();
@@ -4815,9 +4821,10 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
           <label class="ficha-field"><span>Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
           <label class="ficha-field" id="fichaClaveBox"><span>Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
           <label class="ficha-field" id="fichaPinBox"><span>PIN del perfil</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
-          <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Proveedor IPTV</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV</option><option value="liontv">LionTV</option></select></label>
+          <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Proveedor IPTV</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latvgt.com)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV</option></select></label>
           <label class="ficha-field" id="fichaIptvListaBox" style="display:none"><span>Lista (app IPTV)</span><input class="ficha-input" id="fichaIptvLista" placeholder="Ej. Icomplay"></label>
           <label class="ficha-field" id="fichaIptvHoraBox" style="display:none"><span>Hora de activación</span><input class="ficha-input" id="fichaIptvHora" type="time"></label>
+          <label class="ficha-field" id="fichaIptvPantallasBox" style="display:none"><span>Pantallas</span><select class="ficha-select" id="fichaIptvPantallas"><option value="1">1 pantalla</option><option value="2">2 pantallas</option><option value="3">3 pantallas</option><option value="4">4 pantallas</option></select></label>
           <label class="ficha-field" id="fichaOleadaBox" style="display:none"><span>Dispositivos Oleada TV</span><select class="ficha-select" id="fichaOleadaDispositivos"><option value="1">1 dispositivo</option><option value="3">3 dispositivos</option></select></label>
           <label class="ficha-field"><span>Nombre de perfil visible</span><input class="ficha-input" id="fichaPerfil" placeholder="Si es diferente al cliente"></label>
         </div>
@@ -4848,6 +4855,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
+    fichaQ("fichaIptvPantallas").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaOleadaDispositivos").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaRefreshTemplate(); });
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
