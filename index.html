@@ -1524,6 +1524,7 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
   <button class="nav-btn" data-screen="partidos"><span class="nico">⚽</span><span>Partidos</span></button>
   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
 </nav>
+<div id="sidebarWrap" class="sidebar-wrap"></div>
 <script type="module">
 const CONFIG = {
   firebase: {
@@ -6867,44 +6868,49 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
-     Va al final del documento a propósito: licMenuPerfilPolish reescribe .nav con
-     selectores "body.ready .nav" y gana la cascada si esta regla queda antes. Acá
-     se repiten esos mismos selectores para empatar en especificidad y, al estar
-     después en el HTML, ganar el empate. Todo dentro de @media(min-width:900px),
-     así que en celular no cambia absolutamente nada. -->
+     #sidebarWrap es un contenedor real: un script más abajo mueve el .topbar y el
+     .nav DENTRO de él en escritorio (y los regresa a su lugar en celular). Como es
+     un ID, su especificidad le gana a cualquier ".nav"/"body.ready .nav" de otros
+     parches sin importar el orden en el archivo. Todo dentro de @media(min-width:900px)
+     y controlado por JS con matchMedia, así que en celular no cambia nada. -->
 <style id="licModoWebSidebarInicio">
+  #sidebarWrap{display:none}
   @media(min-width:900px){
-    body.ready{padding-left:242px!important;padding-bottom:24px!important}
-    body.ready .wrap{max-width:none!important;margin:0!important;padding:22px 30px 40px!important}
-    /* Sidebar: el topbar (logo/marca) arriba, el nav debajo, como dos tarjetas
-       blancas apiladas en una columna fija a la izquierda. */
-    body.ready .topbar{
-      position:fixed!important;left:18px!important;top:18px!important;width:206px!important;height:172px!important;
+    body.ready .wrap{margin-left:242px!important;max-width:none!important;padding:22px 30px 40px!important}
+    #sidebarWrap{
+      display:flex!important;flex-direction:column!important;gap:12px!important;
+      position:fixed!important;left:18px!important;top:18px!important;bottom:18px!important;width:206px!important;
+      z-index:9998!important;
+    }
+    #sidebarWrap .topbar{
+      position:static!important;flex:none!important;width:auto!important;height:auto!important;
       flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;
       background:var(--card)!important;border:1px solid var(--line)!important;border-radius:26px!important;
-      padding:18px 14px!important;box-shadow:var(--sh)!important;z-index:9998!important;gap:6px!important;
+      padding:18px 14px!important;box-shadow:var(--sh)!important;gap:6px!important;display:flex!important;
     }
-    body.ready .topbar .tb-txt{align-items:center!important;text-align:center!important;display:flex!important;flex-direction:column!important}
-    body.ready .topbar > div:last-child{margin-top:4px!important}
-    body.ready .nav.focus-nav,
-    body.ready .nav,
-    body.ready:not(.light) .nav.focus-nav,
-    body.ready:not(.light) .nav{
-      position:fixed!important;left:18px!important;top:198px!important;bottom:18px!important;right:auto!important;
-      transform:none!important;width:206px!important;max-width:206px!important;height:auto!important;
+    #sidebarWrap .topbar .tb-txt{align-items:center!important;text-align:center!important;display:flex!important;flex-direction:column!important}
+    #sidebarWrap .topbar > div:last-child{margin-top:4px!important}
+    #sidebarWrap .av-brand{width:88px!important;height:88px!important;border-radius:50%!important}
+    #sidebarWrap .tb-txt h1{font-size:22px!important;letter-spacing:-.4px!important}
+    #sidebarWrap .tb-txt .greet{font-size:12px!important;white-space:normal!important}
+    #sidebarWrap .tb-txt .live{font-size:11px!important}
+    #sidebarWrap .nav.focus-nav,
+    #sidebarWrap .nav{
+      position:static!important;left:auto!important;top:auto!important;bottom:auto!important;right:auto!important;
+      transform:none!important;width:100%!important;max-width:none!important;height:auto!important;flex:1!important;
       flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;
       border-radius:26px!important;padding:12px 10px!important;gap:3px!important;overflow-y:auto!important;overflow-x:hidden!important;
       background:var(--card)!important;border:1px solid var(--line)!important;box-shadow:var(--sh)!important;
-      backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+      backdrop-filter:none!important;-webkit-backdrop-filter:none!important;margin:0!important;
     }
-    body.ready .nav .nav-btn{
+    #sidebarWrap .nav .nav-btn{
       flex:0 0 auto!important;flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
       width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;
       padding:11px 13px!important;border-radius:15px!important;text-align:left!important;
     }
-    body.ready .nav .nav-btn span:last-child{font-size:13.5px!important}
-    body.ready .nav .nav-btn .nico{font-size:19px!important}
-    body.ready .nav .nav-btn.active{transform:none!important}
+    #sidebarWrap .nav .nav-btn span:last-child{font-size:13.5px!important}
+    #sidebarWrap .nav .nav-btn .nico{font-size:19px!important}
+    #sidebarWrap .nav .nav-btn.active{transform:none!important}
     body.ready .rbac-nav-arrow{display:none!important}
     /* Inicio: hero + frase lado a lado, 4 tarjetas en fila, barra de stats abajo */
     #screen-inicio .inicio-top-row{display:flex!important;gap:16px!important;align-items:stretch!important;margin-bottom:11px!important}
@@ -6926,6 +6932,41 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     #screen-inicio .inicio-web-stats .iws-txt small{font-size:11.5px!important;color:var(--txt2)!important;font-weight:700!important}
   }
 </style>
+<script id="licModoWebSidebarMoverScript">
+(function(){
+  'use strict';
+  var mq = window.matchMedia('(min-width:900px)');
+  function colocar(){
+    var topbar = document.querySelector('.topbar');
+    var nav = document.querySelector('.nav.focus-nav') || document.querySelector('.nav');
+    var wrap = document.querySelector('.wrap');
+    var sidebar = document.getElementById('sidebarWrap');
+    if(!topbar || !nav || !wrap || !sidebar) return;
+    if(mq.matches){
+      // Escritorio: topbar + nav DENTRO del sidebar fijo, topbar primero.
+      if(topbar.parentElement !== sidebar) sidebar.appendChild(topbar);
+      if(nav.parentElement !== sidebar) sidebar.appendChild(nav);
+      if(sidebar.firstChild !== topbar) sidebar.insertBefore(topbar, sidebar.firstChild);
+    }else{
+      // Celular: todo vuelve exactamente a su lugar original.
+      if(topbar.parentElement !== wrap || wrap.firstChild !== topbar) wrap.insertBefore(topbar, wrap.firstChild);
+      if(nav.parentElement !== document.body) document.body.appendChild(nav);
+    }
+  }
+  if(mq.addEventListener) mq.addEventListener('change', colocar);
+  else if(mq.addListener) mq.addListener(colocar);
+  colocar();
+  // Por si buildNav()/render() se ejecutan después y algo reordena el DOM.
+  document.addEventListener('DOMContentLoaded', colocar);
+  window.addEventListener('load', colocar);
+  setTimeout(colocar, 300);
+  setTimeout(colocar, 1200);
+  var _oldBuildNav = window.buildNav;
+  if(typeof _oldBuildNav === 'function'){
+    window.buildNav = function(){ var r = _oldBuildNav.apply(this, arguments); colocar(); return r; };
+  }
+})();
+</script>
 </body>
 </html>
 
