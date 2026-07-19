@@ -8432,6 +8432,112 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   }
 </style>
 
+
+<!-- LIC 20260719 · MENSAJE AÚN MÁS COMPACTO + ESPACIO MÓVIL CORREGIDO -->
+<style id="licSmallerMessageMobileGapFix20260719">
+  /* Teléfono: se elimina el relleno excesivo que permitía bajar cientos de píxeles
+     después de la última tarjeta. Solo queda el espacio real del navbar fijo. */
+  @media (max-width:899px){
+    :root{--lic-fixed-nav-clearance:116px!important}
+    html{
+      min-height:0!important;
+      height:auto!important;
+      scroll-padding-bottom:calc(116px + env(safe-area-inset-bottom))!important;
+    }
+    body{
+      min-height:0!important;
+      height:auto!important;
+      padding-bottom:calc(116px + env(safe-area-inset-bottom))!important;
+    }
+    body.ready .wrap{
+      min-height:0!important;
+      height:auto!important;
+      padding-bottom:14px!important;
+    }
+    body.ready .screen.active{
+      min-height:0!important;
+      padding-bottom:8px!important;
+    }
+    #screen-inicio.active{
+      min-height:0!important;
+      padding-bottom:0!important;
+    }
+
+    /* Pensamiento diario más bajo y ligero en móvil. */
+    #screen-inicio .daily-thought-banner{
+      height:132px!important;
+      min-height:132px!important;
+      max-height:132px!important;
+      margin-bottom:10px!important;
+      border-radius:18px!important;
+    }
+    #screen-inicio .daily-thought-copy{
+      width:100%!important;
+      height:132px!important;
+      min-height:132px!important;
+      padding:12px 12px 10px 36%!important;
+      justify-content:center!important;
+    }
+    #screen-inicio .daily-quote-mark{
+      left:calc(36% - 21px)!important;
+      top:7px!important;
+      font-size:40px!important;
+    }
+    #screen-inicio .daily-thought-banner .quote-text{
+      font-size:clamp(12.5px,3.75vw,15.5px)!important;
+      line-height:1.13!important;
+    }
+    #screen-inicio .quote-author{
+      margin-top:5px!important;
+      font-size:10.5px!important;
+      line-height:1.05!important;
+    }
+    #screen-inicio .quote-source,
+    #screen-inicio .daily-thought-banner.is-original .quote-source{
+      margin-top:1px!important;
+      font-size:8px!important;
+      line-height:1!important;
+    }
+  }
+
+  /* Web: el mensaje conserva presencia, pero ya no domina el panel Inicio. */
+  @media (min-width:900px){
+    #screen-inicio .daily-thought-banner{
+      height:104px!important;
+      min-height:104px!important;
+      max-height:104px!important;
+      margin-bottom:10px!important;
+      border-radius:18px!important;
+    }
+    #screen-inicio .daily-thought-copy{
+      width:min(61%,790px)!important;
+      height:104px!important;
+      min-height:104px!important;
+      padding:10px clamp(18px,2vw,30px) 9px clamp(18px,2vw,30px)!important;
+    }
+    #screen-inicio .daily-quote-mark{
+      left:clamp(0px,.55vw,8px)!important;
+      top:5px!important;
+      font-size:40px!important;
+    }
+    #screen-inicio .daily-thought-banner .quote-text{
+      font-size:clamp(14px,1.05vw,18px)!important;
+      line-height:1.11!important;
+    }
+    #screen-inicio .quote-author{
+      margin-top:4px!important;
+      font-size:10.5px!important;
+      line-height:1!important;
+    }
+    #screen-inicio .quote-source,
+    #screen-inicio .daily-thought-banner.is-original .quote-source{
+      margin-top:1px!important;
+      font-size:8px!important;
+      line-height:1!important;
+    }
+  }
+</style>
+
 </body>
 </html>
 
