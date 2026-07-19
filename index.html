@@ -1288,10 +1288,20 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
 
   <!-- INICIO -->
   <section class="screen active" id="screen-inicio">
+    <div class="quote-card daily-thought-banner" id="quoteCard" aria-live="polite">
+      <div class="daily-thought-art" id="quoteArt" aria-hidden="true"></div>
+      <div class="daily-thought-shade" aria-hidden="true"></div>
+      <div class="daily-thought-copy">
+        <div class="daily-quote-mark" aria-hidden="true">“</div>
+        <div class="quote-text" id="quoteText"></div>
+        <div class="quote-author" id="quoteAuthor"></div>
+        <div class="quote-source" id="quoteSource"></div>
+      </div>
+    </div>
     <div id="alertBanner" class="alert-banner" style="display:none">
       <div class="ab-ico">🔔</div>
       <div class="ab-body"><div class="ab-title" id="abTitle"></div><div class="ab-sub" id="abSub"></div></div>
-      <button class="ab-go" id="abGo">Ver</button>
+      <button class="ab-go" id="abGo"><span>Ver detalle</span><span aria-hidden="true">›</span></button>
     </div>
     <div class="inicio-top-row">
       <div class="hero">
@@ -1299,10 +1309,6 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
         <div class="hl">Cartera total</div>
         <div class="hv" id="kCartera">—</div>
         <div class="hs" id="kClientes">—</div>
-      </div>
-      <div class="quote-card" id="quoteCard">
-        <div class="quote-ico">✨</div>
-        <div class="quote-text" id="quoteText"></div>
       </div>
     </div>
     <div class="grid3">
@@ -7604,6 +7610,243 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   setTimeout(init,1200);
 })();
 </script>
+
+
+<!-- LIC 20260719 · PENSAMIENTO DIARIO ILUSTRADO + ALERTA WEB -->
+<style id="licDailyThoughtBanner20260719">
+  #screen-inicio .daily-thought-banner{
+    position:relative!important;
+    isolation:isolate!important;
+    display:block!important;
+    width:100%!important;
+    min-height:220px!important;
+    margin:0 0 18px!important;
+    padding:0!important;
+    overflow:hidden!important;
+    border:1px solid rgba(255,255,255,.78)!important;
+    border-radius:28px!important;
+    background:#1d236b!important;
+    box-shadow:0 11px 0 rgba(24,37,104,.16),0 24px 44px rgba(28,50,110,.20)!important;
+  }
+  #screen-inicio .daily-thought-art,
+  #screen-inicio .daily-thought-art svg,
+  #screen-inicio .daily-thought-shade{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+  }
+  #screen-inicio .daily-thought-art svg{display:block!important;object-fit:cover!important}
+  #screen-inicio .daily-thought-banner::before,
+  #screen-inicio .daily-thought-banner::after{display:none!important;content:none!important}
+  #screen-inicio .daily-thought-shade{
+    z-index:1!important;
+    pointer-events:none!important;
+    background:
+      linear-gradient(90deg,rgba(11,16,70,.12) 0%,rgba(15,17,75,.42) 35%,rgba(12,15,64,.72) 100%),
+      linear-gradient(180deg,transparent 55%,rgba(5,9,43,.20) 100%)!important;
+  }
+  #screen-inicio .daily-thought-copy{
+    position:relative!important;
+    z-index:2!important;
+    width:min(62%,860px)!important;
+    min-height:220px!important;
+    margin-left:auto!important;
+    padding:34px clamp(30px,4vw,72px) 28px clamp(24px,3.4vw,58px)!important;
+    display:flex!important;
+    flex-direction:column!important;
+    justify-content:center!important;
+    align-items:flex-start!important;
+    color:#fff!important;
+    text-align:left!important;
+  }
+  #screen-inicio .daily-quote-mark{
+    position:absolute!important;
+    left:clamp(0px,1.1vw,18px)!important;
+    top:22px!important;
+    font-family:Georgia,serif!important;
+    font-size:clamp(72px,7vw,118px)!important;
+    line-height:.8!important;
+    font-weight:900!important;
+    color:rgba(140,126,255,.80)!important;
+    text-shadow:0 8px 24px rgba(0,0,0,.18)!important;
+  }
+  #screen-inicio .daily-thought-banner .quote-text{
+    position:relative!important;
+    z-index:2!important;
+    margin:0!important;
+    max-width:760px!important;
+    color:#fff!important;
+    font-family:'Fredoka','Nunito',system-ui,sans-serif!important;
+    font-size:clamp(22px,2.05vw,38px)!important;
+    line-height:1.22!important;
+    letter-spacing:-.02em!important;
+    font-style:normal!important;
+    font-weight:650!important;
+    text-shadow:0 3px 14px rgba(7,10,48,.36)!important;
+  }
+  #screen-inicio .quote-author{
+    margin-top:16px!important;
+    color:rgba(255,255,255,.88)!important;
+    font-family:'Nunito',system-ui,sans-serif!important;
+    font-size:clamp(13px,1.05vw,17px)!important;
+    font-weight:900!important;
+    letter-spacing:.015em!important;
+  }
+  #screen-inicio .quote-source{
+    margin-top:3px!important;
+    color:rgba(255,255,255,.58)!important;
+    font-family:'Nunito',system-ui,sans-serif!important;
+    font-size:clamp(10px,.76vw,12px)!important;
+    font-weight:800!important;
+  }
+  #screen-inicio .daily-thought-banner.is-original .quote-source{
+    color:rgba(255,255,255,.52)!important;
+  }
+  #screen-inicio .alert-banner{
+    order:initial!important;
+    margin:0 0 18px!important;
+  }
+  #screen-inicio .alert-banner .ab-go{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:10px!important;
+    min-width:132px!important;
+    background:linear-gradient(180deg,#FFD978,#FFC44E)!important;
+    color:#3D2E04!important;
+    border:0!important;
+    box-shadow:0 7px 0 #E0A62B,0 12px 20px rgba(191,132,15,.18)!important;
+  }
+  #screen-inicio .alert-banner .ab-go span:last-child{
+    font-size:22px!important;
+    line-height:1!important;
+    transform:translateY(-1px)!important;
+  }
+  #screen-inicio .inicio-top-row{
+    display:block!important;
+    margin:0 0 14px!important;
+  }
+  #screen-inicio .inicio-top-row .hero{
+    width:100%!important;
+    height:clamp(126px,10vw,176px)!important;
+    margin:0!important;
+  }
+
+  @media (max-width:899px){
+    #screen-inicio .daily-thought-banner{
+      min-height:235px!important;
+      border-radius:25px!important;
+      margin-bottom:15px!important;
+    }
+    #screen-inicio .daily-thought-shade{
+      background:linear-gradient(180deg,rgba(10,13,58,.16) 0%,rgba(8,11,49,.82) 62%,rgba(5,8,40,.94) 100%)!important;
+    }
+    #screen-inicio .daily-thought-copy{
+      width:100%!important;
+      min-height:235px!important;
+      justify-content:flex-end!important;
+      padding:88px 22px 24px!important;
+    }
+    #screen-inicio .daily-quote-mark{left:15px!important;top:78px!important;font-size:68px!important}
+    #screen-inicio .daily-thought-banner .quote-text{font-size:clamp(19px,5.6vw,25px)!important;line-height:1.2!important}
+    #screen-inicio .quote-author{font-size:13px!important;margin-top:11px!important}
+    #screen-inicio .quote-source{font-size:10px!important}
+    #screen-inicio .alert-banner .ab-go{min-width:48px!important;width:48px!important;padding:0!important}
+    #screen-inicio .alert-banner .ab-go span:first-child{display:none!important}
+  }
+</style>
+<script id="licDailyThoughtBannerScript20260719">
+(function(){
+  'use strict';
+  var DAILY_THOUGHTS=[
+    {q:'La felicidad de su vida depende de la calidad de sus pensamientos.',a:'Marco Aurelio',s:'Meditaciones',scene:'bust',icon:'✦',p:['#17185C','#34369D','#8C66E9','#F38ACD']},
+    {q:'No son las cosas las que inquietan, sino el juicio que hacemos sobre ellas.',a:'Epicteto',s:'Enquiridión, capítulo 5',scene:'bust',icon:'◈',p:['#112A57','#29559D','#54A7D8','#9EDCF0']},
+    {q:'Mientras aplazamos, la vida se apresura.',a:'Séneca',s:'Cartas a Lucilio, carta 1',scene:'bust',icon:'⌛',p:['#34204C','#713E7D','#C66E91','#F4B48A']},
+    {q:'Un viaje de mil pasos comienza debajo de sus pies.',a:'Lao-Tsé',s:'Tao Te Ching, capítulo 64',scene:'path',icon:'道',p:['#172A5E','#274B8D','#7D6EDB','#F3A0D0']},
+    {q:'Caminante, no hay camino: se hace camino al andar.',a:'Antonio Machado',s:'Proverbios y cantares XXIX',scene:'path',icon:'➜',p:['#16264A','#315B83','#69A5AD','#F4C278']},
+    {q:'El que lee mucho y anda mucho, ve mucho y sabe mucho.',a:'Miguel de Cervantes',s:'Don Quijote de la Mancha',scene:'books',icon:'✎',p:['#3A1F55','#7B4779','#D17C92','#F6C68B']},
+    {q:'Cuando no podemos cambiar una situación, tenemos el desafío de cambiarnos.',a:'Viktor Frankl',s:'El hombre en busca de sentido',scene:'mountain',icon:'△',p:['#102B4F','#1E6380','#49A89C','#C9E693']},
+    {q:'Su tiempo es limitado: no lo desperdicie viviendo la vida de otra persona.',a:'Steve Jobs',s:'Discurso de Stanford, 2005',scene:'horizon',icon:'◉',p:['#151A5A','#2B4490','#6B7CE3','#FF8DB4']},
+    {q:'Una venta empieza cuando usted escucha mejor de lo que habla.',a:'Sublicuentas',s:'Reflexión original',scene:'people',icon:'☏',p:['#162D57','#1B72A5','#39B7C4','#F3D56C']},
+    {q:'La disciplina convierte los días comunes en resultados extraordinarios.',a:'Sublicuentas',s:'Reflexión original',scene:'stairs',icon:'↗',p:['#2C185E','#6740A4','#AD65D2','#F4A4C8']},
+    {q:'Cada cliente bien atendido puede convertirse en su mejor publicidad.',a:'Sublicuentas',s:'Reflexión original',scene:'people',icon:'★',p:['#122A52','#245F92','#46A9C7','#AEE8D5']},
+    {q:'Lo pequeño, repetido con intención, termina construyendo algo grande.',a:'Sublicuentas',s:'Reflexión original',scene:'blocks',icon:'◆',p:['#3B2459','#724F9C','#C17AC2','#F3C984']},
+    {q:'Hoy no necesita hacerlo perfecto; necesita hacerlo avanzar.',a:'Sublicuentas',s:'Reflexión original',scene:'road',icon:'➤',p:['#0F3157','#146B91','#39AEB5','#F6D977']},
+    {q:'Una respuesta clara y rápida también es una forma de vender.',a:'Sublicuentas',s:'Reflexión original',scene:'chat',icon:'✉',p:['#20205F','#4651A7','#7B78E8','#F18EB5']},
+    {q:'Su negocio crece cuando su sistema trabaja incluso cuando usted descansa.',a:'Sublicuentas',s:'Reflexión original',scene:'gears',icon:'⚙',p:['#17294E','#2E6592','#5DB1BD','#B9E6C8']},
+    {q:'No persiga clientes: construya una experiencia a la que quieran volver.',a:'Sublicuentas',s:'Reflexión original',scene:'orbit',icon:'◎',p:['#321A5B','#6941A1','#B466CA','#FFAFBC']},
+    {q:'Cada renovación confirma que la confianza también se puede medir.',a:'Sublicuentas',s:'Reflexión original',scene:'chart',icon:'✓',p:['#0E3559','#176C8B','#38A89D','#D0E78B']},
+    {q:'La meta de hoy es sencilla: resolver mejor que ayer.',a:'Sublicuentas',s:'Reflexión original',scene:'target',icon:'⌖',p:['#2C1D63','#5F4FB4','#AA7EEB','#FFB3CC']},
+    {q:'Una agenda ordenada le devuelve tiempo para pensar en grande.',a:'Sublicuentas',s:'Reflexión original',scene:'calendar',icon:'▦',p:['#18305B','#2B6BA5','#55B9CF','#F4D36E']},
+    {q:'El seguimiento transforma una conversación pendiente en una oportunidad.',a:'Sublicuentas',s:'Reflexión original',scene:'bridge',icon:'∞',p:['#3A215B','#7650A2','#C777C2','#F5C98C']},
+    {q:'El precio atrae; la confianza hace que el cliente permanezca.',a:'Sublicuentas',s:'Reflexión original',scene:'shield',icon:'◇',p:['#0F3556','#146F89','#42AC9F','#D9E889']},
+    {q:'Su próxima gran venta puede empezar con un mensaje enviado hoy.',a:'Sublicuentas',s:'Reflexión original',scene:'message',icon:'➜',p:['#251B5F','#5144A8','#8B75E6','#FF9FC3']},
+    {q:'No mida solamente lo que vende; mida también lo que mejora.',a:'Sublicuentas',s:'Reflexión original',scene:'chart',icon:'▥',p:['#163257','#1C7198','#48AFB0','#F6D57B']},
+    {q:'La constancia no hace ruido, pero termina cambiando los números.',a:'Sublicuentas',s:'Reflexión original',scene:'waves',icon:'≈',p:['#3C205D','#7648A0','#BE72C4','#F5BC91']},
+    {q:'Una buena decisión repetida cada día se convierte en una ventaja.',a:'Sublicuentas',s:'Reflexión original',scene:'chess',icon:'♟',p:['#102F54','#24678D','#4AB0AA','#D5E68A']},
+    {q:'El mejor servicio es el que hace sentir al cliente acompañado.',a:'Sublicuentas',s:'Reflexión original',scene:'people',icon:'♡',p:['#281A60','#5D45AD','#9877E8','#FF9EB8']},
+    {q:'Cuando todo parece urgente, vuelva a lo importante.',a:'Sublicuentas',s:'Reflexión original',scene:'focus',icon:'●',p:['#15365A','#197493','#49B3A8','#E1E98B']},
+    {q:'Una meta visible es más fácil de convertir en una acción diaria.',a:'Sublicuentas',s:'Reflexión original',scene:'target',icon:'◎',p:['#3D215E','#774AA2','#C071C5','#F8C48F']},
+    {q:'La creatividad vende mejor cuando también resuelve un problema.',a:'Sublicuentas',s:'Reflexión original',scene:'idea',icon:'✦',p:['#112F57','#226D96','#4FB1B8','#F4D073']},
+    {q:'El progreso real comienza cuando deja de posponer el siguiente paso.',a:'Sublicuentas',s:'Reflexión original',scene:'stairs',icon:'↑',p:['#2A1B61','#5F48AD','#9C75E9','#FDA4C2']},
+    {q:'Hoy puede ser el día en que una pequeña mejora cambie todo su mes.',a:'Sublicuentas',s:'Reflexión original',scene:'sunrise',icon:'☀',p:['#133354','#2A6C8B','#58B5A8','#F7D77A']}
+  ];
+
+  function esc(v){return String(v==null?'':v).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c];});}
+  function seedRand(seed,n){var x=Math.sin(seed*97.13+n*41.77)*43758.5453;return x-Math.floor(x);}
+  function sceneMarkup(item,index){
+    var p=item.p, stars='';
+    for(var i=0;i<22;i++){
+      var x=(seedRand(index+1,i)*100).toFixed(1), y=(seedRand(index+4,i)*72).toFixed(1), r=(.55+seedRand(index+8,i)*1.45).toFixed(2);
+      stars+='<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="white" opacity="'+(.18+seedRand(index+12,i)*.55).toFixed(2)+'"/>';
+    }
+    var common='<defs><linearGradient id="bg'+index+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+p[0]+'"/><stop offset=".42" stop-color="'+p[1]+'"/><stop offset=".74" stop-color="'+p[2]+'"/><stop offset="1" stop-color="'+p[3]+'"/></linearGradient><filter id="blur'+index+'"><feGaussianBlur stdDeviation="7"/></filter></defs><rect width="100" height="100" fill="url(#bg'+index+')"/><g>'+stars+'</g><circle cx="18" cy="49" r="22" fill="'+p[3]+'" opacity=".78" filter="url(#blur'+index+')"/><circle cx="18" cy="49" r="16" fill="'+p[3]+'" opacity=".72"/>';
+    var art='';
+    switch(item.scene){
+      case 'bust': art='<g transform="translate(2,7)" fill="rgba(18,18,57,.78)"><ellipse cx="18" cy="38" rx="10" ry="13"/><path d="M8 76c1-17 4-26 10-27 7 1 10 10 12 27z"/><path d="M11 31c2-10 11-13 16-4-3-2-7-2-9 0 5 1 8 4 9 9-6-5-12-5-16-5z"/><path d="M13 46c2 8 8 11 13 2-1 10-4 16-7 18-5-3-7-10-6-20z"/></g>';break;
+      case 'path': art='<path d="M0 87C18 75 22 68 33 58c10-9 20-16 35-21" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-linecap="round"/><path d="M0 90C22 80 31 74 43 66" fill="none" stroke="rgba(20,22,70,.55)" stroke-width="8" stroke-linecap="round"/><g fill="rgba(16,18,64,.72)"><circle cx="11" cy="78" r="3"/><circle cx="19" cy="72" r="2.6"/><circle cx="27" cy="65" r="2.1"/></g>';break;
+      case 'books': art='<g transform="translate(5,41)"><rect x="0" y="26" width="35" height="8" rx="2" fill="rgba(18,18,62,.72)"/><rect x="3" y="16" width="31" height="8" rx="2" fill="rgba(255,255,255,.42)"/><rect x="0" y="6" width="35" height="8" rx="2" fill="rgba(18,18,62,.66)"/><path d="M12 2l7-13 7 13" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/></g>';break;
+      case 'mountain': art='<path d="M0 84L14 58l8 10 12-27 21 43z" fill="rgba(13,23,66,.72)"/><path d="M16 58l6 10 12-27 7 12" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/><circle cx="35" cy="32" r="8" fill="rgba(255,240,190,.72)"/>';break;
+      case 'horizon': art='<circle cx="22" cy="55" r="11" fill="rgba(255,232,175,.85)"/><path d="M0 66c16-8 31-8 51 0M0 74c18-7 36-7 56 0M0 83c20-6 39-6 60 0" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="2"/>';break;
+      case 'people': art='<g transform="translate(4,38)" fill="rgba(17,20,65,.72)"><circle cx="12" cy="12" r="7"/><circle cx="29" cy="9" r="6"/><circle cx="43" cy="14" r="5"/><path d="M1 38c1-11 5-17 11-17s10 6 11 17zM20 36c1-10 4-15 9-15s8 5 10 15zM35 39c1-9 3-14 8-14s7 5 8 14z"/></g>';break;
+      case 'stairs': art='<g transform="translate(4,47)" fill="rgba(17,20,65,.70)"><rect x="0" y="26" width="12" height="10" rx="2"/><rect x="12" y="17" width="12" height="19" rx="2"/><rect x="24" y="8" width="12" height="28" rx="2"/><rect x="36" y="0" width="12" height="36" rx="2"/></g><path d="M10 39l13-10 9 3 13-14" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.5"/>';break;
+      case 'blocks': art='<g transform="translate(5,42)"><rect x="0" y="26" width="14" height="14" rx="3" fill="rgba(18,20,67,.72)"/><rect x="15" y="18" width="14" height="22" rx="3" fill="rgba(255,255,255,.42)"/><rect x="30" y="8" width="14" height="32" rx="3" fill="rgba(18,20,67,.72)"/></g>';break;
+      case 'road': art='<path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(18,20,67,.68)" stroke-width="13"/><path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="1.8" stroke-dasharray="5 5"/>';break;
+      case 'chat': case 'message': art='<g transform="translate(5,40)"><rect x="0" y="0" width="42" height="29" rx="8" fill="rgba(255,255,255,.54)"/><path d="M10 29l-4 10 12-10" fill="rgba(255,255,255,.54)"/><circle cx="12" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="21" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="30" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/></g>';break;
+      case 'gears': art='<g transform="translate(7,43)" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="4"><circle cx="15" cy="15" r="11"/><circle cx="37" cy="28" r="8"/></g><g fill="rgba(17,20,65,.70)"><circle cx="22" cy="58" r="5"/><circle cx="44" cy="71" r="4"/></g>';break;
+      case 'orbit': art='<g transform="translate(5,31)" fill="none" stroke="rgba(255,255,255,.62)" stroke-width="1.8"><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(25 24 28)"/><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(-25 24 28)"/></g><circle cx="29" cy="59" r="7" fill="rgba(18,20,67,.74)"/>';break;
+      case 'chart': art='<g transform="translate(5,44)" fill="rgba(18,20,67,.70)"><rect x="0" y="22" width="8" height="18" rx="2"/><rect x="12" y="14" width="8" height="26" rx="2"/><rect x="24" y="4" width="8" height="36" rx="2"/><rect x="36" y="-6" width="8" height="46" rx="2"/></g><path d="M8 54l13-8 10 2 14-15" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.4"/>';break;
+      case 'target': case 'focus': art='<g transform="translate(6,38)" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="3"><circle cx="22" cy="22" r="20"/><circle cx="22" cy="22" r="12"/><circle cx="22" cy="22" r="4"/></g><path d="M28 58l21-22" stroke="rgba(18,20,67,.78)" stroke-width="4"/>';break;
+      case 'calendar': art='<g transform="translate(6,37)"><rect x="0" y="5" width="42" height="36" rx="7" fill="rgba(255,255,255,.52)"/><rect x="0" y="5" width="42" height="10" rx="7" fill="rgba(18,20,67,.64)"/><g fill="rgba(18,20,67,.55)"><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/><circle cx="31" cy="24" r="2"/><circle cx="11" cy="33" r="2"/><circle cx="21" cy="33" r="2"/><circle cx="31" cy="33" r="2"/></g></g>';break;
+      case 'bridge': art='<path d="M2 78h52M7 78c5-31 36-31 42 0" fill="none" stroke="rgba(18,20,67,.72)" stroke-width="4"/><path d="M7 77c7-20 33-20 42 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2"/>';break;
+      case 'shield': art='<path d="M27 31l18 7v16c0 14-8 25-18 31-10-6-18-17-18-31V38z" fill="rgba(18,20,67,.70)"/><path d="M17 56l7 7 14-17" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="3.2" stroke-linecap="round"/>';break;
+      case 'waves': art='<path d="M0 55c8-8 16-8 24 0s16 8 24 0M0 67c8-8 16-8 24 0s16 8 24 0M0 79c8-8 16-8 24 0s16 8 24 0" fill="none" stroke="rgba(255,255,255,.60)" stroke-width="3"/>';break;
+      case 'chess': art='<g transform="translate(11,34)" fill="rgba(18,20,67,.74)"><circle cx="14" cy="8" r="7"/><path d="M8 18h12l4 21H4z"/><rect x="1" y="39" width="26" height="7" rx="2"/></g>';break;
+      case 'idea': art='<g transform="translate(8,32)"><circle cx="20" cy="20" r="15" fill="rgba(255,244,188,.78)"/><path d="M14 40h12M15 46h10" stroke="rgba(18,20,67,.72)" stroke-width="3" stroke-linecap="round"/><path d="M20 0v-8M0 20h-8M40 20h8M6 6l-6-6M34 6l6-6" stroke="rgba(255,255,255,.65)" stroke-width="2"/></g>';break;
+      case 'sunrise': art='<circle cx="25" cy="61" r="13" fill="rgba(255,230,155,.88)"/><path d="M0 70h55M4 80c10-6 18-6 27 0s17 6 26 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2.4"/>';break;
+      default: art='<circle cx="27" cy="58" r="17" fill="rgba(18,20,67,.70)"/>';
+    }
+    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Ilustración relacionada con el pensamiento del día">'+common+art+'<text x="17" y="92" text-anchor="middle" fill="rgba(255,255,255,.72)" font-size="12" font-family="Nunito,Arial" font-weight="900">'+esc(item.icon)+'</text></svg>';
+  }
+  function dayIndex(){var d=new Date();var utc=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());return Math.floor(utc/86400000);}
+  function render(){
+    var text=document.getElementById('quoteText'),author=document.getElementById('quoteAuthor'),source=document.getElementById('quoteSource'),art=document.getElementById('quoteArt'),card=document.getElementById('quoteCard');
+    if(!text||!author||!source||!art||!card)return;
+    var idx=((dayIndex()%DAILY_THOUGHTS.length)+DAILY_THOUGHTS.length)%DAILY_THOUGHTS.length,item=DAILY_THOUGHTS[idx];
+    text.textContent=item.q;
+    author.textContent='— '+item.a;
+    source.textContent=item.s;
+    art.innerHTML=sceneMarkup(item,idx);
+    card.classList.toggle('is-original',item.a==='Sublicuentas');
+    card.setAttribute('aria-label','Pensamiento del día: '+item.q+' Autor: '+item.a+'. '+item.s+'.');
+    card.dataset.dailyThought=String(idx);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render);else render();
+  window.addEventListener('pageshow',render);
+})();
+</script>
+
 </body>
 </html>
 
