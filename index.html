@@ -1316,7 +1316,7 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
         <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
         <span class="fob-arrow">›</span>
       </button>
-      <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
+      <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); sessionStorage.setItem('sublichat_intro_seen','1'); localStorage.setItem('sublichat_skip_intro_until',String(Date.now()+1800000)); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
         <span class="ico focus-action-icon focus-action-aula">🏫</span>
         <span class="focus-action-text"><b>Aula de clases</b><small>Cursos, logros y casos de ventas</small></span>
         <span class="fob-arrow">›</span>
@@ -3763,6 +3763,7 @@ setTimeout(()=>{ const f=document.getElementById("introFlash"); if(f) f.classLis
 
 function showLogin(){ loginEl.classList.add("show"); }
 function enterApp(){
+  try{ sessionStorage.setItem("sublichat_intro_seen","1"); }catch(e){}
   loginEl.classList.remove("show");
   document.body.classList.add("ready");
   load();
@@ -3783,14 +3784,22 @@ async function bootAuthOrLogin(){
 
 // Secuencia cinematográfica: intro → sesión guardada o login
 // Si viene de Academia, vuelve directo a Inicio sin pedir usuario otra vez.
-const skipIntro=sessionStorage.getItem("sublichat_skip_intro")==="1";
+let skipIntroUntil=0;
+try{ skipIntroUntil=Number(localStorage.getItem("sublichat_skip_intro_until")||0); }catch(e){}
+let navType="";
+try{ navType=(performance.getEntriesByType("navigation")[0]||{}).type||""; }catch(e){}
+const skipIntro=sessionStorage.getItem("sublichat_skip_intro")==="1" ||
+  sessionStorage.getItem("sublichat_intro_seen")==="1" ||
+  skipIntroUntil>Date.now() || navType==="back_forward";
 if(skipIntro){
   sessionStorage.removeItem("sublichat_skip_intro");
+  intro.classList.add("hide");
   intro.style.display="none";
   bootAuthOrLogin();
 }else{
   setTimeout(()=>{
     intro.classList.add("hide");
+    try{ sessionStorage.setItem("sublichat_intro_seen","1"); }catch(e){}
     setTimeout(()=>{ intro.style.display="none"; bootAuthOrLogin(); }, 800);
   }, 3800);
 }
@@ -7315,6 +7324,286 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 }
 </style>
 
+
+
+<!-- LIC 20260718 · ARMONÍA GENERAL WEB + REGRESO A INICIO + AULA SIN INTRO -->
+<style id="licWebAllScreensHarmony20260718">
+@media (min-width:900px){
+  /* El mismo marco visual de Inicio se aplica a todos los módulos web. */
+  body.ready .wrap{
+    margin-left:242px!important;
+    margin-top:14px!important;
+    margin-right:18px!important;
+    margin-bottom:14px!important;
+    width:auto!important;
+    max-width:none!important;
+    min-height:calc(100vh - 28px)!important;
+    padding:16px!important;
+    border-radius:30px!important;
+    background:rgba(255,255,255,.76)!important;
+    border:1px solid rgba(255,255,255,.94)!important;
+    box-shadow:0 24px 60px rgba(48,88,132,.15),inset 0 1px 0 rgba(255,255,255,.95)!important;
+    box-sizing:border-box!important;
+  }
+
+  body.ready .screen.active:not(#screen-inicio){
+    position:relative!important;
+    width:100%!important;
+    max-width:1180px!important;
+    margin:0 auto!important;
+    padding:0!important;
+    overflow:visible!important;
+  }
+
+  body.ready .screen.active:not(#screen-inicio):not(#screen-chat):not(#screen-tickets) > .card{
+    width:100%!important;
+    max-width:1180px!important;
+    min-height:0!important;
+    margin:0 auto!important;
+    padding:clamp(20px,2vw,30px)!important;
+    border:1px solid #E5EDF5!important;
+    border-radius:26px!important;
+    background:#FFFFFF!important;
+    box-shadow:0 10px 0 #DDEAF5,0 22px 42px rgba(29,90,150,.09)!important;
+    overflow:visible!important;
+  }
+
+  body.ready .screen.active:not(#screen-inicio):not(#screen-chat):not(#screen-tickets) > .card > h2{
+    min-height:48px!important;
+    margin:0 0 7px!important;
+    padding:0!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:10px!important;
+    font-size:clamp(25px,2vw,34px)!important;
+    line-height:1.08!important;
+    color:#102F55!important;
+  }
+  body.ready .screen.active:not(#screen-inicio):not(#screen-chat):not(#screen-tickets) > .card > h2 .ico{
+    flex:none!important;
+  }
+  body.ready .screen.active:not(#screen-inicio):not(#screen-chat):not(#screen-tickets) > .card > .count{
+    margin:0 0 18px!important;
+    font-size:13px!important;
+    line-height:1.4!important;
+    color:#7893AA!important;
+  }
+
+  /* Módulos informativos: ancho de lectura cómodo; no se estiran de punta a punta. */
+  #screen-pelis.active,
+  #screen-soporte.active,
+  #screen-configuracion.active,
+  #screen-perfil.active{
+    max-width:1040px!important;
+  }
+  #screen-pelis.active > .card,
+  #screen-soporte.active > .card,
+  #screen-configuracion.active > .card,
+  #screen-perfil.active > .card{
+    max-width:1040px!important;
+  }
+  #screen-pelis .toolbar,
+  #screen-pelis #movieResults,
+  #screen-pelis > .card > .count{
+    max-width:820px!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+  #rbac-soporte,
+  #rbac-configuracion,
+  #rbac-perfil{
+    max-width:940px!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+  #screen-pelis .search{
+    min-height:52px!important;
+    padding:12px 16px!important;
+  }
+
+  /* Clientes, Cobros, Objetivos y Mesas conservan espacio de trabajo amplio,
+     pero arrancan con el mismo margen superior que Inicio. */
+  #screen-clientes.active,
+  #screen-agenda.active,
+  #screen-objetivos.active,
+  #screen-importar.active,
+  #screen-tickets.active,
+  #screen-inventario.active,
+  #screen-egresos.active,
+  #screen-auditoria.active,
+  #screen-estadisticas.active,
+  #screen-crm-master.active{
+    max-width:1180px!important;
+  }
+
+  /* Subli: panel compacto, con personalidad y sin el vacío horizontal gigante. */
+  #screen-chat.active{
+    display:grid!important;
+    grid-template-rows:auto minmax(0,1fr) auto!important;
+    width:min(100%,980px)!important;
+    max-width:980px!important;
+    height:min(760px,calc(100vh - 62px))!important;
+    min-height:560px!important;
+    margin:0 auto!important;
+    padding:18px!important;
+    border:1px solid #E1EAF4!important;
+    border-radius:28px!important;
+    background:#FFFFFF!important;
+    box-shadow:0 10px 0 #DDEAF5,0 22px 42px rgba(29,90,150,.10)!important;
+    overflow:hidden!important;
+  }
+  #screen-chat .chat-head{
+    margin:0!important;
+    padding:14px 16px!important;
+    border:1px solid #DDEAF4!important;
+    border-radius:21px!important;
+    background:linear-gradient(135deg,#F7FCFF 0%,#EAF7FF 100%)!important;
+    box-shadow:0 6px 14px rgba(30,88,142,.07)!important;
+  }
+  #screen-chat .chat-head .ch-av{
+    width:64px!important;height:64px!important;border-radius:18px!important;
+    border:2px solid rgba(53,185,246,.24)!important;
+    background:#DDF3FF!important;
+  }
+  #screen-chat .chat-head .ch-name{font-size:23px!important;color:#102F55!important}
+  #screen-chat .chat-head .ch-role{font-size:13px!important;color:#58738E!important}
+  #screen-chat .chat-scroll{
+    min-height:0!important;
+    margin:12px 0 0!important;
+    padding:16px!important;
+    border:1px solid #E4EDF5!important;
+    border-radius:22px!important;
+    background:linear-gradient(180deg,#F8FCFF 0%,#F3F9FE 100%)!important;
+    overflow-y:auto!important;
+  }
+  #screen-chat .chips{margin-bottom:14px!important;gap:8px!important}
+  #screen-chat .chip{
+    padding:9px 13px!important;border-radius:13px!important;
+    background:#FFFFFF!important;border:1px solid #CFE0EF!important;
+    box-shadow:0 3px 8px rgba(38,82,126,.05)!important;
+  }
+  #screen-chat .chat-log{gap:10px!important}
+  #screen-chat .botline{max-width:78%!important}
+  #screen-chat .msg{font-size:14px!important;line-height:1.45!important}
+  #screen-chat .msg.bot{background:#FFFFFF!important;border:1px solid #D8E5F1!important}
+  #screen-chat .input-row{
+    margin:12px 0 0!important;
+    padding:0!important;
+    background:transparent!important;
+  }
+  #screen-chat .input-row input{
+    min-height:52px!important;
+    border:1px solid #D4E2EF!important;
+    background:#F7FBFF!important;
+    box-shadow:none!important;
+  }
+  #screen-chat .mic,#screen-chat .send,#screen-chat .voice-toggle{
+    box-shadow:0 5px 12px rgba(29,90,150,.10)!important;
+  }
+
+  /* Botón coherente para regresar al menú Inicio desde cualquier categoría. */
+  .web-home-back{
+    flex:none!important;
+    margin-left:auto!important;
+    min-width:44px!important;
+    height:44px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:7px!important;
+    padding:0 14px!important;
+    border:0!important;
+    border-radius:16px!important;
+    background:linear-gradient(180deg,#42C8FF,#159EE8)!important;
+    color:#FFFFFF!important;
+    font-family:'Fredoka','Nunito',system-ui,sans-serif!important;
+    font-size:13px!important;
+    font-weight:900!important;
+    white-space:nowrap!important;
+    cursor:pointer!important;
+    box-shadow:0 6px 0 #147FBE,0 11px 20px rgba(24,153,231,.20)!important;
+    transition:transform .15s ease,box-shadow .15s ease!important;
+  }
+  .web-home-back:hover{transform:translateY(-1px)!important}
+  .web-home-back:active{transform:translateY(2px)!important;box-shadow:0 3px 0 #147FBE!important}
+  #screen-chat .chat-head .web-home-back{margin-left:8px!important}
+
+  /* Los overlays ya tienen botón de cierre; se iguala visualmente al resto. */
+  body.ready .fin-screen .cobro-x,
+  body.ready .focus-games-screen .focus-gear{
+    width:44px!important;height:44px!important;border:0!important;border-radius:16px!important;
+    background:linear-gradient(180deg,#42C8FF,#159EE8)!important;color:#fff!important;
+    box-shadow:0 6px 0 #147FBE,0 11px 20px rgba(24,153,231,.18)!important;
+  }
+}
+
+/* Modo móvil queda intacto. */
+@media (max-width:899px){
+  .web-home-back{display:none!important}
+}
+</style>
+<script id="licWebAllScreensHarmonyScript20260718">
+(function(){
+  'use strict';
+  function goHome(){
+    try{
+      if(window.subliRBAC && typeof window.subliRBAC.go==='function'){
+        window.subliRBAC.go('inicio');
+        return;
+      }
+    }catch(e){}
+    var btn=document.querySelector('.nav-btn[data-screen="inicio"]');
+    if(btn)btn.click();
+  }
+  function makeButton(){
+    var b=document.createElement('button');
+    b.type='button';
+    b.className='web-home-back';
+    b.innerHTML='<span aria-hidden="true">←</span><span>Inicio</span>';
+    b.setAttribute('aria-label','Volver al menú Inicio');
+    b.title='Volver al menú Inicio';
+    b.addEventListener('click',goHome);
+    return b;
+  }
+  function decorate(){
+    document.querySelectorAll('.screen').forEach(function(screen){
+      if(screen.id==='screen-inicio' || screen.querySelector(':scope > .card > h2 > .web-home-back') || screen.querySelector(':scope > .chat-head > .web-home-back')) return;
+      var h2=screen.querySelector(':scope > .card > h2');
+      if(h2){ h2.appendChild(makeButton()); return; }
+      var chatHead=screen.querySelector(':scope > .chat-head');
+      if(chatHead) chatHead.appendChild(makeButton());
+    });
+  }
+  function reinforceAulaReturn(){
+    var aula=document.getElementById('aulaOpenBtn');
+    if(!aula || aula.dataset.returnFix==='1')return;
+    aula.dataset.returnFix='1';
+    aula.onclick=function(){
+      try{
+        sessionStorage.setItem('sublichat_skip_intro','1');
+        sessionStorage.setItem('sublichat_intro_seen','1');
+        localStorage.setItem('sublichat_skip_intro_until',String(Date.now()+1800000));
+      }catch(e){}
+      window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8');
+    };
+  }
+  function init(){ decorate(); reinforceAulaReturn(); }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+  new MutationObserver(function(){decorate();reinforceAulaReturn();}).observe(document.documentElement,{childList:true,subtree:true});
+  window.addEventListener('pageshow',function(){
+    var intro=document.getElementById('intro');
+    try{
+      if(sessionStorage.getItem('sublichat_intro_seen')==='1' && intro){
+        intro.classList.add('hide');
+        intro.style.display='none';
+      }
+    }catch(e){}
+    setTimeout(init,50);
+  });
+  setTimeout(init,350);
+  setTimeout(init,1200);
+})();
+</script>
 </body>
 </html>
 
