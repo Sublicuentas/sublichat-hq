@@ -3854,7 +3854,7 @@ const intro=document.getElementById("intro"), loginEl=document.getElementById("l
 // destello de energía a la mitad del intro
 setTimeout(()=>{ const f=document.getElementById("introFlash"); if(f) f.classList.add("boom"); }, 1800);
 
-function showLogin(){ loginEl.classList.add("show"); }
+function showLogin(){ document.body.classList.remove("ready"); loginEl.classList.add("show"); }
 function enterApp(){
   try{ sessionStorage.setItem("sublichat_intro_seen","1"); }catch(e){}
   loginEl.classList.remove("show");
@@ -8932,6 +8932,37 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();
 </script>
+
+
+<!-- LIC 20260719 · LOGIN WEB SIEMPRE POR ENCIMA Y APP OCULTA -->
+<style id="licLoginNoSidebarOverlap20260719">
+  #login.show{z-index:2147483000!important}
+  body:has(#login.show) #sidebarWrap,
+  body:has(#login.show) > .wrap,
+  body:has(#login.show) > .nav,
+  body:has(#login.show) .rbac-nav-arrow{display:none!important}
+  body:has(#login.show){padding-bottom:0!important;overflow:hidden!important}
+</style>
+<script id="licLoginNoSidebarOverlapScript20260719">
+(function(){
+  var login=document.getElementById('login');
+  if(!login)return;
+  function sync(){
+    var visible=login.classList.contains('show');
+    document.body.classList.toggle('lic-login-visible',visible);
+    if(visible)document.body.classList.remove('ready');
+  }
+  new MutationObserver(sync).observe(login,{attributes:true,attributeFilter:['class']});
+  sync();
+})();
+</script>
+<style>
+  body.lic-login-visible #sidebarWrap,
+  body.lic-login-visible > .wrap,
+  body.lic-login-visible > .nav,
+  body.lic-login-visible .rbac-nav-arrow{display:none!important}
+  body.lic-login-visible{padding-bottom:0!important;overflow:hidden!important}
+</style>
 
 </body>
 </html>
