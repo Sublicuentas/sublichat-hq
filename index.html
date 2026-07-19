@@ -1234,6 +1234,34 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
     overflow:auto!important;
   }
 </style>
+
+<!-- LIC 20260719 · AULA RETURN: OMITIR INTRO ANTES DEL PRIMER PINTADO -->
+<style id="licAulaReturnNoIntroEarlyStyle">
+html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointer-events:none!important}
+</style>
+<script id="licAulaReturnNoIntroEarlyScript">
+(function(){
+  'use strict';
+  var now=Date.now(), skip=false;
+  try{
+    var until=Math.max(
+      Number(localStorage.getItem('sublichat_skip_intro_until')||0),
+      Number(localStorage.getItem('sublichat_return_from_aula_until')||0)
+    );
+    skip = sessionStorage.getItem('sublichat_skip_intro')==='1' ||
+           sessionStorage.getItem('sublichat_intro_seen')==='1' ||
+           sessionStorage.getItem('sublichat_return_from_aula')==='1' ||
+           until>now ||
+           /academia-sublicuentas\.html/i.test(document.referrer||'');
+  }catch(e){}
+  try{
+    var nav=(performance.getEntriesByType('navigation')[0]||{}).type||'';
+    if(nav==='back_forward')skip=true;
+  }catch(e){}
+  if(skip)document.documentElement.classList.add('sublichat-no-intro');
+})();
+</script>
+
 </head>
 <body>
 <!-- INTRO SUBLIROBOT -->
@@ -1322,7 +1350,7 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
         <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
         <span class="fob-arrow">›</span>
       </button>
-      <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); sessionStorage.setItem('sublichat_intro_seen','1'); localStorage.setItem('sublichat_skip_intro_until',String(Date.now()+1800000)); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
+      <button class="fin-open-btn aula-btn focus-action-card" id="aulaOpenBtn" onclick="sessionStorage.setItem('sublichat_skip_intro','1'); sessionStorage.setItem('sublichat_intro_seen','1'); sessionStorage.setItem('sublichat_return_from_aula','1'); localStorage.setItem('sublichat_skip_intro_until',String(Date.now()+43200000)); localStorage.setItem('sublichat_return_from_aula_until',String(Date.now()+43200000)); window.location.assign('./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8')" data-sub="Cursos, niveles y logros">
         <span class="ico focus-action-icon focus-action-aula">🏫</span>
         <span class="focus-action-text"><b>Aula de clases</b><small>Cursos, logros y casos de ventas</small></span>
         <span class="fob-arrow">›</span>
@@ -8118,6 +8146,90 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   }
 }
 </style>
+
+
+<!-- LIC 20260719 · AULA RETURN: REGRESO DIRECTO A INICIO SIN VIDEO -->
+<script id="licAulaReturnNoIntroRuntimeScript">
+(function(){
+  'use strict';
+  var AULA_URL='./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8';
+
+  function markAulaReturn(){
+    var until=String(Date.now()+43200000);
+    try{
+      sessionStorage.setItem('sublichat_skip_intro','1');
+      sessionStorage.setItem('sublichat_intro_seen','1');
+      sessionStorage.setItem('sublichat_return_from_aula','1');
+      localStorage.setItem('sublichat_skip_intro_until',until);
+      localStorage.setItem('sublichat_return_from_aula_until',until);
+    }catch(e){}
+    document.documentElement.classList.add('sublichat-no-intro');
+  }
+
+  function mustSkipIntro(){
+    var skip=document.documentElement.classList.contains('sublichat-no-intro');
+    try{
+      var until=Math.max(
+        Number(localStorage.getItem('sublichat_skip_intro_until')||0),
+        Number(localStorage.getItem('sublichat_return_from_aula_until')||0)
+      );
+      skip = skip ||
+        sessionStorage.getItem('sublichat_skip_intro')==='1' ||
+        sessionStorage.getItem('sublichat_intro_seen')==='1' ||
+        sessionStorage.getItem('sublichat_return_from_aula')==='1' ||
+        until>Date.now() ||
+        /academia-sublicuentas\.html/i.test(document.referrer||'');
+    }catch(e){}
+    try{
+      var nav=(performance.getEntriesByType('navigation')[0]||{}).type||'';
+      if(nav==='back_forward')skip=true;
+    }catch(e){}
+    return skip;
+  }
+
+  function hideIntroNow(){
+    if(!mustSkipIntro())return;
+    document.documentElement.classList.add('sublichat-no-intro');
+    var intro=document.getElementById('intro');
+    if(intro){
+      intro.classList.add('hide');
+      intro.style.setProperty('display','none','important');
+      intro.setAttribute('aria-hidden','true');
+    }
+  }
+
+  function bindAula(){
+    var aula=document.getElementById('aulaOpenBtn');
+    if(!aula || aula.dataset.aulaNoIntroFix==='1')return;
+    aula.dataset.aulaNoIntroFix='1';
+    aula.removeAttribute('onclick');
+    aula.addEventListener('click',function(ev){
+      ev.preventDefault();
+      markAulaReturn();
+      window.location.assign(AULA_URL);
+    },true);
+  }
+
+  function init(){
+    hideIntroNow();
+    bindAula();
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+
+  window.addEventListener('pageshow',function(){
+    hideIntroNow();
+    bindAula();
+    var home=document.querySelector('.nav-btn[data-screen="inicio"]');
+    if(home && mustSkipIntro() && !document.querySelector('#screen-inicio.active'))home.click();
+  });
+  window.addEventListener('popstate',hideIntroNow);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)hideIntroNow();});
+  setTimeout(init,50);
+  setTimeout(init,500);
+})();
+</script>
 
 </body>
 </html>
