@@ -242,7 +242,7 @@
   .hero .hl{font-size:12px;letter-spacing:.4px;opacity:.85;font-weight:500}
   .hero .hv{font-family:var(--ff);font-weight:800;font-size:clamp(32px,9vw,44px);line-height:1;margin-top:8px;letter-spacing:-1px}
   .hero .hs{font-size:13px;opacity:.85;margin-top:9px}
-  .hero .mascot-bg{position:absolute;right:-14px;bottom:0;height:82%;width:auto;max-width:none;object-fit:contain;opacity:.22;pointer-events:none}
+  .hero .mascot-bg{position:absolute;right:-14px;bottom:-18px;width:120px;opacity:.22;pointer-events:none}
 
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:11px}
   .inicio-web-stats{display:none}
@@ -638,7 +638,7 @@ html,body{
 .hero::after{display:none!important}
 .hero .hv{font-size:50px!important;line-height:.92!important;white-space:nowrap!important;color:#fff!important}
 .hero .hs{font-size:17px!important;font-weight:900!important;color:#fff!important}
-.hero .mascot-bg{height:82%!important;width:auto!important;object-fit:contain!important;opacity:.20!important;right:8px!important;bottom:0!important}
+.hero .mascot-bg{width:130px!important;opacity:.20!important;right:8px!important;bottom:-11px!important}
 .quote-card{background:#fff!important;border:0!important;border-radius:32px!important;box-shadow:0 12px 0 #DDEAF5,0 22px 40px rgba(29,90,150,.10)!important}
 .quote-card .quote-text{font-size:22px!important;color:#0F2D52!important;font-style:normal!important;font-weight:900!important}
 .grid3{display:none!important}
@@ -843,7 +843,7 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
 .hero{min-height:136px!important;border-radius:30px!important;padding:18px!important;margin-bottom:12px!important;}
 .hero .hv{font-size:clamp(38px,10vw,46px)!important;line-height:.92!important;}
 .hero .hs{font-size:15px!important;line-height:1.2!important;}
-.hero .mascot-bg{height:80%!important;width:auto!important;object-fit:contain!important;right:2px!important;bottom:0!important;opacity:.18!important;}
+.hero .mascot-bg{width:118px!important;right:2px!important;bottom:-9px!important;opacity:.18!important;}
 .quote-card{padding:13px 15px!important;border-radius:28px!important;margin-bottom:12px!important;}
 .quote-card .quote-ico{font-size:25px!important;}
 .quote-card .quote-text{font-size:18px!important;line-height:1.22!important;}
@@ -7119,8 +7119,8 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     font-size:clamp(12px,1vw,17px)!important;
   }
   #screen-inicio .hero .mascot-bg{
-    height:80%!important;width:auto!important;object-fit:contain!important;
-    right:4%!important;bottom:0!important;opacity:.19!important;z-index:1!important;
+    width:clamp(110px,10.5vw,174px)!important;
+    right:4%!important;bottom:-8%!important;opacity:.19!important;z-index:1!important;
   }
   #screen-inicio .inicio-top-row .quote-card{
     position:relative!important;overflow:hidden!important;
@@ -7733,6 +7733,44 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     margin:0!important;
   }
 
+  .daily-thought-art-mobile,
+  .daily-thought-art-web{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+  }
+  .daily-thought-art-web{display:none!important}
+  @media (min-width:900px){
+    #screen-inicio .daily-thought-banner{
+      border-color:rgba(255,255,255,.72)!important;
+      background:#233746!important;
+      box-shadow:0 10px 0 rgba(30,55,70,.12),0 22px 42px rgba(25,48,63,.17)!important;
+    }
+    #screen-inicio .daily-thought-art-mobile{display:none!important}
+    #screen-inicio .daily-thought-art-web{display:block!important}
+    #screen-inicio .daily-thought-art-web svg{
+      width:100%!important;
+      height:100%!important;
+      display:block!important;
+      filter:none!important;
+    }
+    #screen-inicio .daily-thought-shade{
+      background:
+        linear-gradient(90deg,rgba(13,24,33,0) 0%,rgba(14,27,38,.06) 34%,rgba(13,26,38,.63) 60%,rgba(10,20,31,.91) 100%),
+        linear-gradient(180deg,rgba(0,0,0,.02) 0%,rgba(4,13,21,.22) 100%)!important;
+    }
+    #screen-inicio .daily-quote-mark{
+      color:rgba(236,208,158,.90)!important;
+      text-shadow:0 6px 18px rgba(0,0,0,.16)!important;
+    }
+    #screen-inicio .daily-thought-banner .quote-text{
+      text-shadow:0 3px 14px rgba(0,0,0,.38)!important;
+    }
+    #screen-inicio .quote-author{color:rgba(255,255,255,.92)!important}
+    #screen-inicio .quote-source{color:rgba(255,255,255,.65)!important}
+  }
+
   @media (max-width:899px){
     #screen-inicio .daily-thought-banner{
       min-height:235px!important;
@@ -7802,8 +7840,174 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
       stars+='<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="white" opacity="'+(.18+seedRand(index+12,i)*.55).toFixed(2)+'"/>';
     }
     var common='<defs><linearGradient id="bg'+index+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+p[0]+'"/><stop offset=".42" stop-color="'+p[1]+'"/><stop offset=".74" stop-color="'+p[2]+'"/><stop offset="1" stop-color="'+p[3]+'"/></linearGradient><filter id="blur'+index+'"><feGaussianBlur stdDeviation="7"/></filter></defs><rect width="100" height="100" fill="url(#bg'+index+')"/><g>'+stars+'</g><circle cx="18" cy="49" r="22" fill="'+p[3]+'" opacity=".78" filter="url(#blur'+index+')"/><circle cx="18" cy="49" r="16" fill="'+p[3]+'" opacity=".72"/>';
-    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Fondo decorativo del pensamiento del día">'+common+'</svg>';
+    var art='';
+    switch(item.scene){
+      case 'bust': art='<g transform="translate(2,7)" fill="rgba(18,18,57,.78)"><ellipse cx="18" cy="38" rx="10" ry="13"/><path d="M8 76c1-17 4-26 10-27 7 1 10 10 12 27z"/><path d="M11 31c2-10 11-13 16-4-3-2-7-2-9 0 5 1 8 4 9 9-6-5-12-5-16-5z"/><path d="M13 46c2 8 8 11 13 2-1 10-4 16-7 18-5-3-7-10-6-20z"/></g>';break;
+      case 'path': art='<path d="M0 87C18 75 22 68 33 58c10-9 20-16 35-21" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-linecap="round"/><path d="M0 90C22 80 31 74 43 66" fill="none" stroke="rgba(20,22,70,.55)" stroke-width="8" stroke-linecap="round"/><g fill="rgba(16,18,64,.72)"><circle cx="11" cy="78" r="3"/><circle cx="19" cy="72" r="2.6"/><circle cx="27" cy="65" r="2.1"/></g>';break;
+      case 'books': art='<g transform="translate(5,41)"><rect x="0" y="26" width="35" height="8" rx="2" fill="rgba(18,18,62,.72)"/><rect x="3" y="16" width="31" height="8" rx="2" fill="rgba(255,255,255,.42)"/><rect x="0" y="6" width="35" height="8" rx="2" fill="rgba(18,18,62,.66)"/><path d="M12 2l7-13 7 13" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/></g>';break;
+      case 'mountain': art='<path d="M0 84L14 58l8 10 12-27 21 43z" fill="rgba(13,23,66,.72)"/><path d="M16 58l6 10 12-27 7 12" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/><circle cx="35" cy="32" r="8" fill="rgba(255,240,190,.72)"/>';break;
+      case 'horizon': art='<circle cx="22" cy="55" r="11" fill="rgba(255,232,175,.85)"/><path d="M0 66c16-8 31-8 51 0M0 74c18-7 36-7 56 0M0 83c20-6 39-6 60 0" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="2"/>';break;
+      case 'people': art='<g transform="translate(4,38)" fill="rgba(17,20,65,.72)"><circle cx="12" cy="12" r="7"/><circle cx="29" cy="9" r="6"/><circle cx="43" cy="14" r="5"/><path d="M1 38c1-11 5-17 11-17s10 6 11 17zM20 36c1-10 4-15 9-15s8 5 10 15zM35 39c1-9 3-14 8-14s7 5 8 14z"/></g>';break;
+      case 'stairs': art='<g transform="translate(4,47)" fill="rgba(17,20,65,.70)"><rect x="0" y="26" width="12" height="10" rx="2"/><rect x="12" y="17" width="12" height="19" rx="2"/><rect x="24" y="8" width="12" height="28" rx="2"/><rect x="36" y="0" width="12" height="36" rx="2"/></g><path d="M10 39l13-10 9 3 13-14" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.5"/>';break;
+      case 'blocks': art='<g transform="translate(5,42)"><rect x="0" y="26" width="14" height="14" rx="3" fill="rgba(18,20,67,.72)"/><rect x="15" y="18" width="14" height="22" rx="3" fill="rgba(255,255,255,.42)"/><rect x="30" y="8" width="14" height="32" rx="3" fill="rgba(18,20,67,.72)"/></g>';break;
+      case 'road': art='<path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(18,20,67,.68)" stroke-width="13"/><path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="1.8" stroke-dasharray="5 5"/>';break;
+      case 'chat': case 'message': art='<g transform="translate(5,40)"><rect x="0" y="0" width="42" height="29" rx="8" fill="rgba(255,255,255,.54)"/><path d="M10 29l-4 10 12-10" fill="rgba(255,255,255,.54)"/><circle cx="12" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="21" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="30" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/></g>';break;
+      case 'gears': art='<g transform="translate(7,43)" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="4"><circle cx="15" cy="15" r="11"/><circle cx="37" cy="28" r="8"/></g><g fill="rgba(17,20,65,.70)"><circle cx="22" cy="58" r="5"/><circle cx="44" cy="71" r="4"/></g>';break;
+      case 'orbit': art='<g transform="translate(5,31)" fill="none" stroke="rgba(255,255,255,.62)" stroke-width="1.8"><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(25 24 28)"/><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(-25 24 28)"/></g><circle cx="29" cy="59" r="7" fill="rgba(18,20,67,.74)"/>';break;
+      case 'chart': art='<g transform="translate(5,44)" fill="rgba(18,20,67,.70)"><rect x="0" y="22" width="8" height="18" rx="2"/><rect x="12" y="14" width="8" height="26" rx="2"/><rect x="24" y="4" width="8" height="36" rx="2"/><rect x="36" y="-6" width="8" height="46" rx="2"/></g><path d="M8 54l13-8 10 2 14-15" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.4"/>';break;
+      case 'target': case 'focus': art='<g transform="translate(6,38)" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="3"><circle cx="22" cy="22" r="20"/><circle cx="22" cy="22" r="12"/><circle cx="22" cy="22" r="4"/></g><path d="M28 58l21-22" stroke="rgba(18,20,67,.78)" stroke-width="4"/>';break;
+      case 'calendar': art='<g transform="translate(6,37)"><rect x="0" y="5" width="42" height="36" rx="7" fill="rgba(255,255,255,.52)"/><rect x="0" y="5" width="42" height="10" rx="7" fill="rgba(18,20,67,.64)"/><g fill="rgba(18,20,67,.55)"><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/><circle cx="31" cy="24" r="2"/><circle cx="11" cy="33" r="2"/><circle cx="21" cy="33" r="2"/><circle cx="31" cy="33" r="2"/></g></g>';break;
+      case 'bridge': art='<path d="M2 78h52M7 78c5-31 36-31 42 0" fill="none" stroke="rgba(18,20,67,.72)" stroke-width="4"/><path d="M7 77c7-20 33-20 42 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2"/>';break;
+      case 'shield': art='<path d="M27 31l18 7v16c0 14-8 25-18 31-10-6-18-17-18-31V38z" fill="rgba(18,20,67,.70)"/><path d="M17 56l7 7 14-17" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="3.2" stroke-linecap="round"/>';break;
+      case 'waves': art='<path d="M0 55c8-8 16-8 24 0s16 8 24 0M0 67c8-8 16-8 24 0s16 8 24 0M0 79c8-8 16-8 24 0s16 8 24 0" fill="none" stroke="rgba(255,255,255,.60)" stroke-width="3"/>';break;
+      case 'chess': art='<g transform="translate(11,34)" fill="rgba(18,20,67,.74)"><circle cx="14" cy="8" r="7"/><path d="M8 18h12l4 21H4z"/><rect x="1" y="39" width="26" height="7" rx="2"/></g>';break;
+      case 'idea': art='<g transform="translate(8,32)"><circle cx="20" cy="20" r="15" fill="rgba(255,244,188,.78)"/><path d="M14 40h12M15 46h10" stroke="rgba(18,20,67,.72)" stroke-width="3" stroke-linecap="round"/><path d="M20 0v-8M0 20h-8M40 20h8M6 6l-6-6M34 6l6-6" stroke="rgba(255,255,255,.65)" stroke-width="2"/></g>';break;
+      case 'sunrise': art='<circle cx="25" cy="61" r="13" fill="rgba(255,230,155,.88)"/><path d="M0 70h55M4 80c10-6 18-6 27 0s17 6 26 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2.4"/>';break;
+      default: art='<circle cx="27" cy="58" r="17" fill="rgba(18,20,67,.70)"/>';
+    }
+    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Ilustración relacionada con el pensamiento del día">'+common+art+'<text x="17" y="92" text-anchor="middle" fill="rgba(255,255,255,.72)" font-size="12" font-family="Nunito,Arial" font-weight="900">'+esc(item.icon)+'</text></svg>';
   }
+  function sceneMarkupWeb(item,idx){
+    var id='dqweb'+idx+'_', scene=item.scene||'sunrise';
+    var palettes={
+      bust:['#17283b','#324d62','#b99563','#e7d3ad'],
+      path:['#24364d','#527485','#d0a35f','#f2dfb8'],
+      books:['#2f2630','#675044','#bd8e57','#f0d6ae'],
+      mountain:['#183246','#446879','#c59a5d','#f2ddb5'],
+      horizon:['#172b43','#4e7083','#c58e63','#f3d7b2'],
+      people:['#173248','#3f6d78','#c68f58','#f0d8ae'],
+      stairs:['#2b3146','#6b6570','#c69562','#f1d9b2'],
+      blocks:['#2f3340','#6f6253','#c89256','#efd4aa'],
+      road:['#20354a','#54727d','#c49b66','#f0ddba'],
+      chat:['#203145','#526677','#b88a59','#eed7b3'],
+      gears:['#1e3344','#476879','#b99465','#eedab9'],
+      orbit:['#233244','#5f665d','#bd8b54','#efd5aa'],
+      chart:['#203143','#526f76','#b98b57','#efd9b7'],
+      target:['#273444','#607064','#bd8d56','#efdbb9'],
+      focus:['#273444','#607064','#bd8d56','#efdbb9'],
+      calendar:['#283441','#6c6557','#bd8b52','#f0d8af'],
+      bridge:['#1e3446','#4d7277','#c2945e','#f0dcb8'],
+      shield:['#253443','#5a7068','#bd915b','#efdbb8'],
+      message:['#233044','#565f75','#b7895a','#eed7b4'],
+      waves:['#153547','#3f7580','#c59b67','#f2dfbd'],
+      chess:['#282e3a','#6b6256','#ba8a53','#efd7b0'],
+      idea:['#263342','#64675c','#c08f54','#f0d8ae'],
+      sunrise:['#18344a','#557783','#d09d5c','#f3dfbb']
+    };
+    var p=palettes[scene]||palettes.sunrise;
+    var common='';
+    var art='';
+
+    function person(x,y,scale,coat){
+      return '<g transform="translate('+x+' '+y+') scale('+scale+')" fill="'+(coat||'rgba(24,33,39,.94)')+'"><circle cx="0" cy="-28" r="12"/><path d="M-14-12C-9-20 9-20 14-12L19 34H-19z"/><path d="M-8 31l-10 42M8 31l12 42" fill="none" stroke="'+(coat||'rgba(24,33,39,.94)')+'" stroke-width="9" stroke-linecap="round"/></g>';
+    }
+    function deskScene(kind){
+      var extra='';
+      if(kind==='chat'||kind==='message') extra='<g transform="translate(272 75)"><rect width="122" height="80" rx="18" fill="rgba(247,242,228,.94)"/><path d="M24 27h74M24 45h56" stroke="rgba(64,78,84,.50)" stroke-width="7" stroke-linecap="round"/><path d="M36 80l-10 24 31-24" fill="rgba(247,242,228,.94)"/></g>';
+      if(kind==='chart') extra='<g transform="translate(273 62)"><rect width="150" height="100" rx="15" fill="rgba(246,241,227,.94)"/><path d="M22 76h108M22 76V23" stroke="rgba(70,78,77,.30)" stroke-width="4"/><path d="M32 68l30-22 26 7 31-34" fill="none" stroke="rgba(164,118,63,.95)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><g fill="rgba(71,111,104,.70)"><rect x="34" y="54" width="14" height="22" rx="3"/><rect x="62" y="42" width="14" height="34" rx="3"/><rect x="90" y="34" width="14" height="42" rx="3"/><rect x="118" y="20" width="14" height="56" rx="3"/></g></g>';
+      if(kind==='calendar') extra='<g transform="translate(275 55)"><rect width="142" height="112" rx="16" fill="rgba(248,243,230,.96)"/><rect width="142" height="30" rx="16" fill="rgba(180,136,80,.88)"/><path d="M34-9v29M108-9v29" stroke="rgba(58,65,64,.62)" stroke-width="8" stroke-linecap="round"/><g fill="rgba(78,101,99,.46)"><rect x="20" y="48" width="22" height="18" rx="4"/><rect x="50" y="48" width="22" height="18" rx="4"/><rect x="80" y="48" width="22" height="18" rx="4"/><rect x="20" y="76" width="22" height="18" rx="4"/><rect x="50" y="76" width="22" height="18" rx="4"/><rect x="80" y="76" width="22" height="18" rx="4"/></g></g>';
+      if(kind==='idea') extra='<g transform="translate(298 58)"><circle cx="55" cy="50" r="44" fill="rgba(243,211,151,.95)"/><path d="M32 88h46M38 103h34" stroke="rgba(83,77,66,.58)" stroke-width="9" stroke-linecap="round"/><path d="M55-12v22M4 9l18 18M106 9L88 27M-8 50h24M94 50h24" stroke="rgba(243,211,151,.78)" stroke-width="7" stroke-linecap="round"/></g>';
+      return '<rect x="0" y="232" width="560" height="68" fill="rgba(61,49,39,.54)"/>'+ 
+        '<rect x="70" y="187" width="370" height="22" rx="11" fill="rgba(218,198,165,.91)"/>'+ 
+        '<path d="M103 209v62M404 209v62" stroke="rgba(62,57,50,.78)" stroke-width="12" stroke-linecap="round"/>'+ 
+        '<g transform="translate(128 75)"><circle cx="36" cy="31" r="22" fill="rgba(196,147,104,.96)"/><path d="M4 143c4-57 13-91 32-91s29 34 34 91z" fill="rgba(35,45,51,.94)"/><path d="M67 98l63 35" stroke="rgba(35,45,51,.94)" stroke-width="13" stroke-linecap="round"/></g>'+ 
+        '<rect x="245" y="149" width="130" height="34" rx="8" fill="rgba(40,54,60,.86)"/>'+extra;
+    }
+
+    common='<circle cx="126" cy="66" r="120" fill="rgba(255,255,255,.07)" filter="url(#'+id+'blur)"/>'+ 
+      '<path d="M0 253C160 228 306 236 456 263C552 280 649 281 760 262V300H0z" fill="rgba(11,24,31,.16)"/>';
+
+    if(scene==='mountain'){
+      art='<circle cx="142" cy="78" r="38" fill="rgba(247,214,154,.92)"/>'+ 
+        '<path d="M0 207C89 157 171 145 247 170C326 197 401 192 474 155C520 132 561 129 610 142V300H0z" fill="rgba(82,111,105,.68)"/>'+ 
+        '<path d="M0 241C102 193 189 186 275 218C368 252 457 239 558 184V300H0z" fill="rgba(37,69,70,.90)"/>'+ 
+        '<path d="M84 300C145 246 202 219 260 216C318 213 367 234 421 273" fill="none" stroke="rgba(232,211,174,.85)" stroke-width="18" stroke-linecap="round"/>'+ 
+        person(257,221,.72,'rgba(26,36,41,.95)')+
+        '<g opacity=".66" fill="rgba(234,223,202,.60)"><circle cx="81" cy="48" r="3"/><circle cx="292" cy="56" r="2.5"/><circle cx="371" cy="90" r="2"/></g>';
+    }else if(scene==='bust'){
+      var hair=item.a==='Séneca'?'#5f5144':(item.a==='Epicteto'?'#51463d':'#443b35');
+      art='<g transform="translate(62 18)"><path d="M76 244h235c-6-66-39-106-89-122 25-23 40-58 40-96C262-34 218-76 161-76S60-34 60 26c0 38 15 73 40 96-51 16-80 56-84 122z" fill="rgba(231,218,196,.94)"/>'+ 
+        '<path d="M104 12c14-45 92-65 129-19 11 14 18 33 17 56-25-16-45-19-75-14-32 6-52-3-71-23z" fill="'+hair+'" opacity=".95"/>'+ 
+        '<path d="M108 68c21 26 84 34 121 5-3 44-28 76-61 76-34 0-57-32-60-81z" fill="rgba(198,151,112,.96)"/>'+ 
+        '<path d="M142 91c15 10 31 10 48 0M156 120c8 4 15 4 23 0" fill="none" stroke="rgba(80,59,47,.42)" stroke-width="5" stroke-linecap="round"/>'+ 
+        '<path d="M122 126c13 34 29 52 48 52 20 0 39-18 54-53-17 13-34 19-52 19-18 0-34-6-50-18z" fill="rgba(94,78,64,.78)"/>'+ 
+        '<path d="M75 244c20-56 51-85 94-85s76 29 97 85z" fill="rgba(55,70,77,.88)"/></g>'+ 
+        '<g opacity=".75"><rect x="365" y="72" width="122" height="158" rx="8" fill="rgba(239,229,211,.76)"/><path d="M385 102h82M385 127h67M385 152h74" stroke="rgba(76,85,83,.28)" stroke-width="6" stroke-linecap="round"/></g>';
+    }else if(scene==='path'||scene==='road'||scene==='stairs'){
+      art='<circle cx="132" cy="80" r="37" fill="rgba(245,211,150,.90)"/>'+ 
+        '<path d="M0 184C86 141 174 139 264 179C354 219 443 208 554 148V300H0z" fill="rgba(85,112,102,.62)"/>'+ 
+        '<path d="M0 226C105 180 201 190 292 228C375 263 455 253 556 204V300H0z" fill="rgba(39,72,70,.90)"/>'+ 
+        '<path d="M88 300c60-57 119-91 181-100 66-10 124 5 190 48" fill="none" stroke="rgba(231,213,181,.88)" stroke-width="20" stroke-linecap="round"/>'+ 
+        person(249,193,.60,'rgba(24,34,39,.95)');
+      if(scene==='stairs') art+='<path d="M320 221h46v-25h46v-25h46v-25h46" fill="none" stroke="rgba(232,215,184,.82)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>';
+    }else if(scene==='books'){
+      art='<rect x="0" y="231" width="560" height="69" fill="rgba(71,53,39,.55)"/>'+ 
+        '<g transform="translate(58 30)"><rect width="180" height="183" rx="18" fill="rgba(62,58,53,.62)"/><g fill="rgba(226,207,176,.92)"><rect x="18" y="20" width="20" height="145" rx="5"/><rect x="46" y="38" width="25" height="127" rx="5"/><rect x="79" y="14" width="22" height="151" rx="5"/><rect x="109" y="31" width="28" height="134" rx="5"/><rect x="145" y="9" width="19" height="156" rx="5"/></g></g>'+ 
+        '<g transform="translate(269 164)"><path d="M0 34c64-31 128-31 192 0v61c-64-30-128-30-192 0z" fill="rgba(242,232,214,.96)"/><path d="M96 34v61" stroke="rgba(97,82,62,.28)" stroke-width="4"/><path d="M18 51h63M18 67h52M111 51h62M111 67h50" stroke="rgba(99,87,70,.24)" stroke-width="4" stroke-linecap="round"/></g>'+ 
+        person(386,126,.67,'rgba(31,40,46,.94)');
+    }else if(scene==='horizon'||scene==='sunrise'||scene==='waves'){
+      art='<circle cx="151" cy="101" r="43" fill="rgba(247,210,148,.92)"/>'+ 
+        '<path d="M0 181C94 151 182 154 264 183C353 214 442 207 556 161V300H0z" fill="rgba(78,113,108,.57)"/>'+ 
+        '<path d="M0 225C101 199 193 206 279 235C370 267 460 257 556 215V300H0z" fill="rgba(37,75,79,.90)"/>'+ 
+        '<path d="M0 226c87-19 168-15 244 12 82 29 166 26 252-8" fill="none" stroke="rgba(239,229,208,.48)" stroke-width="7"/>'+ 
+        person(312,181,.62,'rgba(23,33,39,.95)');
+      if(scene==='waves') art+='<g transform="translate(118 187)"><path d="M0 35h123l-17 30H18z" fill="rgba(46,55,57,.88)"/><path d="M58 35V-8l40 27z" fill="rgba(239,226,203,.92)"/></g>';
+    }else if(scene==='people'||scene==='orbit'){
+      art='<rect x="0" y="230" width="560" height="70" fill="rgba(66,53,43,.52)"/>'+ 
+        '<g transform="translate(87 102)"><rect x="0" y="74" width="278" height="20" rx="10" fill="rgba(224,204,171,.92)"/><path d="M38 94v67M240 94v67" stroke="rgba(72,63,52,.72)" stroke-width="12" stroke-linecap="round"/>'+ 
+        '<g transform="translate(45 18)"><circle r="22" fill="rgba(194,145,103,.97)"/><path d="M-27 79c4-48 12-75 27-75s23 27 27 75z" fill="rgba(31,42,48,.94)"/></g>'+ 
+        '<g transform="translate(208 18)"><circle r="22" fill="rgba(169,119,89,.97)"/><path d="M-27 79c4-48 12-75 27-75s23 27 27 75z" fill="rgba(75,91,88,.94)"/></g>'+ 
+        '<path d="M69 67l46 14M184 67l-46 14" stroke="rgba(31,42,48,.82)" stroke-width="11" stroke-linecap="round"/>'+ 
+        '<circle cx="139" cy="75" r="17" fill="rgba(244,233,213,.95)"/></g>'+ 
+        '<path d="M415 42c34 17 61 49 65 89" fill="none" stroke="rgba(239,222,191,.62)" stroke-width="6" stroke-dasharray="10 10"/>';
+    }else if(scene==='chat'||scene==='message'||scene==='chart'||scene==='calendar'||scene==='idea'){
+      art=deskScene(scene);
+    }else if(scene==='blocks'){
+      art='<rect x="0" y="231" width="560" height="69" fill="rgba(70,54,40,.54)"/>'+ 
+        '<g transform="translate(80 64)" fill="rgba(222,190,143,.95)" stroke="rgba(91,66,43,.18)" stroke-width="3"><rect x="0" y="115" width="92" height="68" rx="8"/><rect x="106" y="82" width="92" height="101" rx="8"/><rect x="212" y="44" width="92" height="139" rx="8"/><rect x="318" y="0" width="92" height="183" rx="8"/></g>'+ 
+        person(451,151,.72,'rgba(29,39,44,.95)');
+    }else if(scene==='gears'){
+      art='<rect x="0" y="230" width="560" height="70" fill="rgba(61,49,39,.53)"/>'+ 
+        '<g transform="translate(89 76)" fill="none" stroke="rgba(224,206,176,.90)" stroke-width="17"><circle cx="78" cy="78" r="49"/><circle cx="202" cy="122" r="36"/></g>'+ 
+        '<g fill="rgba(52,67,70,.90)"><circle cx="167" cy="154" r="18"/><circle cx="291" cy="198" r="13"/></g>'+ 
+        '<g transform="translate(362 78)"><rect width="118" height="108" rx="16" fill="rgba(242,234,218,.93)"/><path d="M24 32h70M24 54h54M24 76h62" stroke="rgba(70,84,86,.34)" stroke-width="7" stroke-linecap="round"/></g>';
+    }else if(scene==='target'||scene==='focus'){
+      art='<path d="M0 215C104 172 202 172 292 211C382 250 468 240 556 196V300H0z" fill="rgba(43,76,70,.84)"/>'+ 
+        '<g transform="translate(97 57)" fill="none" stroke="rgba(239,226,202,.93)"><circle cx="98" cy="94" r="78" stroke-width="16"/><circle cx="98" cy="94" r="49" stroke-width="16"/><circle cx="98" cy="94" r="19" stroke-width="16"/></g>'+ 
+        '<path d="M391 72L236 151" stroke="rgba(56,52,46,.86)" stroke-width="8" stroke-linecap="round"/><path d="M391 72l-34-2 18 28z" fill="rgba(185,132,75,.94)"/>'+ 
+        person(431,154,.70,'rgba(26,36,41,.95)');
+    }else if(scene==='bridge'){
+      art='<path d="M0 213C95 171 190 171 279 207C369 245 458 236 556 191V300H0z" fill="rgba(39,74,73,.88)"/>'+ 
+        '<path d="M61 213h402" stroke="rgba(232,214,183,.92)" stroke-width="13" stroke-linecap="round"/>'+ 
+        '<path d="M104 212c15-89 75-132 156-132s142 43 157 132" fill="none" stroke="rgba(232,214,183,.92)" stroke-width="10"/>'+ 
+        '<path d="M137 210V134M194 210V96M260 210V82M328 210V99M383 210V140" stroke="rgba(232,214,183,.58)" stroke-width="5"/>'+ 
+        person(261,177,.45,'rgba(22,31,36,.96)');
+    }else if(scene==='shield'){
+      art='<g transform="translate(89 36)"><path d="M126 5l103 39v76c0 70-41 110-103 139C64 230 23 190 23 120V44z" fill="rgba(234,222,201,.94)"/><path d="M77 127l35 36 70-82" fill="none" stroke="rgba(74,105,95,.92)" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/></g>'+ 
+        '<g transform="translate(345 68)"><rect width="148" height="151" rx="18" fill="rgba(238,228,210,.88)"/><rect x="20" y="26" width="108" height="58" rx="10" fill="rgba(62,83,84,.25)"/><path d="M39 120h71" stroke="rgba(75,82,76,.35)" stroke-width="9" stroke-linecap="round"/></g>';
+    }else if(scene==='chess'){
+      art='<g transform="translate(48 180)"><rect width="410" height="96" rx="7" fill="rgba(226,210,184,.91)"/><g fill="rgba(78,69,58,.36)"><rect x="0" y="0" width="51" height="48"/><rect x="102" y="0" width="51" height="48"/><rect x="204" y="0" width="51" height="48"/><rect x="306" y="0" width="51" height="48"/><rect x="51" y="48" width="51" height="48"/><rect x="153" y="48" width="51" height="48"/><rect x="255" y="48" width="51" height="48"/><rect x="357" y="48" width="53" height="48"/></g></g>'+ 
+        '<g transform="translate(183 55)" fill="rgba(37,46,49,.94)"><path d="M32 0l18 25-11 18 18 31-8 58H15L7 74l18-31-11-18z"/><rect x="4" y="132" width="56" height="18" rx="5"/></g>'+ 
+        '<g transform="translate(321 95)" fill="rgba(236,224,203,.96)"><circle cx="25" cy="17" r="16"/><path d="M8 43h34l10 69H-2z"/><rect x="-8" y="112" width="66" height="18" rx="5"/></g>';
+    }else{
+      art='<circle cx="148" cy="100" r="42" fill="rgba(246,211,149,.91)"/><path d="M0 203C93 160 181 161 263 194C351 230 441 222 556 172V300H0z" fill="rgba(71,105,99,.62)"/><path d="M0 242C101 207 195 213 283 244C373 276 465 267 556 232V300H0z" fill="rgba(36,72,73,.88)"/>';
+    }
+
+    return '<svg viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Ilustración elegante y relacionada con el pensamiento del día">'+
+      '<defs>'+ 
+        '<linearGradient id="'+id+'bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+p[0]+'"/><stop offset=".48" stop-color="'+p[1]+'"/><stop offset=".78" stop-color="'+p[2]+'"/><stop offset="1" stop-color="'+p[3]+'"/></linearGradient>'+ 
+        '<linearGradient id="'+id+'veil" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="rgba(255,255,255,.05)"/><stop offset=".52" stop-color="rgba(18,26,34,.03)"/><stop offset="1" stop-color="rgba(8,17,25,.30)"/></linearGradient>'+ 
+        '<filter id="'+id+'blur"><feGaussianBlur stdDeviation="22"/></filter>'+ 
+        '<filter id="'+id+'grain"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="2" seed="'+(idx+7)+'"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 .055"/></feComponentTransfer></filter>'+ 
+      '</defs>'+ 
+      '<rect width="1000" height="300" fill="url(#'+id+'bg)"/>'+ 
+      '<ellipse cx="175" cy="58" rx="240" ry="108" fill="rgba(255,255,255,.11)" filter="url(#'+id+'blur)"/>'+ 
+      '<g>'+common+art+'</g>'+ 
+      '<rect width="1000" height="300" fill="url(#'+id+'veil)"/>'+ 
+      '<rect width="1000" height="300" filter="url(#'+id+'grain)" opacity=".44"/>'+ 
+      '</svg>';
+  }
+
   function dayIndex(){var d=new Date();var utc=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());return Math.floor(utc/86400000);}
   function render(){
     var text=document.getElementById('quoteText'),author=document.getElementById('quoteAuthor'),source=document.getElementById('quoteSource'),art=document.getElementById('quoteArt'),card=document.getElementById('quoteCard');
@@ -7812,7 +8016,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     text.textContent=item.q;
     author.textContent='— '+item.a;
     source.textContent=item.s;
-    art.innerHTML=sceneMarkup(item,idx);
+    art.innerHTML='<div class="daily-thought-art-mobile">'+sceneMarkup(item,idx)+'</div><div class="daily-thought-art-web">'+sceneMarkupWeb(item,idx)+'</div>';
     card.classList.toggle('is-original',item.a==='Sublicuentas');
     card.setAttribute('aria-label','Pensamiento del día: '+item.q+' Autor: '+item.a+'. '+item.s+'.');
     card.dataset.dailyThought=String(idx);
