@@ -242,7 +242,7 @@
   .hero .hl{font-size:12px;letter-spacing:.4px;opacity:.85;font-weight:500}
   .hero .hv{font-family:var(--ff);font-weight:800;font-size:clamp(32px,9vw,44px);line-height:1;margin-top:8px;letter-spacing:-1px}
   .hero .hs{font-size:13px;opacity:.85;margin-top:9px}
-  .hero .mascot-bg{position:absolute;right:-14px;bottom:-18px;width:120px;opacity:.22;pointer-events:none}
+  .hero .mascot-bg{position:absolute;right:-14px;bottom:0;height:82%;width:auto;max-width:none;object-fit:contain;opacity:.22;pointer-events:none}
 
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:11px}
   .inicio-web-stats{display:none}
@@ -638,7 +638,7 @@ html,body{
 .hero::after{display:none!important}
 .hero .hv{font-size:50px!important;line-height:.92!important;white-space:nowrap!important;color:#fff!important}
 .hero .hs{font-size:17px!important;font-weight:900!important;color:#fff!important}
-.hero .mascot-bg{width:130px!important;opacity:.20!important;right:8px!important;bottom:-11px!important}
+.hero .mascot-bg{height:82%!important;width:auto!important;object-fit:contain!important;opacity:.20!important;right:8px!important;bottom:0!important}
 .quote-card{background:#fff!important;border:0!important;border-radius:32px!important;box-shadow:0 12px 0 #DDEAF5,0 22px 40px rgba(29,90,150,.10)!important}
 .quote-card .quote-text{font-size:22px!important;color:#0F2D52!important;font-style:normal!important;font-weight:900!important}
 .grid3{display:none!important}
@@ -843,7 +843,7 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
 .hero{min-height:136px!important;border-radius:30px!important;padding:18px!important;margin-bottom:12px!important;}
 .hero .hv{font-size:clamp(38px,10vw,46px)!important;line-height:.92!important;}
 .hero .hs{font-size:15px!important;line-height:1.2!important;}
-.hero .mascot-bg{width:118px!important;right:2px!important;bottom:-9px!important;opacity:.18!important;}
+.hero .mascot-bg{height:80%!important;width:auto!important;object-fit:contain!important;right:2px!important;bottom:0!important;opacity:.18!important;}
 .quote-card{padding:13px 15px!important;border-radius:28px!important;margin-bottom:12px!important;}
 .quote-card .quote-ico{font-size:25px!important;}
 .quote-card .quote-text{font-size:18px!important;line-height:1.22!important;}
@@ -7119,8 +7119,8 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     font-size:clamp(12px,1vw,17px)!important;
   }
   #screen-inicio .hero .mascot-bg{
-    width:clamp(110px,10.5vw,174px)!important;
-    right:4%!important;bottom:-8%!important;opacity:.19!important;z-index:1!important;
+    height:80%!important;width:auto!important;object-fit:contain!important;
+    right:4%!important;bottom:0!important;opacity:.19!important;z-index:1!important;
   }
   #screen-inicio .inicio-top-row .quote-card{
     position:relative!important;overflow:hidden!important;
@@ -7802,32 +7802,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
       stars+='<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="white" opacity="'+(.18+seedRand(index+12,i)*.55).toFixed(2)+'"/>';
     }
     var common='<defs><linearGradient id="bg'+index+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+p[0]+'"/><stop offset=".42" stop-color="'+p[1]+'"/><stop offset=".74" stop-color="'+p[2]+'"/><stop offset="1" stop-color="'+p[3]+'"/></linearGradient><filter id="blur'+index+'"><feGaussianBlur stdDeviation="7"/></filter></defs><rect width="100" height="100" fill="url(#bg'+index+')"/><g>'+stars+'</g><circle cx="18" cy="49" r="22" fill="'+p[3]+'" opacity=".78" filter="url(#blur'+index+')"/><circle cx="18" cy="49" r="16" fill="'+p[3]+'" opacity=".72"/>';
-    var art='';
-    switch(item.scene){
-      case 'bust': art='<g transform="translate(2,7)" fill="rgba(18,18,57,.78)"><ellipse cx="18" cy="38" rx="10" ry="13"/><path d="M8 76c1-17 4-26 10-27 7 1 10 10 12 27z"/><path d="M11 31c2-10 11-13 16-4-3-2-7-2-9 0 5 1 8 4 9 9-6-5-12-5-16-5z"/><path d="M13 46c2 8 8 11 13 2-1 10-4 16-7 18-5-3-7-10-6-20z"/></g>';break;
-      case 'path': art='<path d="M0 87C18 75 22 68 33 58c10-9 20-16 35-21" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-linecap="round"/><path d="M0 90C22 80 31 74 43 66" fill="none" stroke="rgba(20,22,70,.55)" stroke-width="8" stroke-linecap="round"/><g fill="rgba(16,18,64,.72)"><circle cx="11" cy="78" r="3"/><circle cx="19" cy="72" r="2.6"/><circle cx="27" cy="65" r="2.1"/></g>';break;
-      case 'books': art='<g transform="translate(5,41)"><rect x="0" y="26" width="35" height="8" rx="2" fill="rgba(18,18,62,.72)"/><rect x="3" y="16" width="31" height="8" rx="2" fill="rgba(255,255,255,.42)"/><rect x="0" y="6" width="35" height="8" rx="2" fill="rgba(18,18,62,.66)"/><path d="M12 2l7-13 7 13" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/></g>';break;
-      case 'mountain': art='<path d="M0 84L14 58l8 10 12-27 21 43z" fill="rgba(13,23,66,.72)"/><path d="M16 58l6 10 12-27 7 12" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2"/><circle cx="35" cy="32" r="8" fill="rgba(255,240,190,.72)"/>';break;
-      case 'horizon': art='<circle cx="22" cy="55" r="11" fill="rgba(255,232,175,.85)"/><path d="M0 66c16-8 31-8 51 0M0 74c18-7 36-7 56 0M0 83c20-6 39-6 60 0" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="2"/>';break;
-      case 'people': art='<g transform="translate(4,38)" fill="rgba(17,20,65,.72)"><circle cx="12" cy="12" r="7"/><circle cx="29" cy="9" r="6"/><circle cx="43" cy="14" r="5"/><path d="M1 38c1-11 5-17 11-17s10 6 11 17zM20 36c1-10 4-15 9-15s8 5 10 15zM35 39c1-9 3-14 8-14s7 5 8 14z"/></g>';break;
-      case 'stairs': art='<g transform="translate(4,47)" fill="rgba(17,20,65,.70)"><rect x="0" y="26" width="12" height="10" rx="2"/><rect x="12" y="17" width="12" height="19" rx="2"/><rect x="24" y="8" width="12" height="28" rx="2"/><rect x="36" y="0" width="12" height="36" rx="2"/></g><path d="M10 39l13-10 9 3 13-14" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.5"/>';break;
-      case 'blocks': art='<g transform="translate(5,42)"><rect x="0" y="26" width="14" height="14" rx="3" fill="rgba(18,20,67,.72)"/><rect x="15" y="18" width="14" height="22" rx="3" fill="rgba(255,255,255,.42)"/><rect x="30" y="8" width="14" height="32" rx="3" fill="rgba(18,20,67,.72)"/></g>';break;
-      case 'road': art='<path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(18,20,67,.68)" stroke-width="13"/><path d="M10 100c4-31 20-48 39-62" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="1.8" stroke-dasharray="5 5"/>';break;
-      case 'chat': case 'message': art='<g transform="translate(5,40)"><rect x="0" y="0" width="42" height="29" rx="8" fill="rgba(255,255,255,.54)"/><path d="M10 29l-4 10 12-10" fill="rgba(255,255,255,.54)"/><circle cx="12" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="21" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/><circle cx="30" cy="14" r="2.3" fill="rgba(19,21,66,.68)"/></g>';break;
-      case 'gears': art='<g transform="translate(7,43)" fill="none" stroke="rgba(255,255,255,.68)" stroke-width="4"><circle cx="15" cy="15" r="11"/><circle cx="37" cy="28" r="8"/></g><g fill="rgba(17,20,65,.70)"><circle cx="22" cy="58" r="5"/><circle cx="44" cy="71" r="4"/></g>';break;
-      case 'orbit': art='<g transform="translate(5,31)" fill="none" stroke="rgba(255,255,255,.62)" stroke-width="1.8"><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(25 24 28)"/><ellipse cx="24" cy="28" rx="22" ry="9" transform="rotate(-25 24 28)"/></g><circle cx="29" cy="59" r="7" fill="rgba(18,20,67,.74)"/>';break;
-      case 'chart': art='<g transform="translate(5,44)" fill="rgba(18,20,67,.70)"><rect x="0" y="22" width="8" height="18" rx="2"/><rect x="12" y="14" width="8" height="26" rx="2"/><rect x="24" y="4" width="8" height="36" rx="2"/><rect x="36" y="-6" width="8" height="46" rx="2"/></g><path d="M8 54l13-8 10 2 14-15" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="2.4"/>';break;
-      case 'target': case 'focus': art='<g transform="translate(6,38)" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="3"><circle cx="22" cy="22" r="20"/><circle cx="22" cy="22" r="12"/><circle cx="22" cy="22" r="4"/></g><path d="M28 58l21-22" stroke="rgba(18,20,67,.78)" stroke-width="4"/>';break;
-      case 'calendar': art='<g transform="translate(6,37)"><rect x="0" y="5" width="42" height="36" rx="7" fill="rgba(255,255,255,.52)"/><rect x="0" y="5" width="42" height="10" rx="7" fill="rgba(18,20,67,.64)"/><g fill="rgba(18,20,67,.55)"><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/><circle cx="31" cy="24" r="2"/><circle cx="11" cy="33" r="2"/><circle cx="21" cy="33" r="2"/><circle cx="31" cy="33" r="2"/></g></g>';break;
-      case 'bridge': art='<path d="M2 78h52M7 78c5-31 36-31 42 0" fill="none" stroke="rgba(18,20,67,.72)" stroke-width="4"/><path d="M7 77c7-20 33-20 42 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2"/>';break;
-      case 'shield': art='<path d="M27 31l18 7v16c0 14-8 25-18 31-10-6-18-17-18-31V38z" fill="rgba(18,20,67,.70)"/><path d="M17 56l7 7 14-17" fill="none" stroke="rgba(255,255,255,.78)" stroke-width="3.2" stroke-linecap="round"/>';break;
-      case 'waves': art='<path d="M0 55c8-8 16-8 24 0s16 8 24 0M0 67c8-8 16-8 24 0s16 8 24 0M0 79c8-8 16-8 24 0s16 8 24 0" fill="none" stroke="rgba(255,255,255,.60)" stroke-width="3"/>';break;
-      case 'chess': art='<g transform="translate(11,34)" fill="rgba(18,20,67,.74)"><circle cx="14" cy="8" r="7"/><path d="M8 18h12l4 21H4z"/><rect x="1" y="39" width="26" height="7" rx="2"/></g>';break;
-      case 'idea': art='<g transform="translate(8,32)"><circle cx="20" cy="20" r="15" fill="rgba(255,244,188,.78)"/><path d="M14 40h12M15 46h10" stroke="rgba(18,20,67,.72)" stroke-width="3" stroke-linecap="round"/><path d="M20 0v-8M0 20h-8M40 20h8M6 6l-6-6M34 6l6-6" stroke="rgba(255,255,255,.65)" stroke-width="2"/></g>';break;
-      case 'sunrise': art='<circle cx="25" cy="61" r="13" fill="rgba(255,230,155,.88)"/><path d="M0 70h55M4 80c10-6 18-6 27 0s17 6 26 0" fill="none" stroke="rgba(255,255,255,.58)" stroke-width="2.4"/>';break;
-      default: art='<circle cx="27" cy="58" r="17" fill="rgba(18,20,67,.70)"/>';
-    }
-    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Ilustración relacionada con el pensamiento del día">'+common+art+'<text x="17" y="92" text-anchor="middle" fill="rgba(255,255,255,.72)" font-size="12" font-family="Nunito,Arial" font-weight="900">'+esc(item.icon)+'</text></svg>';
+    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Fondo decorativo del pensamiento del día">'+common+'</svg>';
   }
   function dayIndex(){var d=new Date();var utc=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());return Math.floor(utc/86400000);}
   function render(){
