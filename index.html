@@ -426,100 +426,6 @@
   .login-btn:active{transform:translateY(1px)}
   .login-err{color:var(--accent);font-size:13px;text-align:center;margin-top:14px;min-height:18px}
   .login-foot{font-size:11px;color:var(--muted);text-align:center;margin-top:18px;letter-spacing:1px}
-  .login-web-left,.login-web-right{width:100%}
-  .login-web-left{display:none}
-  .lw-top-badge{display:none}
-  .lc-h-web,.lc-p-web,.lc-label-web,.lc-badge-s,.lc-btn-web,.lc-web-foot,.lc-eye,.lc-underline{display:none}
-
-  /* ===== MODO WEB: login estilo landing (panel izquierdo + tarjeta a la derecha) =====
-     Oculto por completo en celular (login-web-left:display:none arriba); todo lo de
-     acá abajo vive dentro de @media(min-width:980px). */
-  @media(min-width:980px){
-    body #login{
-      background:
-        radial-gradient(650px 500px at -6% -10%,rgba(255,236,150,.55),transparent 60%),
-        radial-gradient(650px 500px at 108% -6%,rgba(150,225,255,.42),transparent 62%),
-        linear-gradient(180deg,#F7FAFF 0%,#EFF6FF 100%)!important;
-      flex-direction:row!important;align-items:center!important;justify-content:center!important;
-      gap:64px!important;padding:40px 6vw!important;position:fixed!important;
-    }
-    #login .login-robot{display:none!important}
-    .lw-top-badge{
-      display:flex!important;align-items:center;gap:8px;position:absolute;top:34px;right:6vw;
-      font-size:12.5px;font-weight:800;color:#B4212F;background:rgba(232,49,63,.08);
-      border:1px solid rgba(232,49,63,.22);border-radius:999px;padding:8px 15px;
-    }
-    .lw-top-badge svg{width:15px;height:15px;fill:#E8313F;stroke:none}
-    .login-web-left{
-      display:block!important;width:auto!important;max-width:560px!important;flex:1 1 560px!important;
-    }
-    .lw-brand{display:flex!important;align-items:center;gap:9px;margin-bottom:22px}
-    .lw-logo-s{width:34px;height:34px;border-radius:9px;background:linear-gradient(160deg,#12233F,#0B1626);
-      color:#fff;font-family:var(--ff);font-weight:800;font-size:18px;display:grid;place-items:center;
-      box-shadow:0 4px 10px rgba(15,45,82,.22)}
-    .lw-logo-txt{font-family:var(--ff);font-weight:800;font-size:19px;color:#0F2D52;letter-spacing:-.2px}
-    .lw-headline{font-family:var(--ff);font-weight:800;font-size:clamp(30px,3.2vw,46px);line-height:1.08;
-      color:#0F2D52;letter-spacing:-1px;margin:0 0 16px}
-    .lw-headline span{color:#E8313F}
-    .lw-sub{font-size:15px;line-height:1.5;color:#5C7690;max-width:440px;margin:0 0 26px}
-    .lw-chips{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:30px}
-    .lw-chip{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5EEF6;border-radius:16px;
-      padding:12px 16px;box-shadow:0 8px 20px rgba(30,70,120,.06);flex:1 1 160px;min-width:160px}
-    .lw-chip-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:17px;flex:none}
-    .lw-chip-ico.c-blue{background:#E8F1FF;color:#2F6FE0}
-    .lw-chip-ico.c-red{background:#FDE9EB;color:#E8313F}
-    .lw-chip b{display:block;font-family:var(--ff);font-size:13.5px;color:#102F55}
-    .lw-chip small{display:block;font-size:11px;color:#7893AA;margin-top:2px;line-height:1.25}
-    /* laptop mockup con nuestro Inicio real (sidebar + resumen) en miniatura */
-    .lw-laptop{width:100%;max-width:520px}
-    .lw-laptop-screen{display:flex;background:#fff;border:1px solid #22314A;border-radius:14px 14px 4px 4px;
-      overflow:hidden;box-shadow:0 30px 60px rgba(15,45,82,.22);aspect-ratio:16/10.4}
-    .lw-mock-side{width:30%;background:#0E1E38;padding:14px 10px;display:flex;flex-direction:column;gap:3px;flex:none}
-    .lw-mock-logo{display:flex;align-items:center;gap:6px;color:#fff;font-family:var(--ff);font-weight:800;font-size:10.5px;
-      margin-bottom:10px;letter-spacing:.02em}
-    .lw-mock-logo span{width:16px;height:16px;border-radius:5px;background:#E8313F;display:grid;place-items:center;font-size:9px;color:#fff}
-    .lw-mock-nav-item{font-size:9px;color:#AEBEDA;padding:6px 8px;border-radius:8px;font-weight:700}
-    .lw-mock-nav-item.active{background:#1C3457;color:#fff}
-    .lw-mock-main{flex:1;padding:14px;background:#F6F9FD;overflow:hidden}
-    .lw-mock-title{font-family:var(--ff);font-weight:800;font-size:11px;color:#102F55;margin-bottom:9px}
-    .lw-mock-stats{display:flex;gap:6px;margin-bottom:10px}
-    .lw-mock-stat{flex:1;background:#fff;border:1px solid #E8EEF6;border-radius:8px;padding:7px 8px}
-    .lw-mock-stat .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-bottom:3px}
-    .lw-mock-stat .dot.blue{background:#2F6FE0}.lw-mock-stat .dot.green{background:#1FBF86}.lw-mock-stat .dot.red{background:#E8313F}
-    .lw-mock-stat b{display:block;font-family:var(--ff);font-size:10px;color:#102F55}
-    .lw-mock-stat small{font-size:7px;color:#8398AE;font-weight:700}
-    .lw-mock-panels{display:flex;gap:6px}
-    .lw-mock-panel{flex:1;background:#fff;border:1px solid #E8EEF6;border-radius:8px;padding:8px}
-    .lw-mock-panel-title{font-size:8px;font-weight:800;color:#102F55;margin-bottom:6px}
-    .lw-mock-line{height:5px;border-radius:3px;background:#EDF2F8;margin-bottom:5px}
-    .lw-mock-line.short{width:60%}
-    .lw-mock-donut{width:34px;height:34px;border-radius:50%;margin:4px auto;
-      background:conic-gradient(#2F6FE0 0 40%,#1FBF86 40% 72%,#E8313F 72% 100%)}
-    .lw-laptop-base{height:12px;background:linear-gradient(180deg,#D7E1EC,#B9C7D8);border-radius:0 0 10px 10px;
-      margin:0 -14px;box-shadow:0 8px 14px rgba(15,45,82,.18)}
-
-    .login-web-right{flex:0 0 auto!important;width:auto!important;display:flex!important;flex-direction:column;align-items:center}
-    .login-web-right .login-card{width:400px!important;max-width:400px!important;margin-top:0!important;padding:38px 34px 32px!important;text-align:left!important}
-    .login-web-right .login-card h2,.login-web-right .login-card p{text-align:left!important}
-    .lc-badge-s{display:flex!important;width:56px;height:56px;border-radius:50%;background:#fff;border:1px solid #E5EEF6;
-      box-shadow:0 8px 18px rgba(30,70,120,.10);color:#0F2D52;font-family:var(--ff);font-weight:800;font-size:24px;
-      align-items:center;justify-content:center;margin:0 auto 18px}
-    .lc-h-mobile,.lc-p-mobile,.lc-btn-mobile{display:none!important}
-    .lc-h-web{display:block!important;position:relative;font-family:var(--ff);font-weight:800;font-size:24px;color:#0F2D52;margin-bottom:14px}
-    .lc-underline{display:block!important;width:46px;height:3px;background:#E8313F;border-radius:2px;margin-top:9px}
-    .lc-p-web{display:block!important;font-size:13.5px;color:#5C7690;margin:0 0 24px}
-    .lc-label-web{display:block!important;font-size:12.5px;font-weight:800;color:#5C7690;margin:0 0 6px 2px}
-    .login-web-right .field{position:relative}
-    .lc-eye{display:flex!important;position:absolute;right:12px;top:50%;transform:translateY(-50%);
-      background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;align-items:center;justify-content:center}
-    .lc-eye svg{width:17px;height:17px}
-    .lc-btn-web{display:inline-flex!important;align-items:center;justify-content:center;gap:9px;width:100%}
-    .lc-btn-web svg{width:17px;height:17px}
-    .lc-web-foot{display:flex!important;align-items:center;justify-content:center;gap:7px;margin-top:20px;
-      padding-top:18px;border-top:1px solid #EEF3F8;font-size:12px;font-weight:700;color:#7893AA}
-    .lc-web-foot svg{width:14px;height:14px;opacity:.7}
-    .login-web-right .login-foot{display:none!important}
-  }
 
   /* line icons */
   .ico-svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block}
@@ -836,7 +742,7 @@ tbody td{border-color:#ECF3FA!important;color:#0F2D52!important}
   .intro-ring::before,.intro-ring::after{content:"";position:absolute;inset:14px;border-radius:50%;border:2px dashed rgba(255,255,255,.22)}
   .intro-ring::after{inset:-18px;border-color:rgba(232,49,63,.34);animation:ringSpin 2.8s linear reverse infinite}
   @keyframes ringSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
-  .intro-bot{position:absolute;left:50%;top:37%;width:auto;max-width:56vw;height:min(320px,44vh);max-height:44vh;transform:translate(-50%,-50%) scale(.72);opacity:0;z-index:4;
+  .intro-bot{position:absolute;left:50%;top:39%;width:190px;max-width:52vw;transform:translate(-50%,-50%) scale(.72);opacity:0;z-index:4;
     filter:drop-shadow(0 28px 36px rgba(0,0,0,.55)) drop-shadow(0 0 28px rgba(232,49,63,.42));
     animation:botReveal 3.25s cubic-bezier(.16,.8,.28,1) forwards}
   @keyframes botReveal{0%{opacity:0;transform:translate(-50%,-36%) scale(.55);filter:blur(14px) brightness(.55)}28%{opacity:1;filter:blur(0) brightness(1.12)}52%{transform:translate(-50%,-50%) scale(1.06)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
@@ -1377,75 +1283,21 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 <!-- LOGIN -->
 <div id="login">
   <img class="login-robot" id="loginRobot" alt="Subli">
-  <div class="lw-top-badge"><svg viewBox="0 0 24 24" class="ico-svg"><path d="M12 2 4 5v6c0 5 3.4 9 8 11 4.6-2 8-6 8-11V5z"/></svg>Área privada de asesores</div>
-  <div class="login-web-left" id="loginWebLeft">
-    <div class="lw-brand"><span class="lw-logo-s">S</span><span class="lw-logo-txt">SUBLICHAT</span></div>
-    <h1 class="lw-headline">Su mesa de trabajo<br>comienza <span>aquí</span></h1>
-    <p class="lw-sub">Un espacio creado para asesores: clientes, cobros, seguimiento y organización diaria.</p>
-    <div class="lw-chips">
-      <div class="lw-chip"><span class="lw-chip-ico c-blue">👥</span><div><b>Clientes</b><small>Gestione y conozca a sus clientes</small></div></div>
-      <div class="lw-chip"><span class="lw-chip-ico c-red">💲</span><div><b>Cobros</b><small>Controle cobros y pendientes</small></div></div>
-      <div class="lw-chip"><span class="lw-chip-ico c-blue">🖥️</span><div><b>Mesas de trabajo</b><small>Organice tareas y dé seguimiento diario</small></div></div>
-    </div>
-    <div class="lw-laptop">
-      <div class="lw-laptop-screen">
-        <div class="lw-mock-side">
-          <div class="lw-mock-logo"><span>S</span>SUBLICHAT</div>
-          <div class="lw-mock-nav-item active">🏠 Inicio</div>
-          <div class="lw-mock-nav-item">👥 Clientes</div>
-          <div class="lw-mock-nav-item">🎯 Objetivos</div>
-          <div class="lw-mock-nav-item">🖥️ Mesas de trabajo</div>
-          <div class="lw-mock-nav-item">🎫 Tickets</div>
-          <div class="lw-mock-nav-item">📦 Bodega</div>
-          <div class="lw-mock-nav-item">💸 Egresos</div>
-          <div class="lw-mock-nav-item">Salir ↩</div>
-        </div>
-        <div class="lw-mock-main">
-          <div class="lw-mock-title">Resumen general</div>
-          <div class="lw-mock-stats">
-            <div class="lw-mock-stat"><span class="dot blue"></span><b>128</b><small>Clientes</small></div>
-            <div class="lw-mock-stat"><span class="dot green"></span><b>Lps 2,450</b><small>Ingresos</small></div>
-            <div class="lw-mock-stat"><span class="dot red"></span><b>27</b><small>Cobros</small></div>
-          </div>
-          <div class="lw-mock-panels">
-            <div class="lw-mock-panel">
-              <div class="lw-mock-panel-title">Actividad reciente</div>
-              <div class="lw-mock-line"></div><div class="lw-mock-line short"></div><div class="lw-mock-line"></div>
-            </div>
-            <div class="lw-mock-panel">
-              <div class="lw-mock-panel-title">Cobros del mes</div>
-              <div class="lw-mock-donut"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="lw-laptop-base"></div>
-    </div>
-  </div>
-  <div class="login-web-right">
   <div class="login-card">
-    <div class="lc-badge-s">S</div>
-    <h2 class="lc-h-mobile">Bienvenido</h2>
-    <h2 class="lc-h-web">Acceda a su cuenta<i class="lc-underline"></i></h2>
-    <p class="lc-p-mobile">Usuario privado para asesores</p>
-    <p class="lc-p-web">Bienvenido a Sublichat</p>
-    <label class="lc-label-web" for="loginUser">Usuario</label>
+    <h2>Bienvenido</h2>
+    <p>Usuario privado para asesores</p>
     <div class="field">
       <svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
       <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none" spellcheck="false">
     </div>
-    <label class="lc-label-web" for="loginPass">Clave de acceso</label>
     <div class="field">
       <svg class="ico-svg" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
       <input id="loginPass" type="password" placeholder="Clave de acceso" autocomplete="current-password">
-      <button type="button" class="lc-eye" id="loginEyeToggle" aria-label="Mostrar clave"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
-    <button class="login-btn" id="loginBtn"><span class="lc-btn-mobile">ACCEDER</span><span class="lc-btn-web">Entrar<svg class="ico-svg" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button>
+    <button class="login-btn" id="loginBtn">ACCEDER</button>
     <div class="login-err" id="loginErr"></div>
-    <div class="lc-web-foot"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Área privada de asesores</div>
   </div>
   <div class="login-foot">SUBLICUENTAS · Conectamos su entretenimiento</div>
-  </div>
 </div>
 
 <div class="wrap">
@@ -3990,11 +3842,6 @@ if(skipIntro){
 const lUser=document.getElementById("loginUser"), lPass=document.getElementById("loginPass"),
       lBtn=document.getElementById("loginBtn"), lErr=document.getElementById("loginErr");
 
-const lEye=document.getElementById("loginEyeToggle");
-if(lEye && lPass)lEye.addEventListener("click",()=>{
-  lPass.type = lPass.type==="password" ? "text" : "password";
-});
-
 async function firebaseSignInWithToken(token){
   const { initializeApp, getApps, getApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
   const { getAuth, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
@@ -5109,9 +4956,9 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .ficha-sub{font-size:12px;color:var(--txt2);margin-top:3px}
       .ficha-x{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--txt);font-size:18px}
       .ficha-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-      .ficha-field{display:block;margin-bottom:8px}
+      .ficha-field{display:block;margin-bottom:10px}
       .ficha-field span{display:block;font-size:12px;color:var(--txt2);font-weight:700;margin:0 0 5px 2px}
-      .ficha-input,.ficha-select,.ficha-text{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:13px;padding:10px 12px;font-family:inherit;font-size:14px;outline:none}
+      .ficha-input,.ficha-select,.ficha-text{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:13px;padding:12px 13px;font-family:inherit;font-size:14px;outline:none}
       .ficha-text{min-height:255px;line-height:1.4;resize:vertical;white-space:pre-wrap}
       .ficha-preview{min-height:255px;line-height:1.5;white-space:pre-wrap;font-size:14px;cursor:text}
       .ficha-preview b{font-weight:800}
@@ -5128,12 +4975,6 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .ficha-status.info{display:block;background:rgba(47,155,224,.13);border-color:rgba(47,155,224,.35);color:var(--info)}
       .ficha-note{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:8px}
       @media(max-width:430px){.ficha-grid{grid-template-columns:1fr}.ficha-actions,.ficha-actions.three{grid-template-columns:1fr}}
-      @media(min-width:900px){
-        body.ready .ficha-overlay{align-items:center!important}
-        body.ready .ficha-sheet{max-width:760px!important;width:92%!important;border-radius:26px!important;max-height:88vh!important}
-        body.ready .ficha-grid{grid-template-columns:1fr 1fr 1fr!important;gap:12px!important}
-        body.ready .ficha-actions,body.ready .ficha-actions.three{grid-template-columns:repeat(3,1fr)!important}
-      }
     `;
     document.head.appendChild(style);
     const wrap=document.createElement("div");
