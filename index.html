@@ -1317,7 +1317,9 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <div class="lic-login-access">
     <img class="login-robot" id="loginRobot" alt="Subli">
     <div class="login-card">
-      <div class="lic-login-card-logo lic-web-only">S</div>
+      <div class="lic-login-card-logo lic-web-only" aria-label="Sublicuentas">
+        <img src="assets/sublicuentas-logo.png" alt="Sublicuentas">
+      </div>
       <h2>
         <span class="lic-mobile-only">Bienvenido</span>
         <span class="lic-web-only">Acceda a su cuenta</span>
@@ -8962,6 +8964,65 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   body.lic-login-visible > .nav,
   body.lic-login-visible .rbac-nav-arrow{display:none!important}
   body.lic-login-visible{padding-bottom:0!important;overflow:hidden!important}
+</style>
+
+
+<!-- LIC 20260719 · LOGIN WEB: POSICIÓN, LOGO REAL Y AUTOFILL LIMPIO -->
+<style id="licWebLoginPolish20260719">
+@media (min-width:760px){
+  #login .login-card{
+    transform:translateX(clamp(-50px,-2.5vw,-24px))!important;
+  }
+
+  #login .lic-login-card-logo{
+    position:relative!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    overflow:hidden!important;
+    background:#080A0E!important;
+    border-color:rgba(15,32,55,.14)!important;
+  }
+  #login .lic-login-card-logo img{
+    display:block!important;
+    position:absolute!important;
+    left:0!important;
+    top:50%!important;
+    width:auto!important;
+    max-width:none!important;
+    height:100%!important;
+    object-fit:contain!important;
+    transform:translateY(-50%)!important;
+  }
+
+  #login .field input,
+  #login .field input:focus,
+  #login .field input:active{
+    background:#fff!important;
+    background-color:#fff!important;
+    box-shadow:none!important;
+  }
+  #login .field input:-webkit-autofill,
+  #login .field input:-webkit-autofill:hover,
+  #login .field input:-webkit-autofill:focus,
+  #login .field input:-webkit-autofill:active{
+    -webkit-text-fill-color:#203A58!important;
+    caret-color:#203A58!important;
+    -webkit-box-shadow:0 0 0 1000px #fff inset!important;
+    box-shadow:0 0 0 1000px #fff inset!important;
+    background-color:#fff!important;
+    transition:background-color 9999s ease-out 0s!important;
+  }
+  #login .field input:autofill{
+    color:#203A58!important;
+    background:#fff!important;
+    box-shadow:0 0 0 1000px #fff inset!important;
+  }
+}
+
+@media (min-width:760px) and (max-width:980px){
+  #login .login-card{transform:translateX(-14px)!important}
+}
 </style>
 
 </body>
