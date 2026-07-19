@@ -5305,6 +5305,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     document.body.classList.toggle('role-auditor',role==='auditor');
     nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
+    setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
     const objBtn=document.getElementById('objetivosOpenBtn');
     if(objBtn && !objBtn.dataset.wired){ objBtn.dataset.wired='1'; objBtn.addEventListener('click',()=>rbacGo('objetivos')); }
     /* relojes ya no queda atrapado en la mesa: entra en Inicio y navega libre a todas sus secciones */
@@ -5796,7 +5797,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(tk.loading)return;tk.loading=true;renderTickets(true);
     try{const j=await tkApi({accion:'listar'});tk.items=j.items||[];tk.err='';tk.loaded=true;}
     catch(e){tk.err=e.message||String(e);}
-    finally{tk.loading=false;renderTickets(true);}
+    finally{tk.loading=false;renderTickets(true);tkUpdateNavBadge();}
   }
   function tkMine(){
     const u=tkRole();
@@ -5805,6 +5806,33 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const dest=Array.isArray(t.destinos)?t.destinos:[String(t.destino||'')];
       return dest.includes(u)||String(t.creadoPorRol||'')===u;
     });
+  }
+  function tkUpdateNavBadge(){
+    const btn=document.querySelector('.nav-btn[data-screen="tickets"]');
+    if(!btn)return;
+    const open=tkMine().filter(t=>{
+      const e=String(t.estado||'abierto').toLowerCase();
+      return e!=='resuelto'&&e!=='finalizado';
+    }).length;
+    let badge=btn.querySelector('.ticket-nav-notify');
+    if(open>0){
+      if(!badge){
+        badge=document.createElement('span');
+        badge.className='ticket-nav-notify';
+        badge.setAttribute('aria-hidden','true');
+        btn.appendChild(badge);
+      }
+      badge.textContent=open>99?'99+':String(open);
+      badge.style.display='grid';
+      btn.classList.add('has-ticket-notify');
+      btn.setAttribute('aria-label','Tickets: '+open+' pendiente'+(open===1?'':'s'));
+      btn.title=open+' ticket'+(open===1?'':'s')+' pendiente'+(open===1?'':'s');
+    }else{
+      if(badge)badge.style.display='none';
+      btn.classList.remove('has-ticket-notify');
+      btn.removeAttribute('aria-label');
+      btn.removeAttribute('title');
+    }
   }
   function tkDestOptions(){
     const u=tkRole(),sel=tk.formDestino||'';
@@ -5925,6 +5953,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     ensureTkCss();
     host.innerHTML=tkHtml();
     tkBind(host);
+    tkUpdateNavBadge();
   }
 
   function renderRBACAll(){
@@ -8230,6 +8259,178 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   setTimeout(init,500);
 })();
 </script>
+
+
+<!-- LIC 20260719 · NAV FIJO SIN TAPAR CONTENIDO + ALERTA TICKETS + MENSAJE COMPACTO -->
+<style id="licNavTicketsCompactMessage20260719">
+  :root{--lic-fixed-nav-clearance:154px}
+  html{
+    overflow-y:auto!important;
+    scroll-padding-bottom:var(--lic-fixed-nav-clearance)!important;
+  }
+  body{
+    overflow-y:auto!important;
+    min-height:100dvh!important;
+    padding-bottom:calc(var(--lic-fixed-nav-clearance) + env(safe-area-inset-bottom))!important;
+  }
+  body.ready .wrap{
+    min-height:100dvh!important;
+    padding-bottom:calc(var(--lic-fixed-nav-clearance) + 28px + env(safe-area-inset-bottom))!important;
+  }
+  body.ready .screen.active{
+    overflow:visible!important;
+    padding-bottom:28px!important;
+  }
+
+  /* El menú sigue fijo; este espacio final permite que el último contenido suba por encima. */
+  .nav.focus-nav,.nav{position:fixed!important}
+
+  /* Indicador de tickets pendientes: funciona en menú móvil y en sidebar web. */
+  .nav-btn[data-screen="tickets"]{position:relative!important;overflow:visible!important}
+  .ticket-nav-notify{
+    position:absolute!important;
+    top:3px!important;
+    right:7px!important;
+    z-index:8!important;
+    min-width:20px!important;
+    height:20px!important;
+    padding:0 5px!important;
+    border:3px solid #fff!important;
+    border-radius:999px!important;
+    background:#FF3F6E!important;
+    color:#fff!important;
+    box-shadow:0 4px 10px rgba(217,41,84,.34)!important;
+    place-items:center!important;
+    font-family:'Nunito',system-ui,sans-serif!important;
+    font-size:10px!important;
+    line-height:1!important;
+    font-weight:1000!important;
+    pointer-events:none!important;
+  }
+  .nav-btn.has-ticket-notify .nico{animation:licTicketPulse 1.8s ease-in-out infinite}
+  @keyframes licTicketPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+
+  /* Pensamiento diario compacto y claro en teléfono. */
+  #screen-inicio .daily-thought-banner{
+    height:168px!important;
+    min-height:168px!important;
+    max-height:168px!important;
+    margin-bottom:12px!important;
+    border:1px solid #D6E9F5!important;
+    border-radius:22px!important;
+    background:linear-gradient(135deg,#EAF8FF 0%,#F8FCFF 58%,#FFF5D9 100%)!important;
+    box-shadow:0 7px 0 #DDECF6,0 14px 26px rgba(35,91,140,.10)!important;
+  }
+  #screen-inicio .daily-thought-art-mobile,
+  #screen-inicio .daily-thought-art-web{
+    opacity:.48!important;
+    filter:brightness(1.58) saturate(.60) contrast(.78)!important;
+  }
+  #screen-inicio .daily-thought-shade{
+    background:
+      linear-gradient(90deg,rgba(240,250,255,.18) 0%,rgba(245,252,255,.52) 38%,rgba(250,253,255,.91) 67%,rgba(255,248,226,.98) 100%),
+      linear-gradient(180deg,rgba(255,255,255,.12),rgba(225,244,255,.26))!important;
+  }
+  #screen-inicio .daily-thought-copy{
+    width:100%!important;
+    height:168px!important;
+    min-height:168px!important;
+    margin-left:0!important;
+    padding:22px 18px 18px 42%!important;
+    justify-content:center!important;
+    color:#0F2D52!important;
+    text-align:left!important;
+  }
+  #screen-inicio .daily-quote-mark{
+    left:calc(42% - 27px)!important;
+    top:17px!important;
+    font-size:52px!important;
+    color:rgba(53,185,246,.62)!important;
+    text-shadow:none!important;
+  }
+  #screen-inicio .daily-thought-banner .quote-text{
+    color:#0F2D52!important;
+    font-size:clamp(15px,4.2vw,19px)!important;
+    line-height:1.16!important;
+    letter-spacing:-.012em!important;
+    text-shadow:none!important;
+    font-weight:800!important;
+  }
+  #screen-inicio .quote-author{
+    margin-top:7px!important;
+    color:#365F7D!important;
+    font-size:11.5px!important;
+    text-shadow:none!important;
+  }
+  #screen-inicio .quote-source,
+  #screen-inicio .daily-thought-banner.is-original .quote-source{
+    margin-top:1px!important;
+    color:#7892A6!important;
+    font-size:9px!important;
+    text-shadow:none!important;
+  }
+
+  @media (max-width:520px){
+    :root{--lic-fixed-nav-clearance:146px}
+    #screen-inicio .daily-thought-banner{
+      height:158px!important;
+      min-height:158px!important;
+      max-height:158px!important;
+      border-radius:20px!important;
+    }
+    #screen-inicio .daily-thought-copy{
+      height:158px!important;
+      min-height:158px!important;
+      padding:18px 15px 15px 39%!important;
+    }
+    #screen-inicio .daily-quote-mark{left:calc(39% - 25px)!important;top:13px!important;font-size:48px!important}
+    #screen-inicio .daily-thought-banner .quote-text{font-size:clamp(14px,4.1vw,17px)!important}
+    .ticket-nav-notify{top:2px!important;right:4px!important}
+  }
+
+  @media (min-width:900px){
+    :root{--lic-fixed-nav-clearance:46px}
+    body.ready .wrap{padding-bottom:58px!important}
+    body.ready .screen.active{padding-bottom:18px!important}
+
+    /* El menú web está fijo dentro del sidebar; el documento completo hace scroll normal. */
+    #sidebarWrap .nav.focus-nav,#sidebarWrap .nav{position:static!important}
+    #sidebarWrap .ticket-nav-notify{
+      top:50%!important;
+      right:12px!important;
+      transform:translateY(-50%)!important;
+      min-width:21px!important;
+      height:21px!important;
+      border-width:2px!important;
+    }
+
+    #screen-inicio .daily-thought-banner{
+      height:122px!important;
+      min-height:122px!important;
+      max-height:122px!important;
+      margin-bottom:11px!important;
+      border-radius:20px!important;
+    }
+    #screen-inicio .daily-thought-copy{
+      width:min(59%,800px)!important;
+      height:122px!important;
+      min-height:122px!important;
+      margin-left:auto!important;
+      padding:13px clamp(21px,2.4vw,38px) 12px clamp(20px,2.2vw,36px)!important;
+    }
+    #screen-inicio .daily-quote-mark{
+      left:clamp(0px,.65vw,10px)!important;
+      top:8px!important;
+      font-size:48px!important;
+    }
+    #screen-inicio .daily-thought-banner .quote-text{
+      font-size:clamp(16px,1.25vw,21px)!important;
+      line-height:1.14!important;
+    }
+    #screen-inicio .quote-author{font-size:11.5px!important;margin-top:6px!important}
+    #screen-inicio .quote-source{font-size:8.5px!important}
+  }
+</style>
 
 </body>
 </html>
