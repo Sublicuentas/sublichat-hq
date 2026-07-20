@@ -29,13 +29,16 @@ function normUser(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9_-]/g, '').trim() || 'usuario';
 }
 
-// El avatar es un dataURL base64 (imagen redimensionada en el navegador antes de subir).
-// Límite generoso pero seguro para no chocar con el máximo de 1MB por documento de Firestore.
+// Las imágenes llegan como dataURL base64, ya redimensionadas en el navegador.
+// El banner se guarda en un documento separado para que avatar + banner nunca
+// superen juntos el límite de 1 MiB por documento de Firestore.
 const MAX_AVATAR_LEN = 700000;
+const MAX_BANNER_LEN = 900000;
 
 async function guardarPerfil(db, body) {
   const usuario = normUser(body.usuario);
   const ref = db.collection('perfiles_usuario').doc(usuario);
+  const mediaRef = db.collection('perfiles_usuario_media').doc(usuario);
   const now = new Date().toISOString();
   const update = { usuario, updatedAt: now };
 
@@ -57,15 +60,33 @@ async function guardarPerfil(db, body) {
   if (typeof body.emoji === 'string') update.emoji = clean(body.emoji, 10);
   if (typeof body.tema === 'string') update.tema = clean(body.tema, 30);
 
-  await ref.set(update, { merge: true });
+  let bannerUpdate = null;
+  if (typeof body.banner === 'string') {
+    if (body.banner && !body.banner.startsWith('data:image/')) {
+      return { status: 400, json: { ok: false, error: 'Formato de banner inválido.' } };
+    }
+    if (body.banner.length > MAX_BANNER_LEN) {
+      return { status: 400, json: { ok: false, error: 'El banner pesa mucho. Use una imagen más pequeña.' } };
+    }
+    bannerUpdate = { usuario, banner: body.banner, updatedAt: now };
+  }
+
+  const writes = [ref.set(update, { merge: true })];
+  if (bannerUpdate) writes.push(mediaRef.set(bannerUpdate, { merge: true }));
+  await Promise.all(writes);
   return { ok: true, usuario };
 }
 
 async function obtenerPerfil(db, body) {
   const usuario = normUser(body.usuario);
-  const snap = await db.collection('perfiles_usuario').doc(usuario).get();
+  const [snap, mediaSnap] = await Promise.all([
+    db.collection('perfiles_usuario').doc(usuario).get(),
+    db.collection('perfiles_usuario_media').doc(usuario).get()
+  ]);
   if (!snap.exists) return { ok: true, usuario, perfil: null };
-  return { ok: true, usuario, perfil: snap.data() || null };
+  const perfil = snap.data() || {};
+  if (mediaSnap.exists) perfil.banner = String((mediaSnap.data() || {}).banner || '');
+  return { ok: true, usuario, perfil };
 }
 
 module.exports = async function handler(req, res) {
