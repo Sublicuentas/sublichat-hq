@@ -666,17 +666,17 @@ html,body{
 .objetivos-btn{background:linear-gradient(135deg,var(--accent2),var(--accent))!important;box-shadow:0 12px 0 var(--accent2),0 24px 42px var(--accentSoft)!important;color:var(--txt)!important}
 
 .card,.tbl-wrap,.movie,.match,.renew-item,.inv-card,.ci{
-  border:0!important;border-radius:32px!important;background:#fff!important;
-  box-shadow:0 12px 0 #DDEAF5,0 22px 40px rgba(29,90,150,.09)!important;color:#0F2D52!important;
+  border:0!important;border-radius:32px!important;background:var(--card)!important;
+  box-shadow:0 12px 0 var(--line),0 22px 40px var(--accentSoft)!important;color:var(--txt)!important;
 }
-.card h2,.cobro-title,.fin-head .cobro-title{font-size:30px!important;color:#0F2D52!important}
-.search,select,.serv-input,.input-row input{border:0!important;background:#F2F8FE!important;border-radius:24px!important;color:#0F2D52!important;font-weight:900!important}
-thead th{background:#E8F6FF!important;color:#6E879B!important}
-tbody td{border-color:#ECF3FA!important;color:#0F2D52!important}
+.card h2,.cobro-title,.fin-head .cobro-title{font-size:30px!important;color:var(--txt)!important}
+.search,select,.serv-input,.input-row input{border:0!important;background:var(--surface2)!important;border-radius:24px!important;color:var(--txt)!important;font-weight:900!important}
+thead th{background:var(--accentSoft)!important;color:var(--txt2)!important}
+tbody td{border-color:var(--line)!important;color:var(--txt)!important}
 
 .focus-nav.nav{
   left:18px!important;right:18px!important;bottom:14px!important;height:92px!important;border:0!important;border-radius:36px!important;
-  background:rgba(255,255,255,.94)!important;box-shadow:0 -10px 34px rgba(28,80,130,.12),0 8px 0 #DDEAF5!important;
+  background:var(--surface)!important;box-shadow:0 -10px 34px var(--accentSoft),0 8px 0 var(--line)!important;
   backdrop-filter:blur(22px)!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important;
 }
 .nav-btn{gap:4px!important;color:#7693AA!important;font-size:12px!important;font-weight:900!important;border-radius:24px!important;padding:6px 4px!important}
@@ -816,12 +816,12 @@ body.ready .wrap, body.ready .nav{visibility:visible!important;}
 .alert-banner .ab-title, .alert-banner .ab-sub{white-space:normal!important;overflow:hidden!important;}
 /* CRM/Pelis/Partidos más tipo Focus */
 #screen-clientes .card, #screen-pelis .card, #screen-partidos .card, #screen-inventario .card{
-  border-radius:36px!important;box-shadow:0 12px 0 #DDEAF5,0 22px 40px rgba(29,90,150,.09)!important;
+  border-radius:36px!important;box-shadow:0 12px 0 var(--line),0 22px 40px var(--accentSoft)!important;
 }
 #screen-clientes h2, #screen-pelis h2, #screen-partidos h2, #screen-inventario h2{
-  font-family:'Fredoka','Nunito',system-ui,sans-serif!important;font-size:32px!important;color:#0F2D52!important;
+  font-family:'Fredoka','Nunito',system-ui,sans-serif!important;font-size:32px!important;color:var(--txt)!important;
 }
-.movie .poster{border-radius:22px!important;box-shadow:0 8px 0 #D5E9F8!important;}
+.movie .poster{border-radius:22px!important;box-shadow:0 8px 0 var(--line)!important;}
 .match{padding:18px!important;}
 /* Login con usuario + clave, sin correo visible */
 #login{background:
@@ -7345,8 +7345,8 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   }
   #screen-inicio .inicio-top-row .hero{
     padding:clamp(17px,1.55vw,26px)!important;
-    background:linear-gradient(118deg,#168DF4 0%,#24B9F2 58%,#28C8EA 100%)!important;
-    box-shadow:0 9px 0 #1186DC,0 17px 32px rgba(18,150,230,.17)!important;
+    background:linear-gradient(118deg,var(--accent) 0%,var(--accent2) 100%)!important;
+    box-shadow:0 9px 0 var(--accent2),0 17px 32px var(--accentSoft)!important;
   }
   #screen-inicio .inicio-top-row .hero::before{
     position:relative!important;z-index:2!important;
@@ -7486,14 +7486,14 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   }
   #screen-tickets > .card > h2{
     margin:0 0 5px!important;font-size:clamp(25px,2vw,34px)!important;line-height:1.08!important;
-    color:#102F55!important;gap:10px!important;
+    color:var(--txt)!important;gap:10px!important;
   }
   #screen-tickets > .card > h2 .ico{
     width:38px!important;height:38px!important;display:grid!important;place-items:center!important;
-    border-radius:13px!important;background:#FFF4BE!important;font-size:18px!important;
+    border-radius:13px!important;background:var(--accentSoft)!important;font-size:18px!important;
   }
   #screen-tickets > .card > .count{
-    margin:0 0 18px!important;font-size:12.5px!important;line-height:1.35!important;color:#7893AA!important;
+    margin:0 0 18px!important;font-size:12.5px!important;line-height:1.35!important;color:var(--txt2)!important;
   }
   #screen-tickets .tk-wrap{
     width:100%!important;max-width:none!important;margin:0!important;
@@ -7620,10 +7620,10 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     min-height:0!important;
     margin:0 auto!important;
     padding:clamp(20px,2vw,30px)!important;
-    border:1px solid #E5EDF5!important;
+    border:1px solid var(--line)!important;
     border-radius:26px!important;
-    background:#FFFFFF!important;
-    box-shadow:0 10px 0 #DDEAF5,0 22px 42px rgba(29,90,150,.09)!important;
+    background:var(--card)!important;
+    box-shadow:0 10px 0 var(--line),0 22px 42px var(--accentSoft)!important;
     overflow:visible!important;
   }
 
@@ -7636,7 +7636,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     gap:10px!important;
     font-size:clamp(25px,2vw,34px)!important;
     line-height:1.08!important;
-    color:#102F55!important;
+    color:var(--txt)!important;
   }
   body.ready .screen.active:not(#screen-inicio):not(#screen-chat):not(#screen-tickets) > .card > h2 .ico{
     flex:none!important;
@@ -7645,7 +7645,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     margin:0 0 18px!important;
     font-size:13px!important;
     line-height:1.4!important;
-    color:#7893AA!important;
+    color:var(--txt2)!important;
   }
 
   /* Módulos informativos: ancho de lectura cómodo; no se estiran de punta a punta. */
