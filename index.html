@@ -1385,35 +1385,39 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 
   <!-- INICIO -->
   <section class="screen active" id="screen-inicio">
-    <div class="quote-card daily-thought-banner" id="quoteCard" aria-live="polite">
-      <div class="daily-thought-art" id="quoteArt" aria-hidden="true"></div>
-      <div class="daily-thought-shade" aria-hidden="true"></div>
-      <div class="daily-thought-copy">
-        <div class="daily-quote-mark" aria-hidden="true">“</div>
-        <div class="quote-text" id="quoteText"></div>
-        <div class="quote-author" id="quoteAuthor"></div>
-        <div class="quote-source" id="quoteSource"></div>
-      </div>
+    <div class="home-welcome">
+      <div><h2>Buenos días, <span id="homeAdvisorName">Sublicuentas</span></h2><p>Esto es lo más importante para hoy.</p></div>
+      <span class="home-welcome-orb orb-one"></span><span class="home-welcome-orb orb-two"></span>
     </div>
-    <div id="alertBanner" class="alert-banner" style="display:none">
-      <div class="ab-ico">🔔</div>
-      <div class="ab-body"><div class="ab-title" id="abTitle"></div><div class="ab-sub" id="abSub"></div></div>
+    <div class="home-kpis">
+      <div class="home-kpi kpi-due"><span class="home-kpi-icon">🔔</span><div><b id="kHoy">—</b><small>vencen hoy</small><span id="kHoyMonto">Lps —</span></div></div>
+      <div class="home-kpi"><span class="home-kpi-icon">👥</span><div><b id="iwsClientes">—</b><small>clientes</small></div></div>
+      <div class="home-kpi"><span class="home-kpi-icon">💼</span><div><b id="iwsServicios">—</b><small>servicios</small></div></div>
+      <div class="home-kpi kpi-wallet"><span class="home-kpi-icon">💰</span><div><b id="kCartera">—</b><small>cartera total</small><span id="kClientes">—</span></div></div>
+      <button class="home-expiry-btn" id="homeExpiryBtn">Ver todos los vencimientos <span>›</span></button>
+    </div>
+    <div id="alertBanner" class="alert-banner home-alert-data" style="display:none">
+      <div class="ab-ico">🔔</div><div class="ab-body"><div class="ab-title" id="abTitle"></div><div class="ab-sub" id="abSub"></div></div>
       <button class="ab-go" id="abGo"><span>Ver detalle</span><span aria-hidden="true">›</span></button>
     </div>
-    <div class="inicio-top-row">
-      <div class="hero">
-        <img class="mascot-bg" id="mascotBg" alt="">
-        <div class="hl">Cartera total</div>
-        <div class="hv" id="kCartera">—</div>
-        <div class="hs" id="kClientes">—</div>
+    <div class="home-main-grid">
+      <section class="home-panel home-priorities"><div class="home-panel-title"><span>☷</span><h3>Prioridades de hoy</h3></div>
+        <div class="priority-list">
+          <button class="priority-row" data-home-action="cobros"><span class="priority-check"></span><span class="priority-icon">🔔</span><span class="priority-copy"><b>Revisar vencimientos de hoy</b><small>Contactar clientes y confirmar pagos.</small></span><em class="priority-tag high">Alta</em></button>
+          <button class="priority-row" data-home-action="clientes"><span class="priority-check"></span><span class="priority-icon">👥</span><span class="priority-copy"><b>Dar seguimiento a nuevos clientes</b><small>Responder mensajes y coordinar servicios.</small></span><em class="priority-tag medium">Media</em></button>
+          <button class="priority-row" data-home-action="mesas"><span class="priority-check"></span><span class="priority-icon">📅</span><span class="priority-copy"><b>Actualizar servicios programados</b><small>Verificar horarios y estado de las cuentas.</small></span><em class="priority-tag medium">Media</em></button>
+          <button class="priority-row" data-home-action="objetivos"><span class="priority-check"></span><span class="priority-icon">🎯</span><span class="priority-copy"><b>Revisar objetivos de la semana</b><small>Asegurar avances y ajustar acciones.</small></span><em class="priority-tag low">Baja</em></button>
+        </div>
+        <button class="home-text-btn" id="homeAllPriorities">Ver todas las prioridades <span>›</span></button>
+      </section>
+      <div class="home-side-stack">
+        <section class="home-panel home-goal"><div class="home-panel-title"><span>🎯</span><h3>Objetivo del día</h3></div><div class="goal-line"><span>Completar seguimientos de clientes</span><b>5 / 8</b></div><div class="goal-track"><i></i></div><div class="goal-foot"><span>62% completado</span><button id="homeGoalBtn">Ver objetivos</button></div></section>
+        <section class="home-panel home-message"><div class="home-panel-title"><span>💬</span><h3>Mensaje para el equipo</h3></div>
+          <div class="quote-card home-quote" id="quoteCard" aria-live="polite"><div id="quoteArt" hidden></div><div class="daily-thought-copy"><span class="daily-quote-mark">“</span><div><div class="quote-text" id="quoteText"></div><div class="quote-author" id="quoteAuthor"></div><div class="quote-source" id="quoteSource"></div></div></div></div>
+        </section>
       </div>
     </div>
-    <div class="grid3">
-      <div class="stat"><div class="si ic-warn"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div><div class="sl">Renuevan hoy</div><div class="sv" id="kHoy">—</div><div class="ss" id="kHoyMonto">Lps —</div></div>
-      <div class="stat"><div class="si ic-good"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div class="sl">Próx. 7 días</div><div class="sv" id="kSemana">—</div><div class="ss">por vencer</div></div>
-      <div class="stat"><div class="si ic-info"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M9 18h6M10 22h4M12 18v4"/></svg></div><div class="sl">Plataforma top</div><div class="sv" id="kTop" style="font-size:13px">—</div><div class="ss" id="kTopMonto">Lps —</div></div>
-    </div>
-    <div class="inicio-cards-row">
+    <section class="home-tools"><div class="home-tools-title"><span>💼</span><h3>Herramientas</h3></div><div class="inicio-cards-row">
       <button class="fin-open-btn focus-action-card" id="finOpenBtn" data-sub="Ingresos, cartera y movimientos">
         <span class="ico focus-action-icon focus-action-fin">📊</span>
         <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
@@ -1434,13 +1438,9 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <span class="focus-action-text"><b>Objetivos</b><small>Metas diarias, semanales y mensuales</small></span>
         <span class="fob-arrow">›</span>
       </button>
-    </div>
-    <div class="inicio-web-stats" id="inicioWebStats">
-      <div class="iws-item"><span class="iws-ico">👥</span><div class="iws-txt"><b id="iwsClientes">—</b><small>Clientes</small></div></div>
-      <div class="iws-item"><span class="iws-ico">🛍️</span><div class="iws-txt"><b id="iwsServicios">—</b><small>Servicios</small></div></div>
-      <div class="iws-item"><span class="iws-ico">💰</span><div class="iws-txt"><b id="iwsCartera">—</b><small>Cartera total</small></div></div>
-      <div class="iws-item"><span class="iws-ico">📈</span><div class="iws-txt"><b id="iwsDelta">—</b><small>vs mes anterior</small></div></div>
-    </div>
+      <button class="fin-open-btn mesas-home-btn focus-action-card" id="mesasHomeBtn"><span class="ico focus-action-icon">📅</span><span class="focus-action-text"><b>Mesas de trabajo</b><small>Documentos y operación</small></span><span class="fob-arrow">›</span></button>
+    </div></section>
+    <div class="inicio-web-stats" id="inicioWebStats" hidden><b id="iwsCartera">—</b><b id="iwsDelta">—</b><b id="kSemana">—</b><b id="kTop">—</b><b id="kTopMonto">—</b></div>
   </section>
 
 
@@ -5331,11 +5331,21 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   function applyTheme(id,persist){
     const preset=THEME_PRESETS[id]; if(!preset)return;
     const root=document.documentElement;
+    document.body.dataset.theme=id;
+    root.dataset.theme=id;
     Object.keys(preset.vars).forEach(k=>{
       const cssVar=THEME_VAR_MAP[k]; if(!cssVar)return;
       root.style.setProperty(cssVar,preset.vars[k]);
     });
     root.style.setProperty('--surface2',preset.vars.surface2||shadeHex(preset.vars.surface,preset.light?-4:6));
+    root.style.setProperty('--theme-bg',preset.vars.bg);
+    root.style.setProperty('--theme-panel',preset.vars.card);
+    root.style.setProperty('--theme-surface',preset.vars.surface);
+    root.style.setProperty('--theme-border',preset.vars.line);
+    root.style.setProperty('--theme-accent',preset.vars.accent);
+    root.style.setProperty('--theme-accent-2',preset.vars.accent2);
+    root.style.setProperty('--theme-text',preset.vars.txt);
+    root.style.setProperty('--theme-text-2',preset.vars.txt2);
     document.body.classList.toggle('theme-light',!!preset.light);
     if(persist!==false){
       try{localStorage.setItem(themeKey(),id);}catch(e){}
@@ -9224,6 +9234,66 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 }
 </style>
 
+<!-- LIC 20260720 · INICIO PRIORIDADES + TEMAS REALES EN TODA LA INTERFAZ -->
+<style id="licHomePrioridadesYTemas20260720">
+  /* Los presets de Perfil ahora pintan la interfaz completa, no solo los bordes. */
+  body.ready{background:var(--bg)!important;color:var(--txt)!important;transition:background .22s ease,color .22s ease}
+  body.ready .wrap{background:color-mix(in srgb,var(--bg) 80%,var(--surface) 20%)!important;border-color:var(--line)!important;box-shadow:0 24px 60px color-mix(in srgb,var(--accent) 13%,transparent)!important}
+  body.ready .nav,body.ready .topbar,.card,.rbac-card,.profile-hero,.tk-col-left,.tk-col-right,.fin-card,.obj-card{background:var(--card)!important;border-color:var(--line)!important;color:var(--txt)!important}
+  body.ready .nav-btn{color:var(--txt2)!important}
+  body.ready .nav-btn.active{background:linear-gradient(180deg,var(--accent),var(--accent2))!important;color:#fff!important;box-shadow:0 7px 0 color-mix(in srgb,var(--accent2) 72%,#000 28%)!important}
+  body.ready input,body.ready textarea,body.ready select,body.ready .search,body.ready .tk-input{background:var(--surface)!important;color:var(--txt)!important;border-color:var(--line)!important}
+  body.ready table,body.ready thead th,body.ready tbody td{color:var(--txt)!important;border-color:var(--line)!important}
+  body.ready thead th{background:var(--surface)!important;color:var(--txt2)!important}
+  body.ready .theme-swatch{background:var(--surface)!important;color:var(--txt)!important}
+
+  #screen-inicio.active{display:block!important;padding:0!important;color:var(--txt)!important}
+  #screen-inicio .home-welcome{position:relative;isolation:isolate;overflow:hidden;min-height:176px;padding:34px 48px;border-radius:24px;background:linear-gradient(118deg,var(--accent2),var(--accent),color-mix(in srgb,var(--accent) 52%,#54dff0 48%));color:#fff;display:flex;align-items:flex-start;box-shadow:0 12px 28px color-mix(in srgb,var(--accent) 25%,transparent)}
+  #screen-inicio .home-welcome h2{position:relative;z-index:2;margin:0;font-family:var(--ff);font-size:clamp(28px,3vw,50px);font-weight:900;letter-spacing:-1.2px;line-height:1.05}
+  #screen-inicio .home-welcome p{position:relative;z-index:2;margin-top:12px;font-size:clamp(14px,1.15vw,20px);opacity:.92}
+  .home-welcome-orb{position:absolute;border-radius:50%;border:34px solid rgba(255,255,255,.10);pointer-events:none}.orb-one{width:430px;height:220px;right:12%;top:-112px;transform:rotate(-14deg)}.orb-two{width:84px;height:84px;right:5%;top:38px;background:rgba(255,255,255,.12);border:0}
+  #screen-inicio .home-kpis{display:grid;grid-template-columns:1fr 1fr 1fr 1.15fr .92fr;gap:12px;margin:12px 0}
+  #screen-inicio .home-kpi,#screen-inicio .home-expiry-btn{min-width:0;min-height:102px;border:1px solid var(--line);border-radius:20px;background:var(--card);color:var(--txt);box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 9%,transparent)}
+  #screen-inicio .home-kpi{display:flex;align-items:center;gap:16px;padding:17px 20px}.home-kpi-icon{width:56px;height:56px;flex:none;display:grid;place-items:center;border-radius:16px;background:var(--accentSoft);font-size:27px}.home-kpi>div{min-width:0;display:flex;flex-direction:column}.home-kpi b{font-family:var(--ff);font-size:clamp(22px,1.8vw,31px);line-height:1;color:var(--txt);white-space:nowrap}.home-kpi small{margin-top:5px;color:var(--txt2);font-size:13px;font-weight:800}.home-kpi div>span{margin-top:3px;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi-due .home-kpi-icon,.kpi-wallet .home-kpi-icon{background:var(--warnSoft)}
+  #screen-inicio .home-expiry-btn{padding:15px;color:var(--accent);font-weight:900;font-family:var(--fb);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px}.home-expiry-btn span{font-size:24px}.home-expiry-btn:hover{border-color:var(--accent);background:var(--accentSoft)}
+  #screen-inicio .home-alert-data{display:none!important}
+  #screen-inicio .home-main-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-bottom:14px}
+  #screen-inicio .home-panel,#screen-inicio .home-tools{border:1px solid var(--line);border-radius:22px;background:var(--card);color:var(--txt);box-shadow:0 7px 18px color-mix(in srgb,var(--accent) 8%,transparent)}
+  #screen-inicio .home-panel{padding:18px 20px}.home-panel-title,.home-tools-title{display:flex;align-items:center;gap:10px}.home-panel-title>span,.home-tools-title>span{width:39px;height:39px;border-radius:12px;background:var(--accentSoft);display:grid;place-items:center;color:var(--accent);font-size:20px}.home-panel-title h3,.home-tools-title h3{margin:0;font-family:var(--ff);font-weight:900;font-size:20px;color:var(--txt)}
+  .priority-list{display:flex;flex-direction:column;gap:7px;margin-top:14px}.priority-row{width:100%;display:grid;grid-template-columns:20px 38px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--txt);text-align:left;cursor:pointer}.priority-row:hover{border-color:var(--accent);transform:translateX(2px)}.priority-check{width:18px;height:18px;border:2px solid var(--line2);border-radius:5px}.priority-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--accentSoft)}.priority-copy{display:flex;flex-direction:column;min-width:0}.priority-copy b{font-size:13px;line-height:1.2}.priority-copy small{font-size:11.5px;color:var(--txt2);margin-top:3px}.priority-tag{font-style:normal;font-size:11px;border-radius:999px;padding:6px 13px}.priority-tag.high{color:#d8304f;background:rgba(238,65,92,.11)}.priority-tag.medium{color:var(--warn);background:var(--warnSoft)}.priority-tag.low{color:var(--good);background:var(--goodSoft)}
+  .home-text-btn{width:100%;margin-top:10px;padding:8px;border:0;background:transparent;color:var(--accent);font-weight:900;cursor:pointer}.home-side-stack{display:grid;grid-template-rows:1fr 1fr;gap:14px}.goal-line{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:18px 0 10px;color:var(--txt2);font-size:13px}.goal-line b{font-size:23px;color:var(--accent)}.goal-track{height:9px;border-radius:999px;background:var(--surface);overflow:hidden}.goal-track i{display:block;width:62%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--info))}.goal-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;color:var(--txt2);font-size:12px}.goal-foot button{border:1px solid var(--accent);border-radius:999px;padding:7px 18px;background:var(--card);color:var(--accent);font-weight:800;cursor:pointer}
+  #screen-inicio .home-quote{display:block!important;margin:12px 0 0!important;padding:0!important;min-height:0!important;background:transparent!important;border:0!important;box-shadow:none!important;color:var(--txt)!important}.home-quote .daily-thought-copy{position:static!important;width:100%!important;min-height:0!important;padding:6px 4px!important;display:flex!important;flex-direction:row!important;gap:12px!important;color:var(--txt)!important}.home-quote .daily-quote-mark{position:static!important;font:900 52px/.7 Georgia,serif!important;color:var(--accent)!important;text-shadow:none!important}.home-quote .quote-text{font-size:15px!important;line-height:1.35!important;font-weight:900!important;color:var(--txt)!important;text-shadow:none!important}.home-quote .quote-author{margin-top:7px!important;color:var(--accent)!important;font-size:11px!important}.home-quote .quote-source{font-size:10px!important;color:var(--muted)!important}
+  #screen-inicio .home-tools{padding:16px 18px;margin:0}.home-tools-title{margin-bottom:12px}
+  #screen-inicio .home-tools .inicio-cards-row{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:10px!important;margin:0!important}
+  #screen-inicio .home-tools .focus-action-card{height:80px!important;min-height:80px!important;margin:0!important;padding:10px 13px!important;display:grid!important;grid-template-columns:42px minmax(0,1fr) 26px!important;align-items:center!important;gap:9px!important;border:1px solid var(--line)!important;border-radius:16px!important;background:var(--surface)!important;color:var(--txt)!important;box-shadow:none!important;text-align:left!important}
+  #screen-inicio .home-tools .focus-action-card:hover{border-color:var(--accent)!important;background:var(--accentSoft)!important}.home-tools .focus-action-icon{width:42px!important;height:42px!important;margin:0!important;border-radius:12px!important;font-size:22px!important;background:var(--card)!important;box-shadow:none!important}.home-tools .focus-action-text{align-items:flex-start!important;text-align:left!important;gap:2px!important}.home-tools .focus-action-text b{font-size:12.5px!important;color:var(--txt)!important}.home-tools .focus-action-text small{font-size:9.5px!important;color:var(--txt2)!important;text-align:left!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;width:100%!important}.home-tools .fob-arrow{width:25px!important;height:25px!important;margin:0!important;border-radius:50%!important;background:var(--accent)!important;color:#fff!important;font-size:18px!important}.home-tools .objetivos-btn{display:grid!important}.home-tools .mesas-home-btn{display:grid!important}
+  #screen-inicio #inicioWebStats{display:none!important}
+
+  @media(max-width:1150px) and (min-width:900px){#screen-inicio .home-kpis{grid-template-columns:repeat(4,1fr)}#screen-inicio .home-expiry-btn{grid-column:1/-1;min-height:52px}#screen-inicio .home-tools .inicio-cards-row{grid-template-columns:repeat(3,1fr)!important}}
+  @media(max-width:899px){#screen-inicio .home-welcome{min-height:132px;padding:26px 22px;border-radius:21px}#screen-inicio .home-kpis{grid-template-columns:1fr 1fr;gap:9px}.home-kpi{padding:12px!important;gap:10px!important;min-height:88px!important}.home-kpi-icon{width:43px;height:43px;font-size:21px}.home-expiry-btn{grid-column:1/-1;min-height:50px!important}.home-main-grid{grid-template-columns:1fr!important}.priority-row{grid-template-columns:18px 34px minmax(0,1fr) auto;padding:8px}.priority-copy small{display:none}.home-side-stack{grid-template-rows:auto}.home-tools .inicio-cards-row{grid-template-columns:1fr 1fr!important}.home-tools .focus-action-card{height:72px!important;min-height:72px!important}.home-welcome-orb{opacity:.7}}
+  @media(max-width:520px){#screen-inicio .home-kpis{grid-template-columns:1fr}.home-main-grid{gap:10px}.priority-tag{padding:5px 8px}.home-tools .inicio-cards-row{grid-template-columns:1fr!important}}
+</style>
+<script id="licHomePrioridadesJS20260720">
+(function(){
+  function nav(screen){
+    if(window.subliRBAC&&typeof window.subliRBAC.go==='function'){window.subliRBAC.go(screen);return;}
+    var b=document.querySelector('.nav-btn[data-screen="'+screen+'"]'); if(b)b.click();
+  }
+  function name(){
+    try{var p=JSON.parse(localStorage.getItem((typeof profileKey==='function'?profileKey():'sublichat_profile'))||'{}');return p.nombre||'Sublicuentas';}catch(e){return 'Sublicuentas';}
+  }
+  function bind(){
+    var n=document.getElementById('homeAdvisorName');if(n)n.textContent=name();
+    var expiry=document.getElementById('homeExpiryBtn');if(expiry)expiry.onclick=function(){var b=document.getElementById('abGo');if(b)b.click();else nav('agenda');};
+    var goal=document.getElementById('homeGoalBtn');if(goal)goal.onclick=function(){var b=document.getElementById('objetivosOpenBtn');if(b)b.click();else nav('objetivos');};
+    var all=document.getElementById('homeAllPriorities');if(all)all.onclick=function(){nav('agenda');};
+    var mesas=document.getElementById('mesasHomeBtn');if(mesas)mesas.onclick=function(){nav('importar');};
+    document.querySelectorAll('[data-home-action]').forEach(function(b){b.onclick=function(){var a=b.dataset.homeAction;if(a==='cobros')nav('agenda');else if(a==='mesas')nav('importar');else nav(a);};});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+  window.addEventListener('pageshow',bind);setTimeout(bind,700);
+})();
+</script>
 </body>
 </html>
 
