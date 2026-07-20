@@ -1373,9 +1373,9 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <div class="topbar">
     <div class="av-brand"><img id="avatarImg" alt="Subli"></div>
     <div class="tb-txt">
-      <h1>Sublichat</h1>
+      <h1 id="sidebarProfileName">Asesor</h1>
       <span class="greet" id="greet">Centro de mando</span>
-      <span class="live"><span class="dot"></span><span id="srcLabel">Conectando…</span></span>
+      <span class="live" aria-hidden="true"><span class="dot"></span><span id="srcLabel">Conectando…</span></span>
     </div>
     <div style="display:flex;gap:8px;flex:none">
       <button id="themeBtn" class="icon-btn" aria-label="Tema">🌙</button>
@@ -9356,6 +9356,107 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 #screen-inicio .home-tools .fob-arrow{width:34px!important;height:34px!important;font-size:22px!important;box-shadow:0 6px 13px color-mix(in srgb,var(--accent) 25%,transparent)!important}
 @media(max-width:899px){#screen-inicio #quoteCard.home-daily-hero{height:235px!important;min-height:235px!important;background-position:58% center!important}#screen-inicio #quoteCard .daily-thought-copy{width:100%!important;padding:23px!important}#screen-inicio #quoteCard .quote-text{font-size:clamp(27px,7vw,39px)!important;max-width:92%!important}#screen-inicio .home-tools .focus-action-card{height:84px!important;min-height:84px!important;grid-template-columns:50px minmax(0,1fr) 30px!important}#screen-inicio .home-tools .focus-action-icon{width:50px!important;height:50px!important;font-size:26px!important}}
 </style>
+
+<!-- LIC 20260720 · TARJETA DE IDENTIDAD HEXAGONAL DINÁMICA -->
+<style id="licTarjetaIdentidadHexagonal20260720">
+@media(min-width:900px){
+  #sidebarWrap .topbar{
+    position:relative!important;overflow:hidden!important;isolation:isolate!important;
+    min-height:300px!important;padding:20px 13px 72px!important;gap:8px!important;
+    background:linear-gradient(160deg,var(--card) 0%,var(--surface) 100%)!important;
+    border:1px solid color-mix(in srgb,var(--accent) 24%,var(--line))!important;
+    border-bottom:4px solid var(--accent)!important;border-radius:28px!important;
+    box-shadow:0 15px 34px color-mix(in srgb,var(--accent) 13%,rgba(20,43,73,.12))!important;
+  }
+  #sidebarWrap .topbar::after{
+    content:'';position:absolute;z-index:-1;left:-20%;right:-20%;bottom:-58px;height:112px;
+    border-radius:50% 50% 0 0;background:linear-gradient(180deg,var(--accentSoft),var(--surface));
+    border-top:1px solid color-mix(in srgb,var(--accent) 22%,var(--line));
+  }
+  #sidebarWrap .av-brand{
+    position:relative!important;overflow:visible!important;width:112px!important;height:124px!important;
+    border:0!important;border-radius:0!important;padding:7px!important;box-sizing:border-box!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+  #sidebarWrap .av-brand::before{
+    content:'';position:absolute;inset:0;z-index:0;background:linear-gradient(160deg,var(--txt),var(--accent));
+    clip-path:polygon(50% 0,93% 24%,93% 76%,50% 100%,7% 76%,7% 24%);
+  }
+  #sidebarWrap .av-brand img{
+    position:relative;z-index:1;width:100%!important;height:100%!important;border-radius:0!important;
+    object-fit:cover!important;clip-path:polygon(50% 0,93% 24%,93% 76%,50% 100%,7% 76%,7% 24%);
+  }
+  #sidebarWrap .av-brand::after{
+    content:'';position:absolute;z-index:3;right:8px;bottom:18px;width:18px;height:18px;border-radius:50%;
+    background:#32D11D;border:4px solid var(--card);box-shadow:0 4px 12px rgba(26,150,24,.32);
+  }
+  #sidebarWrap .topbar .tb-txt{width:100%!important;gap:3px!important}
+  #sidebarWrap .tb-txt h1{
+    margin:2px 0 0!important;color:var(--txt)!important;font-family:var(--ff)!important;
+    font-size:24px!important;line-height:1.05!important;font-weight:1000!important;letter-spacing:-.7px!important;
+  }
+  #sidebarWrap .tb-txt .greet{
+    color:var(--txt2)!important;font-size:12px!important;line-height:1.25!important;font-weight:900!important;
+  }
+  #sidebarWrap .tb-txt .live{display:none!important}
+  #sidebarWrap #rbacRoleChip.rbac-chip{
+    display:inline-flex!important;justify-content:center!important;margin-top:9px!important;max-width:176px!important;
+    padding:8px 12px!important;background:linear-gradient(180deg,var(--card),var(--accentSoft))!important;
+    color:var(--txt)!important;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line))!important;
+    box-shadow:0 8px 17px color-mix(in srgb,var(--accent) 14%,transparent)!important;
+    overflow:hidden!important;text-overflow:ellipsis!important;
+  }
+  #sidebarWrap .topbar>div:last-child{
+    position:absolute!important;left:50%!important;bottom:12px!important;transform:translateX(-50%)!important;
+    z-index:2!important;margin:0!important;
+  }
+  #sidebarWrap #themeBtn{display:none!important}
+  #sidebarWrap #logoutBtn{
+    width:48px!important;height:48px!important;border-radius:50%!important;background:var(--card)!important;
+    color:var(--txt)!important;border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line))!important;
+    box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 17%,rgba(20,43,73,.12))!important;
+  }
+}
+</style>
+<script id="licTarjetaIdentidadHexagonalScript20260720">
+(function(){
+  'use strict';
+  function saludoActual(){
+    var h=new Date().getHours();
+    return h<12?'Buenos días':h<18?'Buenas tardes':'Buenas noches';
+  }
+  function actualizarIdentidad(){
+    if(typeof profileBase!=='function')return;
+    var p=profileBase();
+    var nombre=(p&&p.nombre)||'Asesor';
+    var nombreEl=document.getElementById('sidebarProfileName');
+    var greetEl=document.getElementById('greet');
+    var chip=document.getElementById('rbacRoleChip');
+    if(nombreEl)nombreEl.textContent=nombre;
+    if(greetEl)greetEl.textContent=saludoActual()+', asesor';
+    if(chip){
+      var role=(typeof currentRole==='function'?currentRole():(p&&p.role))||'admin';
+      var cargo=role==='finanzas'?'Finanzas':role==='auditor'?'Auditoría':'Admin';
+      chip.textContent='💼 '+nombre+' · '+cargo;
+      chip.title=nombre+' · '+cargo;
+    }
+  }
+  function instalar(){
+    actualizarIdentidad();
+    setTimeout(actualizarIdentidad,250);
+    setTimeout(actualizarIdentidad,1200);
+    setInterval(actualizarIdentidad,60000);
+    var old=window.updateTopAdvisor;
+    if(typeof old==='function'&&!old.__identidadHex){
+      var wrapped=function(){var r=old.apply(this,arguments);actualizarIdentidad();return r;};
+      wrapped.__identidadHex=true;window.updateTopAdvisor=wrapped;
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});else instalar();
+  window.addEventListener('focus',actualizarIdentidad);
+})();
+</script>
 </body>
 </html>
 
