@@ -3441,18 +3441,99 @@ function _sacarPlantillaIndex(){
 }
 function generarMensajeCobro(g){
   const total = g.total!=null ? g.total : g.precio;
-  const i=_sacarPlantillaIndex();
-  let msg=PLANTILLAS_COBRO[i]
-    .replaceAll("{n}",g.nombre||"")
-    .replaceAll("{serv}",descServicios(g))
-    .replaceAll("{m}",fmt(total))
-    .replaceAll("{f}",fechaLarga(g.fecha));
+  const nombre=`*${g.nombre||"Cliente"}*`;
+  const monto=`*${fmt(total)}*`;
+  const servicio=descServicios(g);
+  const fecha=fechaLarga(g.fecha);
+  const elegir=a=>a[Math.floor(Math.random()*a.length)];
+  const saludos=[
+    `¡Hola, ${nombre}! 👋`,
+    `Hola ${nombre}, espero que se encuentre muy bien.`,
+    `¡Buenas, ${nombre}! 😊`,
+    `Cordial saludo, ${nombre}.`,
+    `Hola ${nombre}, qué gusto saludarle.`,
+    `Muy buenas, ${nombre} 🙌`,
+    `${nombre}, reciba un cordial saludo.`,
+    `¡Hola, ${nombre}! Esperamos que esté muy bien.`,
+    `Buen día, ${nombre} 🌟`,
+    `Hola ${nombre}, le saluda el equipo de Sublicuentas.`
+  ];
+  const avisos=[
+    `Le recordamos que ${servicio} vence el ${fecha}.`,
+    `Le escribimos porque ${servicio} tiene renovación el ${fecha}.`,
+    `Queremos avisarle que ${servicio} está próximo a vencer el ${fecha}.`,
+    `Este es un recordatorio amistoso: ${servicio} renueva el ${fecha}.`,
+    `La fecha de renovación de ${servicio} es el ${fecha}.`,
+    `Para que continúe disfrutando sin interrupciones, ${servicio} renueva el ${fecha}.`,
+    `Pasamos a recordarle que ${servicio} finaliza el ${fecha}.`,
+    `Tenemos registrada la renovación de ${servicio} para el ${fecha}.`,
+    `Su próximo vencimiento de ${servicio} corresponde al ${fecha}.`,
+    `Le avisamos con tiempo que ${servicio} se renueva el ${fecha}.`
+  ];
+  const montos=[
+    `El monto a pagar es ${monto}.`,
+    `El total de la renovación es ${monto}.`,
+    `Para renovar, el valor es de ${monto}.`,
+    `El pago correspondiente es de ${monto}.`,
+    `Puede mantenerlo activo por ${monto}.`,
+    `El importe total a cancelar es ${monto}.`,
+    `La renovación tiene un costo de ${monto}.`,
+    `El total pendiente para continuar es ${monto}.`,
+    `Su monto de renovación es ${monto}.`,
+    `El valor para dejarlo activo es ${monto}.`
+  ];
+  const cierres=[
+    `¿Desea que se lo dejemos renovado?`,
+    `Confírmenos y con gusto lo dejamos listo.`,
+    `Quedamos atentos a su confirmación.`,
+    `¿Procedemos con la renovación?`,
+    `Avísenos y lo activamos enseguida.`,
+    `Estamos a la orden para ayudarle.`,
+    `Puede confirmarnos por este mismo medio.`,
+    `¿Le ayudamos a mantenerlo activo?`,
+    `Con gusto procesamos su renovación cuando nos confirme.`,
+    `Gracias por su preferencia; quedamos pendientes. 🙏`
+  ];
+  let msg="";
+  for(let intento=0;intento<8;intento++){
+    const candidato=`${elegir(saludos)} ${elegir(avisos)} ${elegir(montos)} ${elegir(cierres)}`;
+    if(candidato!==generarMensajeCobro.ultimo){msg=candidato;break;}
+  }
+  if(!msg) msg=`${saludos[0]} ${avisos[0]} ${montos[0]} ${cierres[0]}`;
+  generarMensajeCobro.ultimo=msg;
   // Si tiene varias plataformas, agregar el desglose al final
   if(g.servicios && g.servicios.length>1){
-    const detalle=g.servicios.map(s=>`• ${s.plataforma}: ${fmt(s.precio)}`).join("\n");
-    msg+=`\n\nDetalle:\n${detalle}\nTotal: ${fmt(total)}`;
+    const detalle=g.servicios.map(s=>`• ${s.plataforma}: *${fmt(s.precio)}*`).join("\n");
+    msg+=`\n\nDetalle:\n${detalle}\nTotal: ${monto}`;
   }
   return msg;
+}
+
+function cobroEscapeHTML(texto){
+  return String(texto||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function actualizarVistaCobro(){
+  const text=$cobro("cobroText"), preview=$cobro("cobroPreview");
+  if(!text||!preview)return;
+  preview.innerHTML=cobroEscapeHTML(text.value)
+    .replace(/\*([^*\n]+)\*/g,"<strong>$1</strong>")
+    .replace(/\n/g,"<br>");
+}
+function cobroSetMensaje(texto){
+  const area=$cobro("cobroText"); if(!area)return;
+  area.value=texto||"";
+  actualizarVistaCobro();
+}
+function asegurarNegritasCobro(texto,g){
+  let salida=String(texto||"");
+  const total=g?(g.total!=null?g.total:g.precio):null;
+  const valores=[g&&g.nombre, total!=null?fmt(total):null].filter(Boolean);
+  valores.forEach(valor=>{
+    if(salida.includes(`*${valor}*`))return;
+    const safe=String(valor).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    salida=salida.replace(new RegExp(safe),`*${valor}*`);
+  });
+  return salida;
 }
 
 function abrirCobro(g){
@@ -3461,7 +3542,7 @@ function abrirCobro(g){
   const plats=(g.servicios||[{plataforma:g.plataforma}]).map(s=>s.plataforma);
   const platLabel=plats.length>1?`${plats.length} servicios`:plats[0];
   $cobro("cobroCliente").textContent=`${g.nombre} · ${platLabel} · ${fmt(total)}`;
-  $cobro("cobroText").value=generarMensajeCobro(g);
+  cobroSetMensaje(generarMensajeCobro(g));
   // reset opciones de renovar (ocultas, sin texto de estado)
   const rb=$cobro("cobroRenovar"); if(rb)rb.style.display="none";
   const rbtn=$cobro("cobroRenovarBtn"); if(rbtn)rbtn.textContent="🔁 Renovar suscripción";
@@ -3652,7 +3733,8 @@ $cobro("servSave").addEventListener("click",async()=>{
 
 $cobro("cobroClose").addEventListener("click",cerrarCobro);
 $cobro("cobroModal").addEventListener("click",e=>{ if(e.target.id==="cobroModal") cerrarCobro(); });
-$cobro("cobroVariar").addEventListener("click",()=>{ if(cobroActual) $cobro("cobroText").value=generarMensajeCobro(cobroActual); });
+$cobro("cobroVariar").addEventListener("click",()=>{ if(cobroActual) cobroSetMensaje(generarMensajeCobro(cobroActual)); });
+$cobro("cobroText").addEventListener("input",actualizarVistaCobro);
 
 $cobro("cobroCopy").addEventListener("click",async()=>{
   try{ await navigator.clipboard.writeText($cobro("cobroText").value);
@@ -3678,7 +3760,7 @@ $cobro("cobroIA").addEventListener("click",async()=>{
     const r=await fetch(CONFIG.chatEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pregunta:prompt,hoy:today.toISOString().slice(0,10),clientes:[]})});
     const j=await r.json();
     const txt=(j.respuesta||j.text||"").trim();
-    if(txt) $cobro("cobroText").value=txt; else alert("No pude generar con IA ahora. Probá 'Otro mensaje'.");
+    if(txt) cobroSetMensaje(asegurarNegritasCobro(txt,cobroActual)); else alert("No pude generar con IA ahora. Probá 'Otro mensaje'.");
   }catch(e){ alert("No pude conectar con la IA. Probá 'Otro mensaje'."); }
   btn.classList.remove("ia-load");btn.textContent=orig;
 });
@@ -6174,7 +6256,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       </div>
       <button class="cobro-x" id="cobroClose">✕</button>
     </div>
-    <textarea id="cobroText" class="cobro-text" rows="7"></textarea>
+    <div id="cobroPreview" class="cobro-preview" aria-live="polite"></div>
+    <details class="cobro-edit-box">
+      <summary>✏️ Editar mensaje</summary>
+      <textarea id="cobroText" class="cobro-text" rows="7"></textarea>
+    </details>
     <div class="cobro-actions">
       <button class="cobro-btn ghost" id="cobroVariar">🔄 Otro mensaje</button>
       <button class="cobro-btn ghost" id="cobroIA">✨ Con IA</button>
@@ -9684,3 +9770,113 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 </html>
 
 <!-- FIX LIC 20260705 · Perfil por usuario: Libni/Magdiel/Naara/Sublicuentas + RBAC no toma sesión anterior -->
+
+<!-- LIC 20260720 · AJUSTE MÓVIL, COBROS VARIABLES Y RETORNO LIMPIO DE AULA -->
+<style id="licMobileCobrosAulaFinal20260720">
+  /* El mensaje se lee con negrita real; el texto editable conserva los asteriscos de WhatsApp. */
+  #cobroModal .cobro-preview{
+    min-height:150px;
+    max-height:31dvh;
+    overflow:auto;
+    padding:18px 20px;
+    border:1px solid var(--line);
+    border-radius:18px;
+    background:var(--surface);
+    color:var(--txt);
+    font-family:var(--fb);
+    font-size:17px;
+    line-height:1.55;
+    white-space:normal;
+  }
+  #cobroModal .cobro-preview strong{color:var(--txt);font-weight:900}
+  #cobroModal .cobro-edit-box{margin:10px 0 2px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  #cobroModal .cobro-edit-box>summary{padding:10px 13px;color:var(--txt2);font-size:12px;font-weight:900;cursor:pointer;list-style:none}
+  #cobroModal .cobro-edit-box>summary::-webkit-details-marker{display:none}
+  #cobroModal .cobro-edit-box[open]>summary{border-bottom:1px solid var(--line)}
+  #cobroModal .cobro-edit-box #cobroText{display:block;width:calc(100% - 16px)!important;min-height:128px!important;max-height:25dvh!important;margin:8px!important}
+
+  @media(max-width:520px){
+    /* Vencen hoy deja de ocupar casi toda la pantalla. */
+    #screen-inicio .home-due-card{
+      min-height:0!important;
+      padding:14px 15px!important;
+      display:grid!important;
+      grid-template-columns:58px minmax(0,1fr) auto!important;
+      grid-template-rows:auto auto auto auto!important;
+      column-gap:12px!important;
+      row-gap:2px!important;
+      align-items:center!important;
+      justify-content:stretch!important;
+    }
+    #screen-inicio .home-due-card .due-head{display:contents!important}
+    #screen-inicio .home-due-card .due-head>span.metric-icon{
+      grid-column:1!important;grid-row:1/3!important;
+      width:54px!important;height:54px!important;flex-basis:54px!important;
+      border:0!important;box-shadow:none!important;background:transparent!important;
+    }
+    #screen-inicio .home-due-card .due-head>b{grid-column:2!important;grid-row:1!important;align-self:end!important;font-size:15px!important}
+    #screen-inicio .home-due-card>strong{grid-column:3!important;grid-row:1/3!important;margin:0!important;font-size:44px!important;line-height:1!important}
+    #screen-inicio .home-due-card>em{grid-column:2!important;grid-row:2!important;align-self:start!important;font-size:14px!important}
+    #screen-inicio .home-due-card>small{grid-column:1/-1!important;grid-row:3!important;margin:9px 0 0!important;text-align:center!important;font-size:11px!important}
+    #screen-inicio .home-due-card>button{grid-column:1/-1!important;grid-row:4!important;margin-top:8px!important;padding:9px 11px!important;font-size:12px!important}
+
+    /* Más espacio entre el icono y el nombre de cada herramienta. */
+    #screen-inicio .home-tools .inicio-cards-row .focus-action-card{
+      height:72px!important;min-height:72px!important;
+      padding:9px 15px!important;
+      grid-template-columns:58px minmax(0,1fr) 30px!important;
+      gap:12px!important;
+    }
+    #screen-inicio .home-tools .focus-action-icon{width:54px!important;height:54px!important;font-size:27px!important}
+    #screen-inicio .home-tools .focus-action-text{padding-left:4px!important;overflow:hidden!important}
+    #screen-inicio .home-tools .focus-action-text b{font-size:13px!important;line-height:1.16!important}
+    #screen-inicio .home-tools .fob-arrow{justify-self:end!important}
+
+    #cobroModal .cobro-sheet{padding:17px 14px 20px!important;border-radius:24px!important}
+    #cobroModal .cobro-preview{min-height:132px;max-height:30dvh;padding:15px;font-size:16px;line-height:1.48}
+  }
+</style>
+<script id="licAulaSingleNavigation20260720">
+(function(){
+  'use strict';
+  var URL_AULA='./academia-sublicuentas.html?v=AULA-DINAMICA-AVATARES-CURSOS-20260608-8';
+  function prepararRegreso(){
+    try{
+      var limite=String(Date.now()+600000);
+      sessionStorage.setItem('sublichat_skip_intro','1');
+      sessionStorage.setItem('sublichat_intro_seen','1');
+      sessionStorage.setItem('sublichat_return_from_aula','1');
+      localStorage.setItem('sublichat_skip_intro_until',limite);
+      localStorage.setItem('sublichat_return_from_aula_until',limite);
+    }catch(e){}
+    document.documentElement.classList.add('sublichat-no-intro');
+  }
+  function instalar(){
+    var anterior=document.getElementById('aulaOpenBtn');
+    if(!anterior||anterior.dataset.singleAulaNavigation==='1')return;
+    anterior.removeAttribute('onclick');
+    var limpio=anterior.cloneNode(true);
+    limpio.removeAttribute('onclick');
+    limpio.dataset.returnFix='1';
+    limpio.dataset.aulaNoIntroFix='1';
+    limpio.dataset.singleAulaNavigation='1';
+    anterior.replaceWith(limpio);
+    limpio.addEventListener('click',function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      prepararRegreso();
+      window.location.href=URL_AULA;
+    });
+  }
+  instalar();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});
+  window.addEventListener('pageshow',function(){
+    instalar();
+    var intro=document.getElementById('intro');
+    if(intro&&document.documentElement.classList.contains('sublichat-no-intro')){
+      intro.classList.add('hide');
+      intro.style.setProperty('display','none','important');
+    }
+  });
+})();
+</script>
