@@ -1419,7 +1419,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     </div>
     <section class="home-tools"><div class="home-tools-title"><span>💼</span><h3>Herramientas</h3></div><div class="inicio-cards-row">
       <button class="fin-open-btn focus-action-card" id="finOpenBtn" data-sub="Ingresos, cartera y movimientos">
-        <span class="ico focus-action-icon focus-action-fin">📊</span>
+        <span class="ico focus-action-icon focus-action-fin">💰</span>
         <span class="focus-action-text"><b>Control financiero</b><small>Ingresos, cartera y movimientos</small></span>
         <span class="fob-arrow">›</span>
       </button>
@@ -1438,7 +1438,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <span class="focus-action-text"><b>Objetivos</b><small>Metas diarias, semanales y mensuales</small></span>
         <span class="fob-arrow">›</span>
       </button>
-      <button class="fin-open-btn mesas-home-btn focus-action-card" id="mesasHomeBtn"><span class="ico focus-action-icon">📅</span><span class="focus-action-text"><b>Mesas de trabajo</b><small>Documentos y operación</small></span><span class="fob-arrow">›</span></button>
+      <button class="fin-open-btn mesas-home-btn focus-action-card" id="mesasHomeBtn"><span class="ico focus-action-icon">📥</span><span class="focus-action-text"><b>Mesas de trabajo</b><small>Documentos y operación</small></span><span class="fob-arrow">›</span></button>
     </div></section>
     <div class="inicio-web-stats" id="inicioWebStats" hidden><b id="iwsCartera">—</b><b id="iwsDelta">—</b><b id="kSemana">—</b><b id="kTop">—</b><b id="kTopMonto">—</b></div>
   </section>
@@ -5282,7 +5282,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     _profileSyncTimer=setTimeout(()=>{
       fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
-        telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||''
+        telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',banner:p.banner||''
       })}).catch(()=>null);
     },400);
   }
@@ -5475,7 +5475,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
     ensureScreen('soporte','Alertas de soporte','Buzón interno para caídas, cambios de cuenta y problemas técnicos.','');
-    ensureScreen('tickets','Bandeja de Tickets','Mensajería interna entre Relojes, Magdiel y Sublicuentas. Envíe, responda y dé seguimiento con historial.','');
+    ensureScreen('tickets','Tickets y Avisos','Mensajería interna y comunicados de actualización entre Relojes, Magdiel y Sublicuentas.','');
     ensureScreen('configuracion','Configuración Admin','Estado operativo de Firebase, bot Telegram, usuarios y webhooks.','');
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
     ensureScreen('auditoria','Cuadre y auditoría','Detecta servicios sin precio, sin vendedor, vencidos o posibles fugas.','');
@@ -5489,7 +5489,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
+    nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s)));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
     const objBtn=document.getElementById('objetivosOpenBtn');
@@ -5528,64 +5528,42 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     });
   }
 
+  function profileActivityStats(p){
+    const role=tkRole(),items=(tk&&Array.isArray(tk.items))?tk.items:[];
+    const mine=items.filter(t=>String(t.creadoPorRol||'')===role||norm(t.creadoPor||'')===norm(p.usuario||p.nombre||''));
+    const resolved=items.filter(t=>(String(t.resueltoPorRol||'')===role||norm(t.resueltoPor||'')===norm(p.usuario||p.nombre||''))&&['resuelto','finalizado'].includes(String(t.estado||'').toLowerCase()));
+    let games=0,best=0,aula=0;
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i)||'',v=Number(localStorage.getItem(k)||0);if(/brain|cerebral|game/i.test(k)&&/best/i.test(k)&&v>0){games++;best=Math.max(best,v);}if(/aula|academia.*progreso|curso.*progreso/i.test(k)&&Number.isFinite(v))aula=Math.max(aula,v);}}catch(e){}
+    return {sent:mine.length,resolved:resolved.length,games,best,aula:Math.min(100,Math.max(0,aula||0))};
+  }
+
   function renderPerfil(){
     const el=document.getElementById('rbac-perfil'); if(!el)return;
-    const p=profileBase();
-    const roleLabel=ROLE_LABEL[p.role]||'Usuario';
-    const vendNorm=norm(p.nombre||p.usuario);
+    const p=profileBase(),stats=profileActivityStats(p);
+    const roleLabel=ROLE_LABEL[p.role]||'Usuario',vendNorm=norm(p.nombre||p.usuario);
     const propios=DATA.filter(c=>norm(c.vendedor).includes(vendNorm)||norm(c.vendedor)===vendNorm);
-    const hoy=DATA.filter(c=>c.fecha&&daysTo(c.fecha)===0);
     const totalPropios=propios.reduce((s,c)=>s+Number(c.precio||0),0);
     const funciones=Array.isArray(p.funciones)&&p.funciones.length?p.funciones:(PROFILE_DEFAULTS[p.role]||PROFILE_DEFAULTS.admin).funciones;
-    const extra=String(p.funcionesExtra||'').split(/\n|,/).map(x=>x.trim()).filter(Boolean);
-    const todas=[...funciones,...extra].slice(0,12);
-    el.innerHTML=`<div class="profile-hero"><img class="profile-avatar" id="profAvatarView" src="${svgAvatar(p)}" alt="Perfil"><div><h3 class="profile-name">${esc(p.nombre||p.usuario||'Asesor')}</h3><div class="profile-cargo">${esc(p.cargo||'Asesor de Sublicuentas')}</div><span class="profile-role">${esc(roleLabel)} · ${esc(p.area||'Equipo Sublicuentas')}</span></div></div>
-      <div class="rbac-grid"><div class="rbac-card"><b>${propios.length}</b><span>Servicios asignados</span></div><div class="rbac-card"><b>${fmt(totalPropios)}</b><span>Cartera asignada</span></div><div class="rbac-card"><b>${hoy.length}</b><span>Vencen hoy en la empresa</span></div></div>
-      <div class="rbac-card"><b>Funciones dentro de la empresa</b><div class="profile-funciones">${todas.map(f=>`<div class="profile-funcion">${esc(f)}</div>`).join('')}</div></div>
-      <div class="rbac-card"><b>Tema de color</b><div class="theme-sub">Solo cambia colores — íconos, letras y tamaños quedan igual.</div>
-        <div class="theme-swatch-grid" id="themeSwatchGrid">${Object.keys(THEME_PRESETS).map(id=>{
-          const t=THEME_PRESETS[id]; const on=id===currentThemeId();
-          return `<button type="button" class="theme-swatch${on?' on':''}" data-theme="${id}" title="${esc(t.nombre)}">
-            <span class="tsw-preview" style="background:${t.vars.bg}">
-              <span class="tsw-dot" style="background:${t.vars.accent}"></span>
-              <span class="tsw-dot" style="background:${t.vars.accent2}"></span>
-            </span>
-            <span class="tsw-name">${esc(t.nombre)}</span>
-          </button>`;
-        }).join('')}</div>
-      </div>
-      <div class="rbac-card"><b>Editar perfil visible</b><div class="profile-form">
-        <label class="rbac-field"><span>Nombre mostrado</span><input class="rbac-input" id="profNombre" value="${esc(p.nombre||'')}"></label>
-        <label class="rbac-field"><span>Cargo</span><input class="rbac-input" id="profCargo" value="${esc(p.cargo||'')}"></label>
-        <label class="rbac-field"><span>Teléfono interno</span><input class="rbac-input" id="profTelefono" value="${esc(p.telefono||'')}" placeholder="Opcional"></label>
-        <label class="rbac-field"><span>Área</span><input class="rbac-input" id="profArea" value="${esc(p.area||'')}" placeholder="Ventas, Finanzas, Auditoría…"></label>
-        <label class="rbac-field wide"><span>Foto / avatar</span><input class="profile-file" id="profFoto" type="file" accept="image/*"></label>
-        <label class="rbac-field wide"><span>Funciones extra, una por línea</span><textarea class="rbac-input" id="profFunciones" rows="3" placeholder="Ej: Soporte premium">${esc(p.funcionesExtra||'')}</textarea></label>
-      </div><div class="profile-actions"><button class="rbac-btn good" id="profGuardar">💾 Guardar perfil</button><button class="rbac-btn" id="profReset">↩️ Restaurar perfil base</button><button class="rbac-btn red" id="profSalir">🚪 Cerrar sesión</button></div></div>`;
-    const foto=document.getElementById('profFoto');
-    document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(btn=>{
-      btn.onclick=()=>{
-        const id=btn.dataset.theme;
-        applyTheme(id,true);
-        document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(b=>b.classList.toggle('on',b===btn));
-        mostrarToast('🎨 Tema aplicado: '+(THEME_PRESETS[id]?.nombre||id));
-      };
-    });
-    if(foto)foto.onchange=async()=>{ 
-      const file=foto.files&&foto.files[0]; if(!file)return; 
-      try{
-        const dataUrl=await resizeProfilePhoto(file,520,0.82);
-        const cur=readProfile(); cur.avatar=dataUrl; saveProfile(cur); renderPerfil(); updateTopAdvisor(); mostrarToast('✅ Foto actualizada y guardada.');
-      }catch(e){
-        const rd=new FileReader();
-        rd.onload=()=>{ try{ const cur=readProfile(); cur.avatar=rd.result; saveProfile(cur); renderPerfil(); updateTopAdvisor(); mostrarToast('✅ Foto actualizada.'); }catch(err){ mostrarToast('⚠️ La foto pesa mucho. Use una imagen más pequeña.'); } };
-        rd.readAsDataURL(file);
-      }
-    };
-    const guardar=document.getElementById('profGuardar');
-    if(guardar)guardar.onclick=()=>{ const cur=readProfile(); cur.nombre=document.getElementById('profNombre').value.trim()||p.nombre; cur.cargo=document.getElementById('profCargo').value.trim()||p.cargo; cur.telefono=document.getElementById('profTelefono').value.trim(); cur.area=document.getElementById('profArea').value.trim()||p.area; cur.funcionesExtra=document.getElementById('profFunciones').value.trim(); saveProfile(cur); updateTopAdvisor(); renderPerfil(); mostrarToast('✅ Perfil guardado.'); };
-    const reset=document.getElementById('profReset'); if(reset)reset.onclick=()=>{ localStorage.removeItem(profileKey()); updateTopAdvisor(); renderPerfil(); mostrarToast('Perfil restaurado.'); };
-    const salir=document.getElementById('profSalir'); if(salir)salir.onclick=()=>document.getElementById('logoutBtn')?.click();
+    const extra=String(p.funcionesExtra||'').split(/\n|,/).map(x=>x.trim()).filter(Boolean),todas=[...funciones,...extra].slice(0,12);
+    const bannerStyle=p.banner?`style="background-image:linear-gradient(180deg,rgba(8,25,48,.04),rgba(8,25,48,.45)),url('${p.banner}')"`:'';
+    const activity=[
+      {ico:'🎫',txt:`${stats.sent} ticket${stats.sent===1?' enviado':'s enviados'}`,sub:'Comunicación interna'},
+      {ico:'✅',txt:`${stats.resolved} ticket${stats.resolved===1?' resuelto':'s resueltos'}`,sub:'Seguimientos finalizados'},
+      {ico:'🧠',txt:`${stats.games} juego${stats.games===1?' practicado':'s practicados'}`,sub:stats.best?`Mejor puntaje: ${stats.best}`:'Materia cerebral'},
+      {ico:'🏫',txt:`${stats.aula}% de avance`,sub:'Aula de clases'}
+    ];
+    el.innerHTML=`<section class="profile-cover" ${bannerStyle}><div class="profile-cover-actions"><button type="button" id="profBannerBtn">🖼️ Cambiar banner</button></div><div class="profile-identity"><img class="profile-avatar" id="profAvatarView" src="${svgAvatar(p)}" alt="Perfil"><h3 class="profile-name">${esc(p.nombre||p.usuario||'Asesor')}</h3><div class="profile-cargo">${esc(p.cargo||'Asesor de Sublicuentas')}</div><span class="profile-role">${esc(roleLabel)} · ${esc(p.area||'Equipo Sublicuentas')}</span></div></section>
+      <div class="profile-summary-grid"><div><b>${propios.length}</b><span>Servicios asignados</span></div><div><b>${fmt(totalPropios)}</b><span>Cartera asignada</span></div><div><b>${stats.games}</b><span>Juegos practicados</span></div><div><b>${stats.aula}%</b><span>Avance en aula</span></div><div><b>${stats.sent}</b><span>Tickets enviados</span></div><div><b>${stats.resolved}</b><span>Tickets resueltos</span></div></div>
+      <div class="profile-dashboard"><div class="profile-main-column"><div class="rbac-card profile-activity"><b>Actividad del perfil</b>${activity.map(a=>`<div class="profile-activity-row"><span>${a.ico}</span><div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div></div>`).join('')}</div><div class="rbac-card"><b>Funciones dentro de la empresa</b><div class="profile-funciones">${todas.map(f=>`<div class="profile-funcion">${esc(f)}</div>`).join('')}</div></div></div>
+      <div class="profile-side-column"><div class="rbac-card profile-progress"><b>Resumen de avance</b><div class="profile-progress-row"><span>Aula de clases</span><em>${stats.aula}%</em></div><i><u style="width:${stats.aula}%"></u></i><div class="profile-progress-row"><span>Tickets resueltos</span><em>${stats.resolved}/${Math.max(stats.sent,stats.resolved)}</em></div><i><u style="width:${Math.max(stats.sent,stats.resolved)?Math.round(stats.resolved/Math.max(stats.sent,stats.resolved)*100):0}%"></u></i><div class="profile-progress-row"><span>Materia cerebral</span><em>${stats.games} juegos</em></div></div></div></div>
+      <div class="rbac-card"><b>Tema de color</b><div class="theme-sub">El tema cambia fondos, tarjetas, botones, textos y estados en toda la interfaz.</div><div class="theme-swatch-grid" id="themeSwatchGrid">${Object.keys(THEME_PRESETS).map(id=>{const t=THEME_PRESETS[id],on=id===currentThemeId();return `<button type="button" class="theme-swatch${on?' on':''}" data-theme="${id}" title="${esc(t.nombre)}"><span class="tsw-preview" style="background:${t.vars.bg}"><span class="tsw-dot" style="background:${t.vars.accent}"></span><span class="tsw-dot" style="background:${t.vars.accent2}"></span></span><span class="tsw-name">${esc(t.nombre)}</span></button>`;}).join('')}</div></div>
+      <div class="rbac-card"><b>Editar perfil visible</b><div class="profile-form"><label class="rbac-field"><span>Nombre mostrado</span><input class="rbac-input" id="profNombre" value="${esc(p.nombre||'')}"></label><label class="rbac-field"><span>Cargo</span><input class="rbac-input" id="profCargo" value="${esc(p.cargo||'')}"></label><label class="rbac-field"><span>Teléfono interno</span><input class="rbac-input" id="profTelefono" value="${esc(p.telefono||'')}" placeholder="Opcional"></label><label class="rbac-field"><span>Área</span><input class="rbac-input" id="profArea" value="${esc(p.area||'')}" placeholder="Ventas, Finanzas, Auditoría…"></label><label class="rbac-field wide"><span>Foto / avatar</span><input class="profile-file" id="profFoto" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Banner de portada</span><input class="profile-file" id="profBanner" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Funciones extra, una por línea</span><textarea class="rbac-input" id="profFunciones" rows="3">${esc(p.funcionesExtra||'')}</textarea></label></div><div class="profile-actions"><button class="rbac-btn good" id="profGuardar">💾 Guardar perfil</button><button class="rbac-btn" id="profReset">↩️ Restaurar perfil base</button><button class="rbac-btn red" id="profSalir">🚪 Cerrar sesión</button></div></div>`;
+    document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.theme;applyTheme(id,true);document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(b=>b.classList.toggle('on',b===btn));mostrarToast('🎨 Tema aplicado: '+(THEME_PRESETS[id]?.nombre||id));});
+    const saveImage=async(input,key,max,quality,msg)=>{const file=input?.files?.[0];if(!file)return;try{const dataUrl=await resizeProfilePhoto(file,max,quality),cur=readProfile();cur[key]=dataUrl;saveProfile(cur);renderPerfil();updateTopAdvisor();mostrarToast(msg);}catch(e){mostrarToast('⚠️ No se pudo procesar la imagen. Use JPG o PNG más liviano.');}};
+    const foto=document.getElementById('profFoto'),banner=document.getElementById('profBanner');if(foto)foto.onchange=()=>saveImage(foto,'avatar',520,.82,'✅ Foto actualizada.');if(banner)banner.onchange=()=>saveImage(banner,'banner',1600,.78,'✅ Banner actualizado.');
+    const bannerBtn=document.getElementById('profBannerBtn');if(bannerBtn)bannerBtn.onclick=()=>document.getElementById('profBanner')?.click();
+    const guardar=document.getElementById('profGuardar');if(guardar)guardar.onclick=()=>{const cur=readProfile();cur.nombre=document.getElementById('profNombre').value.trim()||p.nombre;cur.cargo=document.getElementById('profCargo').value.trim()||p.cargo;cur.telefono=document.getElementById('profTelefono').value.trim();cur.area=document.getElementById('profArea').value.trim()||p.area;cur.funcionesExtra=document.getElementById('profFunciones').value.trim();saveProfile(cur);updateTopAdvisor();renderPerfil();mostrarToast('✅ Perfil guardado.');};
+    const reset=document.getElementById('profReset');if(reset)reset.onclick=()=>{localStorage.removeItem(profileKey());updateTopAdvisor();renderPerfil();mostrarToast('Perfil restaurado.');};const salir=document.getElementById('profSalir');if(salir)salir.onclick=()=>document.getElementById('logoutBtn')?.click();
   }
 
   function renderAgenda(){
@@ -6003,7 +5981,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(tk.loading)return;tk.loading=true;renderTickets(true);
     try{const j=await tkApi({accion:'listar'});tk.items=j.items||[];tk.err='';tk.loaded=true;}
     catch(e){tk.err=e.message||String(e);}
-    finally{tk.loading=false;renderTickets(true);tkUpdateNavBadge();}
+    finally{tk.loading=false;renderTickets(true);tkUpdateNavBadge();if(document.getElementById('screen-perfil')?.classList.contains('active'))renderPerfil();}
   }
   function tkMine(){
     const u=tkRole();
@@ -6050,6 +6028,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   function tkBadge(estado){const e=String(estado||'abierto');const m={abierto:'Pendiente',pendiente:'Pendiente',proceso:'En proceso',respondido:'En proceso',resuelto:'Finalizado',finalizado:'Finalizado'};const cls=(e==='resuelto'||e==='finalizado')?'resuelto':((e==='proceso'||e==='respondido')?'proceso':'pendiente');return `<span class="tk-badge ${cls}">Estado: ${m[e]||esc(e)}</span>`;}
   function tkCardHtml(t){
     const estado=String(t.estado||'abierto'),done=estado==='resuelto';
+    const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
     const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
     const de=t.creadoPor||tkRoleLabel(t.creadoPorRol);
     const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.por||tkRoleLabel(x.porRol))}</b><span>${esc(x.texto||'')}</span><small>${esc(tkWhen(x.at))}</small></div>`).join('');
@@ -6057,7 +6036,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const replying=tk.replyFor===t.id;
     const replyBox=replying?`<div class="tk-reply"><textarea class="tk-input" id="tkReplyText" placeholder="Escriba su respuesta…">${esc(tk.replyText||'')}</textarea><div class="tk-actions"><button class="tk-btn good mini" data-tk-send="${esc(t.id||'')}">📨 Enviar respuesta</button><button class="tk-btn ghost mini" data-tk-cancelreply="1">Cancelar</button></div></div>`:'';
     const acts=done?'':`<div class="tk-actions">${!replying?`<button class="tk-btn mini" data-tk-reply="${esc(t.id||'')}">💬 Responder</button>`:''}${estado!=='proceso'?`<button class="tk-btn warn mini" data-tk-proceso="${esc(t.id||'')}">🔄 En proceso</button>`:''}<button class="tk-btn good mini" data-tk-resolve="${esc(t.id||'')}">✅ Resolver</button></div>`;
-    return `<div class="tk-card ${done?'done':''}"><div class="tk-top"><div class="tk-title">${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
+    return `<div class="tk-card ${done?'done':''} ${isNotice?'tk-notice-card':''}"><div class="tk-top"><div class="tk-title">${isNotice?'<span class="tk-notice-label">📢 AVISO</span> ':''}${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
   }
   function tkHtml(){
     const all=tkMine();
@@ -6066,7 +6045,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const form=`<div class="tk-form"><input class="tk-input" id="tkTitulo" placeholder="Asunto / título corto" value="${esc(tk.formTitulo||'')}"><div class="tk-row"><select class="tk-input" id="tkDestino">${tkDestOptions()}</select><select class="tk-input" id="tkPrioridad">${['normal','alta','urgente'].map(p=>`<option value="${p}" ${(tk.formPrioridad||'normal')===p?'selected':''}>${p==='normal'?'Normal':(p==='alta'?'Alta':'Urgente')}</option>`).join('')}</select></div><textarea class="tk-input" id="tkDetalle" placeholder="Mensaje: cliente, plataforma, fila, fecha, precio o lo que necesita…">${esc(tk.formDetalle||'')}</textarea><button class="tk-btn good" id="tkCreate">📨 Enviar ticket</button></div>`;
     const openHtml=(tk.loading&&!tk.loaded)?'<div class="tk-empty">Cargando bandeja…</div>':(tk.err?`<div class="tk-status err">⚠️ ${esc(tk.err)}</div>`:(open.length?open.map(tkCardHtml).join(''):'<div class="tk-empty">No tiene tickets abiertos.</div>'));
     const histHtml=hist.length?`<div class="tk-sec-title">🗂️ Historial · resueltos (${hist.length})</div>${hist.map(tkCardHtml).join('')}`:'';
-    return `<div class="tk-wrap"><div class="tk-col-left"><div class="tk-sec-title">✍️ Nuevo ticket</div>${form}<div id="tkStatus" class="tk-status ${tk.err?'err':''}">${esc(tk.status||'')}</div></div><div class="tk-col-right"><div class="tk-sec-title">📥 Bandeja · ${open.length} abierto${open.length===1?'':'s'} <button class="tk-btn ghost mini tk-refresh" id="tkRefresh">↻ Actualizar</button></div>${openHtml}${histHtml}</div></div>`;
+    const noticeForm=tkRole()==='sublicuentas'?`<div class="tk-admin-notice"><div class="tk-sec-title">📢 Publicar aviso</div><p>Solo Sublicuentas puede enviar avisos. Llegarán a la bandeja del destinatario y Telegram recibirá una alerta.</p><input class="tk-input" id="tkAvisoTitulo" placeholder="Título de la actualización"><select class="tk-input" id="tkAvisoDestino"><option value="relojes">Para Relojes</option><option value="magdiel">Para Magdiel</option><option value="both">Para todos</option></select><textarea class="tk-input" id="tkAvisoDetalle" placeholder="Explique la actualización, cambio o instrucción…"></textarea><button class="tk-btn notice" id="tkAvisoCreate">📣 Enviar aviso y alertar por Telegram</button></div>`:'';
+    return `<div class="tk-notice-top">${noticeForm}</div><div class="tk-wrap"><div class="tk-col-left"><div class="tk-sec-title">✍️ Nuevo ticket</div>${form}<div id="tkStatus" class="tk-status ${tk.err?'err':''}">${esc(tk.status||'')}</div></div><div class="tk-col-right"><div class="tk-sec-title">📥 Bandeja · ${open.length} abierto${open.length===1?'':'s'} <button class="tk-btn ghost mini tk-refresh" id="tkRefresh">↻ Actualizar</button></div>${openHtml}${histHtml}</div></div>`;
   }
   function ensureTkCss(){
     if(document.getElementById('tkCss'))return;
@@ -6127,6 +6107,14 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       mostrarToast('✅ Ticket enviado.');tk.loaded=false;await tkLoad();
     }catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
   }
+  async function tkCreateNotice(){
+    if(tkRole()!=='sublicuentas'){mostrarToast('Solo Sublicuentas puede publicar avisos.');return;}
+    const titulo=(document.getElementById('tkAvisoTitulo')?.value||'').trim(),detalle=(document.getElementById('tkAvisoDetalle')?.value||'').trim(),destino=document.getElementById('tkAvisoDestino')?.value||'both';
+    if(!titulo||!detalle){mostrarToast('Escriba el título y el contenido del aviso.');return;}
+    tk.status='Publicando aviso y notificando a Telegram…';tkShowStatus();
+    try{const j=await tkApi({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,destino,prioridad:'alta',seccion:'avisos'});tk.status=j.telegramOk===false?'✅ Aviso publicado. ⚠️ Telegram no está configurado en Vercel.':'✅ Aviso publicado y alerta enviada a Telegram.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
+    catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
+  }
   async function tkSend(id){
     const txt=((document.getElementById('tkReplyText')?.value)||tk.replyText||'').trim();
     if(!txt){mostrarToast('Escriba la respuesta.');return;}
@@ -6142,6 +6130,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const de=host.querySelector('#tkDestino');if(de)de.onchange=()=>{tk.formDestino=de.value;};
     const pr=host.querySelector('#tkPrioridad');if(pr)pr.onchange=()=>{tk.formPrioridad=pr.value;};
     const cr=host.querySelector('#tkCreate');if(cr)cr.onclick=tkCreate;
+    const av=host.querySelector('#tkAvisoCreate');if(av)av.onclick=tkCreateNotice;
     const rf=host.querySelector('#tkRefresh');if(rf)rf.onclick=()=>{tk.loaded=false;tkLoad();};
     const rt=host.querySelector('#tkReplyText');if(rt)rt.oninput=()=>{tk.replyText=rt.value;};
     host.querySelectorAll('[data-tk-reply]').forEach(b=>b.onclick=()=>{tk.replyFor=b.dataset.tkReply;tk.replyText='';renderTickets(true);const x=document.getElementById('tkReplyText');if(x){x.focus();}});
@@ -9294,6 +9283,28 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   window.addEventListener('pageshow',bind);setTimeout(bind,700);
 })();
 </script>
+<!-- LIC 20260720 · PERFIL SOCIAL + BANNER + AVISOS ADMIN -->
+<style id="licPerfilSocialAvisos20260720">
+  #screen-perfil.active> .card{max-width:1240px!important;margin:0 auto!important}
+  #screen-perfil .profile-cover{position:relative;min-height:320px;margin:0 0 108px;border:1px solid var(--line);border-radius:28px;background:linear-gradient(125deg,var(--accent2),var(--accent),var(--info));background-size:cover;background-position:center;box-shadow:0 14px 34px color-mix(in srgb,var(--accent) 18%,transparent);overflow:visible}
+  #screen-perfil .profile-cover:after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,transparent 45%,rgba(5,18,38,.62));pointer-events:none}
+  #screen-perfil .profile-cover-actions{position:absolute;z-index:3;right:18px;top:18px}.profile-cover-actions button{border:1px solid rgba(255,255,255,.7);border-radius:14px;padding:10px 14px;background:rgba(10,27,52,.58);backdrop-filter:blur(10px);color:#fff;font-weight:900;cursor:pointer}
+  #screen-perfil .profile-identity{position:absolute;z-index:4;left:50%;bottom:-92px;transform:translateX(-50%);width:min(94%,520px);display:flex;flex-direction:column;align-items:center;text-align:center;color:var(--txt)}
+  #screen-perfil .profile-avatar{width:146px;height:146px;margin:0;border-radius:38px;object-fit:cover;background:var(--surface);border:9px solid var(--card);box-shadow:0 0 0 5px var(--accent),0 16px 32px rgba(8,25,48,.25)}
+  #screen-perfil .profile-name{margin:15px 0 3px;font-size:32px;color:var(--txt)}#screen-perfil .profile-cargo{color:var(--txt2)}#screen-perfil .profile-role{margin-top:7px}
+  #screen-perfil .profile-summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}.profile-summary-grid>div{min-width:0;padding:17px 12px;text-align:center;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:var(--sh)}.profile-summary-grid b{display:block;font-family:var(--ff);font-size:22px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.profile-summary-grid span{display:block;margin-top:5px;color:var(--txt2);font-size:11px;font-weight:800}
+  #screen-perfil .profile-dashboard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.7fr);gap:14px}.profile-main-column,.profile-side-column{min-width:0}.profile-activity-row{display:grid;grid-template-columns:46px 1fr;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}.profile-activity-row:last-child{border-bottom:0}.profile-activity-row>span{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:var(--accentSoft);font-size:22px}.profile-activity-row div b{display:block;font-size:14px;color:var(--txt)}.profile-activity-row small{display:block;margin-top:3px;color:var(--txt2);font-size:11.5px}.profile-progress-row{display:flex;justify-content:space-between;gap:10px;margin-top:17px;color:var(--txt2);font-size:12px;font-weight:900}.profile-progress-row em{font-style:normal;color:var(--accent)}.profile-progress>i{display:block;height:9px;margin-top:7px;border-radius:999px;background:var(--surface);overflow:hidden}.profile-progress>i u{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--info));text-decoration:none}
+  #screen-perfil .profile-file{width:100%;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--surface)}
+
+  #screen-tickets .tk-notice-top:empty{display:none}.tk-admin-notice{margin:0 0 18px;padding:18px;border:1px solid color-mix(in srgb,var(--warn) 48%,var(--line));border-radius:22px;background:linear-gradient(135deg,var(--warnSoft),var(--card));box-shadow:0 9px 22px color-mix(in srgb,var(--warn) 12%,transparent);display:grid;grid-template-columns:minmax(0,1.3fr) 210px;gap:10px}.tk-admin-notice .tk-sec-title,.tk-admin-notice p{grid-column:1/-1}.tk-admin-notice p{margin:0 0 3px;color:var(--txt2);font-size:12.5px;font-weight:700}.tk-admin-notice textarea{grid-column:1/-1;min-height:92px}.tk-admin-notice .tk-btn.notice{grid-column:1/-1;background:linear-gradient(180deg,var(--warn),color-mix(in srgb,var(--warn) 72%,#a45300));color:#fff;box-shadow:0 5px 0 color-mix(in srgb,var(--warn) 62%,#6d3500);font-weight:900}.tk-notice-card{border:2px solid var(--warn)!important;background:linear-gradient(135deg,var(--warnSoft),var(--card))!important}.tk-notice-label{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--warn);color:#fff;font-size:10px;letter-spacing:.05em;vertical-align:2px}.tk-notice-card .tk-detail{font-weight:800;color:var(--txt)!important}
+  #screen-tickets .tk-form,#screen-tickets .tk-card,#screen-tickets .tk-msg,#screen-tickets .tk-col-left,#screen-tickets .tk-col-right{background:var(--card)!important;color:var(--txt)!important;border-color:var(--line)!important}#screen-tickets .tk-input{background:var(--surface)!important;color:var(--txt)!important;border-color:var(--line)!important}#screen-tickets .tk-title,#screen-tickets .tk-detail,#screen-tickets .tk-sec-title{color:var(--txt)!important}#screen-tickets .tk-meta{color:var(--txt2)!important}
+
+  /* Iconos del Inicio comparten la misma caja, tamaño y tratamiento del menú. */
+  #screen-inicio .home-tools .focus-action-icon{font-family:"Apple Color Emoji","Segoe UI Emoji",sans-serif!important;background:var(--accentSoft)!important;border:1px solid color-mix(in srgb,var(--accent) 20%,var(--line))!important;color:var(--accent)!important}
+  #screen-inicio .home-tools .focus-action-card:nth-child(2) .focus-action-icon{background:var(--warnSoft)!important}#screen-inicio .home-tools .focus-action-card:nth-child(3) .focus-action-icon{background:color-mix(in srgb,#8b5cf6 14%,var(--surface))!important}
+  @media(max-width:1050px){#screen-perfil .profile-summary-grid{grid-template-columns:repeat(3,1fr)}#screen-perfil .profile-dashboard{grid-template-columns:1fr}}
+  @media(max-width:680px){#screen-perfil .profile-cover{min-height:230px;margin-bottom:104px;border-radius:22px}#screen-perfil .profile-avatar{width:118px;height:118px;border-radius:32px}#screen-perfil .profile-name{font-size:26px}.profile-summary-grid{grid-template-columns:repeat(2,1fr)!important}.tk-admin-notice{grid-template-columns:1fr}.tk-admin-notice>*{grid-column:1!important}.profile-cover-actions button{font-size:0}.profile-cover-actions button:after{content:"🖼️";font-size:18px}}
+</style>
 </body>
 </html>
 
