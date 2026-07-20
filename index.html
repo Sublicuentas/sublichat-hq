@@ -9568,6 +9568,118 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
  #screen-clientes .clientes-filters{grid-template-columns:1fr!important}
 }
 </style>
+<style id="licMovilInicioFlujoAjustable20260720">
+/* Inicio móvil: herramientas completas, sin flechas montadas sobre los iconos. */
+@media(max-width:899px){
+  #screen-inicio .home-tools{padding:12px!important;overflow:visible!important}
+  #screen-inicio .home-tools .inicio-cards-row{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;overflow:visible!important}
+  #screen-inicio .home-tools .inicio-cards-row .focus-action-card{display:grid!important;width:100%!important;height:78px!important;min-height:78px!important;margin:0!important;padding:9px 10px!important;grid-template-columns:44px minmax(0,1fr) 25px!important;gap:8px!important;overflow:hidden!important;border-radius:16px!important;text-align:left!important}
+  #screen-inicio .home-tools .focus-action-icon{width:44px!important;height:44px!important;margin:0!important;border-radius:13px!important;font-size:23px!important;box-shadow:none!important}
+  #screen-inicio .home-tools .focus-action-text{display:flex!important;min-width:0!important;align-items:flex-start!important;text-align:left!important}
+  #screen-inicio .home-tools .focus-action-text b{display:block!important;font-size:12px!important;line-height:1.15!important;white-space:normal!important;color:var(--txt)!important}
+  #screen-inicio .home-tools .focus-action-text small{display:none!important}
+  #screen-inicio .home-tools .fob-arrow{position:static!important;width:25px!important;height:25px!important;margin:0!important;font-size:17px!important;border-radius:50%!important;box-shadow:none!important}
+  #screen-inicio .home-tools .objetivos-btn,#screen-inicio .home-tools .mesas-home-btn{display:grid!important}
+
+  /* Hero de reflexión compacto y legible en teléfono. */
+  #screen-inicio #quoteCard.home-daily-hero{height:205px!important;min-height:205px!important;border-radius:20px!important;background-position:center!important}
+  #screen-inicio #quoteCard .daily-thought-copy{width:100%!important;height:100%!important;padding:16px 18px!important;justify-content:center!important}
+  #screen-inicio #quoteCard .home-greeting{margin:0 0 8px!important;font-size:12px!important;line-height:1.15!important}
+  #screen-inicio #quoteCard .quote-text{max-width:92%!important;font-size:clamp(18px,5.3vw,23px)!important;line-height:1.14!important;letter-spacing:-.2px!important;text-shadow:0 2px 10px rgba(0,0,0,.58)!important}
+  #screen-inicio #quoteCard .quote-author{margin-top:9px!important;font-size:10px!important}
+  #screen-inicio #quoteCard .quote-source{font-size:8px!important}
+}
+@media(max-width:520px){
+  #screen-inicio .home-tools .inicio-cards-row{grid-template-columns:1fr!important}
+  #screen-inicio .home-tools .inicio-cards-row .focus-action-card{height:72px!important;min-height:72px!important;grid-template-columns:46px minmax(0,1fr) 27px!important}
+  #screen-inicio .home-tools .focus-action-text b{font-size:13px!important}
+  #screen-inicio #quoteCard.home-daily-hero{height:195px!important;min-height:195px!important}
+  #screen-inicio #quoteCard .quote-text{font-size:clamp(17px,5.1vw,21px)!important;line-height:1.13!important}
+}
+
+/* Flujo Diario: tamaños gobernados por controles propios, no por resize nativo. */
+.docs-table-wrap{overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+.docs-table{table-layout:fixed!important}
+.docs-table thead th:not(.corner),.docs-table tbody td{position:relative!important;min-width:110px!important;width:150px;max-width:150px}
+.docs-table textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px!important;min-height:44px!important;padding:8px 30px 8px 9px!important;resize:none!important;overflow:auto!important;transition:height .16s ease!important}
+.docs-fullscreen-host .docs-max-on .docs-table textarea.docs-cell{width:100%!important;min-width:0!important;max-width:100%!important}
+.docs-table td.flow-cell-expanded textarea.docs-cell{height:var(--flow-cell-height,180px)!important;min-height:90px!important}
+.flow-cell-toggle{position:absolute;z-index:3;right:3px;bottom:3px;width:24px;height:24px;padding:0;border:1px solid #93c5fd;border-radius:7px;background:#eff6ff;color:#1d4ed8;font-size:14px;font-weight:900;line-height:1;cursor:pointer;touch-action:manipulation;opacity:.78}
+.flow-cell-toggle:hover,.flow-cell-toggle:focus{opacity:1;background:#dbeafe}
+.flow-col-resizer{position:absolute;z-index:5;top:0;right:-6px;width:14px;height:100%;cursor:col-resize;touch-action:none;background:transparent}
+.flow-col-resizer::after{content:'';position:absolute;top:22%;bottom:22%;left:6px;width:2px;border-radius:2px;background:#60a5fa;opacity:.55}
+.flow-size-controls{display:inline-flex!important;gap:6px!important;align-items:center!important;padding:4px!important;border:1px solid var(--line)!important;border-radius:12px!important;background:var(--surface)!important}
+.flow-size-controls .docs-btn{min-height:34px!important;padding:7px 10px!important;font-size:12px!important;background:var(--card)!important}
+@media(max-width:680px){
+  .docs-table thead th:not(.corner),.docs-table tbody td{min-width:96px!important;width:128px;max-width:128px}
+  .docs-table textarea.docs-cell{font-size:13px!important;height:42px!important;min-height:42px!important}
+  .flow-size-controls{display:grid!important;grid-template-columns:repeat(3,1fr)!important;grid-column:1/-1!important;width:100%!important}
+  .flow-size-controls .docs-btn{padding:7px 5px!important;font-size:11px!important}
+  .flow-cell-toggle{width:26px;height:26px;opacity:.92}
+}
+</style>
+<script id="licMovilInicioFlujoAjustableScript20260720">
+(function(){
+  'use strict';
+  function saludoHora(){var h=new Date().getHours();return h<12?'Buenos días':h<18?'Buenas tardes':'Buenas noches';}
+  function actualizarSaludoReflexion(){
+    var g=document.querySelector('#quoteCard .home-greeting');if(!g)return;
+    var n=g.querySelector('#homeAdvisorName');
+    if(!n){n=document.createElement('span');n.id='homeAdvisorName';n.textContent='Sublicuentas';g.textContent='';g.appendChild(n);}
+    var before=g.firstChild;
+    if(before&&before.nodeType===3)before.nodeValue='👋 ¡'+saludoHora()+', ';
+    else g.insertBefore(document.createTextNode('👋 ¡'+saludoHora()+', '),n);
+    var after=n.nextSibling;
+    if(after&&after.nodeType===3)after.nodeValue='!';else g.appendChild(document.createTextNode('!'));
+  }
+
+  var WIDTH_KEY='sublichat_flujo_column_widths_v2';
+  function widths(){try{return JSON.parse(localStorage.getItem(WIDTH_KEY)||'{}')||{};}catch(e){return {};}}
+  function saveWidths(v){try{localStorage.setItem(WIDTH_KEY,JSON.stringify(v||{}));}catch(e){}}
+  function setColumnWidth(table,index,width,persist){
+    width=Math.max(86,Math.min(420,Math.round(Number(width)||140)));
+    table.querySelectorAll('tr').forEach(function(row){var cell=row.children[index+1];if(cell){cell.style.setProperty('width',width+'px','important');cell.style.setProperty('min-width',width+'px','important');cell.style.setProperty('max-width',width+'px','important');}});
+    if(persist){var w=widths();w[index]=width;saveWidths(w);}
+  }
+  function currentWidth(table,index){var head=table.querySelector('thead tr');var cell=head&&head.children[index+1];return cell?cell.getBoundingClientRect().width:140;}
+  function resizeAll(table,delta){
+    var count=Math.max(0,(table.querySelectorAll('thead th').length||1)-1),w=widths();
+    for(var i=0;i<count;i++){var next=Math.max(86,Math.min(420,(Number(w[i])||currentWidth(table,i)||140)+delta));w[i]=next;setColumnWidth(table,i,next,false);}saveWidths(w);
+  }
+  function toggleFocusedCell(root){
+    var td=root.querySelector('td.cell-selected')||root.querySelector('textarea.docs-cell:focus')?.closest('td')||root.querySelector('tbody td');
+    if(!td)return;toggleCell(td);
+  }
+  function toggleCell(td){
+    var ta=td.querySelector('textarea.docs-cell');if(!ta)return;
+    var expand=!td.classList.contains('flow-cell-expanded');
+    td.classList.toggle('flow-cell-expanded',expand);
+    if(expand)td.style.setProperty('--flow-cell-height',Math.min(320,Math.max(96,ta.scrollHeight+14))+'px');
+    var b=td.querySelector('.flow-cell-toggle');if(b){b.textContent=expand?'↕':'↕';b.title=expand?'Contraer celda':'Expandir celda';b.setAttribute('aria-label',b.title);}
+  }
+  function enhanceTable(table){
+    if(!table||table.dataset.flowResizeReady==='1')return;table.dataset.flowResizeReady='1';
+    var root=table.closest('.docs-root')||document;
+    var stored=widths();
+    table.querySelectorAll('thead th:not(.corner)').forEach(function(th,index){
+      setColumnWidth(table,index,Number(stored[index])||currentWidth(table,index)||140,false);
+      var handle=document.createElement('span');handle.className='flow-col-resizer';handle.title='Arrastre para ajustar la columna';th.appendChild(handle);
+      handle.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var start=ev.clientX,base=currentWidth(table,index);try{handle.setPointerCapture(ev.pointerId);}catch(e){}
+        function move(e){setColumnWidth(table,index,base+(e.clientX-start),false);}
+        function up(e){setColumnWidth(table,index,currentWidth(table,index),true);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);}
+        handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+      });
+    });
+    table.querySelectorAll('tbody td').forEach(function(td){if(td.querySelector('.flow-cell-toggle'))return;var ta=td.querySelector('textarea.docs-cell');if(!ta)return;var b=document.createElement('button');b.type='button';b.className='flow-cell-toggle';b.textContent='↕';b.title='Expandir celda';b.setAttribute('aria-label','Expandir celda');b.addEventListener('click',function(ev){ev.preventDefault();ev.stopPropagation();toggleCell(td);});td.appendChild(b);});
+    var toolbar=root.querySelector('.docs-toolbar.edit-tools');
+    if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">− Columnas</button><button type="button" class="docs-btn" data-flow-cell>↕ Celda</button><button type="button" class="docs-btn" data-flow-size="+">+ Columnas</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeAll(table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeAll(table,18);};controls.querySelector('[data-flow-cell]').onclick=function(){toggleFocusedCell(root);};}
+  }
+  function enhanceAll(){document.querySelectorAll('.docs-table').forEach(enhanceTable);}
+  function init(){actualizarSaludoReflexion();enhanceAll();var mo=new MutationObserver(function(){actualizarSaludoReflexion();enhanceAll();});mo.observe(document.body,{childList:true,subtree:true});setInterval(actualizarSaludoReflexion,30000);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  window.addEventListener('pageshow',function(){actualizarSaludoReflexion();setTimeout(enhanceAll,300);});
+})();
+</script>
 </body>
 </html>
 
