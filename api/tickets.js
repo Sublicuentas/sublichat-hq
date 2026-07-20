@@ -2,7 +2,8 @@
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
-// TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  (o TELEGRAM_AUDIT_CHAT_ID / TELEGRAM_ADMIN_CHAT_ID)
+// TELEGRAM_BOT_TOKEN y, opcionalmente, TELEGRAM_CHAT_ID_<PERFIL>.
+// Los IDs de respaldo incluidos abajo permiten avisar a todos los vendedores configurados.
 
 const admin = require('firebase-admin');
 
@@ -28,15 +29,20 @@ function roleLabel(role) {
   if (role === 'sublicuentas') return 'Sublicuentas';
   if (role === 'relojes') return 'Relojes';
   if (role === 'magdiel') return 'Magdiel';
+  if (role === 'yami') return 'Yami';
+  if (role === 'jimena') return 'Jimena';
+  if (role === 'manuel') return 'Manuel';
   return clean(role || 'Usuario', 40);
 }
+
+const DESTINOS_VALIDOS = new Set(['sublicuentas', 'relojes', 'magdiel', 'yami', 'jimena', 'manuel']);
 
 function normalizeDestinos(destino, fromRol = '') {
   const d = clean(destino, 40).toLowerCase();
   const fr = clean(fromRol, 40).toLowerCase();
   if (['sublicuentas_magdiel', 'magdiel_sublicuentas', 'admin_auditor'].includes(d)) return ['sublicuentas', 'magdiel'];
   if (['sublicuentas_relojes', 'relojes_sublicuentas', 'admin_relojes'].includes(d)) return ['sublicuentas', 'relojes'];
-  if (d === 'todos' || d === 'all') return ['sublicuentas', 'relojes', 'magdiel'];
+  if (d === 'todos' || d === 'all') return ['sublicuentas', 'relojes', 'magdiel', 'yami', 'jimena', 'manuel'];
   if (d === 'both' || d === 'ambos') {
     if (fr === 'relojes') return ['sublicuentas', 'magdiel'];
     if (fr === 'magdiel') return ['sublicuentas', 'relojes'];
@@ -45,7 +51,18 @@ function normalizeDestinos(destino, fromRol = '') {
   if (d === 'sublicuentas' || d === 'naara' || d === 'admin') return ['sublicuentas'];
   if (d === 'relojes' || d === 'libni' || d === 'finanzas') return ['relojes'];
   if (d === 'magdiel' || d === 'auditoria') return ['magdiel'];
+  if (d === 'yami') return ['yami'];
+  if (d === 'jimena') return ['jimena'];
+  if (d === 'manuel') return ['manuel'];
   return ['sublicuentas'];
+}
+
+function normalizeDestinosBody(body, fromRol = '') {
+  const explicit = Array.isArray(body && body.destinos)
+    ? body.destinos.map(v => clean(v, 40).toLowerCase()).filter(v => DESTINOS_VALIDOS.has(v))
+    : [];
+  if (explicit.length) return [...new Set(explicit)];
+  return normalizeDestinos(body && body.destino, fromRol);
 }
 
 function destinosLabel(destinos) {
@@ -58,8 +75,18 @@ function destinosLabel(destinos) {
 const CHAT_IDS = {
   magdiel: process.env.TELEGRAM_CHAT_ID_MAGDIEL || '8652640043',
   relojes: process.env.TELEGRAM_CHAT_ID_RELOJES || '411539492',
-  sublicuentas: process.env.TELEGRAM_CHAT_ID_SUBLICUENTAS || '5728675990'
+  sublicuentas: process.env.TELEGRAM_CHAT_ID_SUBLICUENTAS || '5728675990',
+  yami: process.env.TELEGRAM_CHAT_ID_YAMI || '7511522045',
+  jimena: process.env.TELEGRAM_CHAT_ID_JIMENA || '7844369242',
+  manuel: process.env.TELEGRAM_CHAT_ID_MANUEL || '6848826692'
 };
+
+function telegramHTML(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 async function sendTelegramTo(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || '';
@@ -138,12 +165,14 @@ async function createTicket(db, body) {
   const detalle = clean(body.detalle, 3000);
   if (!titulo || !detalle) return { status: 400, json: { ok: false, error: 'Falta título o detalle del ticket.' } };
   const creadoRol = clean(body.rol || '', 40).toLowerCase();
-  const destinos = normalizeDestinos(body.destino || body.destinos || 'sublicuentas', creadoRol);
+  const destinos = normalizeDestinosBody(body, creadoRol);
+  const tipo = clean(body.tipo || 'ticket', 30).toLowerCase();
   const numero = await nextTicketNumero(db);
   const item = {
     numero,
     titulo,
     detalle,
+    tipo,
     destinos,
     destinosLabel: destinosLabel(destinos),
     prioridad: clean(body.prioridad || 'normal', 30),
@@ -158,10 +187,16 @@ async function createTicket(db, body) {
     resueltoAt: ''
   };
   const ref = await db.collection('tickets_auditoria').add(item);
-  const msg = [
-    `🎫 <b>${roleLabel(creadoRol)}</b> te ha enviado un ticket #${numero}`,
-    `<b>Motivo:</b> ${item.titulo}`,
-    `<b>Estado:</b> ${estadoLabel(item.estado)}`
+  const esAviso = tipo === 'aviso' || item.seccion === 'avisos';
+  const msg = esAviso ? [
+    `📢 <b>Nuevo aviso de ${telegramHTML(roleLabel(creadoRol))}</b>`,
+    `<b>Para:</b> ${telegramHTML(item.destinosLabel)}`,
+    `<b>${telegramHTML(item.titulo.replace(/^AVISO\s*[·:-]?\s*/i, '') || 'Actualización')}</b>`,
+    telegramHTML(item.detalle)
+  ].join('\n') : [
+    `🎫 <b>${telegramHTML(roleLabel(creadoRol))}</b> te ha enviado un ticket #${numero}`,
+    `<b>Motivo:</b> ${telegramHTML(item.titulo)}`,
+    `<b>Estado:</b> ${telegramHTML(estadoLabel(item.estado))}`
   ].join('\n');
   const telegram = await sendTelegram(msg, item.destinos).catch(e => ({ ok: false, error: e.message }));
   await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo: telegram }, { merge: true });
@@ -265,7 +300,7 @@ module.exports = async function handler(req, res) {
     getApp();
     const db = admin.firestore();
     if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, msg: 'api/tickets activo', version: 'tickets-bandeja-responder-20260705' });
+      return res.status(200).json({ ok: true, msg: 'api/tickets activo', version: 'tickets-avisos-vendedores-20260720' });
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método no permitido.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
