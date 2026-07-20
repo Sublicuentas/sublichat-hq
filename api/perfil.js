@@ -55,6 +55,7 @@ async function guardarPerfil(db, body) {
   if (typeof body.funcionesExtra === 'string') update.funcionesExtra = clean(body.funcionesExtra, 500);
   if (typeof body.color === 'string') update.color = clean(body.color, 20);
   if (typeof body.emoji === 'string') update.emoji = clean(body.emoji, 10);
+  if (typeof body.tema === 'string') update.tema = clean(body.tema, 30);
 
   await ref.set(update, { merge: true });
   return { ok: true, usuario };
