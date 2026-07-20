@@ -1430,13 +1430,13 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 
   <!-- CLIENTES -->
   <section class="screen" id="screen-clientes">
-    <div class="card">
-      <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span> Cartera de clientes</h2>
-      <div class="toolbar"><div class="search">🔎 <input id="q" type="text" placeholder="Buscar cliente…"></div></div>
-      <div class="toolbar">
+    <div class="card clientes-crm-card">
+      <h2><span class="ico clientes-title-icon"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c.4-4.1 2.5-6.2 6-6.2s5.6 2.1 6 6.2M14 14c3.8-.8 6.3 1 7 5"/></svg></span><span>Clientes <small id="clientesTitleCount">0</small><em>Cartera y renovaciones</em></span></h2>
+      <div class="clientes-controlbar"><div class="search">⌕ <input id="q" type="text" placeholder="Buscar cliente…"></div><div class="clientes-tabs" aria-label="Filtrar por renovación"><button type="button" class="active" data-client-status="">Todos</button><button type="button" data-client-status="due">Hoy</button><button type="button" data-client-status="soon">Próximos</button><button type="button" data-client-status="exp">Vencidos</button></div></div>
+      <div class="toolbar clientes-filters">
         <select id="fPlat"><option value="">Plataformas</option></select>
         <select id="fVend"><option value="">Socios</option></select>
-        <select id="fEstado">
+        <select id="fEstado" aria-label="Estado de renovación">
           <option value="">Estados</option>
           <option value="due">Renueva hoy</option><option value="soon">Próx. 7 días</option>
           <option value="ok">Al día</option><option value="exp">Vencidos</option>
@@ -1450,8 +1450,8 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         </select>
       </div>
       <div class="count" id="count"></div>
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>Cliente</th><th>Plataforma</th><th>Renovación</th><th>Estado</th><th style="text-align:right">Precio</th></tr></thead>
+      <div class="tbl-wrap clientes-table-wrap"><table>
+        <thead><tr><th>Cliente</th><th>Plataforma</th><th>Renovación</th><th>Estado</th><th style="text-align:right">Precio</th><th class="client-wa-head">WhatsApp</th><th class="client-actions-head">Acciones</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table></div>
     </div>
@@ -1847,10 +1847,19 @@ function renderCharts(byP){
   }
 }
 
+function clienteEsc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function clienteIniciales(nombre){return String(nombre||"C").trim().split(/\s+/).slice(0,2).map(x=>x.charAt(0)).join("").toUpperCase()||"C";}
+function abrirWhatsAppCliente(g){
+  const tel=String(g&&g.telefono||"").replace(/\D/g,"");
+  if(!tel){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene teléfono guardado.");return;}
+  const num=tel.startsWith("504")?tel:"504"+tel;
+  window.open("https://wa.me/"+num,"_blank","noopener");
+}
 function renderTable(){
   const MAX_ROWS=parseInt(document.getElementById("fCantidad").value,10)||100;
   const q=document.getElementById("q").value.toLowerCase();
   const fp=document.getElementById("fPlat").value, fv=document.getElementById("fVend").value, fe=document.getElementById("fEstado").value;
+  document.querySelectorAll("[data-client-status]").forEach(btn=>btn.classList.toggle("active",(btn.dataset.clientStatus||"")===fe));
   // 1) aplicar filtros sobre cada servicio
   const filtrados=DATA.map(c=>({...c,st:statusOf(c.fecha)}))
     .filter(c=>(!q||c.nombre.toLowerCase().includes(q))&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe));
@@ -1872,16 +1881,19 @@ function renderTable(){
   }).sort((a,b)=>(a.fecha?+a.fecha:9e15)-(b.fecha?+b.fecha:9e15));
   const shown=rows.slice(0,MAX_ROWS);
   document.getElementById("count").textContent=rows.length>MAX_ROWS?`Mostrando ${MAX_ROWS} de ${rows.length} clientes · cambiá "Ver" o usá el buscador`:`${rows.length} cliente${rows.length===1?"":"s"}`;
+  const titleCount=document.getElementById("clientesTitleCount");if(titleCount)titleCount.textContent=rows.length;
   window._shownRows=shown;
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
-    return `<tr data-idx="${i}" style="cursor:pointer"><td>${g.nombre}</td><td>${platTxt}</td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${g.st.t}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td></tr>`;
-  }).join(""):`<tr><td colspan="5"><div class="empty">Sin resultados</div></td></tr>`;
-  document.querySelectorAll("#tbody tr[data-idx]").forEach(tr=>tr.addEventListener("click",()=>{
-    const g=window._shownRows[+tr.dataset.idx]; if(g) abrirCobro(g);
-  }));
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="view" data-client-index="${i}">Ver ficha y servicios</button><button type="button" data-client-action="edit" data-client-index="${i}">Editar cliente</button><button type="button" data-client-action="crm" data-client-index="${i}">Ficha CRM + WhatsApp</button><button type="button" data-client-action="renew" data-client-index="${i}">Pago o renovación</button></div></td></tr>`;
+  }).join(""):`<tr><td colspan="7"><div class="empty">Sin resultados</div></td></tr>`;
+  document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
+  document.querySelectorAll("[data-client-menu]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const panel=document.querySelector(`[data-client-menu-panel="${btn.dataset.clientMenu}"]`),open=panel&&panel.classList.contains("show");document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(panel&&!open)panel.classList.add("show");}));
+  document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(btn.dataset.clientAction==="edit"||btn.dataset.clientAction==="crm"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g);}else abrirCobro(g);}));
+  if(!window._clientesMenuCloseBound){window._clientesMenuCloseBound=true;document.addEventListener("click",()=>document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show")));}
 }
 ["q","fPlat","fVend","fEstado","fCantidad"].forEach(id=>{const el=document.getElementById(id);el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
+document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll("[data-client-status]").forEach(x=>x.classList.toggle("active",x===btn));document.getElementById("fEstado").value=btn.dataset.clientStatus||"";renderTable();}));
 
 /* ===== INVENTARIO: agregar plataforma/correo nuevo (misma lógica del bot) ===== */
 const INV_PLAT_CANON=[
@@ -9491,6 +9503,69 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   #screen-inicio .home-mini-card>span.metric-icon,
   #screen-inicio .home-due-card .due-head>span.metric-icon{width:60px!important;height:60px!important;flex-basis:60px!important}
   #screen-inicio .metric-icon svg{width:60px!important;height:60px!important}
+}
+</style>
+<style id="licClientesCRMCompacto20260720">
+#screen-clientes{--client-blue:var(--accent);--client-navy:var(--txt);--client-soft:var(--accentSoft)}
+#screen-clientes>.clientes-crm-card{position:relative!important;max-width:1380px!important;padding:25px 26px 30px!important;overflow:visible!important}
+#screen-clientes .clientes-crm-card>h2{min-height:64px!important;margin:0 0 18px!important;padding-right:330px!important;align-items:flex-start!important}
+#screen-clientes .clientes-title-icon{width:48px!important;height:48px!important;border-radius:16px!important;display:grid!important;place-items:center!important;background:var(--client-soft)!important;color:var(--client-blue)!important}
+#screen-clientes .clientes-title-icon svg{width:26px!important;height:26px!important}
+#screen-clientes .clientes-crm-card>h2>span:nth-child(2){display:grid!important;grid-template-columns:auto auto!important;align-items:center!important;justify-content:start!important;column-gap:9px!important;font-size:29px!important;line-height:1!important}
+#screen-clientes #clientesTitleCount{display:inline-grid!important;place-items:center!important;min-width:30px!important;height:25px!important;padding:0 7px!important;border-radius:9px!important;background:var(--client-soft)!important;color:var(--client-blue)!important;font:800 13px/1 'Montserrat','Nunito',sans-serif!important}
+#screen-clientes .clientes-crm-card>h2 em{grid-column:1/3!important;margin-top:7px!important;color:var(--txt2)!important;font:500 14px/1.2 'Nunito',system-ui,sans-serif!important;font-style:normal!important;letter-spacing:0!important}
+#screen-clientes .web-home-back{margin-left:auto!important;position:absolute!important;right:26px!important;top:25px!important}
+#screen-clientes #clientesNuevaFicha{position:absolute!important;right:132px!important;top:25px!important;width:auto!important;min-height:46px!important;margin:0!important;padding:0 17px!important;border:0!important;border-radius:15px!important;background:linear-gradient(180deg,var(--accent2),color-mix(in srgb,var(--accent2) 76%,#111))!important;color:#fff!important;font:900 12px/1.15 'Nunito',system-ui,sans-serif!important;box-shadow:0 5px 0 color-mix(in srgb,var(--accent2) 68%,#111)!important;white-space:nowrap!important;cursor:pointer!important}
+#screen-clientes #clientesNuevaFicha:active{transform:translateY(3px)!important;box-shadow:0 2px 0 color-mix(in srgb,var(--accent2) 68%,#111)!important}
+#screen-clientes .clientes-controlbar{display:grid!important;grid-template-columns:minmax(260px,1fr) auto!important;gap:16px!important;align-items:center!important;margin:0 0 13px!important}
+#screen-clientes .clientes-controlbar .search{height:54px!important;margin:0!important;padding:0 16px!important;border:1px solid var(--line)!important;border-radius:15px!important;background:var(--surface)!important;color:var(--txt2)!important;font-size:24px!important;box-shadow:none!important}
+#screen-clientes .clientes-controlbar .search input{font-size:14px!important;color:var(--txt)!important}
+#screen-clientes .clientes-tabs{height:54px!important;display:flex!important;border:1px solid var(--line)!important;border-radius:15px!important;overflow:hidden!important;background:var(--surface)!important}
+#screen-clientes .clientes-tabs button{min-width:88px!important;padding:0 18px!important;border:0!important;border-left:1px solid var(--line)!important;background:transparent!important;color:var(--txt2)!important;font-weight:800!important;cursor:pointer!important}
+#screen-clientes .clientes-tabs button:first-child{border-left:0!important}
+#screen-clientes .clientes-tabs button.active{background:var(--client-soft)!important;color:var(--client-blue)!important}
+#screen-clientes .clientes-filters{display:grid!important;grid-template-columns:repeat(3,minmax(150px,1fr)) minmax(120px,.7fr)!important;gap:10px!important;margin:0 0 10px!important;padding:12px!important;border:1px solid var(--line)!important;border-radius:17px!important;background:var(--surface)!important}
+#screen-clientes .clientes-filters select{width:100%!important;height:43px!important;margin:0!important;border:1px solid var(--line)!important;border-radius:12px!important;background:var(--card)!important;color:var(--txt)!important;font-weight:800!important;box-shadow:none!important}
+#screen-clientes .clientes-filters #fEstado{display:none!important}
+#screen-clientes>.clientes-crm-card>.count{margin:8px 2px 10px!important;color:var(--txt2)!important;font-weight:700!important}
+#screen-clientes .clientes-table-wrap{overflow:visible!important;border:1px solid var(--line)!important;border-radius:18px!important;background:var(--card)!important;box-shadow:none!important}
+#screen-clientes table{width:100%!important;border-collapse:separate!important;border-spacing:0!important}
+#screen-clientes thead th{height:48px!important;padding:0 14px!important;background:var(--surface)!important;color:var(--txt2)!important;border-bottom:1px solid var(--line)!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:.25px!important}
+#screen-clientes tbody td{height:54px!important;padding:6px 14px!important;border-bottom:1px solid var(--line)!important;color:var(--txt)!important;font-size:13px!important;background:transparent!important}
+#screen-clientes tbody tr:last-child td{border-bottom:0!important}
+#screen-clientes tbody tr:hover td{background:color-mix(in srgb,var(--client-soft) 36%,transparent)!important}
+#screen-clientes .client-person{display:flex!important;align-items:center!important;gap:10px!important;white-space:nowrap!important}
+#screen-clientes .client-person b{font-weight:850!important;color:var(--txt)!important}
+#screen-clientes .client-avatar{width:34px!important;height:34px!important;flex:none!important;display:grid!important;place-items:center!important;border-radius:50%!important;background:var(--client-soft)!important;border:1px solid color-mix(in srgb,var(--client-blue) 25%,var(--line))!important;color:var(--client-blue)!important;font:900 11px/1 'Montserrat','Nunito',sans-serif!important}
+#screen-clientes .client-platform{display:inline-flex!important;align-items:center!important;max-width:190px!important;padding:6px 9px!important;border-radius:8px!important;background:var(--surface)!important;border:1px solid var(--line)!important;color:var(--txt2)!important;font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+#screen-clientes .pill{white-space:nowrap!important}
+#screen-clientes .client-wa-head,#screen-clientes .client-actions-head,#screen-clientes .client-wa-cell,#screen-clientes .client-actions-cell{text-align:center!important;width:76px!important}
+#screen-clientes .client-wa-btn,#screen-clientes .client-actions-btn{width:34px!important;height:34px!important;display:inline-grid!important;place-items:center!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--surface)!important;cursor:pointer!important;box-shadow:none!important}
+#screen-clientes .client-wa-btn{color:#16A765!important}
+#screen-clientes .client-wa-btn svg{width:20px!important;height:20px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+#screen-clientes .client-actions-btn{color:var(--txt)!important;font-size:23px!important;line-height:1!important}
+#screen-clientes .client-actions-cell{position:relative!important}
+#screen-clientes .client-actions-menu{display:none;position:absolute;z-index:50;right:12px;top:45px;width:205px;padding:7px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 16px 34px rgba(15,45,82,.18);text-align:left}
+#screen-clientes .client-actions-menu.show{display:grid!important}
+#screen-clientes .client-actions-menu button{width:100%;padding:10px 11px;border:0;border-radius:9px;background:transparent;color:var(--txt);text-align:left;font-size:12px;font-weight:800;cursor:pointer}
+#screen-clientes .client-actions-menu button:hover{background:var(--client-soft);color:var(--client-blue)}
+@media(max-width:980px){
+ #screen-clientes .clientes-crm-card>h2{padding-right:0!important;margin-bottom:80px!important}
+ #screen-clientes #clientesNuevaFicha{left:26px!important;right:auto!important;top:91px!important}
+ #screen-clientes .web-home-back{top:91px!important}
+ #screen-clientes .clientes-controlbar{grid-template-columns:1fr!important}
+ #screen-clientes .clientes-tabs{overflow-x:auto!important}
+ #screen-clientes .clientes-filters{grid-template-columns:1fr 1fr!important}
+ #screen-clientes .clientes-table-wrap{overflow-x:auto!important}
+ #screen-clientes table{min-width:950px!important}
+}
+@media(max-width:520px){
+ #screen-clientes>.clientes-crm-card{padding:18px 14px 24px!important}
+ #screen-clientes .clientes-crm-card>h2{margin-bottom:76px!important}
+ #screen-clientes #clientesNuevaFicha{left:14px!important;right:84px!important;top:84px!important;max-width:calc(100% - 104px)!important;white-space:normal!important}
+ #screen-clientes .web-home-back{right:14px!important;top:84px!important}
+ #screen-clientes .clientes-tabs button{min-width:78px!important;padding:0 12px!important}
+ #screen-clientes .clientes-filters{grid-template-columns:1fr!important}
 }
 </style>
 </body>
