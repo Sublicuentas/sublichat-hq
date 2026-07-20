@@ -5267,7 +5267,41 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   };
   function profileKey(){return 'sublichat_profile_'+norm(currentUser()||currentRole()||'usuario');}
   function readProfile(){try{return JSON.parse(localStorage.getItem(profileKey())||'{}')||{};}catch(e){return {};}}
-  function saveProfile(p){localStorage.setItem(profileKey(),JSON.stringify(p||{}));}
+  function saveProfileLocal(p){localStorage.setItem(profileKey(),JSON.stringify(p||{}));}
+  // Guarda el perfil localmente (rápido, offline) y lo sube a Firestore en segundo plano
+  // para que se vea igual al entrar desde otro celular, tablet o computadora.
+  function saveProfile(p){
+    saveProfileLocal(p);
+    syncProfileToServer(p);
+  }
+  let _profileSyncTimer=null;
+  function syncProfileToServer(p){
+    const usuario=currentUser(); if(!usuario)return;
+    clearTimeout(_profileSyncTimer);
+    _profileSyncTimer=setTimeout(()=>{
+      fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
+        telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||''
+      })}).catch(()=>null);
+    },400);
+  }
+  // Trae el perfil guardado en el servidor (si existe) y lo mezcla con el local,
+  // priorizando lo del servidor para que el otro dispositivo se ponga al día.
+  let _profileServerSynced=false;
+  async function loadProfileFromServer(){
+    const usuario=currentUser(); if(!usuario)return;
+    try{
+      const r=await fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'obtener',usuario})});
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok&&j.perfil){
+        const cur=readProfile();
+        const merged={...cur,...j.perfil};
+        saveProfileLocal(merged);
+        _profileServerSynced=true;
+        updateTopAdvisor(); if(typeof renderPerfil==='function')renderPerfil();
+      }
+    }catch(e){}
+  }
   function profileBase(){
     const role=currentRole(), user=norm(currentUser());
     const identity=USER_PROFILE_DEFAULTS[user]||{};
@@ -6047,7 +6081,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); }
   const _oldEnterApp=enterApp;
-  enterApp=function(){ _oldEnterApp(); setTimeout(applyRBAC,50); };
+  enterApp=function(){ _oldEnterApp(); setTimeout(applyRBAC,50); setTimeout(loadProfileFromServer,300); };
   const _oldRender=render;
   render=function(){ _oldRender(); setTimeout(renderRBACAll,30); };
   const _oldIrASeccion=irASeccion;
