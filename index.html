@@ -300,16 +300,15 @@
   }
   function install(){
     applySaved();setTimeout(applySaved,500);setTimeout(applySaved,1500);
-    // renderPerfil() no es una función global — no se puede "envolver" desde aquí.
-    // En vez de eso, vigilamos el propio DOM: cada vez que aparece de nuevo el campo
-    // de banner (se re-crea entero cada vez que se abre o guarda Perfil), enganchamos el botón.
+    // No hay forma segura de "escuchar" cuándo se vuelve a dibujar Perfil, así que
+    // en vez de vigilar todo el DOM de la app (carísimo, con tantas pantallas activas),
+    // se revisa cada 800ms si el botón falta y, si falta, se vuelve a enganchar. Barato.
     function tryEnhance(){
       var file=document.getElementById('profBanner');
-      if(file)enhanceEditor();
+      if(file&&!document.getElementById('profBannerCropBtn'))enhanceEditor();
     }
     tryEnhance();
-    var mo=new MutationObserver(function(){tryEnhance();});
-    mo.observe(document.body,{childList:true,subtree:true});
+    setInterval(tryEnhance,800);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
   window.addEventListener('pageshow',function(){setTimeout(function(){enhanceEditor();applySaved();},120);});
