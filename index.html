@@ -9847,10 +9847,13 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 }
 
 /* Flujo Diario: ajuste estable. Nunca vuelve a medir la tabla en un ciclo continuo. */
-.docs-table-wrap{overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+.docs-table-wrap{-webkit-overflow-scrolling:auto;touch-action:pan-x pan-y;overscroll-behavior:auto}
 .docs-table[data-doc-section="flujo_diario"]{table-layout:fixed!important}
 .docs-table[data-doc-section="flujo_diario"] thead th:not(.corner),.docs-table[data-doc-section="flujo_diario"] tbody td{position:relative!important;min-width:110px!important;width:150px;max-width:150px;vertical-align:top!important}
-.docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px;min-height:44px!important;max-height:2000px!important;padding:8px 9px!important;resize:none!important;overflow:hidden!important;white-space:pre-wrap!important;transition:none!important;overscroll-behavior:contain!important}
+/* La combinación de encabezado fijo + primera columna fija a la vez puede congelar
+   el scroll en algunos navegadores Android. En Flujo Diario dejamos solo el encabezado fijo. */
+.docs-table[data-doc-section="flujo_diario"] .corner,.docs-table[data-doc-section="flujo_diario"] .row-head{position:relative!important;left:auto!important}
+.docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px;min-height:44px!important;max-height:2000px!important;padding:8px 9px!important;resize:none!important;overflow:hidden!important;white-space:pre-wrap!important;transition:none!important;touch-action:pan-x pan-y}
 .docs-fullscreen-host .docs-max-on .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{width:100%!important;min-width:0!important;max-width:100%!important}
 .flow-row-resizer{position:absolute;z-index:6;left:4px;right:4px;bottom:-5px;height:11px;cursor:row-resize;touch-action:none;background:transparent}
 .flow-row-resizer::after{content:'';position:absolute;left:18%;right:18%;top:4px;height:2px;border-radius:3px;background:#2563eb;opacity:.55}
