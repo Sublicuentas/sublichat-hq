@@ -264,6 +264,7 @@
     }
   }
   function applySaved(){applyActual(values(profile()));}
+  window.sublichatApplyBannerCrop=applySaved;
   function enhanceEditor(){
     var cover=document.querySelector('#screen-perfil .profile-cover'),file=document.getElementById('profBanner');if(!cover||!file)return;
     var actions=cover.querySelector('.profile-cover-actions');
@@ -9702,9 +9703,9 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     var hero=document.getElementById('quoteCard');
     if(hero){
       var banner=(p&&p.banner)||'generated_images/oficina-ejecutiva-hero.webp';
-      var safeBanner=String(banner).replace(/"/g,'%22');
-      hero.style.setProperty('background-image','linear-gradient(90deg,rgba(3,16,34,.86) 0%,rgba(3,18,38,.68) 48%,rgba(3,18,38,.08) 76%),url("'+safeBanner+'")','important');
       hero.dataset.bannerSource=(p&&p.banner)?'perfil':'predeterminado';
+      // No pisar el encuadre del usuario: usar la misma función que ya respeta posición y tamaño guardados.
+      if(typeof window.sublichatApplyBannerCrop==='function')window.sublichatApplyBannerCrop();
     }
   }
   function instalar(){
