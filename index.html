@@ -277,6 +277,52 @@
   }
   function applySaved(){applyActual(values(profile()));}
   window.sublichatApplyBannerCrop=applySaved;
+  function captureEditorCrop(base){
+    var px=document.getElementById('bannerPosX'),py=document.getElementById('bannerPosY'),pz=document.getElementById('bannerZoom');
+    var hx=document.getElementById('heroBannerPosX'),hy=document.getElementById('heroBannerPosY'),hz=document.getElementById('heroBannerZoom');
+    if(!px||!py||!pz||!hx||!hy||!hz)return null;
+    var mode=document.getElementById('bannerCropMode'),cur=Object.assign({},base||{});
+    cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';
+    cur.bannerPosX=pct(px.value);cur.bannerPosY=pct(py.value);cur.bannerZoom=zpct(pz.value);
+    cur.heroBannerPosX=pct(hx.value);cur.heroBannerPosY=pct(hy.value);cur.heroBannerZoom=zpct(hz.value);
+    cur.bannerCropUpdatedAt=new Date().toISOString();
+    return cur;
+  }
+  window.sublichatCaptureBannerCrop=captureEditorCrop;
+  async function persistEditorCrop(button){
+    var status=document.getElementById('bannerCropStatus'),oldText=button.textContent;
+    if(button.dataset.cropBusy==='1')return;
+    button.dataset.cropBusy='1';button.disabled=true;button.textContent='Guardando…';
+    try{
+      var base=typeof readProfile==='function'?readProfile():profile();
+      var cur=captureEditorCrop(base);
+      if(!cur)throw new Error('No se encontraron los controles de encuadre.');
+      // Este guardado local es inmediato y no depende de Internet ni del API.
+      writeCropLocal(cur);
+      if(typeof saveProfileLocal==='function')saveProfileLocal(cur);
+      else try{localStorage.setItem('sublichat_profile_'+cropUser(),JSON.stringify(cur));}catch(e){}
+      applyActual(values(cur));
+      if(status){status.className='banner-crop-status ok';status.textContent='✅ Encuadre guardado en este dispositivo. Sincronizando con la nube…';}
+      if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre guardado.');
+      setTimeout(function(){applyActual(values(cur));},120);
+      setTimeout(function(){applyActual(values(cur));},700);
+      if(typeof window.sublichatSaveProfileNow==='function'){
+        try{
+          var reply=await window.sublichatSaveProfileNow(cur,{cropOnly:true});
+          if(reply&&reply.ok&&reply.encuadre&&String(reply.encuadre.bannerCropUpdatedAt||'')===cur.bannerCropUpdatedAt){
+            if(status){status.className='banner-crop-status ok';status.textContent='✅ Encuadre guardado en Perfil e Inicio, también confirmado en la nube.';}
+          }else throw new Error('El servidor todavía usa una versión anterior de api/perfil.js.');
+        }catch(cloudError){
+          if(status){status.className='banner-crop-status warn';status.textContent='✅ El encuadre quedó guardado aquí. ⚠️ La nube no confirmó: '+(cloudError&&cloudError.message?cloudError.message:'sin conexión');}
+        }
+      }
+    }catch(e){
+      if(status){status.className='banner-crop-status warn';status.textContent='⚠️ No se pudo guardar: '+(e&&e.message?e.message:'error desconocido');}
+      if(typeof mostrarToast==='function')mostrarToast('⚠️ No se pudo guardar el encuadre.');
+    }finally{
+      button.disabled=false;button.textContent=oldText;delete button.dataset.cropBusy;
+    }
+  }
   function enhanceEditor(){
     var cover=document.querySelector('#screen-perfil .profile-cover'),file=document.getElementById('profBanner');if(!cover||!file)return;
     var actions=cover.querySelector('.profile-cover-actions');
@@ -305,29 +351,7 @@
     if(mode)mode.onchange=function(){if(mode.value==='auto'){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});paint();}};
     var center=document.getElementById('bannerCropCenter');if(center)center.onclick=function(){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});if(mode)mode.value='custom';paint();};
     var copy=document.getElementById('bannerCropCopy');if(copy)copy.onclick=function(){draft.hx=draft.px;draft.hy=draft.py;draft.hz=draft.pz;var x=document.getElementById('heroBannerPosX'),y=document.getElementById('heroBannerPosY'),z=document.getElementById('heroBannerZoom');if(x)x.value=String(draft.hx);if(y)y.value=String(draft.hy);if(z)z.value=String(draft.hz);if(mode)mode.value='custom';paint();};
-    var save=document.getElementById('bannerCropSave');if(save)save.onclick=async function(){
-      var status=document.getElementById('bannerCropStatus'),oldText=save.textContent;
-      try{
-        save.disabled=true;save.textContent='Guardando…';if(status){status.className='banner-crop-status';status.textContent='Guardando el encuadre en este dispositivo y en la nube…';}
-        var cur=typeof readProfile==='function'?readProfile():{};
-        cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';
-        cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.bannerZoom=draft.pz;
-        cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;cur.heroBannerZoom=draft.hz;
-        cur.bannerCropUpdatedAt=new Date().toISOString();
-        writeCropLocal(cur);
-        if(typeof saveProfileLocal==='function')saveProfileLocal(cur);
-        applyActual(values(cur));
-        setTimeout(function(){applyActual(values(cur));},300);
-        setTimeout(function(){applyActual(values(cur));},1000);
-        if(typeof window.sublichatSaveProfileNow!=='function')throw new Error('La sincronización del perfil todavía no está disponible.');
-        var reply=await window.sublichatSaveProfileNow(cur,{cropOnly:true});
-        if(!reply||!reply.ok||!reply.encuadre)throw new Error('Actualice también api/perfil.js para confirmar el encuadre en la nube.');
-        if(String(reply.encuadre.bannerCropUpdatedAt||'')!==cur.bannerCropUpdatedAt)throw new Error('El servidor no confirmó la versión nueva del encuadre.');
-        if(status){status.className='banner-crop-status ok';status.textContent='✅ Guardado en la nube. Perfil e Inicio usarán este encuadre en todos sus dispositivos.';}
-        if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre guardado en Perfil e Inicio.');
-      }catch(e){if(status){status.className='banner-crop-status warn';status.textContent='⚠️ Quedó guardado en este dispositivo, pero falta confirmar la nube: '+(e&&e.message?e.message:'error de conexión');}if(typeof mostrarToast==='function')mostrarToast('⚠️ Guardado localmente; no se confirmó en la nube.');}
-      finally{save.disabled=false;save.textContent=oldText;}
-    };
+    var save=document.getElementById('bannerCropSave');if(save)save.type='button';
   }
   function install(){
     applySaved();setTimeout(applySaved,500);setTimeout(applySaved,1500);
@@ -345,6 +369,12 @@
   window.addEventListener('pageshow',function(){setTimeout(function(){enhanceEditor();applySaved();},120);});
   window.addEventListener('sublichat:profile-changed',function(){setTimeout(function(){enhanceEditor();applySaved();},60);});
   window.addEventListener('focus',applySaved);
+  // Delegación permanente: aunque Perfil vuelva a crear su HTML, el botón conserva su acción.
+  document.addEventListener('click',function(ev){
+    var target=ev.target&&ev.target.closest?ev.target.closest('#bannerCropSave'):null;
+    if(!target)return;
+    ev.preventDefault();ev.stopPropagation();persistEditorCrop(target);
+  },true);
 })();
 </script>
 <style>
@@ -5834,7 +5864,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const saveImage=async(input,key,max,quality,msg)=>{const file=input?.files?.[0];if(!file)return;try{const dataUrl=await resizeProfilePhoto(file,max,quality),cur=readProfile();cur[key]=dataUrl;saveProfile(cur);renderPerfil();updateTopAdvisor();mostrarToast(msg);}catch(e){mostrarToast('⚠️ No se pudo procesar la imagen. Use JPG o PNG más liviano.');}};
     const foto=document.getElementById('profFoto'),banner=document.getElementById('profBanner');if(foto)foto.onchange=()=>saveImage(foto,'avatar',520,.82,'✅ Foto actualizada.');if(banner)banner.onchange=()=>saveImage(banner,'banner',1400,.72,'✅ Banner actualizado en Perfil e Inicio. Ahora puede ajustar el encuadre.');
     const bannerBtn=document.getElementById('profBannerBtn');if(bannerBtn)bannerBtn.onclick=()=>document.getElementById('profBanner')?.click();
-    const guardar=document.getElementById('profGuardar');if(guardar)guardar.onclick=()=>{const cur=readProfile();cur.nombre=document.getElementById('profNombre').value.trim()||p.nombre;cur.cargo=document.getElementById('profCargo').value.trim()||p.cargo;cur.telefono=document.getElementById('profTelefono').value.trim();cur.area=document.getElementById('profArea').value.trim()||p.area;cur.funcionesExtra=document.getElementById('profFunciones').value.trim();saveProfile(cur);updateTopAdvisor();renderPerfil();mostrarToast('✅ Perfil guardado.');};
+    const guardar=document.getElementById('profGuardar');if(guardar)guardar.onclick=()=>{let cur=readProfile();cur.nombre=document.getElementById('profNombre').value.trim()||p.nombre;cur.cargo=document.getElementById('profCargo').value.trim()||p.cargo;cur.telefono=document.getElementById('profTelefono').value.trim();cur.area=document.getElementById('profArea').value.trim()||p.area;cur.funcionesExtra=document.getElementById('profFunciones').value.trim();const crop=typeof window.sublichatCaptureBannerCrop==='function'?window.sublichatCaptureBannerCrop(cur):null;if(crop){cur=crop;if(typeof window.sublichatWriteBannerCropLocal==='function')window.sublichatWriteBannerCropLocal(cur);}saveProfile(cur);updateTopAdvisor();renderPerfil();mostrarToast('✅ Perfil y encuadre guardados.');};
     const reset=document.getElementById('profReset');if(reset)reset.onclick=()=>{localStorage.removeItem(profileKey());updateTopAdvisor();renderPerfil();mostrarToast('Perfil restaurado.');};const salir=document.getElementById('profSalir');if(salir)salir.onclick=()=>document.getElementById('logoutBtn')?.click();
   }
 
