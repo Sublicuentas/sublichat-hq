@@ -73,6 +73,8 @@ async function guardarPerfil(db, body) {
   update.bannerPosY = percent(body.bannerPosY);
   update.heroBannerPosX = percent(body.heroBannerPosX);
   update.heroBannerPosY = percent(body.heroBannerPosY);
+  update.bannerZoom = Math.max(100, Math.min(250, Math.round(Number(body.bannerZoom)) || 100));
+  update.heroBannerZoom = Math.max(100, Math.min(250, Math.round(Number(body.heroBannerZoom)) || 100));
 
   const writes = [ref.set(update, { merge: true })];
   if (avatar.present) writes.push(media.doc(usuario + '_avatar').set({ usuario, tipo: 'avatar', data: avatar.value, updatedAt: now }, { merge: true }));
