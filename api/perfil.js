@@ -49,6 +49,11 @@ function percent(v, fallback = 50) {
   return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : fallback;
 }
 
+function zoom(v, fallback = 100) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(100, Math.min(250, Math.round(n))) : fallback;
+}
+
 async function guardarPerfil(db, body) {
   const usuario = normUser(body.usuario);
   const ref = db.collection('perfiles_usuario').doc(usuario);
@@ -73,14 +78,28 @@ async function guardarPerfil(db, body) {
   update.bannerPosY = percent(body.bannerPosY);
   update.heroBannerPosX = percent(body.heroBannerPosX);
   update.heroBannerPosY = percent(body.heroBannerPosY);
-  update.bannerZoom = Math.max(100, Math.min(250, Math.round(Number(body.bannerZoom)) || 100));
-  update.heroBannerZoom = Math.max(100, Math.min(250, Math.round(Number(body.heroBannerZoom)) || 100));
+  update.bannerZoom = zoom(body.bannerZoom);
+  update.heroBannerZoom = zoom(body.heroBannerZoom);
+  update.bannerCropUpdatedAt = clean(body.bannerCropUpdatedAt, 50) || now;
 
   const writes = [ref.set(update, { merge: true })];
   if (avatar.present) writes.push(media.doc(usuario + '_avatar').set({ usuario, tipo: 'avatar', data: avatar.value, updatedAt: now }, { merge: true }));
   if (banner.present) writes.push(media.doc(usuario + '_banner').set({ usuario, tipo: 'banner', data: banner.value, updatedAt: now }, { merge: true }));
   await Promise.all(writes);
-  return { ok: true, usuario };
+  return {
+    ok: true,
+    usuario,
+    encuadre: {
+      bannerCropMode: update.bannerCropMode || 'auto',
+      bannerPosX: update.bannerPosX,
+      bannerPosY: update.bannerPosY,
+      bannerZoom: update.bannerZoom,
+      heroBannerPosX: update.heroBannerPosX,
+      heroBannerPosY: update.heroBannerPosY,
+      heroBannerZoom: update.heroBannerZoom,
+      bannerCropUpdatedAt: update.bannerCropUpdatedAt
+    }
+  };
 }
 
 async function obtenerPerfil(db, body) {
@@ -107,7 +126,7 @@ module.exports = async function handler(req, res) {
     getApp();
     const db = admin.firestore();
     if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, msg: 'api/perfil activo', version: 'perfil-banner-encuadre-20260720' });
+      return res.status(200).json({ ok: true, msg: 'api/perfil activo', version: 'perfil-banner-encuadre-confirmado-20260721' });
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método no permitido.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
