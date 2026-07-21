@@ -294,8 +294,20 @@
     var center=document.getElementById('bannerCropCenter');if(center)center.onclick=function(){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});if(mode)mode.value='custom';paint();};
     var copy=document.getElementById('bannerCropCopy');if(copy)copy.onclick=function(){draft.hx=draft.px;draft.hy=draft.py;draft.hz=draft.pz;var x=document.getElementById('heroBannerPosX'),y=document.getElementById('heroBannerPosY'),z=document.getElementById('heroBannerZoom');if(x)x.value=String(draft.hx);if(y)y.value=String(draft.hy);if(z)z.value=String(draft.hz);if(mode)mode.value='custom';paint();};
     var save=document.getElementById('bannerCropSave');if(save)save.onclick=function(){
-      try{var cur=typeof readProfile==='function'?readProfile():{};cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.bannerZoom=draft.pz;cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;cur.heroBannerZoom=draft.hz;if(typeof saveProfile==='function')saveProfile(cur);applyActual(values(cur));if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre y tamaño guardados en Perfil e Inicio.');}
-      catch(e){if(typeof mostrarToast==='function')mostrarToast('⚠️ No se pudo guardar el encuadre.');}
+      try{
+        var cur=typeof readProfile==='function'?readProfile():{};
+        cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';
+        cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.bannerZoom=draft.pz;
+        cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;cur.heroBannerZoom=draft.hz;
+        if(typeof saveProfile==='function')saveProfile(cur);
+        applyActual(values(cur));
+        // Por si algún otro proceso repinta el banner casi al mismo tiempo (p. ej. al
+        // guardar perfil), se vuelve a aplicar el encuadre guardado un par de veces más,
+        // para que quede lo que el usuario acaba de fijar, no lo que había antes.
+        setTimeout(function(){applyActual(values(cur));},300);
+        setTimeout(function(){applyActual(values(cur));},1000);
+        if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre y tamaño guardados en Perfil e Inicio.');
+      }catch(e){if(typeof mostrarToast==='function')mostrarToast('⚠️ No se pudo guardar el encuadre.');}
     };
   }
   function install(){
