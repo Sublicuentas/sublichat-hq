@@ -299,9 +299,17 @@
     };
   }
   function install(){
-    var original=window.renderPerfil;
-    if(typeof original==='function'&&!original.__bannerCropFixed){var wrapped=function(){var out=original.apply(this,arguments);setTimeout(function(){enhanceEditor();applySaved();},0);return out;};wrapped.__bannerCropFixed=true;window.renderPerfil=wrapped;}
-    enhanceEditor();applySaved();setTimeout(function(){enhanceEditor();applySaved();},500);setTimeout(applySaved,1500);
+    applySaved();setTimeout(applySaved,500);setTimeout(applySaved,1500);
+    // renderPerfil() no es una función global — no se puede "envolver" desde aquí.
+    // En vez de eso, vigilamos el propio DOM: cada vez que aparece de nuevo el campo
+    // de banner (se re-crea entero cada vez que se abre o guarda Perfil), enganchamos el botón.
+    function tryEnhance(){
+      var file=document.getElementById('profBanner');
+      if(file)enhanceEditor();
+    }
+    tryEnhance();
+    var mo=new MutationObserver(function(){tryEnhance();});
+    mo.observe(document.body,{childList:true,subtree:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
   window.addEventListener('pageshow',function(){setTimeout(function(){enhanceEditor();applySaved();},120);});
