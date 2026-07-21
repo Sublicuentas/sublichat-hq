@@ -241,15 +241,27 @@
   function pct(v){v=Number(v);return Number.isFinite(v)?Math.max(0,Math.min(100,Math.round(v))):50;}
   function profile(){try{return typeof window.sublichatGetProfile==='function'?window.sublichatGetProfile():{};}catch(e){return {};}}
   function bgUrl(url){return 'url("'+String(url||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]/g,'')+'")';}
+  function zpct(v){v=Number(v);return Number.isFinite(v)?Math.max(100,Math.min(250,Math.round(v))):100;}
   function values(p){
     var custom=(p&&p.bannerCropMode)==='custom';
-    return {mode:custom?'custom':'auto',px:custom?pct(p.bannerPosX):50,py:custom?pct(p.bannerPosY):50,hx:custom?pct(p.heroBannerPosX):50,hy:custom?pct(p.heroBannerPosY):50};
+    return {mode:custom?'custom':'auto',px:custom?pct(p.bannerPosX):50,py:custom?pct(p.bannerPosY):50,hx:custom?pct(p.heroBannerPosX):50,hy:custom?pct(p.heroBannerPosY):50,pz:custom?zpct(p.bannerZoom):100,hz:custom?zpct(p.heroBannerZoom):100};
   }
+  function sizeFor(z){return z<=100?'cover':(z+'% auto');}
   function applyActual(v){
+    var p=profile(),image=p.banner||OFFICE;
     var cover=document.querySelector('#screen-perfil .profile-cover');
-    if(cover)cover.style.setProperty('background-position',v.px+'% '+v.py+'%','important');
+    if(cover){
+      cover.style.setProperty('background-image',bgUrl(image),'important');
+      cover.style.setProperty('background-size',sizeFor(v.pz),'important');
+      cover.style.setProperty('background-position',v.px+'% '+v.py+'%','important');
+    }
     var hero=document.getElementById('quoteCard');
-    if(hero)hero.style.setProperty('background-position',v.hx+'% '+v.hy+'%','important');
+    if(hero){
+      var overlay='linear-gradient(90deg,rgba(3,25,52,.94) 0%,rgba(3,29,57,.72) 38%,rgba(3,29,57,.14) 70%),';
+      hero.style.setProperty('background-image',overlay+bgUrl(image),'important');
+      hero.style.setProperty('background-size','100% 100%,'+sizeFor(v.hz),'important');
+      hero.style.setProperty('background-position','center,'+v.hx+'% '+v.hy+'%','important');
+    }
   }
   function applySaved(){applyActual(values(profile()));}
   function enhanceEditor(){
@@ -259,27 +271,29 @@
     var editor=document.getElementById('profileBannerCropEditor');
     if(!editor){
       editor=document.createElement('div');editor.id='profileBannerCropEditor';editor.hidden=true;
-      editor.innerHTML='<div class="banner-crop-head"><div><b>Ajustar la parte visible del banner</b><small>Perfil e Inicio tienen proporciones distintas. Puede elegir por separado qué parte mostrar en cada uno.</small></div><select class="banner-crop-mode" id="bannerCropMode"><option value="auto">Automático · centrado</option><option value="custom">Personalizado</option></select></div><div class="banner-crop-previews"><div class="banner-crop-preview-wrap"><span>Vista en Perfil</span><div class="banner-crop-preview profile" id="bannerPreviewProfile"></div></div><div class="banner-crop-preview-wrap"><span>Vista panorámica en Inicio</span><div class="banner-crop-preview home" id="bannerPreviewHome"></div></div></div><div class="banner-crop-grid"><div class="banner-crop-group"><b>Encuadre del Perfil</b><label class="banner-range"><span>Horizontal</span><input id="bannerPosX" type="range" min="0" max="100"><output id="bannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="bannerPosY" type="range" min="0" max="100"><output id="bannerPosYOut">50%</output></label></div><div class="banner-crop-group"><b>Encuadre del Inicio</b><label class="banner-range"><span>Horizontal</span><input id="heroBannerPosX" type="range" min="0" max="100"><output id="heroBannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="heroBannerPosY" type="range" min="0" max="100"><output id="heroBannerPosYOut">50%</output></label></div></div><div class="banner-crop-actions"><button type="button" class="rbac-btn" id="bannerCropCenter">◎ Centrar ambos</button><button type="button" class="rbac-btn" id="bannerCropCopy">⇢ Usar perfil en Inicio</button><button type="button" class="rbac-btn good" id="bannerCropSave">💾 Guardar encuadre</button></div>';
+      editor.innerHTML='<div class="banner-crop-head"><div><b>Ajustar la parte visible del banner</b><small>Perfil e Inicio tienen proporciones distintas. Puede elegir por separado qué parte y qué tamaño mostrar en cada uno.</small></div><select class="banner-crop-mode" id="bannerCropMode"><option value="auto">Automático · centrado</option><option value="custom">Personalizado</option></select></div><div class="banner-crop-previews"><div class="banner-crop-preview-wrap"><span>Vista en Perfil</span><div class="banner-crop-preview profile" id="bannerPreviewProfile"></div></div><div class="banner-crop-preview-wrap"><span>Vista panorámica en Inicio</span><div class="banner-crop-preview home" id="bannerPreviewHome"></div></div></div><div class="banner-crop-grid"><div class="banner-crop-group"><b>Encuadre del Perfil</b><label class="banner-range"><span>Horizontal</span><input id="bannerPosX" type="range" min="0" max="100"><output id="bannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="bannerPosY" type="range" min="0" max="100"><output id="bannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="bannerZoom" type="range" min="100" max="250"><output id="bannerZoomOut">100%</output></label></div><div class="banner-crop-group"><b>Encuadre del Inicio</b><label class="banner-range"><span>Horizontal</span><input id="heroBannerPosX" type="range" min="0" max="100"><output id="heroBannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="heroBannerPosY" type="range" min="0" max="100"><output id="heroBannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="heroBannerZoom" type="range" min="100" max="250"><output id="heroBannerZoomOut">100%</output></label></div></div><div class="banner-crop-actions"><button type="button" class="rbac-btn" id="bannerCropCenter">◎ Centrar y restablecer tamaño</button><button type="button" class="rbac-btn" id="bannerCropCopy">⇢ Usar perfil en Inicio</button><button type="button" class="rbac-btn good" id="bannerCropSave">💾 Guardar encuadre</button></div>';
       file.closest('.rbac-field')?.insertAdjacentElement('afterend',editor);
     }
     var p=profile(),v=values(p),image=p.banner||OFFICE;
     var pp=document.getElementById('bannerPreviewProfile'),ph=document.getElementById('bannerPreviewHome');
     if(pp)pp.style.backgroundImage=bgUrl(image);if(ph)ph.style.backgroundImage=bgUrl(image);
     var mode=document.getElementById('bannerCropMode');if(mode)mode.value=v.mode;
-    var ids=['bannerPosX','bannerPosY','heroBannerPosX','heroBannerPosY'];
-    var draft={px:v.px,py:v.py,hx:v.hx,hy:v.hy};
+    var ids=['bannerPosX','bannerPosY','heroBannerPosX','heroBannerPosY','bannerZoom','heroBannerZoom'];
+    var draft={px:v.px,py:v.py,hx:v.hx,hy:v.hy,pz:v.pz,hz:v.hz};
     function paint(){
-      if(pp)pp.style.backgroundPosition=draft.px+'% '+draft.py+'%';if(ph)ph.style.backgroundPosition=draft.hx+'% '+draft.hy+'%';
+      if(pp){pp.style.backgroundSize=sizeFor(draft.pz);pp.style.backgroundPosition=draft.px+'% '+draft.py+'%';}
+      if(ph){ph.style.backgroundSize=sizeFor(draft.hz);ph.style.backgroundPosition=draft.hx+'% '+draft.hy+'%';}
       ids.forEach(function(id){var input=document.getElementById(id),out=document.getElementById(id+'Out');if(out&&input)out.textContent=input.value+'%';});applyActual(draft);
     }
     [['bannerPosX','px'],['bannerPosY','py'],['heroBannerPosX','hx'],['heroBannerPosY','hy']].forEach(function(pair){var input=document.getElementById(pair[0]);if(!input)return;input.value=String(draft[pair[1]]);input.oninput=function(){draft[pair[1]]=pct(input.value);if(mode)mode.value='custom';paint();};});
+    [['bannerZoom','pz'],['heroBannerZoom','hz']].forEach(function(pair){var input=document.getElementById(pair[0]);if(!input)return;input.value=String(draft[pair[1]]);input.oninput=function(){draft[pair[1]]=zpct(input.value);if(mode)mode.value='custom';paint();};});
     paint();
     var toggle=document.getElementById('profBannerCropBtn');if(toggle)toggle.onclick=function(){editor.hidden=!editor.hidden;if(!editor.hidden)editor.scrollIntoView({behavior:'smooth',block:'center'});};
-    if(mode)mode.onchange=function(){if(mode.value==='auto'){draft={px:50,py:50,hx:50,hy:50};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value='50';});paint();}};
-    var center=document.getElementById('bannerCropCenter');if(center)center.onclick=function(){draft={px:50,py:50,hx:50,hy:50};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value='50';});if(mode)mode.value='custom';paint();};
-    var copy=document.getElementById('bannerCropCopy');if(copy)copy.onclick=function(){draft.hx=draft.px;draft.hy=draft.py;var x=document.getElementById('heroBannerPosX'),y=document.getElementById('heroBannerPosY');if(x)x.value=String(draft.hx);if(y)y.value=String(draft.hy);if(mode)mode.value='custom';paint();};
+    if(mode)mode.onchange=function(){if(mode.value==='auto'){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});paint();}};
+    var center=document.getElementById('bannerCropCenter');if(center)center.onclick=function(){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});if(mode)mode.value='custom';paint();};
+    var copy=document.getElementById('bannerCropCopy');if(copy)copy.onclick=function(){draft.hx=draft.px;draft.hy=draft.py;draft.hz=draft.pz;var x=document.getElementById('heroBannerPosX'),y=document.getElementById('heroBannerPosY'),z=document.getElementById('heroBannerZoom');if(x)x.value=String(draft.hx);if(y)y.value=String(draft.hy);if(z)z.value=String(draft.hz);if(mode)mode.value='custom';paint();};
     var save=document.getElementById('bannerCropSave');if(save)save.onclick=function(){
-      try{var cur=typeof readProfile==='function'?readProfile():{};cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;if(typeof saveProfile==='function')saveProfile(cur);applyActual(values(cur));if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre guardado en Perfil e Inicio.');}
+      try{var cur=typeof readProfile==='function'?readProfile():{};cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.bannerZoom=draft.pz;cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;cur.heroBannerZoom=draft.hz;if(typeof saveProfile==='function')saveProfile(cur);applyActual(values(cur));if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre y tamaño guardados en Perfil e Inicio.');}
       catch(e){if(typeof mostrarToast==='function')mostrarToast('⚠️ No se pudo guardar el encuadre.');}
     };
   }
@@ -5470,7 +5484,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
         telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',banner:p.banner||'',
         bannerCropMode:p.bannerCropMode||'auto',bannerPosX:Number(p.bannerPosX??50),bannerPosY:Number(p.bannerPosY??50),
-        heroBannerPosX:Number(p.heroBannerPosX??50),heroBannerPosY:Number(p.heroBannerPosY??50)
+        heroBannerPosX:Number(p.heroBannerPosX??50),heroBannerPosY:Number(p.heroBannerPosY??50),
+        bannerZoom:Number(p.bannerZoom??100),heroBannerZoom:Number(p.heroBannerZoom??100)
       })}).catch(()=>null);
     },400);
   }
@@ -9833,7 +9848,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 .docs-table-wrap{overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
 .docs-table[data-doc-section="flujo_diario"]{table-layout:fixed!important}
 .docs-table[data-doc-section="flujo_diario"] thead th:not(.corner),.docs-table[data-doc-section="flujo_diario"] tbody td{position:relative!important;min-width:110px!important;width:150px;max-width:150px;vertical-align:top!important}
-.docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px;min-height:44px!important;max-height:240px!important;padding:8px 9px!important;resize:none!important;overflow:auto!important;white-space:pre-wrap!important;transition:none!important;overscroll-behavior:contain!important}
+.docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px;min-height:44px!important;max-height:2000px!important;padding:8px 9px!important;resize:none!important;overflow:hidden!important;white-space:pre-wrap!important;transition:none!important;overscroll-behavior:contain!important}
 .docs-fullscreen-host .docs-max-on .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{width:100%!important;min-width:0!important;max-width:100%!important}
 .flow-row-resizer{position:absolute;z-index:6;left:4px;right:4px;bottom:-5px;height:11px;cursor:row-resize;touch-action:none;background:transparent}
 .flow-row-resizer::after{content:'';position:absolute;left:18%;right:18%;top:4px;height:2px;border-radius:3px;background:#2563eb;opacity:.55}
@@ -9844,7 +9859,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 .flow-size-controls .docs-btn{min-height:34px!important;padding:7px 10px!important;font-size:12px!important;background:var(--card)!important}
 @media(max-width:680px){
   .docs-table[data-doc-section="flujo_diario"] thead th:not(.corner),.docs-table[data-doc-section="flujo_diario"] tbody td{min-width:96px!important;width:128px;max-width:128px}
-  .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{font-size:13px!important;min-height:42px!important;max-height:220px!important}
+  .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{font-size:13px!important;min-height:42px!important;max-height:2000px!important}
   .flow-size-controls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-column:1/-1!important;width:100%!important}
   .flow-size-controls .docs-btn{padding:7px 5px!important;font-size:11px!important}
   .flow-size-controls .flow-fit-btn{grid-column:1/-1!important}
@@ -9883,7 +9898,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   function heights(){try{return JSON.parse(localStorage.getItem(HEIGHT_KEY)||'{}')||{};}catch(e){return {};}}
   function saveHeights(v){try{localStorage.setItem(HEIGHT_KEY,JSON.stringify(v||{}));}catch(e){}}
   function rowKey(table,row){var ta=row&&row.querySelector('textarea.docs-cell');return String(table.dataset.docSheet||'1')+':'+String(ta?ta.dataset.r:'0');}
-  function clampHeight(v){return Math.max(window.innerWidth<=680?42:44,Math.min(window.innerWidth<=680?220:240,Math.round(Number(v)||44)));}
+  function clampHeight(v){return Math.max(window.innerWidth<=680?42:44,Math.min(2000,Math.round(Number(v)||44)));}
   function setRowHeight(row,height,persist,manual){
     if(!row)return;var table=row.closest('table'),h=clampHeight(height);
     row.querySelectorAll('textarea.docs-cell').forEach(function(ta){ta.style.setProperty('height',h+'px','important');});
@@ -9960,7 +9975,9 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     actualizarSaludoReflexion();enhanceAll();
     var queued=0,mo=new MutationObserver(function(records){var found=records.some(function(rec){return Array.from(rec.addedNodes||[]).some(function(n){return n.nodeType===1&&(n.matches?.('table[data-doc-section="flujo_diario"]')||n.querySelector?.('table[data-doc-section="flujo_diario"]'));});});if(!found)return;clearTimeout(queued);queued=setTimeout(enhanceAll,90);});
     mo.observe(document.body,{childList:true,subtree:true});
-    document.addEventListener('input',function(ev){if(ev.target&&ev.target.matches&&ev.target.matches('table[data-doc-section="flujo_diario"] textarea.docs-cell'))autoHeightCell(ev.target);},true);
+    var pendingCells=new Set(),rafPending=false;
+    function flushPendingCells(){rafPending=false;pendingCells.forEach(function(ta){autoHeightCell(ta);});pendingCells.clear();}
+    document.addEventListener('input',function(ev){if(ev.target&&ev.target.matches&&ev.target.matches('table[data-doc-section="flujo_diario"] textarea.docs-cell')){pendingCells.add(ev.target);if(!rafPending){rafPending=true;requestAnimationFrame(flushPendingCells);}}},true);
     document.addEventListener('click',function(ev){if(ev.target&&ev.target.closest&&ev.target.closest('[data-screen="importar"], [data-doc-tab], #docMax, #docMore'))setTimeout(enhanceAll,100);},true);
     setInterval(actualizarSaludoReflexion,30000);
   }
