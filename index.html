@@ -226,6 +226,8 @@
   .banner-range{display:grid;grid-template-columns:74px 1fr 42px;gap:7px;align-items:center;margin-top:7px;color:var(--txt2);font-size:11px;font-weight:800}
   .banner-range input{width:100%;accent-color:var(--accent)}.banner-range output{text-align:right;color:var(--txt);font-weight:900}
   .banner-crop-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.banner-crop-actions .rbac-btn{flex:1;min-width:130px}
+  .banner-crop-status{width:100%;margin-top:9px;padding:9px 11px;border-radius:11px;background:var(--accentSoft);color:var(--txt2);font-size:11px;font-weight:800;line-height:1.35}
+  .banner-crop-status.ok{background:var(--goodSoft);color:var(--good)}.banner-crop-status.warn{background:var(--warnSoft);color:var(--warn)}
   @media(max-width:680px){
     #screen-perfil .profile-cover-actions{left:12px!important;right:12px!important;top:12px!important}
     #screen-perfil .profile-cover-actions button{font-size:11px!important;padding:9px 10px!important}
@@ -242,7 +244,17 @@
   function profile(){try{return typeof window.sublichatGetProfile==='function'?window.sublichatGetProfile():{};}catch(e){return {};}}
   function bgUrl(url){return 'url("'+String(url||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]/g,'')+'")';}
   function zpct(v){v=Number(v);return Number.isFinite(v)?Math.max(100,Math.min(250,Math.round(v))):100;}
+  var CROP_FIELDS=['bannerCropMode','bannerPosX','bannerPosY','bannerZoom','heroBannerPosX','heroBannerPosY','heroBannerZoom','bannerCropUpdatedAt'];
+  function cropUser(){try{return String(typeof currentUser==='function'?(currentUser()||'usuario'):'usuario').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]/g,'')||'usuario';}catch(e){return 'usuario';}}
+  function cropKey(){return 'sublichat_banner_crop_v4_'+cropUser();}
+  function readCropLocal(){try{return JSON.parse(localStorage.getItem(cropKey())||'{}')||{};}catch(e){return {};}}
+  function writeCropLocal(p){var out={};CROP_FIELDS.forEach(function(k){if(p&&p[k]!=null)out[k]=p[k];});try{localStorage.setItem(cropKey(),JSON.stringify(out));}catch(e){}return out;}
+  function cropTime(p){var n=Date.parse(p&&p.bannerCropUpdatedAt||'');return Number.isFinite(n)?n:0;}
+  function mergeCrop(p){var base=p||{},local=readCropLocal();return cropTime(local)>=cropTime(base)?Object.assign({},base,local):base;}
+  window.sublichatReadBannerCropLocal=readCropLocal;
+  window.sublichatWriteBannerCropLocal=writeCropLocal;
   function values(p){
+    p=mergeCrop(p);
     var custom=(p&&p.bannerCropMode)==='custom';
     return {mode:custom?'custom':'auto',px:custom?pct(p.bannerPosX):50,py:custom?pct(p.bannerPosY):50,hx:custom?pct(p.heroBannerPosX):50,hy:custom?pct(p.heroBannerPosY):50,pz:custom?zpct(p.bannerZoom):100,hz:custom?zpct(p.heroBannerZoom):100};
   }
@@ -272,7 +284,7 @@
     var editor=document.getElementById('profileBannerCropEditor');
     if(!editor){
       editor=document.createElement('div');editor.id='profileBannerCropEditor';editor.hidden=true;
-      editor.innerHTML='<div class="banner-crop-head"><div><b>Ajustar la parte visible del banner</b><small>Perfil e Inicio tienen proporciones distintas. Puede elegir por separado qué parte y qué tamaño mostrar en cada uno.</small></div><select class="banner-crop-mode" id="bannerCropMode"><option value="auto">Automático · centrado</option><option value="custom">Personalizado</option></select></div><div class="banner-crop-previews"><div class="banner-crop-preview-wrap"><span>Vista en Perfil</span><div class="banner-crop-preview profile" id="bannerPreviewProfile"></div></div><div class="banner-crop-preview-wrap"><span>Vista panorámica en Inicio</span><div class="banner-crop-preview home" id="bannerPreviewHome"></div></div></div><div class="banner-crop-grid"><div class="banner-crop-group"><b>Encuadre del Perfil</b><label class="banner-range"><span>Horizontal</span><input id="bannerPosX" type="range" min="0" max="100"><output id="bannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="bannerPosY" type="range" min="0" max="100"><output id="bannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="bannerZoom" type="range" min="100" max="250"><output id="bannerZoomOut">100%</output></label></div><div class="banner-crop-group"><b>Encuadre del Inicio</b><label class="banner-range"><span>Horizontal</span><input id="heroBannerPosX" type="range" min="0" max="100"><output id="heroBannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="heroBannerPosY" type="range" min="0" max="100"><output id="heroBannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="heroBannerZoom" type="range" min="100" max="250"><output id="heroBannerZoomOut">100%</output></label></div></div><div class="banner-crop-actions"><button type="button" class="rbac-btn" id="bannerCropCenter">◎ Centrar y restablecer tamaño</button><button type="button" class="rbac-btn" id="bannerCropCopy">⇢ Usar perfil en Inicio</button><button type="button" class="rbac-btn good" id="bannerCropSave">💾 Guardar encuadre</button></div>';
+      editor.innerHTML='<div class="banner-crop-head"><div><b>Ajustar la parte visible del banner</b><small>Perfil e Inicio tienen proporciones distintas. Puede elegir por separado qué parte y qué tamaño mostrar en cada uno.</small></div><select class="banner-crop-mode" id="bannerCropMode"><option value="auto">Automático · centrado</option><option value="custom">Personalizado</option></select></div><div class="banner-crop-previews"><div class="banner-crop-preview-wrap"><span>Vista en Perfil</span><div class="banner-crop-preview profile" id="bannerPreviewProfile"></div></div><div class="banner-crop-preview-wrap"><span>Vista panorámica en Inicio</span><div class="banner-crop-preview home" id="bannerPreviewHome"></div></div></div><div class="banner-crop-grid"><div class="banner-crop-group"><b>Encuadre del Perfil</b><label class="banner-range"><span>Horizontal</span><input id="bannerPosX" type="range" min="0" max="100"><output id="bannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="bannerPosY" type="range" min="0" max="100"><output id="bannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="bannerZoom" type="range" min="100" max="250"><output id="bannerZoomOut">100%</output></label></div><div class="banner-crop-group"><b>Encuadre del Inicio</b><label class="banner-range"><span>Horizontal</span><input id="heroBannerPosX" type="range" min="0" max="100"><output id="heroBannerPosXOut">50%</output></label><label class="banner-range"><span>Vertical</span><input id="heroBannerPosY" type="range" min="0" max="100"><output id="heroBannerPosYOut">50%</output></label><label class="banner-range"><span>Tamaño</span><input id="heroBannerZoom" type="range" min="100" max="250"><output id="heroBannerZoomOut">100%</output></label></div></div><div class="banner-crop-actions"><button type="button" class="rbac-btn" id="bannerCropCenter">◎ Centrar y restablecer tamaño</button><button type="button" class="rbac-btn" id="bannerCropCopy">⇢ Usar perfil en Inicio</button><button type="button" class="rbac-btn good" id="bannerCropSave">💾 Guardar encuadre</button></div><div class="banner-crop-status" id="bannerCropStatus">Los cambios se guardan para este usuario en Perfil e Inicio.</div>';
       file.closest('.rbac-field')?.insertAdjacentElement('afterend',editor);
     }
     var p=profile(),v=values(p),image=p.banner||OFFICE;
@@ -293,21 +305,28 @@
     if(mode)mode.onchange=function(){if(mode.value==='auto'){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});paint();}};
     var center=document.getElementById('bannerCropCenter');if(center)center.onclick=function(){draft={px:50,py:50,hx:50,hy:50,pz:100,hz:100};ids.forEach(function(id){var i=document.getElementById(id);if(i)i.value=(id.indexOf('Zoom')>-1?'100':'50');});if(mode)mode.value='custom';paint();};
     var copy=document.getElementById('bannerCropCopy');if(copy)copy.onclick=function(){draft.hx=draft.px;draft.hy=draft.py;draft.hz=draft.pz;var x=document.getElementById('heroBannerPosX'),y=document.getElementById('heroBannerPosY'),z=document.getElementById('heroBannerZoom');if(x)x.value=String(draft.hx);if(y)y.value=String(draft.hy);if(z)z.value=String(draft.hz);if(mode)mode.value='custom';paint();};
-    var save=document.getElementById('bannerCropSave');if(save)save.onclick=function(){
+    var save=document.getElementById('bannerCropSave');if(save)save.onclick=async function(){
+      var status=document.getElementById('bannerCropStatus'),oldText=save.textContent;
       try{
+        save.disabled=true;save.textContent='Guardando…';if(status){status.className='banner-crop-status';status.textContent='Guardando el encuadre en este dispositivo y en la nube…';}
         var cur=typeof readProfile==='function'?readProfile():{};
         cur.bannerCropMode=(mode&&mode.value==='auto')?'auto':'custom';
         cur.bannerPosX=draft.px;cur.bannerPosY=draft.py;cur.bannerZoom=draft.pz;
         cur.heroBannerPosX=draft.hx;cur.heroBannerPosY=draft.hy;cur.heroBannerZoom=draft.hz;
-        if(typeof saveProfile==='function')saveProfile(cur);
+        cur.bannerCropUpdatedAt=new Date().toISOString();
+        writeCropLocal(cur);
+        if(typeof saveProfileLocal==='function')saveProfileLocal(cur);
         applyActual(values(cur));
-        // Por si algún otro proceso repinta el banner casi al mismo tiempo (p. ej. al
-        // guardar perfil), se vuelve a aplicar el encuadre guardado un par de veces más,
-        // para que quede lo que el usuario acaba de fijar, no lo que había antes.
         setTimeout(function(){applyActual(values(cur));},300);
         setTimeout(function(){applyActual(values(cur));},1000);
-        if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre y tamaño guardados en Perfil e Inicio.');
-      }catch(e){if(typeof mostrarToast==='function')mostrarToast('⚠️ No se pudo guardar el encuadre.');}
+        if(typeof window.sublichatSaveProfileNow!=='function')throw new Error('La sincronización del perfil todavía no está disponible.');
+        var reply=await window.sublichatSaveProfileNow(cur,{cropOnly:true});
+        if(!reply||!reply.ok||!reply.encuadre)throw new Error('Actualice también api/perfil.js para confirmar el encuadre en la nube.');
+        if(String(reply.encuadre.bannerCropUpdatedAt||'')!==cur.bannerCropUpdatedAt)throw new Error('El servidor no confirmó la versión nueva del encuadre.');
+        if(status){status.className='banner-crop-status ok';status.textContent='✅ Guardado en la nube. Perfil e Inicio usarán este encuadre en todos sus dispositivos.';}
+        if(typeof mostrarToast==='function')mostrarToast('✅ Encuadre guardado en Perfil e Inicio.');
+      }catch(e){if(status){status.className='banner-crop-status warn';status.textContent='⚠️ Quedó guardado en este dispositivo, pero falta confirmar la nube: '+(e&&e.message?e.message:'error de conexión');}if(typeof mostrarToast==='function')mostrarToast('⚠️ Guardado localmente; no se confirmó en la nube.');}
+      finally{save.disabled=false;save.textContent=oldText;}
     };
   }
   function install(){
@@ -5484,7 +5503,14 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     yami:{nombre:'Yami',cargo:'Asesora de ventas'}, manuel:{nombre:'Manuel',cargo:'Asesor de ventas'}, heber:{nombre:'Heber',cargo:'Asesor de ventas'}, abner:{nombre:'Abner',cargo:'Asesor de ventas'}, jimena:{nombre:'Jimena',cargo:'Asesora de ventas'}, elizabeth:{nombre:'Elizabeth',cargo:'Asesora de ventas'}, lucy:{nombre:'Lucy',cargo:'Asesora de ventas'}
   };
   function profileKey(){return 'sublichat_profile_'+norm(currentUser()||currentRole()||'usuario');}
-  function readProfile(){try{return JSON.parse(localStorage.getItem(profileKey())||'{}')||{};}catch(e){return {};}}
+  function readProfile(){
+    try{
+      const base=JSON.parse(localStorage.getItem(profileKey())||'{}')||{};
+      const crop=typeof window.sublichatReadBannerCropLocal==='function'?window.sublichatReadBannerCropLocal():{};
+      const bt=Date.parse(base.bannerCropUpdatedAt||'')||0,ct=Date.parse(crop.bannerCropUpdatedAt||'')||0;
+      return ct>=bt?{...base,...crop}:base;
+    }catch(e){return {};}
+  }
   function saveProfileLocal(p){
     localStorage.setItem(profileKey(),JSON.stringify(p||{}));
     try{window.dispatchEvent(new CustomEvent('sublichat:profile-changed',{detail:{profile:p||{}}}));}catch(e){}
@@ -5495,19 +5521,31 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     saveProfileLocal(p);
     syncProfileToServer(p);
   }
+  function profileServerPayload(p,usuario,options){
+    const payload={
+      accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
+      telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',banner:p.banner||'',
+      bannerCropMode:p.bannerCropMode||'auto',bannerPosX:Number(p.bannerPosX??50),bannerPosY:Number(p.bannerPosY??50),
+      heroBannerPosX:Number(p.heroBannerPosX??50),heroBannerPosY:Number(p.heroBannerPosY??50),
+      bannerZoom:Number(p.bannerZoom??100),heroBannerZoom:Number(p.heroBannerZoom??100),bannerCropUpdatedAt:p.bannerCropUpdatedAt||''
+    };
+    if(options&&options.cropOnly){delete payload.avatar;delete payload.banner;}
+    return payload;
+  }
+  async function saveProfileToServerNow(p,options){
+    const usuario=currentUser();
+    if(!usuario)throw new Error('Debe iniciar sesión para guardar en la nube.');
+    const r=await fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(profileServerPayload(p||{},usuario,options))});
+    const j=await r.json().catch(()=>({ok:false,error:'Respuesta inválida del servidor.'}));
+    if(!r.ok||!j||!j.ok)throw new Error(j&&j.error?j.error:'No se pudo guardar el perfil.');
+    return j;
+  }
+  window.sublichatSaveProfileNow=saveProfileToServerNow;
   let _profileSyncTimer=null;
   function syncProfileToServer(p){
     const usuario=currentUser(); if(!usuario)return;
     clearTimeout(_profileSyncTimer);
-    _profileSyncTimer=setTimeout(()=>{
-      fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
-        telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',banner:p.banner||'',
-        bannerCropMode:p.bannerCropMode||'auto',bannerPosX:Number(p.bannerPosX??50),bannerPosY:Number(p.bannerPosY??50),
-        heroBannerPosX:Number(p.heroBannerPosX??50),heroBannerPosY:Number(p.heroBannerPosY??50),
-        bannerZoom:Number(p.bannerZoom??100),heroBannerZoom:Number(p.heroBannerZoom??100)
-      })}).catch(()=>null);
-    },400);
+    _profileSyncTimer=setTimeout(()=>{saveProfileToServerNow(p).catch(()=>null);},400);
   }
   // Trae el perfil guardado en el servidor (si existe) y lo mezcla con el local,
   // priorizando lo del servidor para que el otro dispositivo se ponga al día.
@@ -5518,8 +5556,17 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const r=await fetch('/api/perfil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'obtener',usuario})});
       const j=await r.json().catch(()=>({}));
       if(j&&j.ok&&j.perfil){
-        const cur=readProfile();
-        const merged={...cur,...j.perfil};
+        const cur=readProfile(),server=j.perfil||{};
+        const localCrop=typeof window.sublichatReadBannerCropLocal==='function'?window.sublichatReadBannerCropLocal():{};
+        const localTime=Date.parse(localCrop.bannerCropUpdatedAt||cur.bannerCropUpdatedAt||'')||0;
+        const serverTime=Date.parse(server.bannerCropUpdatedAt||'')||0;
+        const merged={...cur,...server};
+        if(localTime>serverTime){
+          Object.assign(merged,localCrop);
+          saveProfileToServerNow(merged,{cropOnly:true}).catch(()=>null);
+        }else if(serverTime&&typeof window.sublichatWriteBannerCropLocal==='function'){
+          window.sublichatWriteBannerCropLocal(server);
+        }
         saveProfileLocal(merged);
         _profileServerSynced=true;
         if(merged.tema)applyTheme(merged.tema,false);
