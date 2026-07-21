@@ -6225,6 +6225,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const btn=document.querySelector('.nav-btn[data-screen="tickets"]');
     if(!btn)return;
     const open=tkMine().filter(t=>{
+      const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
+      if(isNotice)return false; // un aviso es un anuncio enviado, no algo pendiente de leer o resolver
       const e=String(t.estado||'abierto').toLowerCase();
       return e!=='resuelto'&&e!=='finalizado';
     }).length;
@@ -6763,7 +6765,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   const ROOT_MARK='secGridRoot';
   const API='/api/importar';
   const TICKETS_API='/api/tickets';
-  const ROW_PAGE=120;
+  const ROW_PAGE=40;
   const SECTIONS={
     bodega:{id:'bodega',label:'Sublicuentas',short:'Sublicuentas',title:'Sublicuentas · Bodega e Inventario',owner:'sublicuentas',ownerLabel:'Naara / Sublicuentas',emoji:'📦',kind:'excel',accept:'.xlsx,.xls,.csv',desc:'Inventario interno de cuentas, proveedores, fechas de pago, cuentas a pagar y control general de Sublicuentas.'},
     auditoria:{id:'auditoria',label:'Magdiel Auditoría',short:'Magdiel',title:'Magdiel Auditoría · Streaming',owner:'magdiel',ownerLabel:'Magdiel',emoji:'📊',kind:'excel',accept:'.xlsx,.xls,.csv',desc:'Auditoría de streaming. Revise perfil, nombre, celular, clave, correo, PIN, precio, expiración y alerta.'},
@@ -9922,15 +9924,32 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   }
   function autoHeightTable(table){
     if(!table||!table.isConnected||table.dataset.flowFitReady==='1')return;
-    table.dataset.flowFitReady='1';var rows=Array.from(table.querySelectorAll('tbody tr')),stored=heights(),index=0;
-    function batch(deadline){
-      if(!table.isConnected)return;var done=0;
-      while(index<rows.length&&done<36&&(!deadline||deadline.timeRemaining()>2)){
-        var row=rows[index++],saved=Number(stored[rowKey(table,row)]||0);if(saved)setRowHeight(row,saved,false,true);else fitRow(row,false);done++;
-      }
-      if(index<rows.length){if(window.requestIdleCallback)requestIdleCallback(batch,{timeout:120});else setTimeout(batch,12);}
+    table.dataset.flowFitReady='1';
+    var stored=heights();
+    function fitOne(row){
+      if(!row||row.dataset.flowFit==='1')return;row.dataset.flowFit='1';
+      var saved=Number(stored[rowKey(table,row)]||0);
+      if(saved)setRowHeight(row,saved,false,true);else fitRow(row,false);
     }
-    batch();
+    var rows=Array.from(table.querySelectorAll('tbody tr'));
+    var wrap=table.closest('.docs-table-wrap');
+    if('IntersectionObserver' in window){
+      // Solo mide la altura de las filas que realmente entran en pantalla (o están por entrar).
+      // Así, con tablas de cientos de filas, nunca se traba el hilo principal ni el scroll.
+      var io=new IntersectionObserver(function(entries){
+        entries.forEach(function(en){ if(en.isIntersecting) fitOne(en.target); });
+      },{root:wrap||null,rootMargin:'250px 0px'});
+      rows.forEach(function(row){ io.observe(row); });
+      table._flowIO=io;
+    }else{
+      var index=0;
+      function batch(deadline){
+        if(!table.isConnected)return;var done=0;
+        while(index<rows.length&&done<24&&(!deadline||deadline.timeRemaining()>2)){ fitOne(rows[index++]); done++; }
+        if(index<rows.length){ if(window.requestIdleCallback) requestIdleCallback(batch,{timeout:120}); else setTimeout(batch,12); }
+      }
+      batch();
+    }
   }
   var autoHeightTimer=0;
   function scheduleAutoHeight(root){
