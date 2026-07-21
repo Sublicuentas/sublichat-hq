@@ -6244,14 +6244,20 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   function tkCardHtml(t){
     const estado=String(t.estado||'abierto'),done=estado==='resuelto';
     const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
-    const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
     const de=t.creadoPor||tkRoleLabel(t.creadoPorRol);
+    if(isNotice){
+      // Un aviso no es un ticket: solo se muestra el mensaje enviado, sin estado ni botones de acción.
+      const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
+      const tituloLimpio=esc((t.titulo||'Aviso').replace(/^AVISO\s*[·:-]?\s*/i,'')||'Aviso');
+      return `<div class="tk-card tk-notice-card"><div class="tk-top"><div class="tk-title"><span class="tk-notice-label">📢 AVISO</span> ${tituloLimpio}</div></div><div class="tk-meta">De: ${esc(de)} · Para: ${esc(dest)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div></div>`;
+    }
+    const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
     const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.por||tkRoleLabel(x.porRol))}</b><span>${esc(x.texto||'')}</span><small>${esc(tkWhen(x.at))}</small></div>`).join('');
     const resol=(done&&t.resolucion)?`<div class="tk-msg ok"><b>✅ Resuelto · ${esc(t.resueltoPor||tkRoleLabel(t.resueltoPorRol))}</b><span>${esc(t.resolucion)}</span><small>${esc(tkWhen(t.resueltoAt))}</small></div>`:'';
     const replying=tk.replyFor===t.id;
     const replyBox=replying?`<div class="tk-reply"><textarea class="tk-input" id="tkReplyText" placeholder="Escriba su respuesta…">${esc(tk.replyText||'')}</textarea><div class="tk-actions"><button class="tk-btn good mini" data-tk-send="${esc(t.id||'')}">📨 Enviar respuesta</button><button class="tk-btn ghost mini" data-tk-cancelreply="1">Cancelar</button></div></div>`:'';
     const acts=done?'':`<div class="tk-actions">${!replying?`<button class="tk-btn mini" data-tk-reply="${esc(t.id||'')}">💬 Responder</button>`:''}${estado!=='proceso'?`<button class="tk-btn warn mini" data-tk-proceso="${esc(t.id||'')}">🔄 En proceso</button>`:''}<button class="tk-btn good mini" data-tk-resolve="${esc(t.id||'')}">✅ Resolver</button></div>`;
-    return `<div class="tk-card ${done?'done':''} ${isNotice?'tk-notice-card':''}"><div class="tk-top"><div class="tk-title">${isNotice?'<span class="tk-notice-label">📢 AVISO</span> ':''}${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
+    return `<div class="tk-card ${done?'done':''}"><div class="tk-top"><div class="tk-title">${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
   }
   function tkHtml(){
     const all=tkMine();
@@ -6327,7 +6333,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const titulo=(document.getElementById('tkAvisoTitulo')?.value||'').trim(),detalle=(document.getElementById('tkAvisoDetalle')?.value||'').trim(),destino=document.getElementById('tkAvisoDestino')?.value||'todos';
     if(!titulo||!detalle){mostrarToast('Escriba el título y el contenido del aviso.');return;}
     tk.status='Publicando aviso y notificando a Telegram…';tkShowStatus();
-    try{const delivery=tkNoticeDelivery(destino);const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos'},delivery));const enviados=delivery.destinosLabel;tk.status=j.telegramOk===false?'✅ Aviso publicado para '+enviados+'. ⚠️ Telegram no está configurado en Vercel.':'✅ Aviso publicado y alerta enviada a '+enviados+'.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
+    try{const delivery=tkNoticeDelivery(destino);const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos'},delivery));const enviados=delivery.destinosLabel;tk.status=j.telegramOk===false?'✅ Aviso enviado a '+enviados+' (ya lo ven en su Sublichat). Nota: la alerta de Telegram no salió porque falta configurar el bot en Vercel.':'✅ Aviso enviado a '+enviados+' y alerta de Telegram entregada.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
     catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
   }
   async function tkSend(id){
