@@ -210,28 +210,19 @@ async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
 }
 
 async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
-  let snap = null;
-  const t = normPhone(telefono);
+  // ✅ FIX: ya NO se busca/empareja por teléfono. El teléfono que llega en la
+  // ficha muchas veces es el número de contacto del vendedor (autocompletado
+  // por el panel, o simplemente el mismo número que cada asesor escribe por
+  // costumbre) — NO identifica a un cliente en particular. Usarlo para
+  // encontrar/crear el documento hacía que distintos clientes del mismo
+  // vendedor cayeran en el MISMO documento de Firestore y se pisaran el
+  // nombre entre ellos. El teléfono se sigue guardando (para mostrarlo en el
+  // bot), pero el nombre es la única llave real de identidad del cliente.
   const n = clienteNorm || normName(nombrePerfil);
 
   if (n) {
-    snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(1).get();
+    const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(1).get();
     if (!snap.empty) return snap.docs[0];
-  }
-
-  if (telefono) {
-    snap = await db.collection("clientes").where("telefono", "==", telefono).limit(1).get();
-    if (!snap.empty) return snap.docs[0];
-  }
-
-  if (t) {
-    snap = await db.collection("clientes").where("telefono_norm", "==", t).limit(1).get();
-    if (!snap.empty) return snap.docs[0];
-
-    // Compatibilidad con bases viejas que no tienen telefono_norm.
-    const all = await db.collection("clientes").limit(1200).get();
-    const hit = all.docs.find(d => normPhone(d.data().telefono) === t);
-    if (hit) return hit;
   }
 
   return null;
@@ -340,20 +331,11 @@ export default async function handler(req, res) {
     const db = getApp().firestore();
 
     // NUEVO: crear o actualizar cliente + servicio desde el panel de entrega de ficha.
-    // NEUTRO: los teléfonos que aparecen aquí NO son de clientes, son los números
-    // de contacto por defecto que el panel autocompleta en la ficha según el
-    // vendedor (para que salgan en el pie del mensaje de WhatsApp). Si se cuelan
-    // como "teléfono del cliente" y los usamos para buscar/crear documentos,
-    // TODOS los clientes de ese vendedor terminan compartiendo un mismo
-    // documento en Firestore y se van pisando el nombre entre ellos.
-    const VENDOR_DEFAULT_PHONES = new Set(["9687724", "88501036", "32174922", "94306551", "87989267"]);
-
     if (acc === "ficha_upsert") {
       const cliente = body.cliente || {};
       const servicio = body.servicio || {};
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
-      let tel = cliente.telefono || telefono || "";
-      if (VENDOR_DEFAULT_PHONES.has(normPhone(tel))) tel = ""; // era el tel. del vendedor, no del cliente
+      const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
       const vendedor = cliente.vendedor || body.vendedor || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
       const tNorm = normPhone(tel);
@@ -361,7 +343,9 @@ export default async function handler(req, res) {
       if (!nombrePerfil && !tel) return res.status(200).json({ error: "Ponga nombre o teléfono del cliente." });
       if (!servicio.plataforma) return res.status(200).json({ error: "Falta la plataforma de la ficha." });
 
-      let doc = await findCliente(db, { clienteNorm: nNorm, telefono: tel, nombrePerfil });
+      // ✅ Solo busca por nombre (ver findCliente). El teléfono nunca decide
+      // si esta ficha pertenece a un cliente existente o es uno nuevo.
+      let doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil });
       let docRef, data = {}, created = false;
 
       if (doc) {
@@ -369,7 +353,10 @@ export default async function handler(req, res) {
         data = doc.data() || {};
       } else {
         created = true;
-        const idBase = tNorm ? `tel-${tNorm}` : safeDocId(nNorm || nombrePerfil);
+        // ✅ El ID del documento nuevo se basa SIEMPRE en el nombre, nunca en
+        // el teléfono (antes "tel-<numero>" hacía que dos clientes distintos
+        // con el mismo teléfono compartido cayeran en el mismo documento).
+        const idBase = safeDocId(nNorm || nombrePerfil);
         docRef = db.collection("clientes").doc(idBase);
         const existing = await docRef.get();
         if (existing.exists) {
