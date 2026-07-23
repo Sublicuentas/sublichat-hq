@@ -340,11 +340,20 @@ export default async function handler(req, res) {
     const db = getApp().firestore();
 
     // NUEVO: crear o actualizar cliente + servicio desde el panel de entrega de ficha.
+    // NEUTRO: los teléfonos que aparecen aquí NO son de clientes, son los números
+    // de contacto por defecto que el panel autocompleta en la ficha según el
+    // vendedor (para que salgan en el pie del mensaje de WhatsApp). Si se cuelan
+    // como "teléfono del cliente" y los usamos para buscar/crear documentos,
+    // TODOS los clientes de ese vendedor terminan compartiendo un mismo
+    // documento en Firestore y se van pisando el nombre entre ellos.
+    const VENDOR_DEFAULT_PHONES = new Set(["9687724", "88501036", "32174922", "94306551", "87989267"]);
+
     if (acc === "ficha_upsert") {
       const cliente = body.cliente || {};
       const servicio = body.servicio || {};
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
-      const tel = cliente.telefono || telefono || "";
+      let tel = cliente.telefono || telefono || "";
+      if (VENDOR_DEFAULT_PHONES.has(normPhone(tel))) tel = ""; // era el tel. del vendedor, no del cliente
       const vendedor = cliente.vendedor || body.vendedor || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
       const tNorm = normPhone(tel);
