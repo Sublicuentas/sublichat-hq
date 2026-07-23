@@ -374,18 +374,30 @@ export default async function handler(req, res) {
       const pNorm = normPlat(nuevo.plataforma);
       const correoNorm = String(nuevo.correo || "").trim().toLowerCase();
 
+      // Match estricto: misma plataforma + mismo correo = es el mismo servicio (se actualiza).
       let idx = servicios.findIndex(s =>
         normPlat(s.plataforma) === pNorm &&
-        (!correoNorm || String(s.correo || "").trim().toLowerCase() === correoNorm)
+        String(s.correo || "").trim().toLowerCase() === correoNorm
       );
-      if (idx === -1) idx = servicios.findIndex(s => normPlat(s.plataforma) === pNorm);
+      // Solo si NO hay correo (ej. algunas cuentas IPTV) caemos a emparejar por plataforma,
+      // y únicamente contra otro servicio que tampoco tenga correo — así nunca se pisa un
+      // servicio de la misma plataforma que sí tiene su propio correo (multi-perfil).
+      if (idx === -1 && !correoNorm) {
+        idx = servicios.findIndex(s =>
+          normPlat(s.plataforma) === pNorm && !String(s.correo || "").trim()
+        );
+      }
+
+      const correoAnterior = idx >= 0 ? String(servicios[idx].correo || "").trim().toLowerCase() : "";
 
       if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
       else servicios.push(aplicarNuevoServicio({}, nuevo));
 
+      const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
+
       const update = {
-        nombrePerfil: nombrePerfil || data.nombrePerfil || data.nombre || "—",
-        nombre: nombrePerfil || data.nombre || data.nombrePerfil || "—",
+        nombrePerfil: nombreFinal,
+        nombre: nombreFinal,
         nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
         telefono: tel || data.telefono || "",
         telefono_norm: tNorm || data.telefono_norm || "",
@@ -397,13 +409,34 @@ export default async function handler(req, res) {
 
       await docRef.set(update, { merge: true });
 
+      // Sincroniza el cupo en inventario (esto antes NO se hacía en ficha_upsert,
+      // por eso el correo aparecía "sin perfiles" aunque la ficha se hubiera guardado).
+      let invResult = null;
+      try {
+        if (correoAnterior && correoAnterior !== correoNorm) {
+          // Cambió de correo/cuenta: libera el cupo viejo y ocupa el nuevo.
+          await ajustarInventario(db, { modo: "liberar", correo: correoAnterior, nombreCliente: nombreFinal });
+        }
+        if (correoNorm) {
+          invResult = await ajustarInventario(db, {
+            modo: "ocupar",
+            correo: nuevo.correo,
+            nombreCliente: nombreFinal,
+            pin: nuevo.pinPerfil || ""
+          });
+        }
+      } catch (e) {
+        invResult = { tocado: false, motivo: e.message };
+      }
+
       return res.status(200).json({
         ok: true,
         accion: acc,
         created,
         clienteId: docRef.id,
         totalServicios: servicios.length,
-        servicioActualizado: idx >= 0
+        servicioActualizado: idx >= 0,
+        inventario: invResult
       });
     }
 
