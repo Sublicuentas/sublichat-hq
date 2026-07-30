@@ -2038,7 +2038,7 @@ function renderTable(){
   const grupos={};
   filtrados.forEach(c=>{
     const key=c.nombre+"|"+(c.telefono||"");
-    if(!grupos[key]) grupos[key]={nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",servicios:[]};
+    if(!grupos[key]) grupos[key]={nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",nombreNorm:c.nombreNorm||"",servicios:[]};
     grupos[key].servicios.push(c);
   });
   // 3) cada grupo: fecha más próxima, suma de precios, estado de la más urgente
