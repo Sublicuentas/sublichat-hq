@@ -1,23 +1,22 @@
-// api/partidos.js  ·  VERSION 12  ·  + NBA, MLB y UFC (ESPN, sin key)
+// api/partidos.js  ·  VERSION 13  ·  Todo sobre ESPN (sin key) + Fútbol ampliado + Tenis + F1
 //
-// v12: se agregan NBA, MLB y UFC usando la API pública de ESPN (site.api.espn.com),
-//   sin necesidad de key. Se suman al agregador de "Hoy" y a chips propios.
+// v13 — cambios:
+//   - Se quitó "Mundial 2026" como pestaña/fuente por pedido explícito.
+//   - Fútbol deja de depender de openfootball (5 ligas fijas, JSON estático que
+//     había que actualizar cada temporada) y pasa 100% a ESPN: ahora cubre
+//     Honduras, MLS, Liga MX, Champions, Europa League, Libertadores,
+//     Sudamericana, Copa América, Concacaf Naciones/Gold Cup/Champions,
+//     Argentina, Brasil + las 5 grandes de Europa. Ver LIGAS_FUTBOL abajo.
+//   - Se agregan Tenis (ATP + WTA) y F1, también vía ESPN.
+//   - NBA, MLB y UFC (agregados en v12) se mantienen igual.
+//   - "Hoy" ahora mezcla TODO: fútbol (todas las ligas de LIGAS_FUTBOL) + NBA +
+//     MLB + UFC + Tenis + F1, ordenado por hora.
 //
-// Qué arregla v11 (se mantiene):
-//   La cuenta de API-Football quedó suspendida -> "Hoy" y la búsqueda de equipo
-//   tiraban: {"access":"Your account is suspended..."}.
-//   Ahora TODO sale de openfootball (gratis, dominio público, sin key):
-//     - "Hoy"          -> partidos de hoy (Mundial 2026 + ligas top)
-//     - búsqueda equipo -> filtra entre Mundial + ligas top
-//     - pestañas ligas  -> openfootball (igual que antes, modo "ofliga")
-//     - Mundial 2026    -> openfootball (igual que antes, modo "mundial")
-//
-//   El modo "liga" por ID (API-Football) queda como opcional: solo se usa si algún
-//   día reactivás una key nueva en APIFOOTBALL_KEY. Hoy NINGÚN botón lo llama.
-//
-// Nota: openfootball cubre Mundial + ligas grandes. Equipos de Liga Nacional de
-// Honduras (Olimpia, Motagua, etc.) no están en esa fuente gratuita; para esos
-// necesitarías reactivar API-Football con una key nueva.
+// Todo sale de la API pública de ESPN (site.api.espn.com) — sin key, sin costo.
+// Es una API no oficial: si algún día ESPN cambia el formato, esta función
+// puede empezar a fallar; no depende de ningún env var para funcionar.
+
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   // CORS (para que el catálogo en otro dominio también pueda consultar)
@@ -26,7 +25,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST" && req.method !== "GET")
-    return res.status(200).json({ ok: true, version: 12, msg: "partidos v12 activo (+ NBA/MLB/UFC)." });
+    return res.status(200).json({ ok: true, version: 13, msg: "partidos v13 activo (fútbol ampliado + tenis + F1)." });
 
   const src = (req.method === "GET") ? (req.query || {}) : (req.body || {});
   const { modo, q, liga } = src;
@@ -39,24 +38,34 @@ export default async function handler(req, res) {
   });
   const diaHN = d => d.toLocaleDateString("en-CA", { timeZone: "America/Tegucigalpa" }); // YYYY-MM-DD
 
-  const canalDe = ligaName => {
-    const l = (ligaName || "").toLowerCase();
+  const canalDe = ligaKey => {
+    const l = (ligaKey || "").toLowerCase();
     if (l.includes("premier")) return "ESPN / Disney+ (aprox.)";
-    if (l.includes("la liga") || l.includes("primera")) return "Sky / ESPN (aprox.)";
+    if (l.includes("la liga") || l.includes("primera") && l.includes("espa")) return "Sky / ESPN (aprox.)";
     if (l.includes("serie a")) return "ESPN / Disney+ (aprox.)";
     if (l.includes("bundesliga")) return "Sky (aprox.)";
     if (l.includes("ligue 1") || l.includes("ligue1")) return "ESPN (aprox.)";
     if (l.includes("champions")) return "ESPN / Disney+ (aprox.)";
-    if (l.includes("mundial") || l.includes("world cup")) return "Televisoras nacionales / FIFA+ (aprox.)";
+    if (l.includes("europa league")) return "ESPN (aprox.)";
+    if (l.includes("honduras")) return "Televisoras nacionales HN (aprox.)";
+    if (l.includes("mls")) return "Apple TV MLS Season Pass (aprox.)";
+    if (l.includes("liga mx")) return "TUDN / Sky (aprox.)";
+    if (l.includes("libertadores") || l.includes("sudamericana") || l.includes("recopa")) return "ESPN / Disney+ (aprox.)";
+    if (l.includes("copa américa") || l.includes("copa america")) return "Televisoras nacionales / DirecTV (aprox.)";
+    if (l.includes("concacaf")) return "Televisoras nacionales HN / Fox Sports (aprox.)";
+    if (l.includes("argentina")) return "ESPN / Disney+ (aprox.)";
+    if (l.includes("brasil") || l.includes("brasileirão") || l.includes("brasileirao")) return "ESPN / Disney+ (aprox.)";
     if (l.includes("nba")) return "ESPN / Disney+ (aprox.)";
     if (l.includes("mlb")) return "ESPN / ESPN Deportes (aprox.)";
     if (l.includes("ufc")) return "ESPN / TNT Sports (aprox.)";
+    if (l.includes("atp") || l.includes("wta") || l.includes("tenis")) return "ESPN / Tennis Channel (aprox.)";
+    if (l.includes("f1") || l.includes("fórmula") || l.includes("formula")) return "ESPN / Fox Sports (aprox.)";
     return "Consultá en tu proveedor";
   };
 
   // fetch con timeout: nunca cuelga la función
   async function jget(url, opt = {}) {
-    const ms = opt.ms || 7000;
+    const ms = opt.ms || 6000;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), ms);
     try {
@@ -70,36 +79,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // Banderas de selecciones (Mundial) -> flagcdn
-  const ISO = {
-    "Mexico": "mx", "Canada": "ca", "USA": "us", "United States": "us", "Argentina": "ar", "Brazil": "br", "France": "fr",
-    "England": "gb-eng", "Spain": "es", "Germany": "de", "Portugal": "pt", "Netherlands": "nl", "Belgium": "be", "Italy": "it",
-    "Croatia": "hr", "Uruguay": "uy", "Colombia": "co", "Paraguay": "py", "Ecuador": "ec", "Peru": "pe", "Chile": "cl",
-    "Japan": "jp", "South Korea": "kr", "Korea Republic": "kr", "Australia": "au", "Iran": "ir", "Saudi Arabia": "sa",
-    "Qatar": "qa", "Morocco": "ma", "Senegal": "sn", "Tunisia": "tn", "Ghana": "gh", "Cameroon": "cm", "Nigeria": "ng",
-    "Egypt": "eg", "Algeria": "dz", "Ivory Coast": "ci", "South Africa": "za", "Switzerland": "ch", "Denmark": "dk",
-    "Poland": "pl", "Serbia": "rs", "Austria": "at", "Czech Republic": "cz", "Turkey": "tr", "Ukraine": "ua", "Scotland": "gb-sct",
-    "Wales": "gb-wls", "Norway": "no", "Sweden": "se", "Greece": "gr", "Russia": "ru", "Costa Rica": "cr", "Panama": "pa",
-    "Honduras": "hn", "Jamaica": "jm", "New Zealand": "nz", "Uzbekistan": "uz", "Jordan": "jo", "Bosnia & Herzegovina": "ba",
-    "Bosnia and Herzegovina": "ba", "Cape Verde": "cv", "Curacao": "cw", "Curaçao": "cw", "Haiti": "ht", "Venezuela": "ve",
-    "Bolivia": "bo", "Guatemala": "gt", "El Salvador": "sv", "Trinidad & Tobago": "tt", "Suriname": "sr", "DR Congo": "cd"
-  };
-  const bandera = nombre => {
-    if (!nombre) return null;
-    const code = ISO[(nombre || "").trim()];
-    return code ? `https://flagcdn.com/w80/${code}.png` : null;
-  };
-
-  // ===== ESPN (NBA · MLB · UFC) — API pública, sin key =====
+  // ===== ESPN — API pública, sin key =====
   const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
-
   const ymdCompact = d => diaHN(d).replace(/-/g, "");
 
   async function espnScoreboardRango(path, diasAdelante = 7) {
     const start = new Date();
     const end = new Date(Date.now() + diasAdelante * 86400000);
     const url = `${ESPN_BASE}/${path}/scoreboard?dates=${ymdCompact(start)}-${ymdCompact(end)}&limit=300`;
-    const d = await jget(url, { ms: 8000 });
+    const d = await jget(url, { ms: 6000 });
     return (d && d.events) || [];
   }
 
@@ -110,8 +98,27 @@ export default async function handler(req, res) {
     return "NS";
   }
 
-  // Partido de deporte de equipos (NBA, MLB) -> mismo formato que fútbol
-  function parseEspnEquipo(ev, ligaLabel, canalTxt) {
+  const nombreCompetidor = c => {
+    if (!c) return "Por confirmar";
+    if (c.team) return c.team.shortDisplayName || c.team.displayName || c.team.name || "Equipo";
+    if (c.athlete) return c.athlete.shortName || c.athlete.displayName || "Jugador";
+    return "Por confirmar";
+  };
+  const logoCompetidor = c => {
+    if (!c) return null;
+    if (c.team && c.team.logo) return c.team.logo;
+    if (c.athlete && c.athlete.headshot && c.athlete.headshot.href) return c.athlete.headshot.href;
+    if (c.athlete && c.athlete.flag && c.athlete.flag.href) return c.athlete.flag.href;
+    return null;
+  };
+  const scoreDe = c => {
+    if (c && c.score != null && c.score !== "") { const n = Number(c.score); return Number.isFinite(n) ? n : null; }
+    return null;
+  };
+
+  // Sirve para fútbol, NBA, MLB, UFC (peleadores) y tenis (jugadores): siempre
+  // hay 2 "competitors" (equipo o athlete) en la competición.
+  function parseEspnGeneric(ev, ligaLabel, canalTxt) {
     const comp = ev && ev.competitions && ev.competitions[0];
     if (!comp) return null;
     const competidores = comp.competitors || [];
@@ -119,42 +126,16 @@ export default async function handler(req, res) {
     const away = competidores.find(c => c.homeAway === "away") || competidores[1] || {};
     const dObj = new Date(ev.date || comp.date);
     const estado = estadoEspn(ev);
+    const cardTxt = (comp.type && comp.type.text) ? " · " + comp.type.text : "";
     return {
       dObj,
       p: {
         liga: ligaLabel,
         logoLiga: null,
-        local: (home.team && (home.team.shortDisplayName || home.team.displayName)) || "Local",
-        logoLocal: (home.team && home.team.logo) || null,
-        visita: (away.team && (away.team.shortDisplayName || away.team.displayName)) || "Visita",
-        logoVisita: (away.team && away.team.logo) || null,
-        golesLocal: estado === "NS" ? null : (home.score != null ? Number(home.score) : null),
-        golesVisita: estado === "NS" ? null : (away.score != null ? Number(away.score) : null),
-        estado,
-        horaHN: fmtHN(dObj),
-        canal: canalTxt
-      }
-    };
-  }
-
-  // Pelea de UFC -> peleador vs peleador (no hay goles, se muestra el card)
-  function parseEspnUFC(ev, canalTxt) {
-    const comp = ev && ev.competitions && ev.competitions[0];
-    if (!comp) return null;
-    const c1 = (comp.competitors || [])[0] || {};
-    const c2 = (comp.competitors || [])[1] || {};
-    const dObj = new Date(ev.date || comp.date);
-    const estado = estadoEspn(ev);
-    const nombreDe = c => (c.athlete && (c.athlete.shortName || c.athlete.displayName)) || "Por confirmar";
-    const cardTxt = (comp.type && comp.type.text) ? " · " + comp.type.text : "";
-    return {
-      dObj,
-      p: {
-        liga: "UFC" + (ev.shortName ? " · " + ev.shortName : ""),
-        logoLiga: null,
-        local: nombreDe(c1), logoLocal: (c1.athlete && c1.athlete.headshot && c1.athlete.headshot.href) || null,
-        visita: nombreDe(c2), logoVisita: (c2.athlete && c2.athlete.headshot && c2.athlete.headshot.href) || null,
-        golesLocal: null, golesVisita: null,
+        local: nombreCompetidor(home), logoLocal: logoCompetidor(home),
+        visita: nombreCompetidor(away), logoVisita: logoCompetidor(away),
+        golesLocal: estado === "NS" ? null : scoreDe(home),
+        golesVisita: estado === "NS" ? null : scoreDe(away),
         estado,
         horaHN: fmtHN(dObj) + cardTxt,
         canal: canalTxt
@@ -162,121 +143,142 @@ export default async function handler(req, res) {
     };
   }
 
+  // F1: no es cara a cara (es una carrera con parrilla completa) — se muestra
+  // como una fila con el nombre del GP y el circuito.
+  function parseEspnF1(ev, canalTxt) {
+    const comp = ev && ev.competitions && ev.competitions[0];
+    const dObj = new Date((comp && comp.date) || ev.date);
+    const estado = estadoEspn(ev);
+    const nombreCarrera = ev.shortName || ev.name || "Gran Premio";
+    const circuito = (comp && comp.venue && (comp.venue.fullName || (comp.venue.address && comp.venue.address.city))) || "Circuito por confirmar";
+    return {
+      dObj,
+      p: {
+        liga: "Fórmula 1",
+        logoLiga: null,
+        local: nombreCarrera, logoLocal: null,
+        visita: circuito, logoVisita: null,
+        golesLocal: null, golesVisita: null,
+        estado,
+        horaHN: fmtHN(dObj),
+        canal: canalTxt
+      }
+    };
+  }
+
   async function cargarNBA(dias) {
     const evs = await espnScoreboardRango("basketball/nba", dias);
-    return evs.map(ev => parseEspnEquipo(ev, "NBA", canalDe("nba"))).filter(Boolean);
+    return evs.map(ev => parseEspnGeneric(ev, "NBA", canalDe("nba"))).filter(Boolean);
   }
   async function cargarMLB(dias) {
     const evs = await espnScoreboardRango("baseball/mlb", dias);
-    return evs.map(ev => parseEspnEquipo(ev, "MLB", canalDe("mlb"))).filter(Boolean);
+    return evs.map(ev => parseEspnGeneric(ev, "MLB", canalDe("mlb"))).filter(Boolean);
   }
   async function cargarUFC(dias) {
     const evs = await espnScoreboardRango("mma/ufc", dias);
-    return evs.map(ev => parseEspnUFC(ev, canalDe("ufc"))).filter(Boolean);
+    return evs.map(ev => parseEspnGeneric(ev, "UFC" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("ufc"))).filter(Boolean);
+  }
+  async function cargarTenis(dias) {
+    const [atp, wta] = await Promise.all([
+      espnScoreboardRango("tennis/atp", dias).catch(() => []),
+      espnScoreboardRango("tennis/wta", dias).catch(() => [])
+    ]);
+    return [
+      ...atp.map(ev => parseEspnGeneric(ev, "ATP" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis"))),
+      ...wta.map(ev => parseEspnGeneric(ev, "WTA" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis")))
+    ].filter(Boolean);
+  }
+  async function cargarF1(dias) {
+    const evs = await espnScoreboardRango("racing/f1", dias);
+    return evs.map(ev => parseEspnF1(ev, canalDe("f1"))).filter(Boolean);
   }
 
-  // Fuentes openfootball
-  const OF_BASE = "https://raw.githubusercontent.com/openfootball/football.json/master/";
-  const WC_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
-
-  // Ligas que se incluyen en "Hoy" y en la búsqueda de equipo
-  const LIGAS_OF = [
-    { archivo: "2025-26/en.1.json", nombre: "Premier League" },
-    { archivo: "2025-26/es.1.json", nombre: "La Liga" },
-    { archivo: "2025-26/it.1.json", nombre: "Serie A" },
-    { archivo: "2025-26/de.1.json", nombre: "Bundesliga" },
-    { archivo: "2025-26/fr.1.json", nombre: "Ligue 1" }
+  // ===== FÚTBOL — todas las ligas/copas (slug ESPN, sin key) =====
+  // Agregá una línea acá para sumar otra liga/copa; el slug es el que usa ESPN
+  // (ej. https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard).
+  const LIGAS_FUTBOL = [
+    { slug: "hon.1", nombre: "Liga Nacional de Honduras" },
+    { slug: "usa.1", nombre: "MLS" },
+    { slug: "mex.1", nombre: "Liga MX" },
+    { slug: "eng.1", nombre: "Premier League" },
+    { slug: "esp.1", nombre: "La Liga" },
+    { slug: "ita.1", nombre: "Serie A" },
+    { slug: "ger.1", nombre: "Bundesliga" },
+    { slug: "fra.1", nombre: "Ligue 1" },
+    { slug: "uefa.champions", nombre: "Champions League" },
+    { slug: "uefa.europa", nombre: "Europa League" },
+    { slug: "conmebol.libertadores", nombre: "Copa Libertadores" },
+    { slug: "conmebol.sudamericana", nombre: "Copa Sudamericana" },
+    { slug: "conmebol.america", nombre: "Copa América" },
+    { slug: "concacaf.nations.league", nombre: "Concacaf Nations League" },
+    { slug: "concacaf.gold", nombre: "Concacaf Gold Cup" },
+    { slug: "concacaf.champions", nombre: "Concacaf Champions Cup" },
+    { slug: "arg.1", nombre: "Liga Argentina" },
+    { slug: "bra.1", nombre: "Brasileirão" }
   ];
 
-  // Convierte un partido de liga (football.json) al formato del front
-  function parseLeague(m, ligaName) {
-    const t = (m.time && /^\d{1,2}:\d{2}$/.test(m.time)) ? m.time : "15:00";
-    const hh = t.length === 5 ? t : ("0" + t);
-    const dObj = new Date(`${m.date}T${hh}:00-06:00`); // asumimos hora local HN si no hay tz
-    const ft = m.score && m.score.ft;
-    return {
-      dObj,
-      p: {
-        liga: ligaName + (m.round ? " · " + m.round : ""),
-        logoLiga: null,
-        local: m.team1, logoLocal: null,
-        visita: m.team2, logoVisita: null,
-        golesLocal: ft ? ft[0] : null, golesVisita: ft ? ft[1] : null,
-        estado: ft ? "FT" : "NS",
-        horaHN: fmtHN(dObj),
-        canal: canalDe(ligaName)
-      }
-    };
+  async function cargarLigaFutbol(entry, dias) {
+    const evs = await espnScoreboardRango("soccer/" + entry.slug, dias);
+    return evs.map(ev => parseEspnGeneric(ev, entry.nombre, canalDe(entry.nombre))).filter(Boolean);
   }
 
-  // Convierte un partido del Mundial (worldcup.json) al formato del front
-  function parseWC(m) {
-    const tm = (m.time || "").match(/(\d{1,2}):(\d{2})\s*UTC([+-]\d+)?/);
-    const off = tm && tm[3] ? parseInt(tm[3], 10) : -6;
-    const hh = tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : "12:00";
-    const dObj = new Date(`${m.date}T${hh}:00${off < 0 ? "-" : "+"}${String(Math.abs(off)).padStart(2, "0")}:00`);
-    return {
-      dObj,
-      p: {
-        liga: "Mundial 2026 · " + (m.group || m.round || ""),
-        logoLiga: null,
-        local: m.team1, logoLocal: bandera(m.team1),
-        visita: m.team2, logoVisita: bandera(m.team2),
-        golesLocal: m.score1 != null ? m.score1 : null,
-        golesVisita: m.score2 != null ? m.score2 : null,
-        estado: (m.score1 != null) ? "FT" : "NS",
-        horaHN: fmtHN(dObj) + (m.ground ? " · " + m.ground : ""),
-        canal: "Televisoras nacionales / FIFA+ (aprox.)"
-      }
-    };
-  }
-
-  // Carga Mundial + todas las ligas + NBA + MLB + UFC en paralelo y devuelve una sola lista
+  // Carga TODAS las ligas de fútbol + NBA + MLB + UFC + Tenis + F1 en paralelo.
+  // La usan "Hoy" y la búsqueda de equipo/jugador.
   async function cargarTodo() {
     const jobs = [];
-    jobs.push((async () => {
-      const d = await jget(WC_URL, { ms: 7000 });
-      return (d && d.matches ? d.matches : []).map(parseWC);
-    })());
-    for (const lg of LIGAS_OF) {
-      jobs.push((async () => {
-        const d = await jget(OF_BASE + lg.archivo, { ms: 7000 });
-        const name = (d && d.name) || lg.nombre;
-        return (d && d.matches ? d.matches : []).map(m => parseLeague(m, name));
-      })());
-    }
+    for (const lg of LIGAS_FUTBOL) jobs.push(cargarLigaFutbol(lg, 4).catch(() => []));
     jobs.push(cargarNBA(4).catch(() => []));
     jobs.push(cargarMLB(4).catch(() => []));
     jobs.push(cargarUFC(10).catch(() => []));
+    jobs.push(cargarTenis(4).catch(() => []));
+    jobs.push(cargarF1(14).catch(() => []));
     const arrs = await Promise.all(jobs);
     return arrs.flat().filter(x => x && x.dObj && !isNaN(x.dObj));
   }
 
+  // Arma la respuesta de una lista ya cargada: prioriza próximos, si no hay
+  // muestra los más recientes para no dejar la pantalla en blanco.
+  function responder(res, todos, limite) {
+    if (!todos.length) return res.status(200).json({ error: "No pude cargar el calendario ahora (intentá más tarde)." });
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
+    const lista = (fut.length ? fut : todos.sort((a, b) => b.dObj - a.dObj)).slice(0, limite);
+    return res.status(200).json({ partidos: lista.map(x => x.p) });
+  }
+
   try {
-    // ===== MUNDIAL 2026 =====
-    if (modo === "mundial") {
-      const d = await jget(WC_URL, { ms: 8000 });
-      if (!d) return res.status(200).json({ error: "No pude cargar el calendario del Mundial (intentá más tarde)." });
-      const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-      const todos = (d.matches || []).map(parseWC);
-      const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
-      const lista = (fut.length ? fut : todos.sort((a, b) => a.dObj - b.dObj)).slice(0, 60);
-      return res.status(200).json({ partidos: lista.map(x => x.p) });
+    // ===== FÚTBOL — liga específica (chips dentro de la carpeta "Fútbol") =====
+    if (modo === "futliga" && liga) {
+      const entry = LIGAS_FUTBOL.find(l => l.slug === liga) || { slug: liga, nombre: "Fútbol" };
+      const todos = await cargarLigaFutbol(entry, 12);
+      return responder(res, todos, 30);
     }
 
-    // ===== LIGA por archivo (chips Premier / La Liga / Serie A / ...) =====
-    if (modo === "ofliga" && src.archivo) {
-      const d = await jget(OF_BASE + src.archivo, { ms: 8000 });
-      if (!d) return res.status(200).json({ error: "Esta liga no está disponible ahora (datos aún no publicados)." });
-      const name = d.name || "Liga";
-      const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-      const todos = (d.matches || []).map(m => parseLeague(m, name));
-      const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
-      const lista = (fut.length ? fut : todos.sort((a, b) => b.dObj - a.dObj)).slice(0, 30);
-      return res.status(200).json({ partidos: lista.map(x => x.p) });
+    // ===== NBA / MLB (chips directos) =====
+    if (modo === "nba" || modo === "mlb") {
+      const todos = modo === "nba" ? await cargarNBA(10) : await cargarMLB(10);
+      return responder(res, todos, 40);
     }
 
-    // ===== BÚSQUEDA DE EQUIPO (sin key) =====
+    // ===== UFC (chip directo) =====
+    if (modo === "ufc") {
+      const todos = await cargarUFC(45); // eventos UFC no son diarios, ventana más amplia
+      return responder(res, todos, 40);
+    }
+
+    // ===== TENIS — ATP + WTA (chip directo) =====
+    if (modo === "tenis") {
+      const todos = await cargarTenis(10);
+      return responder(res, todos, 40);
+    }
+
+    // ===== F1 (chip directo) =====
+    if (modo === "f1") {
+      const todos = await cargarF1(30);
+      return responder(res, todos, 20);
+    }
+
+    // ===== BÚSQUEDA DE EQUIPO / JUGADOR (sin key) =====
     if (modo === "equipo" && q) {
       const qn = norm(q);
       const todo = await cargarTodo();
@@ -287,11 +289,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ partidos: lista.map(x => x.p) });
     }
 
-    // ===== LIGA por ID (API-Football) — solo si reactivás una key nueva =====
+    // ===== LIGA por ID (API-Football) — legado, solo si reactivás una key =====
     if (modo === "liga" && liga) {
       const KEY = (process.env.APIFOOTBALL_KEY || "").trim();
       if (!KEY)
-        return res.status(200).json({ error: "Esa liga usa API-Football y no hay key activa. Usá las pestañas de ligas (gratis)." });
+        return res.status(200).json({ error: "Esa liga usa API-Football y no hay key activa. Usá las pestañas gratis." });
       const HOST = "https://v3.football.api-sports.io";
       const headers = { "x-apisports-key": KEY };
       const year = new Date().getFullYear();
@@ -324,37 +326,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ partidos });
     }
 
-    // ===== NBA / MLB (chips directos) =====
-    if (modo === "nba" || modo === "mlb") {
-      const todos = modo === "nba" ? await cargarNBA(10) : await cargarMLB(10);
-      if (!todos.length) return res.status(200).json({ error: "No pude cargar el calendario ahora (intentá más tarde)." });
-      const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-      const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
-      const lista = (fut.length ? fut : todos.sort((a, b) => b.dObj - a.dObj)).slice(0, 40);
-      return res.status(200).json({ partidos: lista.map(x => x.p) });
-    }
-
-    // ===== UFC (chip directo) =====
-    if (modo === "ufc") {
-      const todos = await cargarUFC(45); // eventos UFC no son diarios, ventana más amplia
-      if (!todos.length) return res.status(200).json({ error: "No pude cargar la cartelera de UFC ahora (intentá más tarde)." });
-      const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-      const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
-      const lista = (fut.length ? fut : todos.sort((a, b) => b.dObj - a.dObj)).slice(0, 40);
-      return res.status(200).json({ partidos: lista.map(x => x.p) });
-    }
-
-    // ===== HOY (pestaña por defecto) — sin key =====
+    // ===== HOY (pestaña por defecto) — mezcla todo =====
     const hoy = diaHN(new Date());
     const todo = await cargarTodo();
     const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const hoyList = todo.filter(x => diaHN(x.dObj) === hoy).sort((a, b) => a.dObj - b.dObj);
     let lista;
     if (hoyList.length) {
-      lista = hoyList.slice(0, 50);
+      lista = hoyList.slice(0, 60);
     } else {
       // si hoy no hay nada, mostramos los próximos para no dejar la pantalla en blanco
-      lista = todo.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj).slice(0, 25);
+      lista = todo.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj).slice(0, 30);
     }
     return res.status(200).json({ partidos: lista.map(x => x.p) });
 
