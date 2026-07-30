@@ -1644,6 +1644,9 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
       <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18M3 12h18"/></svg></span> Partidos · canales</h2>
       <div class="ligas-chips" id="ligasChips">
         <button class="lchip on" data-hoy="1">Hoy</button>
+        <button class="lchip" data-modo="nba">NBA</button>
+        <button class="lchip" data-modo="mlb">MLB</button>
+        <button class="lchip" data-modo="ufc">UFC</button>
         <button class="lchip" data-mundial="1">Mundial 2026</button>
         <button class="lchip" data-of="2025-26/en.1.json">Premier</button>
         <button class="lchip" data-of="2025-26/es.1.json">La Liga</button>
@@ -1652,7 +1655,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <button class="lchip" data-of="2025-26/fr.1.json">Ligue 1</button>
       </div>
       <div class="toolbar"><div class="search">🔎 <input id="tq" type="text" placeholder="…o buscá un equipo (ej: Olimpia, Real Madrid)"></div></div>
-      <div class="tv-note">⚠️ Los canales son orientativos (suelen tener los derechos en la región). Pueden variar por torneo y proveedor. Horarios en hora de Honduras 🇭🇳</div>
+      <div class="tv-note">⚠️ Los canales son orientativos (suelen tener los derechos en la región). Pueden variar por torneo y proveedor. Horarios en hora de Honduras 🇭🇳 · "Hoy" mezcla fútbol + NBA + MLB + UFC.</div>
       <div id="matchResults"><div class="empty"><span class="typing"><i></i><i></i><i></i></span></div></div>
     </div>
   </section>
@@ -3481,6 +3484,7 @@ function cargarChip(b){
   if(b.dataset.hoy){ pedir({modo:"hoy"}); }
   else if(b.dataset.mundial){ pedir({modo:"mundial"}); }
   else if(b.dataset.of){ pedir({modo:"ofliga", archivo:b.dataset.of}); }
+  else if(b.dataset.modo){ pedir({modo:b.dataset.modo}); }
   else { pedir({modo:"liga", liga:b.dataset.liga}); }
 }
 document.querySelectorAll(".lchip").forEach(b=>b.addEventListener("click",()=>{
