@@ -27,6 +27,7 @@ const REGION = "HN"; // SOLO Honduras
 // Escribí el título en minúsculas y sin acentos.
 const CORRECCIONES = [
   { titulo: "rosario tijeras", anio: "2016", forzar: ["Netflix"] },
+  { titulo: "el diablo viste a la moda 2", anio: "2026", forzar: ["Disney+"] },
 ];
 // ===========================================================================
 
