@@ -170,6 +170,15 @@ function parseMoney(v) {
 // Ajusta los cupos de una cuenta del inventario buscándola por correo.
 // modo "ocupar": suma el cliente y descuenta 1 disponible.
 // modo "liberar": quita el cliente y suma 1 disponible.
+//
+// ⚠️ FIX: antes, "ya existe" se checaba por nombre + PIN exactos. Si el PIN
+// guardado no coincidía letra por letra con el que llegaba en la renovación
+// (ej: uno vacío "" y el otro "0000"), el cliente se consideraba "nuevo" y se
+// duplicaba en el arreglo — cada renovación con un PIN levemente distinto
+// agregaba otra copia. Ahora la identidad es SOLO por nombre; si el PIN
+// cambió, se actualiza en el mismo registro en vez de crear uno nuevo.
+// También se agregó el tope de capacidad, que antes no existía acá (por eso
+// una cuenta de 5 cupos podía terminar con 15 "clientes").
 async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
   if (!correo) return { tocado: false, motivo: "sin correo" };
   try {
@@ -181,11 +190,19 @@ async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
     const cap = Number(data.capacidad) || 0;
 
     if (modo === "ocupar") {
-      const ya = clientes.some(c => normName(c.nombre) === normName(nombreCliente) && (!pin || String(c.pin || "") === String(pin || "")));
-      if (!ya) {
+      const idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente));
+      const pinNorm = String(pin || "").trim();
+      if (idxExiste !== -1) {
+        // Ya está: si el PIN cambió, se actualiza en el mismo registro (nunca duplica).
+        if (pinNorm && String(clientes[idxExiste].pin || "") !== pinNorm) {
+          clientes[idxExiste] = { ...clientes[idxExiste], pin: pinNorm };
+        }
+      } else if (cap > 0 && clientes.length >= cap) {
+        return { tocado: false, motivo: "cuenta llena", ocupados: clientes.length, capacidad: cap };
+      } else {
         const usados = clientes.map(c => Number(c.slot) || 0);
         let slot = 1; while (usados.includes(slot)) slot++;
-        clientes.push({ nombre: nombreCliente || "—", pin: pin || "", slot });
+        clientes.push({ nombre: nombreCliente || "—", pin: pinNorm, slot });
       }
     } else if (modo === "liberar") {
       const i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente)));
