@@ -222,8 +222,10 @@ async function setProcesoTicket(db, body) {
   };
   await ref.set(update, { merge: true });
   const msg = [
-    `🔄 Ticket #${old.numero || id.slice(-4)}`,
-    `<b>Estado:</b> ${estadoLabel(update.estado)}`
+    `🔄 <b>Ticket #${old.numero || id.slice(-4)}</b> · ${estadoLabel(update.estado)}`,
+    `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
+    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
+    `Lo puso en proceso: ${telegramHTML(update.procesoPor || '—')}`
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   await ref.set({ telegramProcessOk: !!telegram.ok, telegramProcessInfo: telegram }, { merge: true });
@@ -249,8 +251,11 @@ async function resolveTicket(db, body) {
   };
   await ref.set(update, { merge: true });
   const msg = [
-    `✅ Ticket #${old.numero || id.slice(-4)}`,
-    `<b>Estado:</b> ${estadoLabel(update.estado)}`
+    `✅ <b>Ticket #${old.numero || id.slice(-4)}</b> · Resuelto`,
+    `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
+    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
+    `Resuelto por: ${telegramHTML(update.resueltoPor || '—')}`,
+    `<b>Resolución:</b> ${telegramHTML(resolucion)}`
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   await ref.set({ telegramResolvedOk: !!telegram.ok, telegramResolvedInfo: telegram }, { merge: true });
@@ -283,8 +288,11 @@ async function responderTicket(db, body) {
   };
   await ref.set(update, { merge: true });
   const msg = [
-    `💬 Ticket #${old.numero || id.slice(-4)}`,
-    `<b>Estado:</b> ${estadoLabel(update.estado)}`
+    `💬 <b>Ticket #${old.numero || id.slice(-4)}</b> · ${estadoLabel(update.estado)}`,
+    `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
+    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
+    `Respondió: ${telegramHTML(entry.por)}`,
+    telegramHTML(respuesta)
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegram }, { merge: true });
