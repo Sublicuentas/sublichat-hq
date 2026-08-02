@@ -10029,9 +10029,18 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     if(persist){var w=widths();w[index]=width;saveWidths(w);}
   }
   function currentWidth(table,index){var head=table.querySelector('thead tr');var cell=head&&head.children[index+1];return cell?cell.getBoundingClientRect().width:140;}
-  function resizeAll(table,delta){
-    var count=Math.max(0,(table.querySelectorAll('thead th').length||1)-1),w=widths();
-    for(var i=0;i<count;i++){var next=Math.max(86,Math.min(420,(Number(w[i])||currentWidth(table,i)||140)+delta));w[i]=next;setColumnWidth(table,i,next,false);}saveWidths(w);
+  function resizeSelectedColumn(root,table,delta){
+    // ⚠️ FIX: antes "Ancho -/+" movía TODAS las columnas de la tabla a la vez
+    // (resizeAll), sin importar qué celda tuviera seleccionada el usuario — por
+    // eso "movía la celda pero no como debía": cambiaba columnas que no había
+    // tocado. Ahora, igual que "Alto", ajusta SOLO la columna de la celda
+    // seleccionada (o la del textarea con foco).
+    var idx=selectedColIndex(root);
+    if(idx==null||idx<0){alert('Toque primero una celda de la columna que quiere ajustar.');return;}
+    var w=widths();
+    var next=Math.max(86,Math.min(420,(Number(w[idx])||currentWidth(table,idx)||140)+delta));
+    w[idx]=next;saveWidths(w);
+    setColumnWidth(table,idx,next,false);
     refitTable(table);
   }
   var HEIGHT_KEY='sublichat_flujo_row_heights_v3';
@@ -10095,10 +10104,19 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     autoHeightTimer=setTimeout(function(){requestAnimationFrame(function(){(root&&root.matches&&root.matches('table[data-doc-section="flujo_diario"]')?[root]:Array.from((root||document).querySelectorAll('table[data-doc-section="flujo_diario"]'))).forEach(autoHeightTable);});},100);
   }
   function selectedRow(root){
-    return root.querySelector('td.cell-selected')?.closest('tr')||root.querySelector('textarea.docs-cell:focus')?.closest('tr')||root.querySelector('tr.row-selected')||root.querySelector('tbody tr');
+    // ⚠️ FIX: antes, si no había ninguna celda seleccionada ni enfocada, caía
+    // en silencio a "la primera fila de la tabla" (root.querySelector('tbody tr')).
+    // Eso hacía que "Alto" o "Ajustar fila al texto" movieran la fila 1 en vez
+    // de la fila que el usuario tenía a la vista — sin ningún aviso de que
+    // había cambiado otra fila distinta.
+    return root.querySelector('td.cell-selected')?.closest('tr')||root.querySelector('textarea.docs-cell:focus')?.closest('tr')||root.querySelector('tr.row-selected')||null;
   }
-  function adjustSelected(root,delta){var row=selectedRow(root);if(!row)return;setRowHeight(row,(Number(row.dataset.flowHeight)||row.getBoundingClientRect().height||44)+delta,true,true);}
-  function fitSelected(root){var row=selectedRow(root);if(row)fitRow(row,true);}
+  function selectedColIndex(root){
+    var td=root.querySelector('td.cell-selected')||root.querySelector('textarea.docs-cell:focus')?.closest('td');
+    return td?td.cellIndex-1:null;
+  }
+  function adjustSelected(root,delta){var row=selectedRow(root);if(!row){alert('Toque primero una celda de la fila que quiere ajustar.');return;}setRowHeight(row,(Number(row.dataset.flowHeight)||row.getBoundingClientRect().height||44)+delta,true,true);}
+  function fitSelected(root){var row=selectedRow(root);if(!row){alert('Toque primero una celda de la fila que quiere ajustar.');return;}fitRow(row,true);}
   function refitTable(table){if(!table)return;table.dataset.flowFitReady='0';autoHeightTable(table);}
   function addRowHandle(table,row){
     if(!row||row.querySelector('.flow-row-resizer'))return;var head=row.querySelector('.row-head');if(!head)return;
@@ -10124,7 +10142,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     });
     table.querySelectorAll('tbody tr').forEach(function(row){addRowHandle(table,row);});
     var toolbar=root.querySelector('.docs-toolbar.edit-tools');
-    if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">↔ − Ancho</button><button type="button" class="docs-btn" data-flow-size="+">↔ + Ancho</button><button type="button" class="docs-btn" data-flow-height="-">↕ − Alto</button><button type="button" class="docs-btn flow-fit-btn" data-flow-fit>✓ Ajustar fila al texto</button><button type="button" class="docs-btn" data-flow-height="+">↕ + Alto</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeAll(table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeAll(table,18);};controls.querySelector('[data-flow-height="-"]').onclick=function(){adjustSelected(root,-18);};controls.querySelector('[data-flow-height="+"]').onclick=function(){adjustSelected(root,18);};controls.querySelector('[data-flow-fit]').onclick=function(){fitSelected(root);};}
+    if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">↔ − Ancho</button><button type="button" class="docs-btn" data-flow-size="+">↔ + Ancho</button><button type="button" class="docs-btn" data-flow-height="-">↕ − Alto</button><button type="button" class="docs-btn flow-fit-btn" data-flow-fit>✓ Ajustar fila al texto</button><button type="button" class="docs-btn" data-flow-height="+">↕ + Alto</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeSelectedColumn(root,table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeSelectedColumn(root,table,18);};controls.querySelector('[data-flow-height="-"]').onclick=function(){adjustSelected(root,-18);};controls.querySelector('[data-flow-height="+"]').onclick=function(){adjustSelected(root,18);};controls.querySelector('[data-flow-fit]').onclick=function(){fitSelected(root);};}
     autoHeightTable(table);
   }
   function enhanceAll(){document.querySelectorAll('table[data-doc-section="flujo_diario"]').forEach(enhanceTable);}
