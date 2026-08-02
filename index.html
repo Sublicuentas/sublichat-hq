@@ -6382,15 +6382,25 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     return o('relojes','Para Relojes')+o('magdiel','Para Magdiel')+o('both','Para ambos');
   }
   function tkBadge(estado){const e=String(estado||'abierto');const m={abierto:'Pendiente',pendiente:'Pendiente',proceso:'En proceso',respondido:'En proceso',resuelto:'Finalizado',finalizado:'Finalizado'};const cls=(e==='resuelto'||e==='finalizado')?'resuelto':((e==='proceso'||e==='respondido')?'proceso':'pendiente');return `<span class="tk-badge ${cls}">Estado: ${m[e]||esc(e)}</span>`;}
+  function tkTelegramMotivo(info){
+    if(!info) return 'sin información del envío';
+    if(info.skipped&&info.reason==='telegram_env_missing') return 'falta configurar el bot en Vercel (variable BOT_TOKEN)';
+    if(info.skipped&&info.reason==='sin_destinos') return 'no hay chat_id de Telegram configurado para ese destinatario';
+    const results=Array.isArray(info.results)?info.results:[];
+    const fallo=results.find(r=>r&&!r.ok);
+    if(fallo&&fallo.error) return fallo.error;
+    return 'error desconocido';
+  }
   function tkCardHtml(t){
     const estado=String(t.estado||'abierto'),done=estado==='resuelto';
     const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
     const de=t.creadoPor||tkRoleLabel(t.creadoPorRol);
+    const tgWarn=(t.telegramOk===false)?`<div class="tk-tg-warn">📵 No llegó por Telegram: ${esc(tkTelegramMotivo(t.telegramInfo))}</div>`:'';
     if(isNotice){
       // Un aviso no es un ticket: solo se muestra el mensaje enviado, sin estado ni botones de acción.
       const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
       const tituloLimpio=esc((t.titulo||'Aviso').replace(/^AVISO\s*[·:-]?\s*/i,'')||'Aviso');
-      return `<div class="tk-card tk-notice-card"><div class="tk-top"><div class="tk-title"><span class="tk-notice-label">📢 AVISO</span> ${tituloLimpio}</div></div><div class="tk-meta">De: ${esc(de)} · Para: ${esc(dest)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div></div>`;
+      return `<div class="tk-card tk-notice-card"><div class="tk-top"><div class="tk-title"><span class="tk-notice-label">📢 AVISO</span> ${tituloLimpio}</div></div><div class="tk-meta">De: ${esc(de)} · Para: ${esc(dest)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${tgWarn}</div>`;
     }
     const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
     const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.por||tkRoleLabel(x.porRol))}</b><span>${esc(x.texto||'')}</span><small>${esc(tkWhen(x.at))}</small></div>`).join('');
@@ -6398,7 +6408,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const replying=tk.replyFor===t.id;
     const replyBox=replying?`<div class="tk-reply"><textarea class="tk-input" id="tkReplyText" placeholder="Escriba su respuesta…">${esc(tk.replyText||'')}</textarea><div class="tk-actions"><button class="tk-btn good mini" data-tk-send="${esc(t.id||'')}">📨 Enviar respuesta</button><button class="tk-btn ghost mini" data-tk-cancelreply="1">Cancelar</button></div></div>`:'';
     const acts=done?'':`<div class="tk-actions">${!replying?`<button class="tk-btn mini" data-tk-reply="${esc(t.id||'')}">💬 Responder</button>`:''}${estado!=='proceso'?`<button class="tk-btn warn mini" data-tk-proceso="${esc(t.id||'')}">🔄 En proceso</button>`:''}<button class="tk-btn good mini" data-tk-resolve="${esc(t.id||'')}">✅ Resolver</button></div>`;
-    return `<div class="tk-card ${done?'done':''}"><div class="tk-top"><div class="tk-title">${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
+    return `<div class="tk-card ${done?'done':''}"><div class="tk-top"><div class="tk-title">${esc(t.titulo||'Sin título')}</div>${tkBadge(estado)}</div><div class="tk-meta">Para: ${esc(dest)} · Prioridad: ${esc(t.prioridad||'normal')} · De: ${esc(de)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${tgWarn}${(thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:''}${acts}${replyBox}</div>`;
   }
   function tkHtml(){
     const all=tkMine();
@@ -6440,6 +6450,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     .tk-badge.respondido{background:#e0f7f1;color:#087f5b}
     .tk-badge.resuelto,.tk-badge.finalizado{background:#dcfce7;color:#166534}
     .tk-meta{font-size:12px;color:#6b7a90;font-weight:700}
+    .tk-tg-warn{font-size:11.5px;color:#b45309;background:#fff7ed;border:1px solid #fde68a;border-radius:8px;padding:4px 8px;font-weight:700}
     .tk-detail{font-size:14px;color:#243b53;white-space:pre-wrap;line-height:1.35}
     .tk-thread{display:flex;flex-direction:column;gap:6px;border-left:3px solid #e2e9f4;padding-left:10px}
     .tk-msg{background:#f5f8fd;border-radius:10px;padding:8px 10px}
