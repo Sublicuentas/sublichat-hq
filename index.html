@@ -9990,12 +9990,14 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 .docs-table[data-doc-section="flujo_diario"] .corner,.docs-table[data-doc-section="flujo_diario"] .row-head{position:relative!important;left:auto!important}
 .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px;min-height:44px!important;max-height:2000px!important;padding:8px 9px!important;resize:none!important;overflow:hidden!important;white-space:pre-wrap!important;transition:none!important;touch-action:pan-x pan-y}
 .docs-fullscreen-host .docs-max-on .docs-table[data-doc-section="flujo_diario"] textarea.docs-cell{width:100%!important;min-width:0!important;max-width:100%!important}
-.flow-row-resizer{position:absolute;z-index:6;left:4px;right:4px;bottom:-5px;height:11px;cursor:row-resize;touch-action:none;background:transparent}
-.flow-row-resizer::after{content:'';position:absolute;left:18%;right:18%;top:4px;height:2px;border-radius:3px;background:#2563eb;opacity:.55}
-.flow-row-resizer:hover::after,.flow-row-resizer:focus::after{opacity:1;height:3px}
-.flow-col-resizer{position:absolute;z-index:5;top:0;right:-6px;width:14px;height:100%;cursor:col-resize;touch-action:none;background:transparent}
-.flow-col-resizer::after{content:'';position:absolute;top:22%;bottom:22%;left:6px;width:2px;border-radius:2px;background:#60a5fa;opacity:.55}
+.flow-row-resizer{position:absolute;z-index:6;left:2px;right:2px;bottom:-8px;height:17px;cursor:row-resize;touch-action:none;background:transparent}
+.flow-row-resizer::after{content:'';position:absolute;left:10%;right:10%;top:7px;height:4px;border-radius:4px;background:#2563eb;opacity:.8}
+.flow-row-resizer:hover::after,.flow-row-resizer:focus::after,.flow-row-resizer.dragging::after{opacity:1;height:5px;background:#1d4ed8;box-shadow:0 0 0 3px rgba(37,99,235,.18)}
+.flow-col-resizer{position:absolute;z-index:5;top:0;right:-9px;width:19px;height:100%;cursor:col-resize;touch-action:none;background:transparent}
+.flow-col-resizer::after{content:'';position:absolute;top:12%;bottom:12%;left:8px;width:4px;border-radius:4px;background:#60a5fa;opacity:.8}
+.flow-col-resizer:hover::after,.flow-col-resizer:focus::after,.flow-col-resizer.dragging::after{opacity:1;background:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.18)}
 .flow-size-controls{display:inline-flex!important;gap:6px!important;align-items:center!important;padding:4px!important;border:1px solid var(--line)!important;border-radius:12px!important;background:var(--surface)!important}
+.flow-drag-hint{width:100%;font-size:12px;font-weight:800;color:#49708c;background:var(--accentSoft,#eef7ff);border-radius:10px;padding:7px 10px;margin:0 0 8px}
 .flow-size-controls .docs-btn{min-height:34px!important;padding:7px 10px!important;font-size:12px!important;background:var(--card)!important}
 @media(max-width:680px){
   .docs-table[data-doc-section="flujo_diario"] thead th:not(.corner),.docs-table[data-doc-section="flujo_diario"] tbody td{min-width:96px!important;width:128px;max-width:128px}
@@ -10121,9 +10123,9 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   function addRowHandle(table,row){
     if(!row||row.querySelector('.flow-row-resizer'))return;var head=row.querySelector('.row-head');if(!head)return;
     var handle=document.createElement('span');handle.className='flow-row-resizer';handle.title='Arrastre para ajustar el alto de esta fila';handle.tabIndex=0;head.appendChild(handle);
-    handle.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var start=ev.clientY,base=Number(row.dataset.flowHeight)||row.getBoundingClientRect().height||44;try{handle.setPointerCapture(ev.pointerId);}catch(e){}
+    handle.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var start=ev.clientY,base=Number(row.dataset.flowHeight)||row.getBoundingClientRect().height||44;handle.classList.add('dragging');try{handle.setPointerCapture(ev.pointerId);}catch(e){}
       function move(e){setRowHeight(row,base+(e.clientY-start),false,true);}
-      function up(){setRowHeight(row,Number(row.dataset.flowHeight)||base,true,true);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);}
+      function up(){handle.classList.remove('dragging');setRowHeight(row,Number(row.dataset.flowHeight)||base,true,true);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);}
       handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
     });
   }
@@ -10134,15 +10136,17 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     table.querySelectorAll('thead th:not(.corner)').forEach(function(th,index){
       setColumnWidth(table,index,Number(stored[index])||currentWidth(table,index)||140,false);
       var handle=document.createElement('span');handle.className='flow-col-resizer';handle.title='Arrastre para ajustar la columna';th.appendChild(handle);
-      handle.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var start=ev.clientX,base=currentWidth(table,index);try{handle.setPointerCapture(ev.pointerId);}catch(e){}
+      handle.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var start=ev.clientX,base=currentWidth(table,index);handle.classList.add('dragging');try{handle.setPointerCapture(ev.pointerId);}catch(e){}
         function move(e){setColumnWidth(table,index,base+(e.clientX-start),false);}
-        function up(e){setColumnWidth(table,index,currentWidth(table,index),true);refitTable(table);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);}
+        function up(e){handle.classList.remove('dragging');setColumnWidth(table,index,currentWidth(table,index),true);refitTable(table);handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);}
         handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
       });
     });
     table.querySelectorAll('tbody tr').forEach(function(row){addRowHandle(table,row);});
     var toolbar=root.querySelector('.docs-toolbar.edit-tools');
-    if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">↔ − Ancho</button><button type="button" class="docs-btn" data-flow-size="+">↔ + Ancho</button><button type="button" class="docs-btn" data-flow-height="-">↕ − Alto</button><button type="button" class="docs-btn flow-fit-btn" data-flow-fit>✓ Ajustar fila al texto</button><button type="button" class="docs-btn" data-flow-height="+">↕ + Alto</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeSelectedColumn(root,table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeSelectedColumn(root,table,18);};controls.querySelector('[data-flow-height="-"]').onclick=function(){adjustSelected(root,-18);};controls.querySelector('[data-flow-height="+"]').onclick=function(){adjustSelected(root,18);};controls.querySelector('[data-flow-fit]').onclick=function(){fitSelected(root);};}
+    if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">↔ − Ancho</button><button type="button" class="docs-btn" data-flow-size="+">↔ + Ancho</button><button type="button" class="docs-btn" data-flow-height="-">↕ − Alto</button><button type="button" class="docs-btn flow-fit-btn" data-flow-fit>✓ Ajustar fila al texto</button><button type="button" class="docs-btn" data-flow-height="+">↕ + Alto</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeSelectedColumn(root,table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeSelectedColumn(root,table,18);};controls.querySelector('[data-flow-height="-"]').onclick=function(){adjustSelected(root,-18);};controls.querySelector('[data-flow-height="+"]').onclick=function(){adjustSelected(root,18);};controls.querySelector('[data-flow-fit]').onclick=function(){fitSelected(root);};
+      if(!root.querySelector('.flow-drag-hint')){var hint=document.createElement('div');hint.className='flow-drag-hint';hint.textContent='💡 También puede arrastrar directo: mantenga presionada la rayita azul en el borde derecho de una columna o abajo de una fila.';toolbar.insertAdjacentElement('afterend',hint);}
+    }
     autoHeightTable(table);
   }
   function enhanceAll(){document.querySelectorAll('table[data-doc-section="flujo_diario"]').forEach(enhanceTable);}
