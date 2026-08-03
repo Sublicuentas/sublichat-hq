@@ -455,8 +455,8 @@ export default async function handler(req, res) {
 
     let query = db.collection("clientes");
     let snap;
-    if (clienteNorm) snap = await query.where("nombre_norm", "==", clienteNorm).limit(1).get();
-    if ((!snap || snap.empty) && telefono) snap = await query.where("telefono", "==", telefono).limit(1).get();
+    if (clienteNorm) snap = await query.where("nombre_norm", "==", clienteNorm).limit(5).get();
+    if ((!snap || snap.empty) && telefono) snap = await query.where("telefono", "==", telefono).limit(5).get();
     if (!snap || snap.empty) {
       const doc = await findCliente(db, { clienteNorm, telefono });
       if (doc) snap = { empty: false, docs: [doc] };
@@ -464,8 +464,25 @@ export default async function handler(req, res) {
     if (!snap || snap.empty)
       return res.status(200).json({ error: "No encontré ese cliente en la base." });
 
-    const docRef = snap.docs[0].ref;
-    const data = snap.docs[0].data();
+    // ⚠️ FIX: si hay dos fichas distintas con el mismo nombre_norm (una
+    // colisión — el mismo cliente quedó duplicado en dos documentos), antes
+    // se tomaba SIEMPRE la primera que devolviera Firestore, sin fijarse si
+    // esa era la ficha que realmente tenía el servicio que se quería renovar.
+    // Eso hacía que "renovar" pareciera no hacer nada: el cambio se guardaba
+    // en la ficha duplicada equivocada, no en la que el usuario veía en
+    // pantalla. Ahora, si hay más de una coincidencia, se elige la que sí
+    // tiene el servicio pedido (por plataforma o índice).
+    let elegido = snap.docs[0];
+    if (snap.docs.length > 1) {
+      const conServicio = snap.docs.find(d => {
+        const servs = Array.isArray(d.data().servicios) ? d.data().servicios : [];
+        return resolveServicioIndex(servs, { servicioIndex: body.servicioIndex, plataforma }) !== -1;
+      });
+      if (conServicio) elegido = conServicio;
+    }
+
+    const docRef = elegido.ref;
+    const data = elegido.data();
     let servicios = Array.isArray(data.servicios) ? data.servicios : [];
     let invResult = null;
 
