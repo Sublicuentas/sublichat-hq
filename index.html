@@ -3779,20 +3779,29 @@ async function renovarServicio(dias, fechaExacta){
   const hint=$cobro("cobroRenovarHint");
   hint.textContent="Renovando…";
   let ok=0, fail=0;
+  const errores=[];
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json();
-      if(j.ok)ok++; else {fail++; hint.textContent="⚠️ "+(j.error||"Error");}
-    }catch(e){fail++;}
+      if(j.ok)ok++; else {fail++;errores.push(`${s.plataforma}: ${j.error||"error sin detalle"}`);}
+    }catch(e){fail++;errores.push(`${s.plataforma}: ${e.message||"fallo de red"}`);}
   }
-  if(ok){
+  // ⚠️ FIX: antes, si al menos 1 servicio se renovaba, el mensaje final SIEMPRE
+  // decía "✅ Renovado" sin importar si otro servicio del mismo cliente había
+  // fallado — el error real quedaba tapado y parecía que "no hacía nada"
+  // aunque en realidad solo se había renovado la mitad.
+  if(ok&&!fail){
     hint.textContent=`✅ Renovado ${descRenov} (${ok} servicio${ok>1?"s":""}). Actualizando…`;
     mostrarToast(`✅ ${g.nombre}: renovado ${descRenov}`);
     setTimeout(()=>{ cerrarCobro(); load(); }, 1200);
-  }else if(!fail){
-    hint.textContent="No se renovó nada.";
+  }else if(ok&&fail){
+    hint.textContent=`⚠️ Renovó ${ok} pero falló ${fail}: ${errores.join(" · ")}`;
+    mostrarToast(`⚠️ ${g.nombre}: ${ok} renovado, ${fail} falló — revise el detalle`);
+    setTimeout(()=>{ load(); }, 1500);
+  }else{
+    hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
   }
 }
 const r30=$cobro("cobroR30"), r31=$cobro("cobroR31");
@@ -6391,11 +6400,26 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(fallo&&fallo.error) return fallo.error;
     return 'error desconocido';
   }
+  // ⚠️ FIX: la tarjeta solo mostraba el estado de la notificación de CREACIÓN
+  // del ticket (telegramOk), aunque ya hubiera pasado por "en proceso",
+  // "respondido" o "resuelto" — cada uno manda su propio aviso de Telegram por
+  // separado, guardado en su propio campo. Por eso podía verse "No llegó por
+  // Telegram" en un ticket cuyo aviso de RESOLUCIÓN sí había llegado: eran dos
+  // envíos distintos. Ahora se muestra el estado del envío más reciente según
+  // en qué paso está el ticket.
+  function tkTelegramField(t){
+    const estado=String(t.estado||'abierto');
+    if(estado==='resuelto') return {ok:t.telegramResolvedOk,info:t.telegramResolvedInfo,label:'el aviso de resuelto'};
+    if(estado==='respondido') return {ok:t.telegramReplyOk,info:t.telegramReplyInfo,label:'el aviso de la respuesta'};
+    if(estado==='proceso') return {ok:t.telegramProcessOk,info:t.telegramProcessInfo,label:'el aviso de "en proceso"'};
+    return {ok:t.telegramOk,info:t.telegramInfo,label:'el aviso de creación'};
+  }
   function tkCardHtml(t){
     const estado=String(t.estado||'abierto'),done=estado==='resuelto';
     const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
     const de=t.creadoPor||tkRoleLabel(t.creadoPorRol);
-    const tgWarn=(t.telegramOk===false)?`<div class="tk-tg-warn">📵 No llegó por Telegram: ${esc(tkTelegramMotivo(t.telegramInfo))}</div>`:'';
+    const tgField=tkTelegramField(t);
+    const tgWarn=(tgField.ok===false)?`<div class="tk-tg-warn">📵 No llegó por Telegram (${esc(tgField.label)}): ${esc(tkTelegramMotivo(tgField.info))}</div>`:'';
     if(isNotice){
       // Un aviso no es un ticket: solo se muestra el mensaje enviado, sin estado ni botones de acción.
       const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
