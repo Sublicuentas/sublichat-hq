@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 13  ·  Reglas de campos por plataforma + ficha CRM/WhatsApp upsert
+// api/renovar.js  ·  VERSION 14  ·  + diagnóstico fechaAnterior/fechaNueva en renovar, fix ficha duplicada
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -335,7 +335,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 13, msg: "renovar v13 activo. Usá POST." });
+    return res.status(200).json({ ok: true, version: 14, msg: "renovar v14 activo (con diagnóstico fechaAnterior/fechaNueva). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteNorm, telefono, plataforma } = body;
