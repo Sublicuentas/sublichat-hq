@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 14  ·  + diagnóstico fechaAnterior/fechaNueva en renovar, fix ficha duplicada
+// api/renovar.js  ·  VERSION 15  ·  + resumen de todos los servicios del cliente en la respuesta de renovar
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -335,7 +335,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 14, msg: "renovar v14 activo (con diagnóstico fechaAnterior/fechaNueva). Usá POST." });
+    return res.status(200).json({ ok: true, version: 15, msg: "renovar v15 activo (con resumen de servicios del cliente). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteNorm, telefono, plataforma } = body;
@@ -561,7 +561,13 @@ export default async function handler(req, res) {
     }
 
     await docRef.update({ servicios: servicios.map(limpiarServicioCRM), updatedAt: isoNow() });
-    return res.status(200).json({ ok: true, accion: acc, totalServicios: servicios.length, inventario: invResult, clienteId: docRef.id, fechaAnterior, fechaNueva });
+    // 🔎 DIAGNÓSTICO: lista completa de servicios de este cliente (plataforma +
+    // fecha guardada), para detectar si hay más de uno con el mismo nombre de
+    // plataforma (duplicado dentro del mismo documento) apuntando a fechas
+    // distintas — eso explicaría que el botón le pegue a uno que no es el que
+    // se ve en la tabla.
+    const serviciosResumen = servicios.map((s, i) => `${i}:${s.plataforma || "?"}=${s.fechaRenovacion || "?"}`);
+    return res.status(200).json({ ok: true, accion: acc, totalServicios: servicios.length, inventario: invResult, clienteId: docRef.id, fechaAnterior, fechaNueva, serviciosResumen });
   } catch (e) {
     console.error(e);
     return res.status(200).json({ error: "Error: " + (e.message || "") });
