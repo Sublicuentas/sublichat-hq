@@ -486,6 +486,8 @@ export default async function handler(req, res) {
     let servicios = Array.isArray(data.servicios) ? data.servicios : [];
     let invResult = null;
 
+    let fechaAnterior = null, fechaNueva = null;
+
     if (acc === "renovar") {
       const { dias, fechaActual, fechaExacta, servicioIndex } = body;
       if (!plataforma && servicioIndex == null)
@@ -497,7 +499,12 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
 
       const s = servicios[idx];
+      // 🔎 DIAGNÓSTICO: de qué fecha REALMENTE está partiendo el servidor
+      // (la que ya está guardada en Firestore para este servicio), para poder
+      // compararla con la que se ve en pantalla.
+      fechaAnterior = s.fechaRenovacion || fechaActual || null;
       const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
+      fechaNueva = nuevaFecha;
       servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
 
     } else if (acc === "eliminar") {
@@ -554,7 +561,7 @@ export default async function handler(req, res) {
     }
 
     await docRef.update({ servicios: servicios.map(limpiarServicioCRM), updatedAt: isoNow() });
-    return res.status(200).json({ ok: true, accion: acc, totalServicios: servicios.length, inventario: invResult });
+    return res.status(200).json({ ok: true, accion: acc, totalServicios: servicios.length, inventario: invResult, clienteId: docRef.id, fechaAnterior, fechaNueva });
   } catch (e) {
     console.error(e);
     return res.status(200).json({ error: "Error: " + (e.message || "") });
