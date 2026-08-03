@@ -3780,12 +3780,13 @@ async function renovarServicio(dias, fechaExacta){
   hint.textContent="Renovando…";
   let ok=0, fail=0;
   const errores=[];
+  const diag=[];
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json();
-      if(j.ok)ok++; else {fail++;errores.push(`${s.plataforma}: ${j.error||"error sin detalle"}`);}
+      if(j.ok){ok++;diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"} (id:${(j.clienteId||"").slice(0,8)})`);} else {fail++;errores.push(`${s.plataforma}: ${j.error||"error sin detalle"}`);}
     }catch(e){fail++;errores.push(`${s.plataforma}: ${e.message||"fallo de red"}`);}
   }
   // ⚠️ FIX: antes, si al menos 1 servicio se renovaba, el mensaje final SIEMPRE
@@ -3793,9 +3794,9 @@ async function renovarServicio(dias, fechaExacta){
   // fallado — el error real quedaba tapado y parecía que "no hacía nada"
   // aunque en realidad solo se había renovado la mitad.
   if(ok&&!fail){
-    hint.textContent=`✅ Renovado ${descRenov} (${ok} servicio${ok>1?"s":""}). Actualizando…`;
+    hint.textContent=`✅ Renovado ${descRenov} (${ok} servicio${ok>1?"s":""}). ${diag.join(" · ")}`;
     mostrarToast(`✅ ${g.nombre}: renovado ${descRenov}`);
-    setTimeout(()=>{ cerrarCobro(); load(); }, 1200);
+    setTimeout(()=>{ load(); }, 2500);
   }else if(ok&&fail){
     hint.textContent=`⚠️ Renovó ${ok} pero falló ${fail}: ${errores.join(" · ")}`;
     mostrarToast(`⚠️ ${g.nombre}: ${ok} renovado, ${fail} falló — revise el detalle`);
