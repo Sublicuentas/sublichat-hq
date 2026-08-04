@@ -1906,7 +1906,7 @@ function statusOf(date){
   if(n<=7) return {k:"soon",t:`En ${n} día${n>1?"s":""}`};
   return {k:"ok",t:`En ${n} días`};
 }
-function flattenCliente(doc){
+function flattenCliente(doc, clienteId=""){
   const F=CONFIG.fields;
   const nombre=doc[F.nombre]||"—", vendedor=doc[F.vendedor]||"—";
   const telefono=doc[F.telefono]||"";
@@ -1918,7 +1918,7 @@ function flattenCliente(doc){
     const clave=rawClave || rawPin; // compatibilidad: antes el campo pin era la clave
     const pinPerfil=s.pinPerfil||s.pin_perfil||s.perfilPin||(rawClave?rawPin:"");
     return {
-      nombre,vendedor,telefono,nombreNorm,
+      nombre,vendedor,telefono,nombreNorm,clienteId,
       srvIndex,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
@@ -1940,16 +1940,21 @@ function countUp(el,to,money){
     el.textContent=money?fmt(v):v;if(p<1)requestAnimationFrame(step);})(t0);
 }
 
-async function load(){
+async function load(options={}){
+  const forceServer=options===true || !!(options&&options.forceServer);
   const cfg=CONFIG.firebase;
   if(cfg && cfg.projectId){
     try{
       const { initializeApp, getApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-      const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const { getFirestore, collection, getDocs, getDocsFromServer } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const app = getApps().length ? getApp() : initializeApp(cfg);
       const db=getFirestore(app);
-      const snap=await getDocs(collection(db,CONFIG.collection));
-      DATA=snap.docs.flatMap(d=>flattenCliente(d.data()));
+      let snap;
+      if(forceServer && typeof getDocsFromServer==="function"){
+        try{ snap=await getDocsFromServer(collection(db,CONFIG.collection)); }
+        catch(serverError){ console.warn("clientes desde servidor",serverError); snap=await getDocs(collection(db,CONFIG.collection)); }
+      }else snap=await getDocs(collection(db,CONFIG.collection));
+      DATA=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       document.getElementById("srcLabel").textContent=`Firebase · ${DATA.length} servicios`;
       // Inventario de cuentas (colección aparte)
       try{
@@ -1965,7 +1970,7 @@ async function load(){
         FINANZAS = fSnap ? fSnap.docs.map(d=>({id:d.id,...d.data()})) : [];
         window._finError="";
       }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
-    }catch(e){console.error(e);DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Error · demo";}
+    }catch(e){console.error(e);if(!DATA.length)DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent=DATA.length?"Firebase · última copia visible":"Error · demo";}
   }else{DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Modo demo";}
   render();
   renderInventario();
@@ -2086,11 +2091,11 @@ function renderTable(){
   // 1) aplicar filtros sobre cada servicio
   const filtrados=DATA.map(c=>({...c,st:statusOf(c.fecha)}))
     .filter(c=>(!q||c.nombre.toLowerCase().includes(q))&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe));
-  // 2) agrupar por cliente (nombre+telefono) — una fila por persona con todos sus servicios
+  // 2) agrupar por documento real de Firestore. No mezclar fichas duplicadas con el mismo nombre.
   const grupos={};
   filtrados.forEach(c=>{
-    const key=c.nombre+"|"+(c.telefono||"");
-    if(!grupos[key]) grupos[key]={nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",nombreNorm:c.nombreNorm||"",servicios:[]};
+    const key=c.clienteId?`id:${c.clienteId}`:(c.nombre+"|"+(c.telefono||""));
+    if(!grupos[key]) grupos[key]={clienteId:c.clienteId||"",nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",nombreNorm:c.nombreNorm||"",servicios:[]};
     grupos[key].servicios.push(c);
   });
   // 3) cada grupo: fecha más próxima, suma de precios, estado de la más urgente
@@ -3785,6 +3790,28 @@ function abrirCobro(g){
 function cerrarCobro(){ $cobro("cobroModal").classList.remove("show"); }
 
 /* ===== RENOVAR (escribe en Firebase vía servidor) ===== */
+function aplicarRenovacionLocal(g,s,resultado){
+  const clienteId=String(resultado.clienteId||s.clienteId||g.clienteId||"");
+  const servicioIndex=Number.isInteger(Number(resultado.servicioIndex))?Number(resultado.servicioIndex):Number(s.srvIndex);
+  const fechaRaw=String(resultado.fechaNueva||"");
+  const fecha=parseDate(fechaRaw);
+  if(!fechaRaw||!fecha||isNaN(fecha))return;
+  const coincide=x=>{
+    const sameDoc=clienteId
+      ? String(x.clienteId||"")===clienteId
+      : (g.nombreNorm?String(x.nombreNorm||"")===String(g.nombreNorm):(String(x.nombre||"")===String(g.nombre||"")&&String(x.telefono||"")===String(g.telefono||"")));
+    const sameIndex=Number.isInteger(servicioIndex)?Number(x.srvIndex)===servicioIndex:false;
+    return sameDoc && (sameIndex || x===s);
+  };
+  DATA.forEach(x=>{if(coincide(x)){x.fechaRaw=fechaRaw;x.fecha=fecha;}});
+  (g.servicios||[]).forEach(x=>{if(coincide(x)){x.fechaRaw=fechaRaw;x.fecha=fecha;}});
+  s.fechaRaw=fechaRaw;s.fecha=fecha;s.clienteId=clienteId||s.clienteId;
+  if(g.servicios&&g.servicios.length){
+    const ordenadas=g.servicios.filter(x=>x.fecha&& !isNaN(x.fecha)).sort((a,b)=>a.fecha-b.fecha);
+    if(ordenadas.length)g.fecha=ordenadas[0].fecha;
+  }else g.fecha=fecha;
+}
+
 async function renovarServicio(dias, fechaExacta){
   if(!cobroActual) return;
   const g=cobroActual;
@@ -3813,12 +3840,21 @@ async function renovarServicio(dias, fechaExacta){
   let ok=0, fail=0;
   const errores=[];
   const diag=[];
+  const confirmadas=[];
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
-      const j=await r.json();
-      if(j.ok){ok++;diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"} (id:${(j.clienteId||"").slice(0,8)})`);if(Array.isArray(j.serviciosResumen))diag.push("TODOS sus servicios: "+j.serviciosResumen.join(" | "));} else {fail++;errores.push(`${s.plataforma}: ${j.error||"error sin detalle"}`);}
+        body:JSON.stringify({clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
+      const j=await r.json().catch(()=>({}));
+      if(j.ok&&j.verified===true){
+        aplicarRenovacionLocal(g,s,j);
+        confirmadas.push({servicio:s,resultado:j});
+        ok++;
+        diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"}`);
+      }else{
+        fail++;
+        errores.push(`${s.plataforma}: ${j.error||(j.ok?"Firebase no confirmó la fecha":"error sin detalle")}`);
+      }
     }catch(e){fail++;errores.push(`${s.plataforma}: ${e.message||"fallo de red"}`);}
   }
   // ⚠️ FIX: antes, si al menos 1 servicio se renovaba, el mensaje final SIEMPRE
@@ -3826,13 +3862,19 @@ async function renovarServicio(dias, fechaExacta){
   // fallado — el error real quedaba tapado y parecía que "no hacía nada"
   // aunque en realidad solo se había renovado la mitad.
   if(ok&&!fail){
-    hint.textContent=`✅ Renovado ${descRenov} (${ok} servicio${ok>1?"s":""}). ${diag.join(" · ")}`;
+    hint.textContent=`✅ Renovación confirmada en Firebase (${ok} servicio${ok>1?"s":""}). ${diag.join(" · ")}`;
     mostrarToast(`✅ ${g.nombre}: renovado ${descRenov}`);
-    setTimeout(()=>{ load(); }, 2500);
+    render();
+    await load({forceServer:true});
+    confirmadas.forEach(x=>aplicarRenovacionLocal(g,x.servicio,x.resultado));
+    render();
   }else if(ok&&fail){
     hint.textContent=`⚠️ Renovó ${ok} pero falló ${fail}: ${errores.join(" · ")}`;
     mostrarToast(`⚠️ ${g.nombre}: ${ok} renovado, ${fail} falló — revise el detalle`);
-    setTimeout(()=>{ load(); }, 1500);
+    render();
+    await load({forceServer:true});
+    confirmadas.forEach(x=>aplicarRenovacionLocal(g,x.servicio,x.resultado));
+    render();
   }else{
     hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
   }
@@ -3903,16 +3945,16 @@ async function eliminarServicio(s){
   $cobro("cgHint").textContent="Eliminando…";
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({accion:"eliminar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,servicioIndex:(s.srvIndex!=null?s.srvIndex:null)})});
+      body:JSON.stringify({accion:"eliminar",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null)})});
     const j=await r.json();
-    if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}`); setTimeout(()=>{cerrarCobro();load();},1200); }
+    if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}`); cerrarCobro(); await load({forceServer:true}); }
     else $cobro("cgHint").textContent="⚠️ "+(j.error||"Error");
   }catch(e){ $cobro("cgHint").textContent="⚠️ No pude conectar."; }
 }
 
 // Formulario agregar/editar
 const servModal=$cobro("servModal");
-let servModo="agregar", servEditandoPlat=null, servEditandoIndex=null;
+let servModo="agregar", servEditandoPlat=null, servEditandoCorreo=null, servEditandoIndex=null;
 function abrirServForm(modo, serv){
   servModo=modo;
   const g=cobroActual;
@@ -3922,6 +3964,7 @@ function abrirServForm(modo, serv){
   $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   if(modo==="editar" && serv){
     servEditandoPlat=serv.plataformaRaw||serv.plataforma;
+    servEditandoCorreo=serv.correo||"";
     servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
     // seleccionar la plataforma actual si está en la lista
     const raw=(serv.plataformaRaw||"").toLowerCase();
@@ -3932,6 +3975,7 @@ function abrirServForm(modo, serv){
     $cobro("servPin").value=serv.pin||"";
   }else{
     servEditandoPlat=null;
+    servEditandoCorreo=null;
     servEditandoIndex=null;
     $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servCorreo").value=""; $cobro("servPin").value="";
   }
@@ -3955,8 +3999,8 @@ $cobro("servSave").addEventListener("click",async()=>{
   if(!servicio.precio||!servicio.fechaRenovacion){ $cobro("servHint").textContent="Poné al menos precio y fecha."; return; }
   $cobro("servHint").textContent="Guardando…";
   const payload=servModo==="agregar"
-    ? {accion:"agregar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",servicio}
-    : {accion:"editar",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,servicioIndex:servEditandoIndex,servicio};
+    ? {accion:"agregar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",servicio}
+    : {accion:"editar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,correoOriginal:servEditandoCorreo||"",servicioIndex:servEditandoIndex,servicio};
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const j=await r.json();
@@ -3965,7 +4009,7 @@ $cobro("servSave").addEventListener("click",async()=>{
       if(servModo==="agregar" && j.inventario){
         if(j.inventario.tocado) extra=` · cupo ocupado en Stock (${j.inventario.disponibles} libres)`;
       }
-      mostrarToast(`✅ ${g.nombre}: servicio ${servModo==="agregar"?"agregado":"actualizado"}${extra}`); servModal.classList.remove("show"); setTimeout(()=>{cerrarCobro();load();},1200);
+      mostrarToast(`✅ ${g.nombre}: servicio ${servModo==="agregar"?"agregado":"actualizado"}${extra}`); servModal.classList.remove("show"); cerrarCobro(); await load({forceServer:true});
     }
     else $cobro("servHint").textContent="⚠️ "+(j.error||"Error");
   }catch(e){ $cobro("servHint").textContent="⚠️ No pude conectar."; }
@@ -4962,6 +5006,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   const fichaNorm=s=>String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"");
   const fichaQ=id=>document.getElementById(id);
+  let fichaClienteIdActual="";
   function fichaStatus(txt,type="info"){
     const el=fichaQ("fichaStatus");
     if(!el) return;
@@ -5199,6 +5244,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
     return {
       accion:"ficha_upsert",
+      clienteId:fichaClienteIdActual||"",
       cliente:{
         nombrePerfil:fichaGetVal("fichaNombre"),
         telefono:fichaGetVal("fichaTelefono"),
@@ -5227,10 +5273,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const j=await r.json().catch(()=>({}));
       if(j.ok){
+        fichaClienteIdActual=j.clienteId||fichaClienteIdActual;
         const msg=j.created?"✅ Cliente creado y ficha guardada en CRM":"✅ Ficha actualizada en CRM";
         fichaStatus(msg,"ok");
         if(!silent) fichaToast(msg);
-        setTimeout(()=>{ try{ load(); }catch(_){} },800);
+        await load({forceServer:true});
       }else{
         const msg="⚠️ CRM: "+(j.error||"No se pudo guardar");
         fichaStatus(msg,"err");
@@ -5472,6 +5519,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const forceBlank = !!(opts && opts.blank);
     const grupo = forceBlank ? {} : (g || cobroActual || null);
     const serv=(grupo&&grupo.servicios&&grupo.servicios[0]) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil}:null);
+    fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaResetButtons();
     fichaPrefillFromService(grupo||{},serv||{plataformaRaw:"netflix"});
     document.body.classList.add("ficha-modal-open");
@@ -5577,7 +5625,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   function groupFromService(c){
     const precio=Number(c?.precio||0);
     return {
-      nombre:c?.nombre||'', telefono:c?.telefono||'', vendedor:c?.vendedor||'', nombreNorm:c?.nombreNorm||'',
+      clienteId:c?.clienteId||'', nombre:c?.nombre||'', telefono:c?.telefono||'', vendedor:c?.vendedor||'', nombreNorm:c?.nombreNorm||'',
       plataforma:c?.plataforma, plataformaRaw:c?.plataformaRaw, precio, total:precio, fecha:c?.fecha, fechaRaw:c?.fechaRaw,
       correo:c?.correo||'', clave:c?.clave||c?.pin||'', pin:c?.pin||c?.clave||'', pinPerfil:c?.pinPerfil||'', perfil:c?.perfil||'',
       servicios:[{...c, precio}]
@@ -5956,12 +6004,17 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const old=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     try{
       const user=currentUser()||'sublichat';
-      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,servicioIndex:(c.srvIndex!=null?c.srvIndex:null),dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
+      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
       const j=await r.json().catch(()=>({}));
-      if(!j.ok) throw new Error(j.error||'No se pudo renovar.');
+      if(!j.ok||j.verified!==true) throw new Error(j.error||(j.ok?'Firebase no confirmó la fecha.':'No se pudo renovar.'));
+      const grupo=groupFromService(c);
+      aplicarRenovacionLocal(grupo,c,j);
       await fetch('/api/finanzas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'registrar_cobro',clienteNombre:c.nombre,clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,monto:c.precio||0,metodoPago:'No especificado',cobradoPor:user,vendedor:c.vendedor||user,rol:currentRole(),fechaPago:dateISO(new Date())})}).catch(()=>null);
       mostrarToast('✅ Pagado registrado y fecha renovada.');
-      await load();
+      render();
+      await load({forceServer:true});
+      aplicarRenovacionLocal(grupo,c,j);
+      render();
     }catch(e){ mostrarToast('⚠️ '+(e.message||'Error al guardar.')); }
     finally{btn.disabled=false;btn.textContent=old;}
   }
