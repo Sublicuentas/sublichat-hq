@@ -23,6 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-20260804-1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1976,6 +1977,23 @@ async function load(options={}){
   renderInventario();
   renderFinanzas();
 }
+
+// Fuente privada para Control Maestro. Solo expone la información que ya está
+// cargada dentro de la sesión actual; el módulo y su API vuelven a validar que
+// el usuario sea Sublicuentas antes de permitir plantillas o respaldos.
+window.sublichatControlData=()=>({
+  servicios:DATA.map(c=>({
+    clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,nombre:c.nombre||'',telefono:c.telefono||'',vendedor:c.vendedor||'',
+    plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:Number(c.precio)||0,
+    fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha.toISOString():String(c.fechaRaw||''),correo:c.correo||'',
+    clave:c.clave||'',pinPerfil:c.pinPerfil||'',perfil:c.perfil||''
+  })),
+  cuentas:INVENTARIO.map(c=>({
+    id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
+    disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??''})):[]
+  }))
+});
+window.sublichatControlReload=()=>load({forceServer:true});
 
 function render(){
   const $=id=>document.getElementById(id);
@@ -5578,12 +5596,12 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
     finanzas:['inicio','clientes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','agenda','objetivos','importar','tickets','inventario','soporte','egresos','pelis','partidos','chat','perfil','configuracion'],
+    admin:['inicio','clientes','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], soporte:['🔧','Soporte'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -5608,7 +5626,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     return (!savedIsGeneric && ROLE_ALIAS[saved]) ||
       (user.includes('magdiel')?'auditor':(user.includes('reloj')||user.includes('libni')||user.includes('daniela'))?'finanzas':'admin');
   }
-  function can(screen){ return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen); }
+  function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
+  function can(screen){
+    if(screen==='control-cuentas')return isSublicuentasAccount();
+    return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
+  }
   const dateDMY=d=>{
     if(!d)return '';
     const x=(d instanceof Date)?d:parseDate(d);
@@ -5634,7 +5656,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   const PROFILE_DEFAULTS={
     finanzas:{nombre:'Relojes',cargo:'Finanzas · Cobros · Atención al cliente',area:'Caja y cartera final',emoji:'⌚',color:'#8B1538',funciones:['Cobrar clientes finales','Crear y actualizar CRM','Generar ficha WhatsApp','Marcar pagado y renovar','Registrar egresos','Preparar cierre semanal']},
-    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Guardar CRM + abrir WhatsApp','Administrar inventario y compras','Resolver soporte','Supervisar finanzas','Configurar sistema y bot']},
+    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Guardar CRM + abrir WhatsApp','Administrar inventario y compras','Revisar Control Maestro','Supervisar finanzas','Configurar sistema y bot']},
     auditor:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Control y rendimiento',emoji:'📊',color:'#6C5CE7',funciones:['Revisar CRM master','Auditar cobros y renovaciones','Detectar servicios sin pago','Ver métricas por vendedor','Medir retención','Controlar fugas de dinero']}
   };
   const USER_PROFILE_DEFAULTS={
@@ -5893,7 +5915,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     ensureScreen('importar','Módulos de trabajo','Bodega, Auditoría y Flujo diario como hoja de cálculo dentro de Sublichat (se trabaja desde la Web). Sublicuentas migra los archivos completos y ve el trabajo de todos.','');
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
-    ensureScreen('soporte','Alertas de soporte','Buzón interno para caídas, cambios de cuenta y problemas técnicos.','');
+    ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
     ensureScreen('tickets','Tickets y Avisos','Mensajería interna y comunicados de actualización entre Relojes, Magdiel y Sublicuentas.','');
     ensureScreen('configuracion','Configuración Admin','Estado operativo de Firebase, bot Telegram, usuarios y webhooks.','');
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
@@ -5908,7 +5930,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    nav.innerHTML=(ROLE_NAV[role]||ROLE_NAV.admin).map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s)));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount());
+    nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s)));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
     const objBtn=document.getElementById('objetivosOpenBtn');
@@ -7668,6 +7691,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-20260804-1"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
