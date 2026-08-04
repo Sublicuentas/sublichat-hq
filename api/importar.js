@@ -554,6 +554,228 @@ async function finalizarRespaldoExcel(db, body) {
   return { status: 200, json: { ok: true, id, estado: "guardado_editable", totalHojas: meta.totalHojas || 0, totalFilas: meta.totalFilas || 0 } };
 }
 
+/* ============================================================
+   CONTROL MAESTRO · SOLO USUARIO SUBLICUENTAS
+
+   Conserva el Excel original y los respaldos generados como archivos
+   privados divididos en bloques de Firestore. El navegador usa el Excel
+   original como plantilla, lo compara con clientes/inventario y genera
+   una copia nueva sin publicar datos dentro del código estático.
+   ============================================================ */
+const CONTROL_ARCHIVOS_COL = "control_maestro_archivos";
+const CONTROL_CONFIG_COL = "control_maestro_config";
+const CONTROL_CONFIG_DOC = "principal";
+const CONTROL_CHUNK_SIZE = 450000;
+const CONTROL_MAX_BASE64 = 20 * 1024 * 1024;
+const CONTROL_BACKUPS_DIA = 2;
+
+function controlDateKey(value) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value || Date.now()));
+    const get = (type) => (parts.find((x) => x.type === type) || {}).value || "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch (_) {
+    return new Date(value || Date.now()).toISOString().slice(0, 10);
+  }
+}
+
+function controlEsAdmin(body) {
+  const usuario = String(body && (body.usuario || body.editor) || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return ["sublicuentas", "naara"].includes(usuario);
+}
+
+function controlDenegado() {
+  return { status: 403, json: { ok: false, error: "Control Maestro es exclusivo del usuario Sublicuentas." } };
+}
+
+function controlArchivoMeta(id, x) {
+  const d = x || {};
+  return {
+    id,
+    clase: d.clase || "respaldo",
+    filename: d.filename || "Sublicuentas.xlsx",
+    size: Number(d.size) || 0,
+    mime: d.mime || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    chunks: Number(d.chunks) || 0,
+    dateKey: d.dateKey || String(d.createdAt || "").slice(0, 10),
+    createdAt: d.createdAt || "",
+    createdBy: d.createdBy || "",
+    motivo: d.motivo || "manual",
+    metricas: d.metricas || {},
+    listo: d.estado === "listo"
+  };
+}
+
+function controlMetricas(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const keys = ["clientes", "servicios", "cuentas", "filasExcel", "correctos", "revision", "soloExcel", "soloSublichat", "fechaDistinta", "cuentaDistinta"];
+  const out = {};
+  keys.forEach((k) => {
+    const n = Number(src[k]);
+    if (Number.isFinite(n)) out[k] = Math.max(0, Math.round(n));
+  });
+  return out;
+}
+
+async function controlContarRespaldosDia(db, dateKey) {
+  let count = 0;
+  try {
+    const snap = await db.collection(CONTROL_ARCHIVOS_COL)
+      .where("clase", "==", "respaldo")
+      .where("dateKey", "==", dateKey)
+      .limit(CONTROL_BACKUPS_DIA + 5).get();
+    return snap.size;
+  } catch (_) {
+    try {
+      const snap = await db.collection(CONTROL_ARCHIVOS_COL).limit(120).get();
+      snap.docs.forEach((d) => {
+        const x = d.data() || {};
+        if (x.clase === "respaldo" && x.dateKey === dateKey) count++;
+      });
+    } catch (__) {}
+  }
+  return count;
+}
+
+async function controlGuardarArchivo(db, body, clase) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const raw = String(body.base64 || body.archivoBase64 || "").replace(/^data:[^,]+,/, "").trim();
+  if (!raw) return { status: 400, json: { ok: false, error: "Falta el archivo Excel." } };
+  if (raw.length > CONTROL_MAX_BASE64) return { status: 413, json: { ok: false, error: "El Excel supera el tamaño permitido para Control Maestro." } };
+
+  const tipo = clase === "plantilla" ? "plantilla" : "respaldo";
+  const now = new Date().toISOString();
+  const dateKey = controlDateKey(now);
+  if (tipo === "respaldo") {
+    const count = await controlContarRespaldosDia(db, dateKey);
+    if (count >= CONTROL_BACKUPS_DIA) {
+      return { status: 200, json: { ok: true, skipped: true, reason: "limite_diario", dateKey, dailyLimit: CONTROL_BACKUPS_DIA } };
+    }
+  }
+
+  const filename = String(body.filename || (tipo === "plantilla" ? "Sublicuentas_plantilla.xlsx" : "Sublicuentas_actual.xlsx"))
+    .replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 180) || "Sublicuentas.xlsx";
+  const size = Math.max(0, Number(body.size) || Math.floor(raw.length * 0.75));
+  const mime = String(body.mime || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").slice(0, 140);
+  const chunks = chunkString(raw, CONTROL_CHUNK_SIZE);
+  const usuario = String(body.usuario || body.editor || "sublicuentas").trim();
+  const motivo = String(body.motivo || (tipo === "plantilla" ? "carga_inicial" : "manual")).slice(0, 80);
+  const metricas = controlMetricas(body.metricas);
+  const ref = db.collection(CONTROL_ARCHIVOS_COL).doc();
+
+  await ref.set({
+    version: "control-maestro-v1-20260804",
+    clase: tipo,
+    filename,
+    size,
+    mime,
+    chunks: chunks.length,
+    base64Length: raw.length,
+    dateKey,
+    createdAt: now,
+    createdBy: usuario,
+    motivo,
+    metricas,
+    estado: "guardando",
+    privado: true,
+    owner: "sublicuentas"
+  });
+
+  let batch = db.batch();
+  let ops = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const cRef = ref.collection("archivo").doc(String(i + 1).padStart(4, "0"));
+    batch.set(cRef, { index: i + 1, totalChunks: chunks.length, base64: chunks[i], createdAt: now });
+    ops++;
+    if (ops >= 350) { await batch.commit(); batch = db.batch(); ops = 0; }
+  }
+  if (ops) await batch.commit();
+  await ref.update({ estado: "listo", updatedAt: new Date().toISOString() });
+
+  const cfgRef = db.collection(CONTROL_CONFIG_COL).doc(CONTROL_CONFIG_DOC);
+  if (tipo === "plantilla") {
+    await cfgRef.set({ plantillaId: ref.id, plantillaFilename: filename, plantillaUpdatedAt: now, updatedBy: usuario, version: "control-maestro-v1" }, { merge: true });
+  } else {
+    await cfgRef.set({ ultimoRespaldoId: ref.id, ultimoRespaldoFilename: filename, ultimoRespaldoAt: now, updatedBy: usuario, version: "control-maestro-v1" }, { merge: true });
+  }
+
+  await db.collection("auditoria_eventos").add({
+    tipo: tipo === "plantilla" ? "control_maestro_plantilla_guardada" : "control_maestro_respaldo_guardado",
+    archivoId: ref.id,
+    filename,
+    size,
+    chunks: chunks.length,
+    metricas,
+    usuario,
+    rol: "sublicuentas",
+    createdAt: now
+  });
+
+  return { status: 200, json: { ok: true, archivo: controlArchivoMeta(ref.id, { clase: tipo, filename, size, mime, chunks: chunks.length, dateKey, createdAt: now, createdBy: usuario, motivo, metricas, estado: "listo" }), dailyLimit: CONTROL_BACKUPS_DIA } };
+}
+
+async function controlObtenerDoc(db, id) {
+  const safeId = String(id || "").trim();
+  if (!safeId || safeId.includes("/")) return null;
+  const doc = await db.collection(CONTROL_ARCHIVOS_COL).doc(safeId).get();
+  return doc.exists ? doc : null;
+}
+
+async function controlEstado(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const cfgDoc = await db.collection(CONTROL_CONFIG_COL).doc(CONTROL_CONFIG_DOC).get();
+  const cfg = cfgDoc.exists ? (cfgDoc.data() || {}) : {};
+  let plantilla = null;
+  if (cfg.plantillaId) {
+    const doc = await controlObtenerDoc(db, cfg.plantillaId);
+    if (doc) plantilla = controlArchivoMeta(doc.id, doc.data());
+  }
+
+  let snap;
+  try { snap = await db.collection(CONTROL_ARCHIVOS_COL).where("clase", "==", "respaldo").orderBy("createdAt", "desc").limit(20).get(); }
+  catch (_) { snap = await db.collection(CONTROL_ARCHIVOS_COL).limit(80).get(); }
+  const respaldos = snap.docs
+    .map((d) => controlArchivoMeta(d.id, d.data()))
+    .filter((x) => x.clase === "respaldo" && x.listo)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 20);
+
+  return { status: 200, json: { ok: true, plantilla, respaldos, config: { plantillaId: cfg.plantillaId || "", ultimoRespaldoId: cfg.ultimoRespaldoId || "" }, dailyLimit: CONTROL_BACKUPS_DIA } };
+}
+
+async function controlLeerArchivo(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const doc = await controlObtenerDoc(db, body.id);
+  if (!doc) return { status: 404, json: { ok: false, error: "No encontré ese archivo de Control Maestro." } };
+  const meta = doc.data() || {};
+  if (meta.owner !== "sublicuentas" || meta.estado !== "listo") return { status: 403, json: { ok: false, error: "Ese archivo no está disponible." } };
+  const snap = await doc.ref.collection("archivo").orderBy("index", "asc").limit(100).get();
+  const base64 = snap.docs.map((d) => String((d.data() || {}).base64 || "")).join("");
+  if (!base64 || (meta.base64Length && base64.length !== Number(meta.base64Length))) {
+    return { status: 409, json: { ok: false, error: "El respaldo está incompleto. Use otra versión." } };
+  }
+  return { status: 200, json: { ok: true, archivo: controlArchivoMeta(doc.id, meta), base64 } };
+}
+
+async function controlRestaurarComoPlantilla(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const doc = await controlObtenerDoc(db, body.id);
+  if (!doc) return { status: 404, json: { ok: false, error: "No encontré ese respaldo." } };
+  const x = doc.data() || {};
+  if (x.owner !== "sublicuentas" || x.estado !== "listo") return { status: 400, json: { ok: false, error: "Ese respaldo no se puede restaurar." } };
+  const now = new Date().toISOString();
+  const usuario = String(body.usuario || body.editor || "sublicuentas");
+  await db.collection(CONTROL_CONFIG_COL).doc(CONTROL_CONFIG_DOC).set({
+    plantillaId: doc.id,
+    plantillaFilename: x.filename || "Sublicuentas.xlsx",
+    plantillaUpdatedAt: now,
+    restauradoDesde: doc.id,
+    updatedBy: usuario
+  }, { merge: true });
+  await db.collection("auditoria_eventos").add({ tipo: "control_maestro_respaldo_restaurado", archivoId: doc.id, usuario, rol: "sublicuentas", createdAt: now });
+  return { status: 200, json: { ok: true, plantilla: controlArchivoMeta(doc.id, x) } };
+}
+
 
 
 /* ============================================================
@@ -1054,7 +1276,7 @@ async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-cjs-word-linebreak-backup2dia-20260705", msg: "api/importar activo", acciones: ["sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
+  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-20260804", msg: "api/importar activo", acciones: ["control_estado","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
 
   try {
@@ -1067,6 +1289,27 @@ async function handler(req, res) {
     body.editor = identity.usuario;
     body.rol = identity.role;
     const accion = body.accion || "guardar_respaldo_excel";
+
+    if (accion === "control_estado") {
+      const out = await controlEstado(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_guardar_plantilla") {
+      const out = await controlGuardarArchivo(db, body, "plantilla");
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_guardar_respaldo") {
+      const out = await controlGuardarArchivo(db, body, "respaldo");
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_leer_archivo") {
+      const out = await controlLeerArchivo(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_restaurar_plantilla") {
+      const out = await controlRestaurarComoPlantilla(db, body);
+      return res.status(out.status).json(out.json);
+    }
 
     if (accion === "iniciar_respaldo_excel") {
       const out = await iniciarRespaldoExcel(db, body);
