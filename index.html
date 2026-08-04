@@ -1623,7 +1623,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
       </div>
       <div class="count" id="count"></div>
       <div class="tbl-wrap clientes-table-wrap"><table>
-        <thead><tr><th>Cliente</th><th>Plataforma</th><th>Renovación</th><th>Estado</th><th style="text-align:right">Precio</th><th class="client-wa-head">WhatsApp</th><th class="client-actions-head">Acciones</th></tr></thead>
+        <thead><tr><th>Cliente</th><th>Plataforma</th><th>Renovación</th><th>Estado</th><th style="text-align:right">Precio</th><th class="client-renew-head">Renovar</th><th class="client-wa-head">WhatsApp</th><th class="client-actions-head">Acciones</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table></div>
     </div>
@@ -2131,8 +2131,10 @@ function renderTable(){
   window._shownRows=shown;
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="view" data-client-index="${i}">Ver ficha y servicios</button><button type="button" data-client-action="edit" data-client-index="${i}">Editar cliente</button><button type="button" data-client-action="crm" data-client-index="${i}">Ficha CRM + WhatsApp</button><button type="button" data-client-action="renew" data-client-index="${i}">Pago o renovación</button></div></td></tr>`;
-  }).join(""):`<tr><td colspan="7"><div class="empty">Sin resultados</div></td></tr>`;
+    const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="view" data-client-index="${i}">Ver ficha y servicios</button><button type="button" data-client-action="edit" data-client-index="${i}">Editar cliente</button><button type="button" data-client-action="crm" data-client-index="${i}">Ficha CRM + WhatsApp</button><button type="button" data-client-action="renew" data-client-index="${i}">Pago o renovación</button></div></td></tr>`;
+  }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
+  document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
   document.querySelectorAll("[data-client-menu]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const panel=document.querySelector(`[data-client-menu-panel="${btn.dataset.clientMenu}"]`),open=panel&&panel.classList.contains("show");document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(panel&&!open)panel.classList.add("show");}));
   document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(btn.dataset.clientAction==="edit"||btn.dataset.clientAction==="crm"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g);}else abrirCobro(g);}));
@@ -3738,12 +3740,61 @@ function asegurarNegritasCobro(texto,g){
   return salida;
 }
 
-function abrirCobro(g){
+function cobroFechaClave(valor){
+  const fecha=valor instanceof Date?valor:parseDate(valor);
+  if(!fecha||isNaN(fecha))return "";
+  return `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,"0")}-${String(fecha.getDate()).padStart(2,"0")}`;
+}
+function cobroEsMismoCliente(servicio,grupo){
+  const clienteId=String(grupo&&grupo.clienteId||"").trim();
+  if(clienteId)return String(servicio&&servicio.clienteId||"").trim()===clienteId;
+  const telefono=String(grupo&&grupo.telefono||"").replace(/\D/g,"");
+  const nombreNorm=String(grupo&&grupo.nombreNorm||"").trim().toLowerCase();
+  if(nombreNorm){
+    const coincideNombre=String(servicio&&servicio.nombreNorm||"").trim().toLowerCase()===nombreNorm;
+    const telefonoServicio=String(servicio&&servicio.telefono||"").replace(/\D/g,"");
+    return coincideNombre&&(!telefono||telefonoServicio===telefono);
+  }
+  const nombre=String(grupo&&grupo.nombre||"").trim().toLowerCase();
+  const nombreServicio=String(servicio&&servicio.nombre||"").trim().toLowerCase();
+  const telefonoServicio=String(servicio&&servicio.telefono||"").replace(/\D/g,"");
+  return !!nombre&&nombreServicio===nombre&&(!telefono||telefonoServicio===telefono);
+}
+function grupoCobroPorFecha(grupo){
+  if(!grupo)return grupo;
+  const serviciosGrupo=Array.isArray(grupo.servicios)&&grupo.servicios.length?grupo.servicios:[grupo];
+  const fechaObjetivo=grupo.fecha||grupo.fechaRaw||serviciosGrupo[0]?.fecha||serviciosGrupo[0]?.fechaRaw||null;
+  const claveObjetivo=cobroFechaClave(fechaObjetivo);
+  let serviciosCliente=Array.isArray(DATA)?DATA.filter(s=>cobroEsMismoCliente(s,grupo)):[];
+  if(!serviciosCliente.length&&Array.isArray(grupo.serviciosCliente))serviciosCliente=grupo.serviciosCliente.slice();
+  if(!serviciosCliente.length)serviciosCliente=serviciosGrupo.slice();
+  let serviciosFecha=serviciosCliente.filter(s=>cobroFechaClave(s.fecha||s.fechaRaw)===claveObjetivo);
+  if(!serviciosFecha.length)serviciosFecha=serviciosGrupo.filter(s=>cobroFechaClave(s.fecha||s.fechaRaw)===claveObjetivo);
+  if(!serviciosFecha.length)serviciosFecha=[serviciosGrupo[0]].filter(Boolean);
+  serviciosFecha=serviciosFecha.slice().sort((a,b)=>(Number(a.srvIndex)||0)-(Number(b.srvIndex)||0));
+  const primero=serviciosFecha[0]||grupo;
+  const fecha=primero.fecha||parseDate(primero.fechaRaw)||parseDate(fechaObjetivo);
+  return {
+    ...grupo,
+    plataforma:primero.plataforma||grupo.plataforma,
+    plataformaRaw:primero.plataformaRaw||grupo.plataformaRaw,
+    fecha,
+    fechaRaw:primero.fechaRaw||grupo.fechaRaw||"",
+    total:serviciosFecha.reduce((s,x)=>s+Number(x.precio||0),0),
+    plats:serviciosFecha.map(x=>x.plataforma),
+    servicios:serviciosFecha,
+    serviciosCliente
+  };
+}
+function abrirCobro(grupo){
+  const g=grupoCobroPorFecha(grupo);
+  if(!g)return;
   cobroActual=g;
   const total = g.total!=null ? g.total : g.precio;
-  const plats=(g.servicios||[{plataforma:g.plataforma}]).map(s=>s.plataforma);
-  const platLabel=plats.length>1?`${plats.length} servicios`:plats[0];
-  $cobro("cobroCliente").textContent=`${g.nombre} · ${platLabel} · ${fmt(total)}`;
+  const servicios=g.servicios||[{plataforma:g.plataforma}];
+  const resumen=servicios.length>1?`${servicios.length} servicios`:servicios[0]?.plataforma||"Servicio";
+  const fechaResumen=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
+  $cobro("cobroCliente").textContent=`${g.nombre} · ${resumen} ${fechaResumen} · ${fmt(total)}`;
   cobroSetMensaje(generarMensajeCobro(g),generarMensajeCobro.tema);
   // reset opciones de renovar (ocultas, sin texto de estado)
   const rb=$cobro("cobroRenovar"); if(rb)rb.style.display="none";
@@ -3772,6 +3823,7 @@ function aplicarRenovacionLocal(g,s,resultado){
   };
   DATA.forEach(x=>{if(coincide(x)){x.fechaRaw=fechaRaw;x.fecha=fecha;}});
   (g.servicios||[]).forEach(x=>{if(coincide(x)){x.fechaRaw=fechaRaw;x.fecha=fecha;}});
+  (g.serviciosCliente||[]).forEach(x=>{if(coincide(x)){x.fechaRaw=fechaRaw;x.fecha=fecha;}});
   s.fechaRaw=fechaRaw;s.fecha=fecha;s.clienteId=clienteId||s.clienteId;
   if(g.servicios&&g.servicios.length){
     const ordenadas=g.servicios.filter(x=>x.fecha&& !isNaN(x.fecha)).sort((a,b)=>a.fecha-b.fecha);
@@ -3891,7 +3943,7 @@ if(gestionBtn)gestionBtn.addEventListener("click",()=>{
 });
 function pintarGestion(){
   const g=cobroActual; if(!g)return;
-  const servicios=g.servicios||[{plataformaRaw:g.plataformaRaw,plataforma:g.plataforma,precio:g.precio,fechaRaw:g.fechaRaw,correo:g.correo,pin:g.pin}];
+  const servicios=g.serviciosCliente||g.servicios||[{plataformaRaw:g.plataformaRaw,plataforma:g.plataforma,precio:g.precio,fechaRaw:g.fechaRaw,correo:g.correo,pin:g.pin}];
   $cobro("cgList").innerHTML=servicios.map((s,i)=>`
     <div class="cg-item">
       <div class="cg-info">
@@ -10184,8 +10236,12 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 #screen-clientes .client-avatar{width:34px!important;height:34px!important;flex:none!important;display:grid!important;place-items:center!important;border-radius:50%!important;background:var(--client-soft)!important;border:1px solid color-mix(in srgb,var(--client-blue) 25%,var(--line))!important;color:var(--client-blue)!important;font:900 11px/1 'Montserrat','Nunito',sans-serif!important}
 #screen-clientes .client-platform{display:inline-flex!important;align-items:center!important;max-width:190px!important;padding:6px 9px!important;border-radius:8px!important;background:var(--surface)!important;border:1px solid var(--line)!important;color:var(--txt2)!important;font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 #screen-clientes .pill{white-space:nowrap!important}
+#screen-clientes .client-renew-head,#screen-clientes .client-renew-cell{text-align:center!important;width:108px!important}
 #screen-clientes .client-wa-head,#screen-clientes .client-actions-head,#screen-clientes .client-wa-cell,#screen-clientes .client-actions-cell{text-align:center!important;width:76px!important}
 #screen-clientes .client-wa-btn,#screen-clientes .client-actions-btn{width:34px!important;height:34px!important;display:inline-grid!important;place-items:center!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--surface)!important;cursor:pointer!important;box-shadow:none!important}
+#screen-clientes .client-renew-btn{height:34px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;padding:0 10px!important;border:1px solid color-mix(in srgb,#22c55e 48%,var(--line))!important;border-radius:11px!important;background:color-mix(in srgb,#22c55e 12%,var(--surface))!important;color:color-mix(in srgb,#159447 86%,var(--txt))!important;font:900 11px/1 'Nunito',system-ui,sans-serif!important;white-space:nowrap!important;cursor:pointer!important;box-shadow:none!important}
+#screen-clientes .client-renew-btn:hover{background:color-mix(in srgb,#22c55e 21%,var(--surface))!important;transform:translateY(-1px)!important}
+#screen-clientes .client-renew-btn svg{width:15px!important;height:15px!important;fill:none!important;stroke:currentColor!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important}
 #screen-clientes .client-wa-btn{color:#16A765!important}
 #screen-clientes .client-wa-btn svg{width:20px!important;height:20px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}
 #screen-clientes .client-actions-btn{color:var(--txt)!important;font-size:23px!important;line-height:1!important}
@@ -10202,7 +10258,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
  #screen-clientes .clientes-tabs{overflow-x:auto!important}
  #screen-clientes .clientes-filters{grid-template-columns:1fr 1fr!important}
  #screen-clientes .clientes-table-wrap{overflow-x:auto!important}
- #screen-clientes table{min-width:950px!important}
+ #screen-clientes table{min-width:1060px!important}
 }
 @media(max-width:520px){
  #screen-clientes>.clientes-crm-card{padding:18px 14px 24px!important}
