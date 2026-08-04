@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 15  ·  + resumen de todos los servicios del cliente en la respuesta de renovar
+// api/renovar.js  ·  VERSION 16  ·  renovación por documento/servicio exactos y verificación posterior
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -34,11 +34,21 @@ async function requireFirebaseUser(req, res) {
   }
 }
 
-// Suma días a una fecha en formato DD/MM/YYYY y devuelve igual DD/MM/YYYY
+function parseFechaDMY(fechaStr) {
+  const m = String(fechaStr || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const d = Number(m[1]), mes = Number(m[2]), y = Number(m[3]);
+  const fecha = new Date(y, mes - 1, d);
+  if (fecha.getFullYear() !== y || fecha.getMonth() !== mes - 1 || fecha.getDate() !== d) return null;
+  return fecha;
+}
+
+// Suma días a una fecha en formato DD/MM/YYYY y devuelve igual DD/MM/YYYY.
 function sumarDias(fechaStr, dias) {
-  const [d, m, y] = String(fechaStr).split("/").map(n => parseInt(n, 10));
-  const base = new Date(y, m - 1, d);
-  base.setDate(base.getDate() + dias);
+  const base = parseFechaDMY(fechaStr);
+  const cantidad = Number(dias);
+  if (!base || !Number.isInteger(cantidad) || cantidad <= 0) return "";
+  base.setDate(base.getDate() + cantidad);
   const dd = String(base.getDate()).padStart(2, "0");
   const mm = String(base.getMonth() + 1).padStart(2, "0");
   return `${dd}/${mm}/${base.getFullYear()}`;
@@ -89,23 +99,33 @@ function canonPlat(v) {
   return key;
 }
 
-// Busca el índice del servicio dentro del array guardado en Firestore.
-// Prioriza el índice explícito que manda el panel (identifica el servicio exacto
-// sin depender del texto de la plataforma). Si no viene o ya no es válido, cae a
-// comparar por plataforma (con alias). Si el cliente sólo tiene un servicio, ese
-// es el único candidato posible y se usa directo: así se evita el falso
-// "servicio no encontrado" cuando el texto guardado no coincide letra por letra.
-function resolveServicioIndex(servicios, { servicioIndex, plataforma } = {}) {
+// Busca el índice del servicio dentro del array guardado en Firestore. El índice
+// explícito solo se acepta si también coincide con plataforma/correo; así un índice
+// válido pero perteneciente a otra ficha no puede renovar el servicio equivocado.
+function normCorreo(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function servicioCoincide(servicio, { plataforma, correo } = {}) {
+  const tienePlataforma = !!String(plataforma || "").trim();
+  const tieneCorreo = !!normCorreo(correo);
+  if (tienePlataforma && canonPlat(servicio && servicio.plataforma) !== canonPlat(plataforma)) return false;
+  if (tieneCorreo && normCorreo(servicio && servicio.correo) !== normCorreo(correo)) return false;
+  return true;
+}
+
+function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo } = {}) {
+  const lista = Array.isArray(servicios) ? servicios : [];
+  const tieneCriterio = !!String(plataforma || "").trim() || !!normCorreo(correo);
   if (servicioIndex != null && Number.isInteger(Number(servicioIndex))) {
     const i = Number(servicioIndex);
-    if (i >= 0 && i < servicios.length) return i;
+    if (i >= 0 && i < lista.length && (!tieneCriterio || servicioCoincide(lista[i], { plataforma, correo }))) return i;
   }
-  if (plataforma) {
-    const buscado = canonPlat(plataforma);
-    const idx = servicios.findIndex(s => canonPlat(s.plataforma) === buscado);
+  if (tieneCriterio) {
+    const idx = lista.findIndex(s => servicioCoincide(s, { plataforma, correo }));
     if (idx !== -1) return idx;
   }
-  if (servicios.length === 1) return 0;
+  if (lista.length === 1 && (!tieneCriterio || servicioCoincide(lista[0], { plataforma, correo }))) return 0;
   return -1;
 }
 
@@ -160,6 +180,13 @@ function safeDocId(v) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
   return x || "cliente";
+}
+
+// Valida un ID recibido desde una fila ya cargada. No lo transforma: debe
+// apuntar exactamente al documento de Firestore que el usuario está viendo.
+function cleanExistingDocId(v) {
+  const id = String(v || "").trim();
+  return id && id.length <= 1500 && !id.includes("/") ? id : "";
 }
 
 function aFechaFB(f) {
@@ -350,13 +377,13 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 15, msg: "renovar v15 activo (con resumen de servicios del cliente). Usá POST." });
+    return res.status(200).json({ ok: true, version: 16, msg: "renovar v16 activo (documento exacto + verificación Firebase). Usá POST." });
 
   const body = req.body || {};
-  const { accion, clienteNorm, telefono, plataforma } = body;
+  const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
   const acc = accion || "renovar";
 
-  if (!clienteNorm && !telefono && acc !== "ficha_upsert")
+  if (!clienteId && !clienteNorm && !telefono && acc !== "ficha_upsert")
     return res.status(200).json({ error: "Falta identificar el cliente." });
 
   try {
@@ -377,9 +404,18 @@ export default async function handler(req, res) {
       if (!nombrePerfil && !tel) return res.status(200).json({ error: "Ponga nombre o teléfono del cliente." });
       if (!servicio.plataforma) return res.status(200).json({ error: "Falta la plataforma de la ficha." });
 
-      // ✅ Solo busca por nombre (ver findCliente). El teléfono nunca decide
-      // si esta ficha pertenece a un cliente existente o es uno nuevo.
-      let doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil });
+      // Si la ficha se abrió desde una fila existente, actualiza exactamente
+      // ese documento. El nombre queda solo como compatibilidad para fichas nuevas.
+      const exactId = cleanExistingDocId(clienteId);
+      if (clienteId && !exactId) return res.status(200).json({ error: "El identificador del cliente no es válido." });
+      let doc = null;
+      if (exactId) {
+        const exactDoc = await db.collection("clientes").doc(exactId).get();
+        if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
+        doc = exactDoc;
+      } else {
+        doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil });
+      }
       let docRef, data = {}, created = false;
 
       if (doc) {
@@ -470,13 +506,21 @@ export default async function handler(req, res) {
       });
     }
 
-    let query = db.collection("clientes");
+    const query = db.collection("clientes");
     let snap;
-    if (clienteNorm) snap = await query.where("nombre_norm", "==", clienteNorm).limit(5).get();
-    if ((!snap || snap.empty) && telefono) snap = await query.where("telefono", "==", telefono).limit(5).get();
-    if (!snap || snap.empty) {
-      const doc = await findCliente(db, { clienteNorm, telefono });
-      if (doc) snap = { empty: false, docs: [doc] };
+    const exactId = cleanExistingDocId(clienteId);
+    if (clienteId && !exactId) return res.status(200).json({ error: "El identificador del cliente no es válido." });
+    if (exactId) {
+      const exactDoc = await query.doc(exactId).get();
+      if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
+      snap = { empty: false, docs: [exactDoc] };
+    } else {
+      if (clienteNorm) snap = await query.where("nombre_norm", "==", clienteNorm).limit(5).get();
+      if ((!snap || snap.empty) && telefono) snap = await query.where("telefono", "==", telefono).limit(5).get();
+      if (!snap || snap.empty) {
+        const doc = await findCliente(db, { clienteNorm, telefono });
+        if (doc) snap = { empty: false, docs: [doc] };
+      }
     }
     if (!snap || snap.empty)
       return res.status(200).json({ error: "No encontré ese cliente en la base." });
@@ -493,7 +537,7 @@ export default async function handler(req, res) {
     if (snap.docs.length > 1) {
       const conServicio = snap.docs.find(d => {
         const servs = Array.isArray(d.data().servicios) ? d.data().servicios : [];
-        return resolveServicioIndex(servs, { servicioIndex: body.servicioIndex, plataforma }) !== -1;
+        return resolveServicioIndex(servs, { servicioIndex: body.servicioIndex, plataforma, correo }) !== -1;
       });
       if (conServicio) elegido = conServicio;
     }
@@ -503,7 +547,7 @@ export default async function handler(req, res) {
     let servicios = Array.isArray(data.servicios) ? data.servicios : [];
     let invResult = null;
 
-    let fechaAnterior = null, fechaNueva = null;
+    let fechaAnterior = null, fechaNueva = null, touchedIndex = null;
 
     if (acc === "renovar") {
       const { dias, fechaActual, fechaExacta, servicioIndex } = body;
@@ -512,7 +556,7 @@ export default async function handler(req, res) {
       if (!dias && !fechaExacta)
         return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
 
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo });
       if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
 
       const s = servicios[idx];
@@ -521,13 +565,15 @@ export default async function handler(req, res) {
       // compararla con la que se ve en pantalla.
       fechaAnterior = s.fechaRenovacion || fechaActual || null;
       const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
+      if (!parseFechaDMY(nuevaFecha)) return res.status(200).json({ error: "La fecha de renovación no es válida." });
       fechaNueva = nuevaFecha;
+      touchedIndex = idx;
       servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
 
     } else if (acc === "eliminar") {
       const { servicioIndex } = body;
       if (!plataforma && servicioIndex == null) return res.status(200).json({ error: "Falta la plataforma a eliminar." });
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo });
       if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
 
       const servEliminado = servicios[idx];
@@ -554,12 +600,12 @@ export default async function handler(req, res) {
       });
 
     } else if (acc === "editar") {
-      const { plataformaOriginal, servicio, servicioIndex } = body;
+      const { plataformaOriginal, correoOriginal, servicio, servicioIndex } = body;
       const buscar = plataformaOriginal || plataforma;
       if (!buscar && servicioIndex == null) return res.status(200).json({ error: "Faltan datos para editar." });
       if (!servicio) return res.status(200).json({ error: "Faltan datos para editar." });
 
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma: buscar });
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma: buscar, correo: correoOriginal || correo });
       if (idx === -1) return res.status(200).json({ error: "No encontré ese servicio." });
 
       const nuevo = buildServicio({
@@ -578,13 +624,43 @@ export default async function handler(req, res) {
     }
 
     await docRef.update({ servicios: servicios.map(limpiarServicioCRM), updatedAt: isoNow() });
-    // 🔎 DIAGNÓSTICO: lista completa de servicios de este cliente (plataforma +
-    // fecha guardada), para detectar si hay más de uno con el mismo nombre de
-    // plataforma (duplicado dentro del mismo documento) apuntando a fechas
-    // distintas — eso explicaría que el botón le pegue a uno que no es el que
-    // se ve en la tabla.
-    const serviciosResumen = servicios.map((s, i) => `${i}:${s.plataforma || "?"}=${s.fechaRenovacion || "?"}`);
-    return res.status(200).json({ ok: true, accion: acc, totalServicios: servicios.length, inventario: invResult, clienteId: docRef.id, fechaAnterior, fechaNueva, serviciosResumen });
+
+    // Una respuesta de escritura no basta: vuelve a leer el documento y solo
+    // confirma la renovación si Firebase devuelve la fecha nueva en el mismo índice.
+    const persistedDoc = await docRef.get();
+    if (!persistedDoc.exists) return res.status(200).json({ error: "Firebase no devolvió la ficha después de guardarla." });
+    const persistedData = persistedDoc.data() || {};
+    const persistedServices = Array.isArray(persistedData.servicios) ? persistedData.servicios : [];
+    let verified = true;
+    if (acc === "renovar") {
+      const persisted = touchedIndex == null ? null : persistedServices[touchedIndex];
+      verified = !!persisted &&
+        servicioCoincide(persisted, { plataforma, correo }) &&
+        String(persisted.fechaRenovacion || "") === String(fechaNueva || "");
+      if (!verified) return res.status(200).json({
+        ok: false,
+        verified: false,
+        error: "Firebase no confirmó la nueva fecha. Recargue e intente nuevamente.",
+        clienteId: docRef.id,
+        servicioIndex: touchedIndex,
+        fechaAnterior,
+        fechaNueva
+      });
+    }
+
+    const serviciosResumen = persistedServices.map((s, i) => `${i}:${s.plataforma || "?"}=${s.fechaRenovacion || "?"}`);
+    return res.status(200).json({
+      ok: true,
+      verified,
+      accion: acc,
+      totalServicios: persistedServices.length,
+      inventario: invResult,
+      clienteId: docRef.id,
+      servicioIndex: touchedIndex,
+      fechaAnterior,
+      fechaNueva,
+      serviciosResumen
+    });
   } catch (e) {
     console.error(e);
     return res.status(200).json({ error: "Error: " + (e.message || "") });
