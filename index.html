@@ -1824,6 +1824,38 @@ const CONFIG = {
   invEndpoint: "/api/inventario",
   deportesEndpoint: "/api/deportes"
 };
+
+// Adjunta automáticamente la sesión Firebase a las funciones internas de Vercel.
+// /api/login queda público porque es el endpoint que crea la sesión inicial.
+const sublichatNativeFetch = window.fetch.bind(window);
+let sublichatAuthModulePromise = null;
+window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
+  const rawUrl = typeof input === "string"
+    ? input
+    : (input instanceof URL ? input.href : (input && input.url) || "");
+  let isPrivateApi = false;
+  try {
+    const parsed = new URL(rawUrl, window.location.href);
+    isPrivateApi = parsed.origin === window.location.origin &&
+      parsed.pathname.startsWith("/api/") && parsed.pathname !== "/api/login";
+  } catch (_) {}
+
+  if (!isPrivateApi) return sublichatNativeFetch(input, init);
+
+  const headers = new Headers(
+    init.headers || (typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined)
+  );
+  if (!headers.has("Authorization")) {
+    try {
+      sublichatAuthModulePromise ||= import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
+      const { getAuth } = await sublichatAuthModulePromise;
+      const user = getAuth().currentUser;
+      if (user) headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
+    } catch (_) {}
+  }
+  return sublichatNativeFetch(input, { ...init, headers });
+};
+
 const PLAT_LABELS = {
   netflix:"Netflix", netflixpremium:"Netflix Premium", "netflix premium":"Netflix Premium", vipnetflix:"VIP Netflix", "vip netflix":"VIP Netflix", vip:"VIP Netflix",
   disneyp:"Disney Premium", disneypremium:"Disney Premium",
