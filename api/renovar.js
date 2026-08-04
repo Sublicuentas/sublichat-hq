@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 16  ·  renovación por documento/servicio exactos y verificación posterior
+// api/renovar.js  ·  VERSION 17  ·  renovación y ficha CRM por documento/servicio exactos
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -377,7 +377,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 16, msg: "renovar v16 activo (documento exacto + verificación Firebase). Usá POST." });
+    return res.status(200).json({ ok: true, version: 17, msg: "renovar v17 activo (documento + servicio exactos en renovación y ficha CRM). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
@@ -440,24 +440,45 @@ export default async function handler(req, res) {
       const pNorm = normPlat(nuevo.plataforma);
       const correoNorm = String(nuevo.correo || "").trim().toLowerCase();
 
-      // Match estricto: misma plataforma + mismo correo = es el mismo servicio (se actualiza).
-      let idx = servicios.findIndex(s =>
-        normPlat(s.plataforma) === pNorm &&
-        String(s.correo || "").trim().toLowerCase() === correoNorm
-      );
-      // Solo si NO hay correo (ej. algunas cuentas IPTV) caemos a emparejar por plataforma,
-      // y únicamente contra otro servicio que tampoco tenga correo — así nunca se pisa un
-      // servicio de la misma plataforma que sí tiene su propio correo (multi-perfil).
-      if (idx === -1 && !correoNorm) {
+      // Una ficha abierta desde el CRM trae el índice real del servicio. Se valida
+      // también contra sus datos originales para impedir que un índice viejo edite
+      // otra ficha por accidente. Esto permite tener dos Netflix VIP (incluso con la
+      // misma plataforma) y modificar exactamente el que el usuario seleccionó.
+      const tieneIndice = body.servicioIndex !== null && body.servicioIndex !== undefined && body.servicioIndex !== "";
+      let idx = -1;
+      if (tieneIndice) {
+        const solicitado = Number(body.servicioIndex);
+        if (!Number.isInteger(solicitado) || solicitado < 0 || solicitado >= servicios.length) {
+          return res.status(200).json({ error: "La ficha seleccionada cambió de posición. Recargue el cliente y vuelva a intentarlo." });
+        }
+        const plataformaOriginal = body.plataformaOriginal || servicios[solicitado].plataforma || "";
+        const correoOriginal = body.correoOriginal != null ? body.correoOriginal : (servicios[solicitado].correo || "");
+        if (!servicioCoincide(servicios[solicitado], { plataforma: plataformaOriginal, correo: correoOriginal })) {
+          return res.status(200).json({ error: "La ficha seleccionada ya no coincide con Firebase. Recargue antes de guardar." });
+        }
+        idx = solicitado;
+      } else {
+        // Ficha nueva o cliente antiguo sin índice: misma plataforma + mismo correo.
         idx = servicios.findIndex(s =>
-          normPlat(s.plataforma) === pNorm && !String(s.correo || "").trim()
+          normPlat(s.plataforma) === pNorm &&
+          String(s.correo || "").trim().toLowerCase() === correoNorm
         );
+        // Sin correo (algunas cuentas IPTV), solo empareja otra ficha también sin correo.
+        if (idx === -1 && !correoNorm) {
+          idx = servicios.findIndex(s =>
+            normPlat(s.plataforma) === pNorm && !String(s.correo || "").trim()
+          );
+        }
       }
 
       const correoAnterior = idx >= 0 ? String(servicios[idx].correo || "").trim().toLowerCase() : "";
+      const servicioActualizado = idx >= 0;
 
       if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
-      else servicios.push(aplicarNuevoServicio({}, nuevo));
+      else {
+        idx = servicios.length;
+        servicios.push(aplicarNuevoServicio({}, nuevo));
+      }
 
       const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
 
@@ -501,7 +522,8 @@ export default async function handler(req, res) {
         created,
         clienteId: docRef.id,
         totalServicios: servicios.length,
-        servicioActualizado: idx >= 0,
+        servicioActualizado,
+        servicioIndex: idx,
         inventario: invResult
       });
     }
