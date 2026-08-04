@@ -2,10 +2,11 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-20260804-1';
+  const BUILD='CONTROL-MAESTRO-CUENTAS-20260804-2';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
-    templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false
+    templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],revealedAccounts:new Set()
   };
 
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -177,6 +178,132 @@
     return {byKey,duplicates};
   }
 
+  const AUDIT_PLATFORM_LABELS={
+    netflix:'Netflix',vipnetflix:'VIP Netflix',disney:'Disney+',hbomax:'HBO Max',primevideo:'Prime Video',
+    paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
+    spotify:'Spotify',youtube:'YouTube',canva:'Canva',magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV'
+  };
+
+  function auditFamily(v){
+    const p=canonPlatform(v);
+    if(['disneyp','disneys','disney'].includes(p))return 'disney';
+    return p||'sin_plataforma';
+  }
+
+  function auditPlatformLabel(v){
+    const p=auditFamily(v);
+    return AUDIT_PLATFORM_LABELS[p]||String(v||p||'Sin plataforma').replace(/(^|\s)\S/g,x=>x.toUpperCase());
+  }
+
+  function daysSince(v){
+    const d=new Date(v||'');if(isNaN(d))return 99999;
+    const today=new Date();today.setHours(0,0,0,0);d.setHours(0,0,0,0);
+    return Math.max(0,Math.floor((today-d)/86400000));
+  }
+
+  function isExpired(v){
+    const d=dateValue(v);if(!d)return false;
+    const today=new Date();today.setHours(0,0,0,0);d.setHours(0,0,0,0);
+    return d<today;
+  }
+
+  function buildAccountAudit(src){
+    const groups=new Map();
+    const allServices=(src.servicios||[]).map((s,i)=>({
+      ...s,_auditIndex:i,_family:auditFamily(s.plataforma||s.plataformaLabel),_email:email(s.correo),
+      _name:norm(s.nombre),_phone:phone(s.telefono),_date:dateKey(s.fecha)
+    }));
+    const assignmentCounts=new Map();
+    (src.cuentas||[]).forEach((account)=>{
+      const family=auditFamily(account.plataforma);
+      (account.clientes||[]).forEach((p)=>{
+        const name=norm(p.nombre);if(!name)return;
+        const key=`${family}|${name}`;assignmentCounts.set(key,(assignmentCounts.get(key)||0)+1);
+      });
+    });
+
+    const ensureGroup=(family,mail,key)=>{
+      if(!groups.has(key))groups.set(key,{
+        key,family,email:mail,platform:auditPlatformLabel(family),rawPlatforms:new Set(),inventoryAccounts:[],accountIds:[],
+        clave:'',capacidad:0,disponibles:0,estado:'',invClients:[],services:[]
+      });
+      return groups.get(key);
+    };
+
+    (src.cuentas||[]).forEach((account,i)=>{
+      const family=auditFamily(account.plataforma),mail=email(account.correo);
+      const key=mail?`${family}|${mail}`:`${family}|__sin_correo_inventario_${account.id||i}`;
+      const g=ensureGroup(family,mail,key);
+      g.rawPlatforms.add(canonPlatform(account.plataforma));g.inventoryAccounts.push(account);g.accountIds.push(account.id||'');
+      if(!g.clave&&account.clave!=null)g.clave=String(account.clave);
+      g.capacidad+=Math.max(0,Number(account.capacidad)||0);g.disponibles+=Math.max(0,Number(account.disponibles)||0);
+      if(!g.estado&&account.estado)g.estado=String(account.estado);
+      (account.clientes||[]).forEach((p)=>g.invClients.push({...p,_accountId:account.id||'',_family:family,_email:mail}));
+    });
+
+    allServices.forEach((s)=>{
+      const key=s._email?`${s._family}|${s._email}`:`${s._family}|__sin_cuenta_clientes`;
+      const g=ensureGroup(s._family,s._email,key);g.rawPlatforms.add(canonPlatform(s.plataforma||s.plataformaLabel));g.services.push(s);
+      if(!g.clave&&s.clave!=null)g.clave=String(s.clave);
+    });
+
+    const revisions=new Map((state.meta?.revisiones||[]).map((r)=>[String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`),r]));
+    const accounts=[];
+    groups.forEach((g)=>{
+      const used=new Set(),roster=[];
+      g.invClients.forEach((p,invIndex)=>{
+        const name=norm(p.nombre),duplicate=(assignmentCounts.get(`${g.family}|${name}`)||0)>1;
+        const matchIndex=g.services.findIndex((s,i)=>!used.has(i)&&name&&s._name===name);
+        let service=null,status='solo_bodega',level='bad',detail='Está asignado en Bodega, pero no tiene servicio activo en Clientes.';
+        if(matchIndex>=0){
+          used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail='Coincide entre Clientes y Bodega.';
+          if(duplicate){status='duplicado';level='bad';detail='El cliente aparece asignado en más de una cuenta de esta plataforma.';}
+          else if(isExpired(service.fecha)){status='vencido';level='warn';detail='El cliente coincide, pero su fecha está vencida.';}
+        }else{
+          const other=allServices.find((s)=>s._family===g.family&&name&&s._name===name);
+          if(duplicate){status='duplicado';detail='La asignación está repetida en Bodega.';}
+          else if(other){status='otra_cuenta';detail=`El servicio activo está registrado en ${other._email||'otra cuenta'}.`;service=other;}
+        }
+        roster.push({inv:p,service,status,level,detail,name:p.nombre||service?.nombre||'Sin nombre',phone:service?._phone||'',profile:service?.perfil||p.slot||'',pin:service?.pinPerfil||p.pin||'',date:service?._date||'',actualAccount:service?._email||'',invIndex});
+      });
+      g.services.forEach((service,i)=>{
+        if(used.has(i))return;
+        const expired=isExpired(service.fecha);
+        roster.push({inv:null,service,status:expired?'vencido_sin_bodega':'falta_bodega',level:expired?'bad':'warn',detail:expired?'Servicio vencido y no asignado en Bodega.':'Cliente activo en esta cuenta, pero falta en la lista de Bodega.',name:service.nombre||'Sin nombre',phone:service._phone||'',profile:service.perfil||'',pin:service.pinPerfil||'',date:service._date||'',actualAccount:service._email||''});
+      });
+
+      const missingInventory=!g.inventoryAccounts.length;
+      const inventoryPlatformCounts={};
+      g.inventoryAccounts.forEach((a)=>{const p=canonPlatform(a.plataforma);inventoryPlatformCounts[p]=(inventoryPlatformCounts[p]||0)+1;});
+      const duplicateDocs=Object.values(inventoryPlatformCounts).some((n)=>n>1);
+      const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length)>g.capacidad;
+      const rosterIssues=roster.filter((r)=>r.status!=='ok').length;
+      const revisionKey=g.email?`${g.family}|${g.email}`:'';
+      const revision=revisionKey?revisions.get(revisionKey)||null:null;
+      const missingPassword=!String(g.clave||'').trim();
+      const recordedIncident=revision?.resultado==='incidencia';
+      const internalIssueCount=rosterIssues+Number(missingInventory)+Number(duplicateDocs)+Number(overCapacity)+Number(!g.email)+Number(missingPassword);
+      const issueCount=internalIssueCount+Number(recordedIncident);
+      const reviewAge=revision?daysSince(revision.revisadoAt):99999;
+      const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==g.services.length||Number(revision.diferencias)!==internalIssueCount);
+      const reviewDue=!revision||reviewAge>=15||reviewDataChanged;
+      const occupied=g.inventoryAccounts.length?g.invClients.length:g.services.length;
+      const capacity=g.capacidad||occupied;
+      accounts.push({
+        ...g,rawPlatforms:[...g.rawPlatforms],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
+        missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0
+      });
+    });
+
+    accounts.sort((a,b)=>a.platform.localeCompare(b.platform)||Number(b.issueCount>0)-Number(a.issueCount>0)||String(a.email).localeCompare(String(b.email)));
+    const clients=new Set(allServices.map(s=>s.clienteId||`${s._name}|${s._phone}`));
+    const platforms={};accounts.forEach(a=>{platforms[a.family]=(platforms[a.family]||0)+1;});
+    return {
+      accounts,platforms,
+      metrics:{clientes:clients.size,servicios:allServices.length,cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length}
+    };
+  }
+
   function parseWorkbook(workbook,src){
     const sheets=[];
     const excelRows=[];
@@ -303,21 +430,124 @@
     return (state.analysis?.items||[]).filter(resultFilter).filter(x=>!q||norm([x.name,x.phone,x.platform,x.excelAccount,x.liveAccount,x.inventoryAccount,x.status].join(' ')).includes(q));
   }
 
+  const ROSTER_STATUS={
+    ok:{label:'Coincide',icon:'✅',tone:'ok'},
+    vencido:{label:'Vencido',icon:'⏰',tone:'warn'},
+    duplicado:{label:'Duplicado',icon:'⛔',tone:'bad'},
+    solo_bodega:{label:'Solo en Bodega',icon:'📦',tone:'bad'},
+    otra_cuenta:{label:'Está en otra cuenta',icon:'↔️',tone:'bad'},
+    falta_bodega:{label:'Falta en Bodega',icon:'⚠️',tone:'warn'},
+    vencido_sin_bodega:{label:'Vencido y sin Bodega',icon:'🗑️',tone:'bad'}
+  };
+
+  function accountDateTime(v){
+    const d=new Date(v||'');if(isNaN(d))return '—';
+    try{return d.toLocaleString('es-HN',{timeZone:'America/Tegucigalpa',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+    catch(_){return d.toLocaleString('es-HN');}
+  }
+
+  function filteredAccounts(){
+    const q=norm(state.accountQuery);
+    return (state.accountAudit?.accounts||[]).filter((a)=>{
+      if(state.accountPlatform!=='all'&&a.family!==state.accountPlatform)return false;
+      if(state.accountStatus==='problems'&&!a.issueCount)return false;
+      if(state.accountStatus==='due'&&!a.reviewDue)return false;
+      if(state.accountStatus==='clean'&&!a.clean)return false;
+      if(state.accountStatus==='incident'&&!a.recordedIncident)return false;
+      if(state.accountStatus==='missing'&&!a.missingInventory)return false;
+      if(!q)return true;
+      return norm([a.platform,a.email,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount])].join(' ')).includes(q);
+    });
+  }
+
+  function accountIssuesHtml(a){
+    const list=[];
+    if(!a.email)list.push('⛔ Sin correo');
+    if(a.missingPassword)list.push('🔑 Sin clave');
+    if(a.missingInventory)list.push('📦 Falta en Bodega');
+    if(a.duplicateDocs)list.push('📦 Cuenta repetida');
+    if(a.overCapacity)list.push('🚨 Sobre capacidad');
+    if(a.rosterIssues)list.push(`👥 ${a.rosterIssues} diferencia${a.rosterIssues===1?'':'s'}`);
+    if(a.recordedIncident)list.push('⚠️ Incidencia manual abierta');
+    if(a.reviewDataChanged)list.push('🔄 Cambió desde la última revisión');
+    if(!list.length)list.push('✅ Base interna coincide');
+    return list.map((x)=>`<span class="cm-account-issue ${a.issueCount?'bad':'ok'}">${esc(x)}</span>`).join('');
+  }
+
+  function rosterRowHtml(r,accountIndex,rowIndex){
+    const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',icon:'⚠️',tone:'bad'};
+    const profile=r.profile?`Perfil ${r.profile}`:'Perfil sin indicar';
+    return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
+      <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
+      <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}</small></button>
+      <div class="cm-roster-date"><b>${esc(dateLabel(r.date))}</b><small>Vencimiento</small></div>
+      <div class="cm-roster-result"><span class="cm-roster-status ${s.tone}">${s.icon} ${esc(s.label)}</span><small>${esc(r.detail||'')}</small></div>
+    </div>`;
+  }
+
+  function accountCardHtml(a,i){
+    const revealed=state.revealedAccounts.has(a.key);
+    const review=a.revision;
+    const reviewText=!review?'Sin revisión manual':(review.resultado==='incidencia'?`Incidencia · ${accountDateTime(review.revisadoAt)}`:`Revisada · ${accountDateTime(review.revisadoAt)}`);
+    const reviewTone=!review||a.reviewDue?'due':(review.resultado==='incidencia'?'bad':'ok');
+    const reviewAge=!review?'Nunca revisada':(a.reviewDataChanged?'Cambió la asignación · toca revisar':(a.reviewDue?`Hace ${a.reviewAge} días · toca revisar`:`Hace ${a.reviewAge} día${a.reviewAge===1?'':'s'}`));
+    const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
+    const roster=a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join('');
+    return `<article class="cm-account-card ${a.issueCount?'has-issues':'is-clean'}">
+      <div class="cm-account-head">
+        <div><span class="cm-platform cm-account-platform">${esc(a.platform)}</span><h4>${esc(a.email||'CUENTA SIN CORREO')}</h4><small>${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} activo${a.services.length===1?'':'s'}</small></div>
+        <span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span>
+      </div>
+      <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
+      <div class="cm-credentials">
+        <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
+        <div class="cm-credential"><span>Clave de la cuenta</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
+      </div>
+      <div class="cm-account-capacity">
+        <span><b>${a.occupied}</b> ocupados</span><span><b>${a.free}</b> libres</span><span><b>${a.capacity||'—'}</b> capacidad</span><span><b>${a.roster.length}</b> filas esperadas</span>
+      </div>
+      <div class="cm-roster-head"><div><b>Clientes/perfiles que deben estar en esta cuenta</b><small>Abra ${esc(a.platform)} y compare esta lista con los perfiles reales.</small></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
+      <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
+      ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
+      <div class="cm-account-review">
+        <div><b>Revisión real del proveedor</b><small>Entre a la cuenta, compruebe que no haya perfiles de más y después marque el resultado. Se guarda en Firebase.</small></div>
+        <div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${i}">✅ Revisada: coincide</button><button class="cm-btn warn" data-cm-review-issue="${i}">⚠️ Registrar incidencia</button></div>
+      </div>
+    </article>`;
+  }
+
+  function accountAuditHtml(){
+    const audit=state.accountAudit;
+    if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
+    const platforms=[['all','Todas',audit.accounts.length],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n])];
+    const statuses=[['all','Todas'],['problems','Con diferencias'],['due','Toca revisar (15 días)'],['incident','Incidencias'],['missing','Fuera de Bodega'],['clean','Base interna correcta']];
+    const all=filteredAccounts();state.accountVisible=all.slice(0,150);
+    return `<section class="cm-panel cm-accounts-panel">
+      <div class="cm-panel-head"><div><h3>📧 Cuentas y perfiles por correo</h3><p>Esta es su mesa de revisión: correo, clave y los clientes que deberían existir dentro de cada cuenta.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
+      <div class="cm-audit-callout"><b>Cómo usarla:</b> elija Disney+, abra cada correo en Disney y compare los perfiles reales con la lista de Sublichat. Si coincide, márquela revisada; si encuentra un perfil adicional o faltante, registre la incidencia.</div>
+      <div class="cm-platform-filters">${platforms.map(([k,l,n])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n}</span></button>`).join('')}</div>
+      <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
+      <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas encontradas.</div>
+      <div class="cm-account-grid">${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
+      ${all.length>state.accountVisible.length?`<div class="cm-hint">Mostrando las primeras 150 de ${all.length}. Use plataforma o búsqueda para reducir el listado.</div>`:''}
+    </section>`;
+  }
+
   function kpisHtml(){
-    const m=state.analysis?.metrics||{};
+    const m=state.accountAudit?.metrics||{};
     return `<div class="cm-kpis">
       <div class="cm-kpi"><b>${m.clientes??'—'}</b><span>Clientes actuales</span></div>
       <div class="cm-kpi"><b>${m.servicios??'—'}</b><span>Servicios en Sublichat</span></div>
-      <div class="cm-kpi"><b>${m.cuentas??'—'}</b><span>Cuentas del inventario</span></div>
-      <div class="cm-kpi good"><b>${m.correctos??'—'}</b><span>Asignaciones correctas</span></div>
-      <div class="cm-kpi ${m.revision?'bad':'good'}"><b>${m.revision??'—'}</b><span>Registros para revisar</span></div>
+      <div class="cm-kpi"><b>${m.cuentas??'—'}</b><span>Correos/cuentas agrupados</span></div>
+      <div class="cm-kpi ${m.conProblemas?'bad':'good'}"><b>${m.conProblemas??'—'}</b><span>Cuentas con diferencias</span></div>
+      <div class="cm-kpi ${m.pendientes15?'warn':'good'}"><b>${m.pendientes15??'—'}</b><span>Revisión quincenal pendiente</span></div>
     </div>`;
   }
 
   function templateHtml(){
     const t=state.meta?.plantilla;
     return `<section class="cm-panel">
-      <div class="cm-panel-head"><div><h3>📘 Plantilla del respaldo</h3><p>Se conserva el diseño de su Excel. Solo Sublicuentas puede cargar, generar o descargar estos archivos.</p></div><span class="cm-template-state ${t?'ok':''}">${t?'✅ Plantilla activa':'⚠️ Falta plantilla'}</span></div>
+      <div class="cm-panel-head"><div><h3>📘 Formato descargable del respaldo</h3><p>El Excel anterior queda únicamente como formato de salida. Su trabajo diario se hace arriba con la información viva de Firebase.</p></div><span class="cm-template-state ${t?'ok':''}">${t?'✅ Formato activo':'⚠️ Falta formato'}</span></div>
       ${t?`<div class="cm-note"><b>${esc(t.filename)}</b> · ${Number(t.size||0).toLocaleString('es-HN')} bytes · cargado ${esc(String(t.createdAt||'').replace('T',' ').slice(0,16))}</div>`:'<div class="cm-note">Cargue una sola vez el Excel “Sublicuentas streaming”. No se publica dentro de la web; queda protegido para generar sus respaldos.</div>'}
       <div class="cm-actions" style="margin-top:11px">
         <label class="cm-file-btn ${state.busy?'off':''}">📤 ${t?'Reemplazar plantilla':'Cargar Excel actual'}<input id="cmTemplateFile" type="file" accept=".xlsx"></label>
@@ -331,7 +561,7 @@
   }
 
   function reviewHtml(){
-    if(!state.analysis)return `<section class="cm-panel"><div class="cm-empty">Cuando cargue la plantilla y presione <b>Revisar ahora</b>, aparecerán aquí las diferencias entre Excel, Clientes e Inventario.</div></section>`;
+    if(!state.analysis)return `<details class="cm-panel cm-details"><summary><span><b>📎 Cruce histórico con el Excel</b><small>Opcional: cargue el formato y presione “Revisar ahora” para comparar también las filas antiguas.</small></span><i>Ver</i></summary></details>`;
     const all=filteredItems();state.visible=all.slice(0,300);
     const filters=[['revision','Revisar'],['cuenta','Cuentas'],['solo_sublichat','Faltan en Excel'],['solo_excel','Solo Excel'],['ok','Correctos'],['all','Todos']];
     const rows=state.visible.map((x,i)=>`<tr>
@@ -342,13 +572,15 @@
       <td><span class="cm-result ${resultClass(x)}">${esc(x.status)}</span></td>
       <td><div class="cm-inline-actions"><button class="cm-mini" data-cm-client="${i}" title="Abrir cliente">👤</button><button class="cm-mini" data-cm-account="${i}" title="Abrir cuenta">📦</button></div></td>
     </tr>`).join('');
-    return `<section class="cm-panel">
-      <div class="cm-panel-head"><div><h3>🔍 Revisión de clientes y cuentas</h3><p>Compara la base actual, las asignaciones de inventario y las filas de su Excel.</p></div><span class="cm-template-state ${state.analysis.metrics.revision?'':'ok'}">${state.analysis.metrics.revision?state.analysis.metrics.revision+' por revisar':'✅ Todo coincide'}</span></div>
+    return `<details class="cm-panel cm-details">
+      <summary><span><b>📎 Cruce histórico con el Excel</b><small>Comparación opcional entre el formato antiguo, Clientes y Bodega.</small></span><i>${state.analysis.metrics.revision?state.analysis.metrics.revision+' diferencias':'Todo coincide'} · Ver</i></summary>
+      <div class="cm-details-body">
       <div class="cm-toolbar"><label class="cm-search"><span>⌕</span><input id="cmSearch" value="${esc(state.query)}" placeholder="Cliente, teléfono, plataforma o cuenta…"></label><div class="cm-filters">${filters.map(([k,l])=>`<button class="cm-filter ${state.filter===k?'on':''}" data-cm-filter="${k}">${l}</button>`).join('')}</div></div>
       <div class="cm-table-wrap">${rows?`<table class="cm-table"><thead><tr><th>Cliente</th><th>Plataforma</th><th>Cuenta Excel</th><th>Cuenta Sublichat</th><th>Cuenta inventario</th><th>Fecha Excel</th><th>Fecha actual</th><th>Resultado</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="cm-empty">No hay registros con este filtro.</div>'}</div>
       ${all.length>state.visible.length?`<div class="cm-hint">Mostrando 300 de ${all.length} resultados. Use la búsqueda para encontrar un cliente específico.</div>`:''}
       <div class="cm-actions" style="margin-top:12px"><button class="cm-btn good" data-cm-action="generate-download">📥 Generar y descargar Excel</button><button class="cm-btn" data-cm-action="save-backup">🛡️ Guardar respaldo sin descargar</button></div>
-    </section>`;
+      </div>
+    </details>`;
   }
 
   function backupsHtml(){
@@ -362,9 +594,10 @@
     const host=root();if(!host)return;
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
+    state.accountAudit=buildAccountAudit(source());
     host.innerHTML=`<div class="cm-shell" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">🗃️</div><div><h2>Control Maestro</h2><p>Clientes, cuentas asignadas y respaldo diario en el mismo formato de su Excel.</p></div></div><span class="cm-private">🔒 Solo Sublicuentas</span></header>
-      ${kpisHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
+      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">🗃️</div><div><h2>Control Maestro</h2><p>Revisión por correo: claves, cupos y clientes/perfiles esperados con información actual de Firebase.</p></div></div><span class="cm-private">🔒 Solo Sublicuentas</span></header>
+      ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
   }
@@ -373,12 +606,72 @@
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;render();});
+    const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
+    host.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
+    host.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
+    host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
+    host.querySelectorAll('[data-cm-open-audit]').forEach(b=>b.onclick=()=>openAuditAccount(Number(b.dataset.cmOpenAudit)));
+    host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
+    host.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(Number(b.dataset.cmReviewOk),'correcta'));
+    host.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(Number(b.dataset.cmReviewIssue),'incidencia'));
     host.querySelectorAll('[data-cm-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.cmFilter;render();});
     const q=host.querySelector('#cmSearch');if(q)q.oninput=()=>{state.query=q.value;render();setTimeout(()=>document.getElementById('cmSearch')?.focus(),0);};
     host.querySelectorAll('[data-cm-client]').forEach(b=>b.onclick=()=>openClient(state.visible[Number(b.dataset.cmClient)]));
     host.querySelectorAll('[data-cm-account]').forEach(b=>b.onclick=()=>openAccount(state.visible[Number(b.dataset.cmAccount)]));
     host.querySelectorAll('[data-cm-download]').forEach(b=>b.onclick=()=>downloadStored(b.dataset.cmDownload));
     host.querySelectorAll('[data-cm-restore]').forEach(b=>b.onclick=()=>restoreStored(b.dataset.cmRestore));
+  }
+
+  function toggleAccountSecret(index){
+    const a=state.accountVisible[index];if(!a?.clave)return;
+    if(state.revealedAccounts.has(a.key))state.revealedAccounts.delete(a.key);else state.revealedAccounts.add(a.key);
+    render();
+  }
+
+  async function copyText(value,label){
+    if(!value)return setStatus(`No hay ${label} para copiar.`,'error');
+    try{
+      if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(String(value));
+      else{
+        const area=document.createElement('textarea');area.value=String(value);area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();
+      }
+      setStatus(`✅ ${label} copiado.`,'good');
+    }catch(_){setStatus(`No se pudo copiar ${label}. Mantenga presionado sobre el dato para copiarlo.`,'error');}
+  }
+
+  function copyAccountValue(index,type){
+    const a=state.accountVisible[index];if(!a)return;
+    return copyText(type==='password'?a.clave:a.email,type==='password'?'Clave':'Correo');
+  }
+
+  function openAuditAccount(index){
+    const a=state.accountVisible[index];if(!a)return;
+    openAccount({inventoryAccount:a.email,liveAccount:a.email,platform:a.platform});
+  }
+
+  function openAuditClient(pointer){
+    const [ai,ri]=String(pointer||'').split(':').map(Number);
+    const r=state.accountVisible[ai]?.roster?.[ri];if(!r)return;
+    openClient(r.service||{name:r.name,phone:r.phone});
+  }
+
+  async function saveAccountReview(index,result){
+    const a=state.accountVisible[index];if(!a||state.busy)return;
+    if(!a.email)return setStatus('Esta cuenta no tiene correo; corríjala primero en Bodega.','error');
+    let nota='';
+    if(result==='incidencia'){
+      nota=prompt('Escriba qué encontró en la cuenta (por ejemplo: “hay un perfil extra llamado Juan”):','')??'';
+      if(!String(nota).trim())return;
+    }
+    state.busy=true;setStatus(result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…','');
+    try{
+      await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.services.length,diferencias:a.internalIssueCount});
+      await refreshMeta();
+      setStatus(result==='incidencia'?'⚠️ Incidencia guardada. Esta cuenta seguirá marcada hasta que la revise de nuevo.':'✅ Revisión guardada. Volverá a aparecer como pendiente dentro de 15 días.','good');
+    }catch(e){setStatus('⚠️ '+(e.message||'No se pudo guardar la revisión.'),'error');}
+    finally{state.busy=false;render();}
   }
 
   async function refreshMeta(){
@@ -592,10 +885,11 @@
     if(action==='refresh-data'){
       if(typeof window.sublichatControlReload!=='function')return setStatus('No encontré la función para actualizar la base.','error');
       state.busy=true;setStatus('Actualizando clientes e inventario desde la base…','');
-      try{await window.sublichatControlReload();setStatus('✅ Base actualizada. Ejecutando revisión…','good');state.analysis=null;}
+      try{await window.sublichatControlReload();state.analysis=null;setStatus(state.meta?.plantilla?'✅ Base actualizada. Ejecutando cruce con el Excel…':'✅ Base actualizada desde Firebase.','good');}
       catch(e){setStatus('⚠️ '+(e.message||'No se pudo actualizar.'),'error');}
       finally{state.busy=false;render();}
-      return runReview(false);
+      if(state.meta?.plantilla)return runReview(false);
+      return;
     }
     if(action==='download-template')return downloadStored(state.meta?.plantilla?.id);
     if(action==='generate-download')return generate({save:true,download:true});
