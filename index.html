@@ -3625,140 +3625,87 @@ function buscarEquipo(text){ pedir({modo:"equipo", q:text}); }
 let cobroActual=null;
 const $cobro=id=>document.getElementById(id);
 
-// Plantillas. {n}=nombre {serv}=detalle de servicios {m}=monto total {f}=fecha
-const PLANTILLAS_COBRO=[
-  // ---- Formales (usted) ----
-  "Buen día, {n} 👋. Le saludo de Sublicuentas. Le recuerdo que {serv} está por renovar el {f}. El total es de {m}. ¿Desea que renovemos? ¡Quedo atento!",
-  "Saludos cordiales, {n}. Le escribimos de Sublicuentas para recordarle que {serv} vence el {f} ({m} en total). Con gusto le ayudamos a mantener todo activo. ¿Procedemos?",
-  "Estimado/a {n}, un gusto saludarle. Le escribo para contarle que {serv} está por vencer el {f}. Para continuar disfrutando, la renovación es de {m}. Quedamos a la orden 🙌",
-  "Hola, {n}. Le saluda su asesor de Sublicuentas. {serv} llega a su fecha de renovación el {f} y el monto es {m}. ¿Renovamos hoy mismo?",
-  "Muy buenas, {n} 👋. Pasamos a recordarle que {serv} vence el {f}. La renovación tiene un costo de {m}. Quedamos pendientes para dejarle todo funcionando.",
-  "Cordial saludo, {n}. Le recordamos que {serv} finaliza el {f}. Para renovar, el valor es de {m}. Estamos atentos a su confirmación. 🙏",
-  "{n}, reciba un cordial saludo de Sublicuentas. Le recordamos que {serv} está próximo a vencer el {f}. El monto de renovación es {m}. ¿Le apartamos su cupo?",
-  "Estimado/a {n}, esperamos que se encuentre bien. Le informamos que {serv} renueva el {f} por {m}. Con gusto procesamos su renovación cuando guste.",
-  // ---- Amigables (cercano) ----
-  "¡Hola, {n}! 😊 Espero se encuentre muy bien. Le recuerdo que {serv} está por vencer y la renovación tiene un valor de {m}. Avíseme si la dejamos lista para que no pierda el acceso.",
-  "¡Buenas, {n}! 🎬 Le recordamos con cariño que {serv} renueva el {f}. El costo total es de {m}. Si desea seguir disfrutando sin interrupciones, con gusto activamos.",
-  "{n}, esperamos que esté disfrutando su servicio 🍿. Le recordamos que {serv} vence el {f}, con una renovación de {m}. Estamos para servirle.",
-  "¡Hola, {n}! 👋 Solo un recordatorio amistoso: {serv} vence el {f}. Para renovar son {m}. ¿Se lo dejamos listo? 😄",
-  "¡Qué tal, {n}! Pasando a saludar y recordarle que {serv} está por renovarse el {f}. El total es {m}. Cualquier cosa aquí andamos. 🙌",
-  "Hola {n} 😊, ¿cómo va todo? Le cuento que {serv} renueva el {f}. Son {m} en total. Avíseme y lo dejamos activo enseguida.",
-  "¡Hey, {n}! 🎉 Le cuento que {serv} está por vencer el {f}. Para que no se quede sin su contenido favorito, la renovación es de {m}. ¿Renovamos?",
-  "Buenas {n} 👋 esperamos la esté pasando genial con su servicio. Le recuerdo que {serv} vence el {f} y la renovación es {m}. Aquí estamos para ayudarle. 🍿",
-  // ---- Cortos / directos ----
-  "Hola {n} 👋 {serv} renueva el {f}. Total: {m}. ¿Le activamos? 🙌",
-  "{n}, recordatorio: {serv} vence el {f}. Renovación {m}. Quedo atento. 😊",
-  "¡Buenas {n}! {serv} por renovar el {f} — {m}. ¿Procedemos?",
-  "Hola {n}, le cuento que {serv} vence el {f}. Son {m}. Avíseme para renovar. 🎬",
-  // ---- Con urgencia suave ----
-  "Hola, {n} 👋. Le recordamos que {serv} vence el {f}. Para evitar que se corte el acceso, la renovación es de {m}. ¿La dejamos lista hoy?",
-  "{n}, no queremos que pierda su acceso 😊. {serv} vence el {f} y renovar cuesta {m}. Confírmenos y lo mantenemos activo sin cortes.",
-  "¡Atención, {n}! ⏰ Le recuerdo que {serv} está por vencer el {f}. Renueve por {m} y siga disfrutando sin interrupciones. ¿Le ayudamos?",
-  "Hola {n}, un recordatorio importante: {serv} vence el {f}. Para no quedarse sin servicio, la renovación es {m}. Estamos listos cuando usted diga. 🙌",
-  // ---- Cálidos / fidelización ----
-  "{n}, ¡gracias por su preferencia! 💛 Le recordamos que {serv} renueva el {f} por {m}. Es un placer tenerle con nosotros. ¿Renovamos?",
-  "Hola {n} 😊, gracias por seguir confiando en Sublicuentas. Le recuerdo que {serv} vence el {f} y la renovación es {m}. Con gusto lo dejamos todo listo.",
-  "¡Buen día, {n}! 🌟 Valoramos mucho que sea nuestro cliente. {serv} renueva el {f} por un total de {m}. Aquí estamos para lo que necesite.",
-  "{n}, esperamos que todo marche excelente 🍿. Le cuento que {serv} está por renovar el {f}. El monto es {m}. Gracias por preferirnos, ¿procedemos?",
-  // ---- Neutros / profesionales ----
-  "Hola {n}. Le informamos que {serv} tiene fecha de renovación el {f}. El total a cancelar es {m}. Quedamos atentos a su respuesta.",
-  "Buenas, {n}. Este es un recordatorio de que {serv} renueva el {f} por {m}. Puede confirmarnos por este medio para procesarlo. 🙌",
-  // ---- Más variedad (para que nunca se sienta repetido) ----
-  "{n}, buen día 🙌. {serv} tiene su renovación programada para el {f}, por un total de {m}. Quedo pendiente de su confirmación.",
-  "Hola {n} 🙋. Le aviso que {serv} está por vencer el {f}. El costo de la renovación es {m}. ¿Se la dejo activada?",
-  "¡Buenas, {n}! Le comparto que {serv} renueva el {f} por {m}. Si me confirma, lo dejo listo de una vez. 😊",
-  "{n}, le escribo porque {serv} vence el {f}. La renovación sale en {m}. Cualquier duda, aquí estoy. 🙌"
-];
-
 function fechaLarga(d){ return d?d.toLocaleDateString("es-HN",{day:"numeric",month:"long"}):"su fecha de renovación"; }
 
 // Describe los servicios: 1 plataforma => "su Netflix"; varias => "sus servicios de Netflix, Disney+ y HBO Max"
 function descServicios(g){
   const plats=(g.servicios||[{plataforma:g.plataforma}]).map(s=>s.plataforma);
+  const unicas=[...new Set(plats.filter(Boolean))];
   if(plats.length===1) return `su suscripción de ${plats[0]}`;
-  const ultimo=plats[plats.length-1];
-  return `sus servicios de ${plats.slice(0,-1).join(", ")} y ${ultimo}`;
+  if(unicas.length===1) return `sus ${plats.length} suscripciones de ${unicas[0]}`;
+  const ultimo=unicas[unicas.length-1];
+  return `sus servicios de ${unicas.slice(0,-1).join(", ")} y ${ultimo}`;
 }
 
-let _bolsaPlantillas=[];
+// Mensajes cortos y realmente distintos. El tema también cambia el color de la
+// vista previa para reconocer visualmente cada variante; WhatsApp recibe texto limpio.
+const COBRO_FORMATOS=[
+  {tema:"oceano", texto:"👋 Hola, {n}.\n{aviso}\n💳 Renovación: {m}. ¿Desea renovarlo? ✅", multiInicio:"👋 Hola, {n}. Estas son sus renovaciones:", multiCierre:"✅ ¿Desea que las dejemos activas?"},
+  {tema:"bosque", texto:"🌟 {n}, queremos que siga disfrutando.\n{aviso}\n💰 {m}. ¿Se lo dejamos activo?", multiInicio:"🌟 {n}, este es su resumen de renovación:", multiCierre:"💚 Confírmenos y las dejamos listas."},
+  {tema:"sol", texto:"⏰ Recordatorio para {n}:\n{aviso}\n💵 {m}. Confírmenos y renovamos.", multiInicio:"⏰ Recordatorio para {n}:", multiCierre:"🙌 Confírmenos y renovamos."},
+  {tema:"uva", texto:"✨ Hola, {n}.\n{aviso}\n💳 {m}. ¿Procedemos con la renovación?", multiInicio:"✨ Hola, {n}. Sus próximas renovaciones:", multiCierre:"💜 ¿Procedemos con la renovación?"},
+  {tema:"coral", texto:"📣 {n}, tenemos un recordatorio.\n{aviso}\n💰 Total: {m}. ¿Lo renovamos?", multiInicio:"📣 {n}, tiene estas renovaciones:", multiCierre:"✅ ¿Las renovamos?"},
+  {tema:"cielo", texto:"🎬 Hola, {n}.\n{aviso}\n✅ Manténgalo activo por {m}.", multiInicio:"🎬 Hola, {n}. Mantenga activos sus servicios:", multiCierre:"💬 Avísenos y los renovamos."},
+  {tema:"rosa", texto:"💫 {n}, su entretenimiento continúa.\n{aviso}\n💳 Renovación: {m}. ¿Le ayudamos?", multiInicio:"💫 {n}, aquí tiene sus renovaciones:", multiCierre:"✅ ¿Le ayudamos a mantenerlas activas?"},
+  {tema:"lima", texto:"🙌 Buen día, {n}.\n{aviso}\n💰 {m}. Responda *RENOVAR* y lo activamos.", multiInicio:"🙌 Buen día, {n}. Su resumen:", multiCierre:"💬 Responda *RENOVAR* y las activamos."}
+];
+
+let _bolsaPlantillas=[], _ultimaPlantillaIndex=null;
 function _sacarPlantillaIndex(){
   if(!_bolsaPlantillas.length){
-    _bolsaPlantillas=PLANTILLAS_COBRO.map((_,i)=>i);
+    _bolsaPlantillas=COBRO_FORMATOS.map((_,i)=>i);
     // Fisher-Yates: mezcla real, no solo Math.random() puro
     for(let i=_bolsaPlantillas.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
       [_bolsaPlantillas[i],_bolsaPlantillas[j]]=[_bolsaPlantillas[j],_bolsaPlantillas[i]];
     }
   }
-  return _bolsaPlantillas.pop();
+  let idx=_bolsaPlantillas.pop();
+  // Al empezar una bolsa nueva tampoco repite el último estilo de la anterior.
+  if(idx===_ultimaPlantillaIndex && _bolsaPlantillas.length){
+    const otro=_bolsaPlantillas.pop();
+    _bolsaPlantillas.unshift(idx);
+    idx=otro;
+  }
+  _ultimaPlantillaIndex=idx;
+  return idx;
+}
+function cobroAvisoServicio(s){
+  const plat=`*${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}*`;
+  if(!s.fecha) return `📅 ${plat} tiene fecha pendiente de confirmar.`;
+  const dias=daysTo(s.fecha), fecha=`*${fechaLarga(s.fecha)}*`;
+  if(dias<0) return `⚠️ ${plat} venció el ${fecha}.`;
+  if(dias===0) return `⏰ ${plat} vence *hoy*.`;
+  if(dias===1) return `📅 ${plat} vence *mañana*.`;
+  return `📅 ${plat} renueva el ${fecha}.`;
+}
+function cobroFechaCompacta(s){
+  if(!s.fecha) return "fecha pendiente";
+  const dias=daysTo(s.fecha);
+  if(dias<0) return `venció ${fechaLarga(s.fecha)}`;
+  if(dias===0) return "vence hoy";
+  if(dias===1) return "vence mañana";
+  return fechaLarga(s.fecha);
 }
 function generarMensajeCobro(g){
+  const servicios=(g.servicios&&g.servicios.length?g.servicios:[g]).filter(Boolean);
   const total = g.total!=null ? g.total : g.precio;
   const nombre=`*${g.nombre||"Cliente"}*`;
   const monto=`*${fmt(total)}*`;
-  const servicio=descServicios(g);
-  const fecha=fechaLarga(g.fecha);
-  const elegir=a=>a[Math.floor(Math.random()*a.length)];
-  const saludos=[
-    `¡Hola, ${nombre}! 👋`,
-    `Hola ${nombre}, espero que se encuentre muy bien.`,
-    `¡Buenas, ${nombre}! 😊`,
-    `Cordial saludo, ${nombre}.`,
-    `Hola ${nombre}, qué gusto saludarle.`,
-    `Muy buenas, ${nombre} 🙌`,
-    `${nombre}, reciba un cordial saludo.`,
-    `¡Hola, ${nombre}! Esperamos que esté muy bien.`,
-    `Buen día, ${nombre} 🌟`,
-    `Hola ${nombre}, le saluda el equipo de Sublicuentas.`
-  ];
-  const avisos=[
-    `Le recordamos que ${servicio} vence el ${fecha}.`,
-    `Le escribimos porque ${servicio} tiene renovación el ${fecha}.`,
-    `Queremos avisarle que ${servicio} está próximo a vencer el ${fecha}.`,
-    `Este es un recordatorio amistoso: ${servicio} renueva el ${fecha}.`,
-    `La fecha de renovación de ${servicio} es el ${fecha}.`,
-    `Para que continúe disfrutando sin interrupciones, ${servicio} renueva el ${fecha}.`,
-    `Pasamos a recordarle que ${servicio} finaliza el ${fecha}.`,
-    `Tenemos registrada la renovación de ${servicio} para el ${fecha}.`,
-    `Su próximo vencimiento de ${servicio} corresponde al ${fecha}.`,
-    `Le avisamos con tiempo que ${servicio} se renueva el ${fecha}.`
-  ];
-  const montos=[
-    `El monto a pagar es ${monto}.`,
-    `El total de la renovación es ${monto}.`,
-    `Para renovar, el valor es de ${monto}.`,
-    `El pago correspondiente es de ${monto}.`,
-    `Puede mantenerlo activo por ${monto}.`,
-    `El importe total a cancelar es ${monto}.`,
-    `La renovación tiene un costo de ${monto}.`,
-    `El total pendiente para continuar es ${monto}.`,
-    `Su monto de renovación es ${monto}.`,
-    `El valor para dejarlo activo es ${monto}.`
-  ];
-  const cierres=[
-    `¿Desea que se lo dejemos renovado?`,
-    `Confírmenos y con gusto lo dejamos listo.`,
-    `Quedamos atentos a su confirmación.`,
-    `¿Procedemos con la renovación?`,
-    `Avísenos y lo activamos enseguida.`,
-    `Estamos a la orden para ayudarle.`,
-    `Puede confirmarnos por este mismo medio.`,
-    `¿Le ayudamos a mantenerlo activo?`,
-    `Con gusto procesamos su renovación cuando nos confirme.`,
-    `Gracias por su preferencia; quedamos pendientes. 🙏`
-  ];
-  let msg="";
-  for(let intento=0;intento<8;intento++){
-    const candidato=`${elegir(saludos)} ${elegir(avisos)} ${elegir(montos)} ${elegir(cierres)}`;
-    if(candidato!==generarMensajeCobro.ultimo){msg=candidato;break;}
+  const formato=COBRO_FORMATOS[_sacarPlantillaIndex()]||COBRO_FORMATOS[0];
+  let msg;
+  if(servicios.length===1){
+    msg=formato.texto
+      .replaceAll("{n}",nombre)
+      .replaceAll("{aviso}",cobroAvisoServicio(servicios[0]))
+      .replaceAll("{m}",monto);
+  }else{
+    const iconos=["🎬","📺","🍿","✨","🎧","📱"];
+    const detalle=servicios.map((s,i)=>`${iconos[i%iconos.length]} *${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}* · ${cobroFechaCompacta(s)} · *${fmt(s.precio)}*`).join("\n");
+    msg=`${formato.multiInicio.replaceAll("{n}",nombre)}\n${detalle}\n💳 Total: ${monto}\n${formato.multiCierre}`;
   }
-  if(!msg) msg=`${saludos[0]} ${avisos[0]} ${montos[0]} ${cierres[0]}`;
   generarMensajeCobro.ultimo=msg;
-  // Si tiene varias plataformas, agregar el desglose al final
-  if(g.servicios && g.servicios.length>1){
-    const detalle=g.servicios.map(s=>`• ${s.plataforma}: *${fmt(s.precio)}*`).join("\n");
-    msg+=`\n\nDetalle:\n${detalle}\nTotal: ${monto}`;
-  }
+  generarMensajeCobro.tema=formato.tema;
   return msg;
 }
 
@@ -3772,9 +3719,11 @@ function actualizarVistaCobro(){
     .replace(/\*([^*\n]+)\*/g,"<strong>$1</strong>")
     .replace(/\n/g,"<br>");
 }
-function cobroSetMensaje(texto){
+function cobroSetMensaje(texto,tema){
   const area=$cobro("cobroText"); if(!area)return;
   area.value=texto||"";
+  const preview=$cobro("cobroPreview");
+  if(preview) preview.dataset.tema=tema||generarMensajeCobro.tema||"oceano";
   actualizarVistaCobro();
 }
 function asegurarNegritasCobro(texto,g){
@@ -3795,7 +3744,7 @@ function abrirCobro(g){
   const plats=(g.servicios||[{plataforma:g.plataforma}]).map(s=>s.plataforma);
   const platLabel=plats.length>1?`${plats.length} servicios`:plats[0];
   $cobro("cobroCliente").textContent=`${g.nombre} · ${platLabel} · ${fmt(total)}`;
-  cobroSetMensaje(generarMensajeCobro(g));
+  cobroSetMensaje(generarMensajeCobro(g),generarMensajeCobro.tema);
   // reset opciones de renovar (ocultas, sin texto de estado)
   const rb=$cobro("cobroRenovar"); if(rb)rb.style.display="none";
   const rbtn=$cobro("cobroRenovarBtn"); if(rbtn)rbtn.textContent="🔁 Renovar suscripción";
@@ -4035,7 +3984,11 @@ $cobro("servSave").addEventListener("click",async()=>{
 
 $cobro("cobroClose").addEventListener("click",cerrarCobro);
 $cobro("cobroModal").addEventListener("click",e=>{ if(e.target.id==="cobroModal") cerrarCobro(); });
-$cobro("cobroVariar").addEventListener("click",()=>{ if(cobroActual) cobroSetMensaje(generarMensajeCobro(cobroActual)); });
+$cobro("cobroVariar").addEventListener("click",()=>{
+  if(!cobroActual)return;
+  const mensaje=generarMensajeCobro(cobroActual);
+  cobroSetMensaje(mensaje,generarMensajeCobro.tema);
+});
 $cobro("cobroText").addEventListener("input",actualizarVistaCobro);
 
 $cobro("cobroCopy").addEventListener("click",async()=>{
@@ -4058,12 +4011,12 @@ $cobro("cobroIA").addEventListener("click",async()=>{
   try{
     const total = cobroActual.total!=null ? cobroActual.total : cobroActual.precio;
     const servDesc = descServicios(cobroActual);
-    const prompt=`Redactá UN mensaje de WhatsApp de cobro para un cliente de Sublicuentas (reventa de suscripciones en Honduras). Tono cordial y profesional, de usted, hondureño, cálido, breve (máx 3 líneas). Incluí 1 emoji discreto. Datos: cliente "${cobroActual.nombre}", ${servDesc}, monto total ${fmt(total)}, renueva el ${fechaLarga(cobroActual.fecha)}. Devolvé SOLO el mensaje, sin comillas ni explicación.`;
+    const prompt=`Redacte UN mensaje de WhatsApp de renovación para un cliente de Sublicuentas en Honduras. Use "usted", tono cordial, cálido y directo. Máximo 3 líneas cortas, incluya de 2 a 4 emojis útiles y evite saludos o frases de relleno. Datos: cliente "${cobroActual.nombre}", ${servDesc}, monto total ${fmt(total)}, fecha ${fechaLarga(cobroActual.fecha)}. Devuelva SOLO el mensaje, sin comillas ni explicación.`;
     const r=await fetch(CONFIG.chatEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pregunta:prompt,hoy:today.toISOString().slice(0,10),clientes:[]})});
     const j=await r.json();
     const txt=(j.respuesta||j.text||"").trim();
-    if(txt) cobroSetMensaje(asegurarNegritasCobro(txt,cobroActual)); else alert("No pude generar con IA ahora. Probá 'Otro mensaje'.");
-  }catch(e){ alert("No pude conectar con la IA. Probá 'Otro mensaje'."); }
+    if(txt) cobroSetMensaje(asegurarNegritasCobro(txt,cobroActual),"uva"); else alert("No pude generar con IA ahora. Pruebe 'Otro estilo'.");
+  }catch(e){ alert("No pude conectar con la IA. Pruebe 'Otro estilo'."); }
   btn.classList.remove("ia-load");btn.textContent=orig;
 });
 
@@ -5025,6 +4978,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   const fichaNorm=s=>String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"");
   const fichaQ=id=>document.getElementById(id);
   let fichaClienteIdActual="";
+  let fichaGrupoActual=null;
+  let fichaServiciosActuales=[];
+  let fichaServicioPosActual=-1;
+  let fichaServicioIndexActual=null;
+  let fichaServicioOriginalActual=null;
   function fichaStatus(txt,type="info"){
     const el=fichaQ("fichaStatus");
     if(!el) return;
@@ -5063,6 +5021,19 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     return FICHA_TEMPLATES[k] || FICHA_TEMPLATES.default;
   };
   const fichaPlatformLabel=plat=>{ try{ return platLabel(plat); }catch(_){ return plat||"—"; } };
+  function fichaPlatformEmoji(plat){
+    const p=fichaNorm(plat);
+    if(p.includes("netflix"))return "🎬";
+    if(p.includes("disney"))return "🏰";
+    if(p.includes("hbo")||p==="max")return "🍿";
+    if(p.includes("spotify")||p.includes("deezer"))return "🎧";
+    if(p.includes("youtube"))return "▶️";
+    if(p.includes("crunchy"))return "🌀";
+    if(p.includes("canva"))return "🎨";
+    if(p.includes("gemini")||p.includes("chatgpt"))return "🤖";
+    if(p.includes("oleada")||p.includes("iptv"))return "📺";
+    return "📱";
+  }
   function fichaPlatValue(raw){
     const n=fichaNorm(raw);
     if(!n) return "netflix";
@@ -5263,6 +5234,9 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     return {
       accion:"ficha_upsert",
       clienteId:fichaClienteIdActual||"",
+      servicioIndex:fichaServicioIndexActual,
+      plataformaOriginal:fichaServicioOriginalActual&&fichaServicioOriginalActual.plataforma||"",
+      correoOriginal:fichaServicioOriginalActual&&fichaServicioOriginalActual.correo||"",
       cliente:{
         nombrePerfil:fichaGetVal("fichaNombre"),
         telefono:fichaGetVal("fichaTelefono"),
@@ -5296,6 +5270,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         fichaStatus(msg,"ok");
         if(!silent) fichaToast(msg);
         await load({forceServer:true});
+        fichaSincronizarServiciosDesdeData(j.servicioIndex!=null?Number(j.servicioIndex):fichaServicioIndexActual,payload);
       }else{
         const msg="⚠️ CRM: "+(j.error||"No se pudo guardar");
         fichaStatus(msg,"err");
@@ -5410,6 +5385,88 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaQ("fichaPinPerfil").value=s.pinPerfil||"";
     fichaQ("fichaPerfil").value=s.perfil||((g&&g.nombre)||"");
     fichaRefreshTemplate();
+    const guardada=String(s.fichaTexto||"").trim();
+    if(guardada){
+      const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
+      if(txt)txt.value=guardada;
+      if(view)view.innerHTML=fichaMarkdownToHtml(guardada);
+    }
+  }
+
+  function fichaServiciosCompletos(grupo){
+    const g=grupo||{};
+    const id=String(g.clienteId||"");
+    let lista=[];
+    if(id) lista=DATA.filter(s=>String(s.clienteId||"")===id);
+    if(!lista.length && g.nombre){
+      const nombre=fichaNorm(g.nombre), tel=String(g.telefono||"").replace(/\D/g,"");
+      lista=DATA.filter(s=>fichaNorm(s.nombre)===nombre && (!tel || String(s.telefono||"").replace(/\D/g,"")===tel));
+    }
+    if(!lista.length && Array.isArray(g.servicios)) lista=g.servicios.slice();
+    if(!lista.length && (g.plataformaRaw||g.plataforma)) lista=[g];
+    return lista.slice().sort((a,b)=>{
+      const ia=(a.srvIndex!=null&&a.srvIndex!=="")?Number(a.srvIndex):Number.MAX_SAFE_INTEGER;
+      const ib=(b.srvIndex!=null&&b.srvIndex!=="")?Number(b.srvIndex):Number.MAX_SAFE_INTEGER;
+      return ia-ib;
+    });
+  }
+
+  function fichaServicioFecha(s){
+    if(s&&s.fecha instanceof Date&&!isNaN(s.fecha)) return s.fecha.toLocaleDateString("es-HN");
+    return fichaISOToDMY((s&&s.fechaRaw)||"")||"Sin fecha";
+  }
+
+  function fichaRenderServicePicker(){
+    const box=fichaQ("fichaServiciosBox"), list=fichaQ("fichaServiciosList"), count=fichaQ("fichaServiciosCount");
+    if(!box||!list||!count)return;
+    if(!fichaServiciosActuales.length){box.style.display="none";list.innerHTML="";return;}
+    box.style.display="block";
+    count.textContent=`${fichaServiciosActuales.length} ficha${fichaServiciosActuales.length===1?"":"s"}`;
+    list.innerHTML=fichaServiciosActuales.map((s,pos)=>{
+      const active=pos===fichaServicioPosActual;
+      const plat=s.plataforma||fichaPlatformLabel(s.plataformaRaw)||"Servicio";
+      const acceso=s.correo||"Sin correo/usuario";
+      return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
+    }).join("");
+    list.querySelectorAll("[data-ficha-servicio]").forEach(btn=>btn.addEventListener("click",()=>fichaSeleccionarServicio(Number(btn.dataset.fichaServicio))));
+  }
+
+  function fichaSeleccionarServicio(pos){
+    const s=fichaServiciosActuales[pos];
+    if(!s)return;
+    fichaServicioPosActual=pos;
+    fichaServicioIndexActual=(s.srvIndex!=null&&s.srvIndex!==""&&Number.isInteger(Number(s.srvIndex)))?Number(s.srvIndex):null;
+    fichaServicioOriginalActual={plataforma:s.plataformaRaw||s.plataforma||"",correo:s.correo||""};
+    fichaPrefillFromService(fichaGrupoActual||{},s);
+    fichaRenderServicePicker();
+  }
+
+  function fichaSincronizarServiciosDesdeData(indicePreferido,payload){
+    let lista=fichaServiciosCompletos({...(fichaGrupoActual||{}),clienteId:fichaClienteIdActual});
+    if(!lista.length && payload&&payload.servicio){
+      lista=[{...payload.servicio,plataformaRaw:payload.servicio.plataforma,plataforma:fichaPlatformLabel(payload.servicio.plataforma),fechaRaw:payload.servicio.fechaRenovacion,fecha:parseDate(payload.servicio.fechaRenovacion),clave:payload.servicio.clave,pin:payload.servicio.clave,pinPerfil:payload.servicio.pinPerfil||"",srvIndex:indicePreferido,fichaTexto:payload.fichaTexto||""}];
+    }
+    if(!lista.length)return;
+    fichaServiciosActuales=lista;
+    let pos=lista.findIndex(s=>indicePreferido!=null&&Number(s.srvIndex)===Number(indicePreferido));
+    if(pos<0&&payload&&payload.servicio){
+      pos=lista.findIndex(s=>fichaNorm(s.plataformaRaw||s.plataforma)===fichaNorm(payload.servicio.plataforma)&&String(s.correo||"").trim().toLowerCase()===String(payload.servicio.correo||"").trim().toLowerCase());
+    }
+    if(pos<0)pos=0;
+    fichaServicioPosActual=pos;
+    const actual=lista[pos];
+    fichaServicioIndexActual=(actual.srvIndex!=null&&actual.srvIndex!=="")?Number(actual.srvIndex):null;
+    fichaServicioOriginalActual={plataforma:actual.plataformaRaw||actual.plataforma||"",correo:actual.correo||""};
+    fichaGrupoActual={
+      ...(fichaGrupoActual||{}),
+      clienteId:fichaClienteIdActual,
+      nombre:actual.nombre||(payload&&payload.cliente&&payload.cliente.nombrePerfil)||(fichaGrupoActual&&fichaGrupoActual.nombre)||"",
+      telefono:actual.telefono||(payload&&payload.cliente&&payload.cliente.telefono)||(fichaGrupoActual&&fichaGrupoActual.telefono)||"",
+      vendedor:actual.vendedor||(payload&&payload.cliente&&payload.cliente.vendedor)||(fichaGrupoActual&&fichaGrupoActual.vendedor)||"",
+      nombreNorm:actual.nombreNorm||(fichaGrupoActual&&fichaGrupoActual.nombreNorm)||"",
+      servicios:lista
+    };
+    fichaRenderServicePicker();
   }
 
   function fichaCreateModal(){
@@ -5424,6 +5481,16 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .ficha-title{font-family:var(--ff);font-weight:800;font-size:18px}
       .ficha-sub{font-size:12px;color:var(--txt2);margin-top:3px}
       .ficha-x{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--txt);font-size:18px}
+      .ficha-services{margin:0 0 14px;padding:12px;border:1px solid var(--line);border-radius:17px;background:color-mix(in srgb,var(--surface) 82%,var(--info) 18%)}
+      .ficha-services-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px;font-size:13px;font-weight:900}
+      .ficha-services-head span{padding:5px 9px;border-radius:999px;background:rgba(47,155,224,.16);color:var(--info);font-size:11px;white-space:nowrap}
+      .ficha-services-help{font-size:11px;color:var(--muted);line-height:1.3;margin:8px 2px 0}
+      .ficha-services-list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .ficha-service-tab{min-width:0;display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px;border:1px solid var(--line);border-radius:13px;background:var(--card);color:var(--txt);text-align:left;cursor:pointer}
+      .ficha-service-tab.active{border-color:#25d366;background:rgba(37,211,102,.12);box-shadow:0 0 0 2px rgba(37,211,102,.12)}
+      .ficha-service-icon{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--surface);font-size:18px}
+      .ficha-service-copy{min-width:0}.ficha-service-copy b,.ficha-service-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ficha-service-copy b{font-size:12px}.ficha-service-copy small{margin-top:3px;color:var(--muted);font-size:10px}
+      .ficha-service-state{font-size:10px;font-weight:900;color:var(--info)}.ficha-service-tab.active .ficha-service-state{color:#25a956}
       .ficha-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
       .ficha-field{display:block;margin-bottom:10px}
       .ficha-field span{display:block;font-size:12px;color:var(--txt2);font-weight:700;margin:0 0 5px 2px}
@@ -5448,6 +5515,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         .ficha-sheet{max-height:calc(100dvh - 18px);padding:14px;border-radius:21px}
         .ficha-head{top:-14px;margin:-14px -14px 12px;padding:14px 14px 11px}
         .ficha-title{font-size:17px}.ficha-sub{font-size:11px;line-height:1.3}
+        .ficha-services-list{grid-template-columns:1fr}
         .ficha-grid{grid-template-columns:1fr}.ficha-field{margin-bottom:8px}
         .ficha-input,.ficha-select,.ficha-text{padding:11px 12px}
         .ficha-preview{min-height:155px;max-height:220px}
@@ -5466,6 +5534,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
           <div><div class="ficha-title">✅ CRM + ficha WhatsApp</div><div class="ficha-sub">Actualiza directamente el CRM que lee el bot de Telegram y prepara la ficha para su grupo de respaldo.</div></div>
           <button class="ficha-x" id="fichaClose" type="button">✕</button>
         </div>
+        <section class="ficha-services" id="fichaServiciosBox" style="display:none">
+          <div class="ficha-services-head"><b>📚 Fichas de servicios del cliente</b><span id="fichaServiciosCount">0 fichas</span></div>
+          <div class="ficha-services-list" id="fichaServiciosList"></div>
+          <div class="ficha-services-help">Seleccione una ficha para ver sus propios datos. Si edita algo, guarde antes de cambiar a otra.</div>
+        </section>
         <div class="ficha-grid">
           <label class="ficha-field"><span>Cliente / perfil</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre del cliente"></label>
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
@@ -5536,10 +5609,16 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     // de otra pantalla y por eso la ficha salía repetida al crear una cuenta nueva).
     const forceBlank = !!(opts && opts.blank);
     const grupo = forceBlank ? {} : (g || cobroActual || null);
-    const serv=(grupo&&grupo.servicios&&grupo.servicios[0]) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil}:null);
+    fichaGrupoActual=grupo||{};
+    fichaServiciosActuales=forceBlank?[]:fichaServiciosCompletos(grupo||{});
+    const serv=fichaServiciosActuales[0] || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
+    fichaServicioPosActual=serv?0:-1;
+    fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
+    fichaServicioOriginalActual=serv?{plataforma:serv.plataformaRaw||serv.plataforma||"",correo:serv.correo||""}:null;
     fichaResetButtons();
     fichaPrefillFromService(grupo||{},serv||{plataformaRaw:"netflix"});
+    fichaRenderServicePicker();
     document.body.classList.add("ficha-modal-open");
     fichaQ("fichaModal").style.display="flex";
     const sheet=fichaQ("fichaModal").querySelector(".ficha-sheet");
@@ -6679,7 +6758,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   <div class="cobro-sheet">
     <div class="cobro-head">
       <div>
-        <div class="cobro-title">Mensaje de cobro</div>
+        <div class="cobro-title">💬 Mensaje de renovación</div>
         <div class="cobro-sub" id="cobroCliente">—</div>
       </div>
       <button class="cobro-x" id="cobroClose">✕</button>
@@ -6690,8 +6769,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       <textarea id="cobroText" class="cobro-text" rows="7"></textarea>
     </details>
     <div class="cobro-actions">
-      <button class="cobro-btn ghost" id="cobroVariar">🔄 Otro mensaje</button>
-      <button class="cobro-btn ghost" id="cobroIA">✨ Con IA</button>
+      <button class="cobro-btn ghost" id="cobroVariar">🎨 Otro estilo</button>
+      <button class="cobro-btn ghost" id="cobroIA">✨ Mensaje IA</button>
     </div>
     <div class="cobro-actions">
       <button class="cobro-btn ghost" id="cobroCopy">📋 Copiar</button>
@@ -10369,6 +10448,22 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     white-space:normal;
   }
   #cobroModal .cobro-preview strong{color:var(--txt);font-weight:900}
+  #cobroModal .cobro-preview[data-tema]{
+    --cobro-accent:#4dabf7;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--cobro-accent) 16%,var(--surface)),var(--surface));
+    border-color:color-mix(in srgb,var(--cobro-accent) 48%,var(--line));
+    box-shadow:inset 5px 0 0 var(--cobro-accent),0 9px 24px rgba(0,0,0,.08);
+    transition:background .2s ease,border-color .2s ease,box-shadow .2s ease;
+  }
+  #cobroModal .cobro-preview[data-tema] strong{color:color-mix(in srgb,var(--cobro-accent) 72%,var(--txt));font-weight:900}
+  #cobroModal .cobro-preview[data-tema="oceano"]{--cobro-accent:#22a6f2}
+  #cobroModal .cobro-preview[data-tema="bosque"]{--cobro-accent:#25b96b}
+  #cobroModal .cobro-preview[data-tema="sol"]{--cobro-accent:#f2a51a}
+  #cobroModal .cobro-preview[data-tema="uva"]{--cobro-accent:#8b67e8}
+  #cobroModal .cobro-preview[data-tema="coral"]{--cobro-accent:#ef6b5b}
+  #cobroModal .cobro-preview[data-tema="cielo"]{--cobro-accent:#39b9ce}
+  #cobroModal .cobro-preview[data-tema="rosa"]{--cobro-accent:#dc62a4}
+  #cobroModal .cobro-preview[data-tema="lima"]{--cobro-accent:#75b82d}
   #cobroModal .cobro-edit-box{margin:10px 0 2px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
   #cobroModal .cobro-edit-box>summary{padding:10px 13px;color:var(--txt2);font-size:12px;font-weight:900;cursor:pointer;list-style:none}
   #cobroModal .cobro-edit-box>summary::-webkit-details-marker{display:none}
