@@ -4,6 +4,7 @@
 // Requiere variables: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -564,6 +565,7 @@ async function finalizarRespaldoExcel(db, body) {
    ============================================================ */
 const CONTROL_ARCHIVOS_COL = "control_maestro_archivos";
 const CONTROL_CONFIG_COL = "control_maestro_config";
+const CONTROL_REVISIONES_COL = "control_maestro_revisiones";
 const CONTROL_CONFIG_DOC = "principal";
 const CONTROL_CHUNK_SIZE = 450000;
 const CONTROL_MAX_BASE64 = 20 * 1024 * 1024;
@@ -604,6 +606,77 @@ function controlArchivoMeta(id, x) {
     metricas: d.metricas || {},
     listo: d.estado === "listo"
   };
+}
+
+function controlRevisionMeta(id, x) {
+  const d = x || {};
+  return {
+    id,
+    accountKey: String(d.accountKey || ""),
+    accountId: String(d.accountId || ""),
+    plataforma: String(d.plataforma || ""),
+    correo: String(d.correo || ""),
+    resultado: d.resultado === "incidencia" ? "incidencia" : "correcta",
+    nota: String(d.nota || "").slice(0, 500),
+    clientesEsperados: Math.max(0, Number(d.clientesEsperados) || 0),
+    diferencias: Math.max(0, Number(d.diferencias) || 0),
+    revisadoAt: String(d.revisadoAt || ""),
+    revisadoPor: String(d.revisadoPor || "")
+  };
+}
+
+async function controlListarRevisiones(db) {
+  try {
+    const snap = await db.collection(CONTROL_REVISIONES_COL).limit(1000).get();
+    return snap.docs.map((d) => controlRevisionMeta(d.id, d.data()));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function controlGuardarRevisionCuenta(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const plataforma = String(body.plataforma || "").toLowerCase().trim().slice(0, 80);
+  const correo = String(body.correo || "").toLowerCase().trim().slice(0, 220);
+  if (!plataforma || !correo) return { status: 400, json: { ok: false, error: "La cuenta necesita plataforma y correo para guardar su revisión." } };
+  const accountKey = `${plataforma}|${correo}`;
+  const id = crypto.createHash("sha256").update(accountKey).digest("hex");
+  const resultado = body.resultado === "incidencia" ? "incidencia" : "correcta";
+  const nota = String(body.nota || "").trim().slice(0, 500);
+  const now = new Date().toISOString();
+  const revisadoPor = String(body.usuario || body.editor || "sublicuentas").trim();
+  const data = {
+    version: "control-maestro-revision-v1",
+    accountKey,
+    accountId: String(body.accountId || "").trim().slice(0, 220),
+    plataforma,
+    correo,
+    resultado,
+    nota,
+    clientesEsperados: Math.max(0, Math.round(Number(body.clientesEsperados) || 0)),
+    diferencias: Math.max(0, Math.round(Number(body.diferencias) || 0)),
+    revisadoAt: now,
+    revisadoPor,
+    updatedAt: now,
+    owner: "sublicuentas",
+    privado: true,
+    totalRevisiones: admin.firestore.FieldValue.increment(1)
+  };
+  await db.collection(CONTROL_REVISIONES_COL).doc(id).set(data, { merge: true });
+  await db.collection("auditoria_eventos").add({
+    tipo: "control_maestro_cuenta_revisada",
+    cuentaRevisionId: id,
+    plataforma,
+    correo,
+    resultado,
+    nota,
+    clientesEsperados: data.clientesEsperados,
+    diferencias: data.diferencias,
+    usuario: revisadoPor,
+    rol: "sublicuentas",
+    createdAt: now
+  });
+  return { status: 200, json: { ok: true, revision: controlRevisionMeta(id, data) } };
 }
 
 function controlMetricas(raw) {
@@ -739,8 +812,9 @@ async function controlEstado(db, body) {
     .filter((x) => x.clase === "respaldo" && x.listo)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, 20);
+  const revisiones = await controlListarRevisiones(db);
 
-  return { status: 200, json: { ok: true, plantilla, respaldos, config: { plantillaId: cfg.plantillaId || "", ultimoRespaldoId: cfg.ultimoRespaldoId || "" }, dailyLimit: CONTROL_BACKUPS_DIA } };
+  return { status: 200, json: { ok: true, plantilla, respaldos, revisiones, config: { plantillaId: cfg.plantillaId || "", ultimoRespaldoId: cfg.ultimoRespaldoId || "" }, dailyLimit: CONTROL_BACKUPS_DIA } };
 }
 
 async function controlLeerArchivo(db, body) {
@@ -1276,7 +1350,7 @@ async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-20260804", msg: "api/importar activo", acciones: ["control_estado","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
+  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-cuentas-20260804", msg: "api/importar activo", acciones: ["control_estado","control_guardar_revision_cuenta","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
 
   try {
@@ -1292,6 +1366,10 @@ async function handler(req, res) {
 
     if (accion === "control_estado") {
       const out = await controlEstado(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_guardar_revision_cuenta") {
+      const out = await controlGuardarRevisionCuenta(db, body);
       return res.status(out.status).json(out.json);
     }
     if (accion === "control_guardar_plantilla") {
