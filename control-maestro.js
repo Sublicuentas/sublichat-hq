@@ -2,17 +2,18 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-CUENTAS-20260804-2';
+  const BUILD='CONTROL-MAESTRO-CONCILIACION-TOTAL-20260804-3';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
-    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],revealedAccounts:new Set()
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:220,revealedAccounts:new Set()
   };
 
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const norm=(v)=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9@.+\s_-]/g,' ').replace(/\s+/g,' ').trim();
   const phone=(v)=>String(v??'').replace(/\D/g,'').replace(/^504(?=\d{8}$)/,'').slice(-8);
-  const email=(v)=>String(v??'').trim().toLowerCase();
+  const email=(v)=>String(v??'').trim().toLowerCase().replace(/\s+/g,'');
+  const excelEmail=(v)=>{const x=email(v);return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)?x:'';};
   const fileDate=()=>{
     const d=new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
@@ -125,7 +126,7 @@
 
   function platformsForSheet(name){
     const n=norm(name);
-    if(n.includes('extra'))return ['netflix','vipnetflix'];
+    if(n.includes('extra'))return ['vipnetflix','netflix'];
     if(n.includes('netflix vip'))return ['vipnetflix'];
     if(n.includes('netflix'))return ['netflix'];
     if(n.includes('disney'))return ['disneyp','disneys','disney'];
@@ -181,7 +182,8 @@
   const AUDIT_PLATFORM_LABELS={
     netflix:'Netflix',vipnetflix:'VIP Netflix',disney:'Disney+',hbomax:'HBO Max',primevideo:'Prime Video',
     paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
-    spotify:'Spotify',youtube:'YouTube',canva:'Canva',magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV'
+    spotify:'Spotify',youtube:'YouTube',canva:'Canva',magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV',
+    vixmix:'ViX / Viki / Universal+'
   };
 
   function auditFamily(v){
@@ -207,8 +209,26 @@
     return d<today;
   }
 
-  function buildAccountAudit(src){
+  function excelAuditFamily(sheet,row,item,src){
+    if(item?.service)return auditFamily(item.service._plat||item.service.plataforma||item.service.plataformaLabel);
+    const allowed=[...new Set((sheet.platforms||[]).map(auditFamily))];
+    const mail=excelEmail(row.accountEmail);
+    if(mail){
+      const found=new Set();
+      (src.servicios||[]).forEach((s)=>{if(email(s.correo)===mail&&allowed.includes(auditFamily(s.plataforma||s.plataformaLabel)))found.add(auditFamily(s.plataforma||s.plataformaLabel));});
+      (src.cuentas||[]).forEach((a)=>{if(email(a.correo)===mail&&allowed.includes(auditFamily(a.plataforma)))found.add(auditFamily(a.plataforma));});
+      if(found.size===1)return [...found][0];
+    }
+    const name=norm(sheet.ws?.name||row.sheet);
+    if(name.includes('extra')||name.includes('netflix vip'))return 'vipnetflix';
+    if(name.includes('netflix belice'))return 'netflix';
+    if(name.includes('vix')&&name.includes('viki'))return 'vixmix';
+    return allowed[0]||'sin_plataforma';
+  }
+
+  function buildAccountAudit(src,analysis){
     const groups=new Map();
+    const hasExcelAudit=!!analysis?.sheets?.length;
     const allServices=(src.servicios||[]).map((s,i)=>({
       ...s,_auditIndex:i,_family:auditFamily(s.plataforma||s.plataformaLabel),_email:email(s.correo),
       _name:norm(s.nombre),_phone:phone(s.telefono),_date:dateKey(s.fecha)
@@ -225,7 +245,7 @@
     const ensureGroup=(family,mail,key)=>{
       if(!groups.has(key))groups.set(key,{
         key,family,email:mail,platform:auditPlatformLabel(family),rawPlatforms:new Set(),inventoryAccounts:[],accountIds:[],
-        clave:'',capacidad:0,disponibles:0,estado:'',invClients:[],services:[]
+        clave:'',capacidad:0,disponibles:0,estado:'',invClients:[],services:[],excelRows:[],excelSheets:new Set()
       });
       return groups.get(key);
     };
@@ -247,16 +267,48 @@
       if(!g.clave&&s.clave!=null)g.clave=String(s.clave);
     });
 
+    const itemByRow=new Map((analysis?.items||[]).filter((x)=>x.row).map((x)=>[x.row,x]));
+    const allExcelRows=[];
+    (analysis?.sheets||[]).forEach((sheet)=>{
+      (sheet.rows||[]).filter((r)=>r.name||r.tel).forEach((row)=>{
+        const item=itemByRow.get(row)||null;
+        const family=excelAuditFamily(sheet,row,item,src);
+        const mail=excelEmail(row.accountEmail);
+        const entry={
+          key:`${row.sheet}|${row.row}`,sheet:row.sheet,row:row.row,family,email:mail,
+          name:String(row.name||'').trim(),phone:phone(row.tel),profile:String(row.profile||'').trim(),pin:String(row.pin||'').trim(),
+          date:dateKey(row.expiry),password:String(row.accountPassword||'').trim(),item
+        };
+        allExcelRows.push(entry);
+        const key=mail?`${family}|${mail}`:`${family}|__excel_${norm(row.sheet)}_${row.row}`;
+        const g=ensureGroup(family,mail,key);g.rawPlatforms.add(family);g.excelRows.push(entry);g.excelSheets.add(row.sheet);
+        if(!g.clave&&entry.password)g.clave=entry.password;
+      });
+    });
+
     const revisions=new Map((state.meta?.revisiones||[]).map((r)=>[String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`),r]));
     const accounts=[];
     groups.forEach((g)=>{
-      const used=new Set(),roster=[];
+      const used=new Set(),usedExcel=new Set(),roster=[];
+      const takeExcel=(target)=>{
+        const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(target?.profile);
+        let best=-1,bestScore=0;
+        g.excelRows.forEach((x,i)=>{
+          if(usedExcel.has(i))return;
+          let score=0;
+          if(targetName&&norm(x.name)===targetName)score+=120;
+          if(targetPhone&&x.phone===targetPhone)score+=105;
+          if(targetProfile&&norm(x.profile)===targetProfile)score+=32;
+          if(score>bestScore){best=i;bestScore=score;}
+        });
+        if(best<0)return null;usedExcel.add(best);return g.excelRows[best];
+      };
       g.invClients.forEach((p,invIndex)=>{
         const name=norm(p.nombre),duplicate=(assignmentCounts.get(`${g.family}|${name}`)||0)>1;
         const matchIndex=g.services.findIndex((s,i)=>!used.has(i)&&name&&s._name===name);
-        let service=null,status='solo_bodega',level='bad',detail='Está asignado en Bodega, pero no tiene servicio activo en Clientes.';
+        let service=null,status='solo_bodega',level='bad',detail=hasExcelAudit?'Está asignado en Bodega, pero no tiene servicio activo en Clientes ni fila coincidente en Excel.':'Está asignado en Bodega, pero no tiene servicio activo en Clientes.';
         if(matchIndex>=0){
-          used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail='Coincide entre Clientes y Bodega.';
+          used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail=hasExcelAudit?'Coincide entre Clientes, Bodega y Excel.':'Coincide entre Clientes y Bodega.';
           if(duplicate){status='duplicado';level='bad';detail='El cliente aparece asignado en más de una cuenta de esta plataforma.';}
           else if(isExpired(service.fecha)){status='vencido';level='warn';detail='El cliente coincide, pero su fecha está vencida.';}
         }else{
@@ -264,19 +316,31 @@
           if(duplicate){status='duplicado';detail='La asignación está repetida en Bodega.';}
           else if(other){status='otra_cuenta';detail=`El servicio activo está registrado en ${other._email||'otra cuenta'}.`;service=other;}
         }
-        roster.push({inv:p,service,status,level,detail,name:p.nombre||service?.nombre||'Sin nombre',phone:service?._phone||'',profile:service?.perfil||p.slot||'',pin:service?.pinPerfil||p.pin||'',date:service?._date||'',actualAccount:service?._email||'',invIndex});
+        const excel=takeExcel({name:p.nombre||service?.nombre,phone:service?._phone,profile:service?.perfil||p.slot});
+        if(status==='ok'&&hasExcelAudit&&!excel){status='falta_excel';level='warn';detail='Coincide entre Clientes y Bodega, pero no aparece en el Excel cargado.';}
+        else if(!service&&excel){status='excel_bodega';level='warn';detail='Aparece en Excel y Bodega, pero no tiene servicio activo en Clientes.';}
+        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:service?.perfil||p.slot||excel?.profile||'',pin:service?.pinPerfil||p.pin||excel?.pin||'',date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex});
       });
       g.services.forEach((service,i)=>{
         if(used.has(i))return;
+        const excel=takeExcel({name:service.nombre,phone:service._phone,profile:service.perfil});
         const expired=isExpired(service.fecha);
-        roster.push({inv:null,service,status:expired?'vencido_sin_bodega':'falta_bodega',level:expired?'bad':'warn',detail:expired?'Servicio vencido y no asignado en Bodega.':'Cliente activo en esta cuenta, pero falta en la lista de Bodega.',name:service.nombre||'Sin nombre',phone:service._phone||'',profile:service.perfil||'',pin:service.pinPerfil||'',date:service._date||'',actualAccount:service._email||''});
+        let status=expired?'vencido_sin_bodega':'falta_bodega';
+        let detail=expired?'Servicio vencido y no asignado en Bodega.':(excel?'Coincide entre Clientes y Excel, pero falta en Bodega.':(hasExcelAudit?'Cliente activo, pero falta tanto en Bodega como en el Excel cargado.':'Cliente activo en esta cuenta, pero falta en Bodega.'));
+        if(hasExcelAudit&&!excel&&!expired)status='falta_excel_bodega';
+        roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',phone:service._phone||excel?.phone||'',profile:service.perfil||excel?.profile||'',pin:service.pinPerfil||excel?.pin||'',date:service._date||excel?.date||'',actualAccount:service._email||''});
+      });
+      g.excelRows.forEach((excel,i)=>{
+        if(usedExcel.has(i))return;
+        const expired=isExpired(excel.date);
+        roster.push({inv:null,service:null,excel,status:expired?'solo_excel_vencido':'solo_excel',level:expired?'bad':'warn',detail:expired?'Permanece en el Excel con fecha vencida, pero ya no está en Clientes ni Bodega.':'Está en el Excel, pero no aparece en Clientes ni en Bodega.',name:excel.name||`Sin nombre · fila ${excel.row}`,phone:excel.phone||'',profile:excel.profile||'',pin:excel.pin||'',date:excel.date||'',actualAccount:''});
       });
 
       const missingInventory=!g.inventoryAccounts.length;
       const inventoryPlatformCounts={};
       g.inventoryAccounts.forEach((a)=>{const p=canonPlatform(a.plataforma);inventoryPlatformCounts[p]=(inventoryPlatformCounts[p]||0)+1;});
       const duplicateDocs=Object.values(inventoryPlatformCounts).some((n)=>n>1);
-      const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length)>g.capacidad;
+      const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length,g.excelRows.length)>g.capacidad;
       const rosterIssues=roster.filter((r)=>r.status!=='ok').length;
       const revisionKey=g.email?`${g.family}|${g.email}`:'';
       const revision=revisionKey?revisions.get(revisionKey)||null:null;
@@ -285,22 +349,23 @@
       const internalIssueCount=rosterIssues+Number(missingInventory)+Number(duplicateDocs)+Number(overCapacity)+Number(!g.email)+Number(missingPassword);
       const issueCount=internalIssueCount+Number(recordedIncident);
       const reviewAge=revision?daysSince(revision.revisadoAt):99999;
-      const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==g.services.length||Number(revision.diferencias)!==internalIssueCount);
+      const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==roster.length||Number(revision.diferencias)!==internalIssueCount);
       const reviewDue=!revision||reviewAge>=15||reviewDataChanged;
-      const occupied=g.inventoryAccounts.length?g.invClients.length:g.services.length;
-      const capacity=g.capacidad||occupied;
+      const occupied=g.inventoryAccounts.length?g.invClients.length:(g.services.length||g.excelRows.length);
+      const maxExcelProfile=Math.max(0,...g.excelRows.map((x)=>Number(x.profile)||0));
+      const capacity=g.capacidad||Math.max(occupied,maxExcelProfile);
       accounts.push({
-        ...g,rawPlatforms:[...g.rawPlatforms],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
+        ...g,rawPlatforms:[...g.rawPlatforms],excelSheets:[...g.excelSheets],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
         missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0
       });
     });
 
     accounts.sort((a,b)=>a.platform.localeCompare(b.platform)||Number(b.issueCount>0)-Number(a.issueCount>0)||String(a.email).localeCompare(String(b.email)));
     const clients=new Set(allServices.map(s=>s.clienteId||`${s._name}|${s._phone}`));
-    const platforms={};accounts.forEach(a=>{platforms[a.family]=(platforms[a.family]||0)+1;});
+    const platforms={},platformRows={};accounts.forEach(a=>{platforms[a.family]=(platforms[a.family]||0)+1;platformRows[a.family]=(platformRows[a.family]||0)+a.roster.length;});
     return {
-      accounts,platforms,
-      metrics:{clientes:clients.size,servicios:allServices.length,cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length}
+      accounts,platforms,platformRows,
+      metrics:{clientes:clients.size,servicios:allServices.length,filasExcel:allExcelRows.length,registros:accounts.reduce((n,a)=>n+a.roster.length,0),cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length}
     };
   }
 
@@ -312,17 +377,19 @@
       const platforms=platformsForSheet(ws.name);if(!platforms.length)return;
       const h=findHeader(ws);if(!h)return;
       const rows=[];
-      let currentAccount='';
+      let currentAccount='',currentPassword='';
       const end=Math.min(Math.max(ws.rowCount||h.row+1,h.row+1),2200);
       for(let r=h.row+1;r<=end;r++){
         const row=ws.getRow(r);
-        const directEmail=h.email?email(valueText(row.getCell(h.email).value)):'';
-        if(directEmail)currentAccount=directEmail;
+        const directEmail=h.email?excelEmail(valueText(row.getCell(h.email).value)):'';
+        const directPassword=h.password?String(valueText(row.getCell(h.password).value)||'').trim():'';
+        if(directEmail){currentAccount=directEmail;currentPassword=directPassword;}
         const name=h.name?String(valueText(row.getCell(h.name).value)||'').trim():'';
         const tel=h.phone?phone(valueText(row.getCell(h.phone).value)):'';
         const profile=h.profile?String(valueText(row.getCell(h.profile).value)||'').trim():'';
         const record={
           ws,sheet:ws.name,row:r,header:h,platforms,accountEmail:directEmail||currentAccount,directEmail,
+          accountPassword:directPassword||currentPassword,
           name,tel,profile,pin:h.pin?String(valueText(row.getCell(h.pin).value)||'').trim():'',
           price:h.price?Number(valueText(row.getCell(h.price).value)||0)||0:0,
           expiry:h.expiry?dateKey(row.getCell(h.expiry).value):'',
@@ -409,7 +476,7 @@
     const raw=await loadTemplateBase64(force);
     const workbook=new ExcelJS.Workbook();
     await workbook.xlsx.load(base64ToBuffer(raw));
-    state.analysis=parseWorkbook(workbook,src);
+    state.analysis=parseWorkbook(workbook,src);state.accountAudit=null;
     return state.analysis;
   }
 
@@ -437,6 +504,11 @@
     solo_bodega:{label:'Solo en Bodega',icon:'📦',tone:'bad'},
     otra_cuenta:{label:'Está en otra cuenta',icon:'↔️',tone:'bad'},
     falta_bodega:{label:'Falta en Bodega',icon:'⚠️',tone:'warn'},
+    falta_excel:{label:'Falta en Excel',icon:'📘',tone:'warn'},
+    excel_bodega:{label:'Excel + Bodega',icon:'🔄',tone:'warn'},
+    falta_excel_bodega:{label:'Solo en Clientes',icon:'⚠️',tone:'warn'},
+    solo_excel:{label:'Solo en Excel',icon:'📘',tone:'warn'},
+    solo_excel_vencido:{label:'Excel vencido',icon:'🗑️',tone:'bad'},
     vencido_sin_bodega:{label:'Vencido y sin Bodega',icon:'🗑️',tone:'bad'}
   };
 
@@ -476,9 +548,11 @@
 
   function rosterRowHtml(r,accountIndex,rowIndex){
     const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',icon:'⚠️',tone:'bad'};
-    const profile=r.profile?`Perfil ${r.profile}`:'Perfil sin indicar';
+    const rawProfile=String(r.profile||'').trim();
+    const profile=rawProfile?(/^perfil\b/i.test(rawProfile)?rawProfile:`Perfil ${rawProfile}`):'Perfil sin indicar';
+    const sources=[r.excel?`📘 Excel · ${r.excel.sheet} fila ${r.excel.row}`:'',r.service?'👤 Clientes':'',r.inv?'📦 Bodega':''].filter(Boolean);
     return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
-      <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
+      <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small><div class="cm-roster-sources">${sources.map((x)=>`<i>${esc(x)}</i>`).join('')}</div></div>
       <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}</small></button>
       <div class="cm-roster-date"><b>${esc(dateLabel(r.date))}</b><small>Vencimiento</small></div>
       <div class="cm-roster-result"><span class="cm-roster-status ${s.tone}">${s.icon} ${esc(s.label)}</span><small>${esc(r.detail||'')}</small></div>
@@ -495,7 +569,7 @@
     const roster=a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join('');
     return `<article class="cm-account-card ${a.issueCount?'has-issues':'is-clean'}">
       <div class="cm-account-head">
-        <div><span class="cm-platform cm-account-platform">${esc(a.platform)}</span><h4>${esc(a.email||'CUENTA SIN CORREO')}</h4><small>${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} activo${a.services.length===1?'':'s'}</small></div>
+        <div><span class="cm-platform cm-account-platform">${esc(a.platform)}</span><h4>${esc(a.email||'CUENTA SIN CORREO')}</h4><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} activo${a.services.length===1?'':'s'}</small></div>
         <span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span>
       </div>
       <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
@@ -510,7 +584,7 @@
       <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
       ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
       <div class="cm-account-review">
-        <div><b>Revisión real del proveedor</b><small>Entre a la cuenta, compruebe que no haya perfiles de más y después marque el resultado. Se guarda en Firebase.</small></div>
+        <div><b>Revisión real del proveedor</b><small>La lista reúne Excel + Clientes + Bodega. Entre a la cuenta, compruebe que no haya perfiles de más y después marque el resultado.</small></div>
         <div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${i}">✅ Revisada: coincide</button><button class="cm-btn warn" data-cm-review-issue="${i}">⚠️ Registrar incidencia</button></div>
       </div>
     </article>`;
@@ -519,17 +593,17 @@
   function accountAuditHtml(){
     const audit=state.accountAudit;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
-    const platforms=[['all','Todas',audit.accounts.length],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n])];
+    const platforms=[['all','Todas',audit.accounts.length,audit.metrics.registros],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n,audit.platformRows[k]||0])];
     const statuses=[['all','Todas'],['problems','Con diferencias'],['due','Toca revisar (15 días)'],['incident','Incidencias'],['missing','Fuera de Bodega'],['clean','Base interna correcta']];
-    const all=filteredAccounts();state.accountVisible=all.slice(0,150);
+    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||220));
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📧 Cuentas y perfiles por correo</h3><p>Esta es su mesa de revisión: correo, clave y los clientes que deberían existir dentro de cada cuenta.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
       <div class="cm-audit-callout"><b>Cómo usarla:</b> elija Disney+, abra cada correo en Disney y compare los perfiles reales con la lista de Sublichat. Si coincide, márquela revisada; si encuentra un perfil adicional o faltante, registre la incidencia.</div>
-      <div class="cm-platform-filters">${platforms.map(([k,l,n])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n}</span></button>`).join('')}</div>
+      <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} filas</span></button>`).join('')}</div>
       <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
       <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas encontradas.</div>
       <div class="cm-account-grid">${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
-      ${all.length>state.accountVisible.length?`<div class="cm-hint">Mostrando las primeras 150 de ${all.length}. Use plataforma o búsqueda para reducir el listado.</div>`:''}
+      ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}
     </section>`;
   }
 
@@ -538,6 +612,7 @@
     return `<div class="cm-kpis">
       <div class="cm-kpi"><b>${m.clientes??'—'}</b><span>Clientes actuales</span></div>
       <div class="cm-kpi"><b>${m.servicios??'—'}</b><span>Servicios en Sublichat</span></div>
+      <div class="cm-kpi"><b>${m.filasExcel??'—'}</b><span>Filas recuperadas del Excel</span></div>
       <div class="cm-kpi"><b>${m.cuentas??'—'}</b><span>Correos/cuentas agrupados</span></div>
       <div class="cm-kpi ${m.conProblemas?'bad':'good'}"><b>${m.conProblemas??'—'}</b><span>Cuentas con diferencias</span></div>
       <div class="cm-kpi ${m.pendientes15?'warn':'good'}"><b>${m.pendientes15??'—'}</b><span>Revisión quincenal pendiente</span></div>
@@ -594,9 +669,10 @@
     const host=root();if(!host)return;
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
-    state.accountAudit=buildAccountAudit(source());
+    if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
+    const expanded=!!document.fullscreenElement||document.getElementById('screen-control-cuentas')?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">🗃️</div><div><h2>Control Maestro</h2><p>Revisión por correo: claves, cupos y clientes/perfiles esperados con información actual de Firebase.</p></div></div><span class="cm-private">🔒 Solo Sublicuentas</span></header>
+      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">🗃️</div><div><h2>Control Maestro</h2><p>Conciliación completa por correo entre Excel, Clientes y Bodega.</p></div></div><div class="cm-hero-actions"><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
@@ -606,9 +682,9 @@
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;render();});
-    const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=state.accountPlatform==='all'?220:5000;render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1200;render();});
+    const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;state.accountLimit=5000;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
     host.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     host.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
     host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
@@ -667,7 +743,7 @@
     }
     state.busy=true;setStatus(result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…','');
     try{
-      await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.services.length,diferencias:a.internalIssueCount});
+      await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
       await refreshMeta();
       setStatus(result==='incidencia'?'⚠️ Incidencia guardada. Esta cuenta seguirá marcada hasta que la revise de nuevo.':'✅ Revisión guardada. Volverá a aparecer como pendiente dentro de 15 días.','good');
     }catch(e){setStatus('⚠️ '+(e.message||'No se pudo guardar la revisión.'),'error');}
@@ -676,7 +752,7 @@
 
   async function refreshMeta(){
     state.loading=true;render();
-    try{state.meta=await api({accion:'control_estado'});state.status='';state.statusType='';}
+    try{state.meta=await api({accion:'control_estado'});state.accountAudit=null;state.status='';state.statusType='';}
     catch(e){state.status=e.message||'No se pudo cargar Control Maestro.';state.statusType='error';}
     finally{state.loading=false;render();}
   }
@@ -691,7 +767,7 @@
       const test=new ExcelJS.Workbook();await test.xlsx.load(buffer);
       if(!test.worksheets.length)throw new Error('El Excel no contiene hojas.');
       const j=await api({accion:'control_guardar_plantilla',filename:file.name,size:file.size,mime:file.type,base64:bufferToBase64(buffer),motivo:state.meta?.plantilla?'reemplazo_plantilla':'carga_inicial'});
-      state.templateBase64=bufferToBase64(buffer);state.analysis=null;
+      state.templateBase64=bufferToBase64(buffer);state.analysis=null;state.accountAudit=null;
       await refreshMeta();
       setStatus(`✅ Plantilla guardada: ${j.archivo?.filename||file.name}. Ahora revisando clientes…`,'good');
       setTimeout(()=>runReview(false),80);
@@ -849,7 +925,7 @@
         setStatus(finalMessage,'good');
       }else setStatus('✅ Excel generado correctamente.','good');
       if(options.download)saveBuffer(out.buffer,out.filename);
-      state.analysis=out.analysis;render();
+      state.analysis=out.analysis;state.accountAudit=null;render();
       return true;
     }catch(e){setStatus('⚠️ '+(e.message||'No se pudo generar el Excel.'),'error');return false;}
     finally{state.busy=false;render();}
@@ -865,7 +941,7 @@
   async function restoreStored(id){
     if(!id||!confirm('¿Usar este respaldo como nueva plantilla base? La plantilla actual no se elimina y seguirá en el historial.'))return;
     state.busy=true;setStatus('Restaurando plantilla…','');
-    try{await api({accion:'control_restaurar_plantilla',id});state.templateBase64='';state.analysis=null;await refreshMeta();setStatus('✅ Respaldo restaurado como plantilla.','good');setTimeout(()=>runReview(true),80);}
+    try{await api({accion:'control_restaurar_plantilla',id});state.templateBase64='';state.analysis=null;state.accountAudit=null;await refreshMeta();setStatus('✅ Respaldo restaurado como plantilla.','good');setTimeout(()=>runReview(true),80);}
     catch(e){setStatus('⚠️ '+(e.message||'No se pudo restaurar.'),'error');}
     finally{state.busy=false;render();}
   }
@@ -880,12 +956,24 @@
     setTimeout(()=>{const q=document.getElementById('invQ');if(q){q.value=item.inventoryAccount||item.liveAccount||item.excelAccount||item.platform||'';q.dispatchEvent(new Event('input',{bubbles:true}));q.focus();}},180);
   }
 
+  async function toggleFullscreen(){
+    const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
+    try{
+      if(document.fullscreenElement){await document.exitFullscreen();screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');}
+      else if(screen.requestFullscreen){await screen.requestFullscreen();}
+      else{screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
+    }catch(_){screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
+    render();
+  }
+
   async function handleAction(action){
+    if(action==='toggle-fullscreen')return toggleFullscreen();
+    if(action==='show-all-accounts'){state.accountLimit=Number.MAX_SAFE_INTEGER;render();return;}
     if(action==='review')return runReview(true);
     if(action==='refresh-data'){
       if(typeof window.sublichatControlReload!=='function')return setStatus('No encontré la función para actualizar la base.','error');
       state.busy=true;setStatus('Actualizando clientes e inventario desde la base…','');
-      try{await window.sublichatControlReload();state.analysis=null;setStatus(state.meta?.plantilla?'✅ Base actualizada. Ejecutando cruce con el Excel…':'✅ Base actualizada desde Firebase.','good');}
+      try{await window.sublichatControlReload();state.analysis=null;state.accountAudit=null;setStatus(state.meta?.plantilla?'✅ Base actualizada. Ejecutando cruce con el Excel…':'✅ Base actualizada desde Firebase.','good');}
       catch(e){setStatus('⚠️ '+(e.message||'No se pudo actualizar.'),'error');}
       finally{state.busy=false;render();}
       if(state.meta?.plantilla)return runReview(false);
@@ -911,7 +999,7 @@
   async function boot(){
     if(!isAdmin()||!root())return;
     if(!state.booted){state.booted=true;await refreshMeta();}
-    else render();
+    else{state.accountAudit=null;render();}
     if(state.meta?.plantilla&&!state.analysis&&!state.busy)runReview(false);
   }
 
@@ -920,6 +1008,7 @@
     document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]'))setTimeout(boot,90);},true);
     const observer=new MutationObserver(()=>{if(screenActive()&&!state.loading)boot();});
     const screen=document.getElementById('screen-control-cuentas');if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
+    document.addEventListener('fullscreenchange',()=>{if(screenActive())render();});
     if(screenActive())boot();
   }
 
