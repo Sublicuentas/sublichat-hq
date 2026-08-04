@@ -23,6 +23,32 @@ function getApp() {
   });
 }
 
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ ok: false, error: "Sesión requerida." });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
+function authIdentity(user) {
+  const role = String(user && user.role || "").toLowerCase();
+  const usuario = String(user && (user.usuario || user.uid) || "sublichat").toLowerCase();
+  const adminUser = ["admin", "administrador", "sublicuentas", "owner"].includes(role) ||
+    ["naara", "sublicuentas"].includes(usuario);
+  const canonicalRole = adminUser ? "sublicuentas" :
+    (["finanzas", "relojes"].includes(role) || ["libni", "relojes"].includes(usuario) ? "relojes" :
+      (["auditor", "auditoria", "magdiel"].includes(role) || usuario === "magdiel" ? "magdiel" : role || "usuario"));
+  return { usuario, role: canonicalRole, admin: adminUser };
+}
+
 function isoNow() {
   return new Date().toISOString();
 }
@@ -60,9 +86,16 @@ export default async function handler(req, res) {
 
   try {
     const db = getApp().firestore();
+    const authUser = await requireFirebaseUser(req, res);
+    if (!authUser) return;
+    const identity = authIdentity(authUser);
     const body = req.body || {};
     const accion = cleanText(body.accion || body.tipoAccion);
     const now = isoNow();
+
+    if (["registrar_egreso", "guardar_cierre"].includes(accion) && !identity.admin) {
+      return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas." });
+    }
 
     if (accion === "registrar_cobro") {
       const monto = cleanMoney(body.monto);
@@ -78,9 +111,9 @@ export default async function handler(req, res) {
         plataforma: cleanText(body.plataforma),
         monto,
         metodoPago: cleanText(body.metodoPago || body.metodo || "No especificado"),
-        cobradoPor: cleanText(body.cobradoPor || body.registradoPor),
+        cobradoPor: identity.usuario,
         vendedor: cleanText(body.vendedor),
-        rol: cleanText(body.rol),
+        rol: identity.role,
         fechaPago: cleanText(body.fechaPago) || now.slice(0, 10),
         createdAt: now,
         updatedAt: now
@@ -103,8 +136,8 @@ export default async function handler(req, res) {
         descripcion: cleanText(body.descripcion || motivo),
         monto,
         banco: cleanText(body.banco),
-        registradoPor: cleanText(body.registradoPor),
-        rol: cleanText(body.rol),
+        registradoPor: identity.usuario,
+        rol: identity.role,
         fecha: cleanText(body.fecha) || now.slice(0, 10),
         createdAt: now,
         updatedAt: now
@@ -123,8 +156,8 @@ export default async function handler(req, res) {
         ingresos: cleanMoney(body.ingresos),
         egresos: cleanMoney(body.egresos),
         neto: cleanMoney(body.neto),
-        registradoPor: cleanText(body.registradoPor),
-        rol: cleanText(body.rol),
+        registradoPor: identity.usuario,
+        rol: identity.role,
         nota: cleanText(body.nota),
         createdAt: now,
         updatedAt: now

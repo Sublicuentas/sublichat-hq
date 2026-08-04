@@ -17,6 +17,32 @@ function getApp() {
   return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
 }
 
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ ok: false, error: "Sesión requerida." });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
+function importIdentity(user) {
+  const role = String(user && user.role || "").toLowerCase();
+  const usuario = String(user && (user.usuario || user.uid) || "sublichat").toLowerCase();
+  const canonicalRole = ["admin", "administrador", "sublicuentas", "owner"].includes(role) || ["naara", "sublicuentas"].includes(usuario)
+    ? "sublicuentas"
+    : (["finanzas", "relojes"].includes(role) || ["libni", "relojes"].includes(usuario)
+      ? "relojes"
+      : (["auditor", "auditoria", "magdiel"].includes(role) || usuario === "magdiel" ? "magdiel" : role || usuario));
+  return { usuario, role: canonicalRole };
+}
+
 function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -1026,14 +1052,20 @@ async function secEstado(db) {
 async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-cjs-word-linebreak-backup2dia-20260705", msg: "api/importar activo", acciones: ["sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
 
   try {
     const db = getApp().firestore();
-    const body = req.body || {};
+    const authUser = await requireFirebaseUser(req, res);
+    if (!authUser) return;
+    const identity = importIdentity(authUser);
+    const body = req.body && typeof req.body === "object" ? { ...req.body } : {};
+    body.usuario = identity.usuario;
+    body.editor = identity.usuario;
+    body.rol = identity.role;
     const accion = body.accion || "guardar_respaldo_excel";
 
     if (accion === "iniciar_respaldo_excel") {

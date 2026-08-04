@@ -20,6 +20,28 @@ function getApp() {
   });
 }
 
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) {
+    res.status(401).json({ ok: false, error: 'Sesión requerida.' });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' });
+    return null;
+  }
+}
+
+function isAdminUser(user) {
+  const role = String(user && user.role || '').toLowerCase();
+  const name = String(user && user.usuario || '').toLowerCase();
+  return ['admin', 'administrador', 'sublicuentas', 'owner'].includes(role) ||
+    ['naara', 'sublicuentas'].includes(name);
+}
+
 function clean(v, max = 1000) {
   return String(v == null ? '' : v).replace(/[\u0000-\u001F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
@@ -120,7 +142,7 @@ async function obtenerPerfil(db, body) {
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
   try {
     getApp();
@@ -130,7 +152,14 @@ module.exports = async function handler(req, res) {
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método no permitido.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const authUser = await requireFirebaseUser(req, res);
+    if (!authUser) return;
     if (!clean(body.usuario, 80)) return res.status(400).json({ ok: false, error: 'Falta usuario.' });
+    const requestedUser = normUser(body.usuario);
+    const authenticatedUser = normUser(authUser.usuario || String(authUser.uid || '').replace(/^asesor-/, ''));
+    if (requestedUser !== authenticatedUser && !isAdminUser(authUser)) {
+      return res.status(403).json({ ok: false, error: 'Solo puede consultar o actualizar su propio perfil.' });
+    }
     const accion = clean(body.accion || 'obtener', 30).toLowerCase();
     let out;
     if (accion === 'guardar') out = await guardarPerfil(db, body);

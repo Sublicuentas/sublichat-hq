@@ -19,6 +19,21 @@ function getApp() {
   });
 }
 
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ ok: false, error: "Sesión requerida." });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
 // Suma días a una fecha en formato DD/MM/YYYY y devuelve igual DD/MM/YYYY
 function sumarDias(fechaStr, dias) {
   const [d, m, y] = String(fechaStr).split("/").map(n => parseInt(n, 10));
@@ -346,6 +361,8 @@ export default async function handler(req, res) {
 
   try {
     const db = getApp().firestore();
+    const authUser = await requireFirebaseUser(req, res);
+    if (!authUser) return;
 
     // NUEVO: crear o actualizar cliente + servicio desde el panel de entrega de ficha.
     if (acc === "ficha_upsert") {

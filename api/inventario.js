@@ -16,6 +16,28 @@ function getApp() {
   });
 }
 
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ ok: false, error: "Sesión requerida." });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
+function isAdminUser(user) {
+  const role = String(user && user.role || "").toLowerCase();
+  const name = String(user && user.usuario || "").toLowerCase();
+  return ["admin", "administrador", "sublicuentas", "owner"].includes(role) ||
+    ["naara", "sublicuentas"].includes(name);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(200).json({ ok: true, version: 2, msg: "inventario v2 activo. Usá POST." });
@@ -24,6 +46,11 @@ export default async function handler(req, res) {
 
   try {
     const db = getApp().firestore();
+    const authUser = await requireFirebaseUser(req, res);
+    if (!authUser) return;
+    if (!isAdminUser(authUser)) {
+      return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
+    }
 
     if (accion === "crearCuenta") {
       if (!plataforma) return res.status(200).json({ error: "Falta la plataforma." });
