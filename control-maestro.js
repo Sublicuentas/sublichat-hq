@@ -2,13 +2,27 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-MESA-COMPACTA-20260805-5';
+  const BUILD='CONTROL-MAESTRO-LECTURA-Y-REVISION-20260805-6';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize()
   };
+
+  function loadUiSize(){
+    try{
+      const saved=localStorage.getItem('sublichat_control_text_size_v1');
+      return ['normal','large','xlarge'].includes(saved)?saved:'large';
+    }catch(_){return 'large';}
+  }
+
+  function setUiSize(size){
+    if(!['normal','large','xlarge'].includes(size))return;
+    state.uiSize=size;
+    try{localStorage.setItem('sublichat_control_text_size_v1',size);}catch(_){}
+    render();
+  }
 
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const norm=(v)=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9@.+\s_-]/g,' ').replace(/\s+/g,' ').trim();
@@ -735,8 +749,9 @@
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
     if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
     const expanded=!!document.fullscreenElement||document.getElementById('screen-control-cuentas')?.classList.contains('cm-control-expanded');
-    host.innerHTML=`<div class="cm-shell" data-build="${BUILD}">
+    host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
       <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
+      <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
@@ -745,6 +760,7 @@
   function bind(){
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
+    host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
     host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
     host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1500;state.expandedAccountKey='';render();});
@@ -832,7 +848,7 @@
     state.accountFeedback={key:a.key,type:'saving',text:result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…'};
     state.status=state.accountFeedback.text;state.statusType='';render();
     try{
-      const saved=await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
+      const saved=await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado:result,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
       if(!saved.revision)throw new Error('Firebase respondió sin confirmar la revisión.');
       mergeAccountRevision(saved.revision);
       const text=result==='incidencia'?'⚠️ Incidencia guardada en Firebase.':'✅ Revisión del proveedor guardada en Firebase. Las diferencias de Excel o Bodega seguirán visibles hasta corregirlas; esta revisión volverá a solicitarse dentro de 15 días.';
