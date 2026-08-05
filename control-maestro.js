@@ -2,11 +2,12 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-CONCILIACION-TOTAL-20260804-3';
+  const BUILD='CONTROL-MAESTRO-CONCILIACION-TOTAL-20260805-4';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
-    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:220,revealedAccounts:new Set()
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:220,revealedAccounts:new Set(),
+    reviewSavingKey:'',accountFeedback:null
   };
 
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -562,6 +563,10 @@
   function accountCardHtml(a,i){
     const revealed=state.revealedAccounts.has(a.key);
     const review=a.revision;
+    const saving=state.reviewSavingKey===a.key;
+    const savedCorrect=review?.resultado==='correcta'&&!a.reviewDue;
+    const okLabel=saving?'⏳ Guardando…':(savedCorrect?'✅ Coincidencia guardada':'✅ Revisada: coincide');
+    const feedback=state.accountFeedback?.key===a.key?state.accountFeedback:null;
     const reviewText=!review?'Sin revisión manual':(review.resultado==='incidencia'?`Incidencia · ${accountDateTime(review.revisadoAt)}`:`Revisada · ${accountDateTime(review.revisadoAt)}`);
     const reviewTone=!review||a.reviewDue?'due':(review.resultado==='incidencia'?'bad':'ok');
     const reviewAge=!review?'Nunca revisada':(a.reviewDataChanged?'Cambió la asignación · toca revisar':(a.reviewDue?`Hace ${a.reviewAge} días · toca revisar`:`Hace ${a.reviewAge} día${a.reviewAge===1?'':'s'}`));
@@ -583,9 +588,10 @@
       <div class="cm-roster-head"><div><b>Clientes/perfiles que deben estar en esta cuenta</b><small>Abra ${esc(a.platform)} y compare esta lista con los perfiles reales.</small></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
       <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
       ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
+      ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
       <div class="cm-account-review">
         <div><b>Revisión real del proveedor</b><small>La lista reúne Excel + Clientes + Bodega. Entre a la cuenta, compruebe que no haya perfiles de más y después marque el resultado.</small></div>
-        <div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${i}">✅ Revisada: coincide</button><button class="cm-btn warn" data-cm-review-issue="${i}">⚠️ Registrar incidencia</button></div>
+        <div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div>
       </div>
     </article>`;
   }
@@ -690,8 +696,8 @@
     host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
     host.querySelectorAll('[data-cm-open-audit]').forEach(b=>b.onclick=()=>openAuditAccount(Number(b.dataset.cmOpenAudit)));
     host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
-    host.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(Number(b.dataset.cmReviewOk),'correcta'));
-    host.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(Number(b.dataset.cmReviewIssue),'incidencia'));
+    host.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
+    host.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
     host.querySelectorAll('[data-cm-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.cmFilter;render();});
     const q=host.querySelector('#cmSearch');if(q)q.oninput=()=>{state.query=q.value;render();setTimeout(()=>document.getElementById('cmSearch')?.focus(),0);};
     host.querySelectorAll('[data-cm-client]').forEach(b=>b.onclick=()=>openClient(state.visible[Number(b.dataset.cmClient)]));
@@ -733,21 +739,40 @@
     openClient(r.service||{name:r.name,phone:r.phone});
   }
 
-  async function saveAccountReview(index,result){
-    const a=state.accountVisible[index];if(!a||state.busy)return;
+  function accountByKey(key){
+    const wanted=String(key||'');
+    return state.accountVisible.find((a)=>String(a.key||'')===wanted)||(state.accountAudit?.accounts||[]).find((a)=>String(a.key||'')===wanted)||null;
+  }
+
+  function mergeAccountRevision(revision){
+    if(!revision)return;
+    const revisionKey=String(revision.accountKey||`${auditFamily(revision.plataforma)}|${email(revision.correo)}`);
+    const anteriores=Array.isArray(state.meta?.revisiones)?state.meta.revisiones:[];
+    state.meta={...(state.meta||{}),revisiones:[revision,...anteriores.filter((r)=>String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`)!==revisionKey)]};
+    state.accountAudit=null;
+  }
+
+  async function saveAccountReview(accountKey,result){
+    const a=accountByKey(accountKey);if(!a||state.busy)return;
     if(!a.email)return setStatus('Esta cuenta no tiene correo; corríjala primero en Bodega.','error');
     let nota='';
     if(result==='incidencia'){
       nota=prompt('Escriba qué encontró en la cuenta (por ejemplo: “hay un perfil extra llamado Juan”):','')??'';
       if(!String(nota).trim())return;
     }
-    state.busy=true;setStatus(result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…','');
+    state.busy=true;state.reviewSavingKey=a.key;
+    state.accountFeedback={key:a.key,type:'saving',text:result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…'};
+    state.status=state.accountFeedback.text;state.statusType='';render();
     try{
-      await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
-      await refreshMeta();
-      setStatus(result==='incidencia'?'⚠️ Incidencia guardada. Esta cuenta seguirá marcada hasta que la revise de nuevo.':'✅ Revisión guardada. Volverá a aparecer como pendiente dentro de 15 días.','good');
-    }catch(e){setStatus('⚠️ '+(e.message||'No se pudo guardar la revisión.'),'error');}
-    finally{state.busy=false;render();}
+      const saved=await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
+      if(!saved.revision)throw new Error('Firebase respondió sin confirmar la revisión.');
+      mergeAccountRevision(saved.revision);
+      const text=result==='incidencia'?'⚠️ Incidencia guardada en Firebase.':'✅ Revisión del proveedor guardada en Firebase. Las diferencias de Excel o Bodega seguirán visibles hasta corregirlas; esta revisión volverá a solicitarse dentro de 15 días.';
+      state.accountFeedback={key:a.key,type:result==='incidencia'?'err':'good',text};state.status=text;state.statusType='good';
+    }catch(e){
+      const text='⚠️ '+(e.message||'No se pudo guardar la revisión.');
+      state.accountFeedback={key:a.key,type:'err',text};state.status=text;state.statusType='error';
+    }finally{state.busy=false;state.reviewSavingKey='';render();}
   }
 
   async function refreshMeta(){
