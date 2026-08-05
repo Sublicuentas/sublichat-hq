@@ -2,11 +2,11 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-CONCILIACION-TOTAL-20260805-4';
+  const BUILD='CONTROL-MAESTRO-MESA-COMPACTA-20260805-5';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
-    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:220,revealedAccounts:new Set(),
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
     reviewSavingKey:'',accountFeedback:null
   };
 
@@ -86,6 +86,18 @@
     return String(v).trim();
   }
 
+  function fieldText(v){
+    if(v==null)return '';
+    if(Array.isArray(v))return v.map(fieldText).filter(Boolean).join(' · ');
+    if(typeof v==='object'){
+      for(const key of ['perfil','slot','nombre','name','label','value','numero','número','index','id']){
+        if(v[key]!=null&&typeof v[key]!=='object'){const out=String(v[key]).trim();if(out)return out;}
+      }
+      const out=valueText(v);return out==='[object Object]'?'':out;
+    }
+    return String(v).trim();
+  }
+
   function dateValue(v){
     if(v==null||v==='')return null;
     if(v instanceof Date&&!isNaN(v))return v;
@@ -116,7 +128,8 @@
       hbomax:'hbomax',hbo:'hbomax',max:'hbomax',prime:'primevideo',primevideo:'primevideo',
       paramount:'paramount',paramountp:'paramount',crunchy:'crunchyroll',crunchyroll:'crunchyroll',
       vix:'vix',viki:'viki',vikirakuten:'viki',universal:'universal',universalp:'universal',
-      spotify:'spotify',youtube:'youtube',youtubepremium:'youtube',canva:'canva',
+      spotify:'spotify',youtube:'youtube',youtubepremium:'youtube',canva:'canva',gemini:'gemini',
+      duolingo:'duolingo',chatgpt:'chatgpt',chatgptplus:'chatgpt',
       magis:'magis',magistv:'magis',oleada:'oleada',oleadatv:'oleada',iptv:'iptv'
     };
     if(aliases[k])return aliases[k];
@@ -183,7 +196,8 @@
   const AUDIT_PLATFORM_LABELS={
     netflix:'Netflix',vipnetflix:'VIP Netflix',disney:'Disney+',hbomax:'HBO Max',primevideo:'Prime Video',
     paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
-    spotify:'Spotify',youtube:'YouTube',canva:'Canva',magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV',
+    spotify:'Spotify',youtube:'YouTube',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
+    magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV',
     vixmix:'ViX / Viki / Universal+'
   };
 
@@ -292,7 +306,7 @@
     groups.forEach((g)=>{
       const used=new Set(),usedExcel=new Set(),roster=[];
       const takeExcel=(target)=>{
-        const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(target?.profile);
+        const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(fieldText(target?.profile));
         let best=-1,bestScore=0;
         g.excelRows.forEach((x,i)=>{
           if(usedExcel.has(i))return;
@@ -320,7 +334,7 @@
         const excel=takeExcel({name:p.nombre||service?.nombre,phone:service?._phone,profile:service?.perfil||p.slot});
         if(status==='ok'&&hasExcelAudit&&!excel){status='falta_excel';level='warn';detail='Coincide entre Clientes y Bodega, pero no aparece en el Excel cargado.';}
         else if(!service&&excel){status='excel_bodega';level='warn';detail='Aparece en Excel y Bodega, pero no tiene servicio activo en Clientes.';}
-        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:service?.perfil||p.slot||excel?.profile||'',pin:service?.pinPerfil||p.pin||excel?.pin||'',date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex});
+        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex});
       });
       g.services.forEach((service,i)=>{
         if(used.has(i))return;
@@ -329,7 +343,7 @@
         let status=expired?'vencido_sin_bodega':'falta_bodega';
         let detail=expired?'Servicio vencido y no asignado en Bodega.':(excel?'Coincide entre Clientes y Excel, pero falta en Bodega.':(hasExcelAudit?'Cliente activo, pero falta tanto en Bodega como en el Excel cargado.':'Cliente activo en esta cuenta, pero falta en Bodega.'));
         if(hasExcelAudit&&!excel&&!expired)status='falta_excel_bodega';
-        roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',phone:service._phone||excel?.phone||'',profile:service.perfil||excel?.profile||'',pin:service.pinPerfil||excel?.pin||'',date:service._date||excel?.date||'',actualAccount:service._email||''});
+        roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',phone:service._phone||excel?.phone||'',profile:fieldText(service.perfil)||fieldText(excel?.profile),pin:fieldText(service.pinPerfil)||fieldText(excel?.pin),date:service._date||excel?.date||'',actualAccount:service._email||''});
       });
       g.excelRows.forEach((excel,i)=>{
         if(usedExcel.has(i))return;
@@ -519,17 +533,55 @@
     catch(_){return d.toLocaleString('es-HN');}
   }
 
+  const EXPIRY_SOON_DAYS=3;
+  const AUDIT_PLATFORM_COLORS={
+    netflix:'#e50914',vipnetflix:'#c9184a',disney:'#1769d2',hbomax:'#6f42c1',primevideo:'#00a8e1',
+    paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
+    spotify:'#1db954',youtube:'#ff0033',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
+    magis:'#16a085',oleada:'#1297a6',iptv:'#0f9f82',vixmix:'#9c27b0',sin_plataforma:'#78909c'
+  };
+
+  function platformColor(family){return AUDIT_PLATFORM_COLORS[auditFamily(family)]||'#168fd3';}
+
+  function daysUntil(v){
+    const d=dateValue(v);if(!d)return null;
+    const today=new Date();today.setHours(0,0,0,0);d.setHours(0,0,0,0);
+    return Math.round((d-today)/86400000);
+  }
+
+  function accountLifecycle(a){
+    const dated=(a.roster||[]).map((r)=>({row:r,days:daysUntil(r.date),date:dateValue(r.date)})).filter((x)=>x.days!=null);
+    const expired=dated.filter((x)=>x.days<0);
+    const soon=dated.filter((x)=>x.days>=0&&x.days<=EXPIRY_SOON_DAYS);
+    const active=dated.filter((x)=>x.days>EXPIRY_SOON_DAYS);
+    const noDate=Math.max(0,(a.roster||[]).length-dated.length);
+    const future=dated.filter((x)=>x.days>=0).sort((x,y)=>x.days-y.days);
+    const past=[...expired].sort((x,y)=>y.days-x.days);
+    const tone=expired.length?'expired':(soon.length?'soon':(active.length?'active':'nodate'));
+    const label=expired.length?'Con vencidos':(soon.length?'Próxima a vencer':(active.length?'Vigente':'Sin fecha'));
+    const icon=expired.length?'🔴':(soon.length?'🟡':(active.length?'🟢':'⚪'));
+    let nextText='Sin fechas registradas';
+    if(future[0])nextText=`Próximo: ${dateLabel(future[0].row.date)}`;
+    else if(past[0])nextText=`Último: ${dateLabel(past[0].row.date)}`;
+    return {expired:expired.length,soon:soon.length,active:active.length,noDate,tone,label,icon,nextText,nextDays:future[0]?.days??99999};
+  }
+
   function filteredAccounts(){
     const q=norm(state.accountQuery);
+    const rank={expired:0,soon:1,nodate:2,active:3};
     return (state.accountAudit?.accounts||[]).filter((a)=>{
+      const life=accountLifecycle(a);
       if(state.accountPlatform!=='all'&&a.family!==state.accountPlatform)return false;
+      if(state.accountStatus==='expired'&&life.tone!=='expired')return false;
+      if(state.accountStatus==='soon'&&life.tone!=='soon')return false;
+      if(state.accountStatus==='active'&&life.tone!=='active')return false;
       if(state.accountStatus==='problems'&&!a.issueCount)return false;
-      if(state.accountStatus==='due'&&!a.reviewDue)return false;
-      if(state.accountStatus==='clean'&&!a.clean)return false;
-      if(state.accountStatus==='incident'&&!a.recordedIncident)return false;
-      if(state.accountStatus==='missing'&&!a.missingInventory)return false;
+      if(state.accountStatus==='review_due'&&!a.reviewDue)return false;
       if(!q)return true;
-      return norm([a.platform,a.email,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount])].join(' ')).includes(q);
+      return norm([a.platform,a.email,a.clave,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount,dateLabel(r.date)])].join(' ')).includes(q);
+    }).sort((a,b)=>{
+      const la=accountLifecycle(a),lb=accountLifecycle(b);
+      return (rank[la.tone]??9)-(rank[lb.tone]??9)||la.nextDays-lb.nextDays||a.platform.localeCompare(b.platform)||String(a.email).localeCompare(String(b.email));
     });
   }
 
@@ -549,7 +601,7 @@
 
   function rosterRowHtml(r,accountIndex,rowIndex){
     const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',icon:'⚠️',tone:'bad'};
-    const rawProfile=String(r.profile||'').trim();
+    const rawProfile=fieldText(r.profile);
     const profile=rawProfile?(/^perfil\b/i.test(rawProfile)?rawProfile:`Perfil ${rawProfile}`):'Perfil sin indicar';
     const sources=[r.excel?`📘 Excel · ${r.excel.sheet} fila ${r.excel.row}`:'',r.service?'👤 Clientes':'',r.inv?'📦 Bodega':''].filter(Boolean);
     return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
@@ -561,6 +613,8 @@
   }
 
   function accountCardHtml(a,i){
+    const life=accountLifecycle(a);
+    const expanded=state.expandedAccountKey===a.key;
     const revealed=state.revealedAccounts.has(a.key);
     const review=a.revision;
     const saving=state.reviewSavingKey===a.key;
@@ -571,28 +625,30 @@
     const reviewTone=!review||a.reviewDue?'due':(review.resultado==='incidencia'?'bad':'ok');
     const reviewAge=!review?'Nunca revisada':(a.reviewDataChanged?'Cambió la asignación · toca revisar':(a.reviewDue?`Hace ${a.reviewAge} días · toca revisar`:`Hace ${a.reviewAge} día${a.reviewAge===1?'':'s'}`));
     const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
-    const roster=a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join('');
-    return `<article class="cm-account-card ${a.issueCount?'has-issues':'is-clean'}">
-      <div class="cm-account-head">
-        <div><span class="cm-platform cm-account-platform">${esc(a.platform)}</span><h4>${esc(a.email||'CUENTA SIN CORREO')}</h4><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} activo${a.services.length===1?'':'s'}</small></div>
-        <span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span>
+    const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join(''):'';
+    return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" style="--platform-color:${platformColor(a.family)}">
+      <div class="cm-ledger-row">
+        <div class="cm-ledger-platform-cell"><span class="cm-ledger-platform">${esc(a.platform)}</span><span class="cm-life-state ${life.tone}">${life.icon} ${esc(life.label)}</span></div>
+        <div class="cm-ledger-identity"><b title="${esc(a.email||'CUENTA SIN CORREO')}">${esc(a.email||'CUENTA SIN CORREO')}</b><small>🔑 ${password}</small></div>
+        <div class="cm-ledger-clients"><b>${a.roster.length}</b><small>${a.occupied}/${a.capacity||'—'} cupos</small></div>
+        <div class="cm-ledger-expiry"><div><span class="expired">${life.expired} vencido${life.expired===1?'':'s'}</span><span class="soon">${life.soon} próximo${life.soon===1?'':'s'}</span><span class="active">${life.active} vigente${life.active===1?'':'s'}</span>${life.noDate?`<span class="nodate">${life.noDate} sin fecha</span>`:''}</div><small>${esc(life.nextText)}</small></div>
+        <div class="cm-ledger-control"><span class="${a.issueCount?'bad':'ok'}">${a.issueCount?`⚠️ ${a.issueCount} diferencia${a.issueCount===1?'':'s'}`:'✅ Sin diferencias'}</span><small class="${reviewTone}">${esc(reviewAge)}</small></div>
+        <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
-      <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
-      <div class="cm-credentials">
-        <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
-        <div class="cm-credential"><span>Clave de la cuenta</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
-      </div>
-      <div class="cm-account-capacity">
-        <span><b>${a.occupied}</b> ocupados</span><span><b>${a.free}</b> libres</span><span><b>${a.capacity||'—'}</b> capacidad</span><span><b>${a.roster.length}</b> filas esperadas</span>
-      </div>
-      <div class="cm-roster-head"><div><b>Clientes/perfiles que deben estar en esta cuenta</b><small>Abra ${esc(a.platform)} y compare esta lista con los perfiles reales.</small></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
-      <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
-      ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
-      ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
-      <div class="cm-account-review">
-        <div><b>Revisión real del proveedor</b><small>La lista reúne Excel + Clientes + Bodega. Entre a la cuenta, compruebe que no haya perfiles de más y después marque el resultado.</small></div>
-        <div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div>
-      </div>
+      ${expanded?`<div class="cm-ledger-detail">
+        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span></div>
+        <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
+        <div class="cm-credentials">
+          <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
+          <div class="cm-credential"><span>Clave de la cuenta</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
+        </div>
+        <div class="cm-account-capacity"><span><b>${a.occupied}</b> ocupados</span><span><b>${a.free}</b> libres</span><span><b>${a.capacity||'—'}</b> capacidad</span><span><b>${a.roster.length}</b> clientes/perfiles</span></div>
+        <div class="cm-roster-head"><div><b>Clientes/perfiles que deben estar en esta cuenta</b><small>Abra ${esc(a.platform)} y compare esta lista con los perfiles reales.</small></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
+        <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
+        ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
+        ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
+        <div class="cm-account-review"><div><b>Revisión real del proveedor</b><small>Entre a la cuenta, compare estos perfiles y marque el resultado. Se guarda en Firebase.</small></div><div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div></div>
+      </div>`:''}
     </article>`;
   }
 
@@ -600,28 +656,30 @@
     const audit=state.accountAudit;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
     const platforms=[['all','Todas',audit.accounts.length,audit.metrics.registros],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n,audit.platformRows[k]||0])];
-    const statuses=[['all','Todas'],['problems','Con diferencias'],['due','Toca revisar (15 días)'],['incident','Incidencias'],['missing','Fuera de Bodega'],['clean','Base interna correcta']];
-    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||220));
+    const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['review_due','🕒 Toca revisar']];
+    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
     return `<section class="cm-panel cm-accounts-panel">
-      <div class="cm-panel-head"><div><h3>📧 Cuentas y perfiles por correo</h3><p>Esta es su mesa de revisión: correo, clave y los clientes que deberían existir dentro de cada cuenta.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
-      <div class="cm-audit-callout"><b>Cómo usarla:</b> elija Disney+, abra cada correo en Disney y compare los perfiles reales con la lista de Sublichat. Si coincide, márquela revisada; si encuentra un perfil adicional o faltante, registre la incidencia.</div>
-      <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} filas</span></button>`).join('')}</div>
-      <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
-      <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas encontradas.</div>
-      <div class="cm-account-grid">${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
+      <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
+      <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. El color lateral identifica la plataforma. Presione <b>Ver clientes</b> para desplegar un solo correo.</div>
+      <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" style="--platform-color:${k==='all'?'#168fd3':platformColor(k)}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} perfiles</span></button>`).join('')}</div>
+      <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
+      <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
+      <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
       ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}
     </section>`;
   }
 
   function kpisHtml(){
     const m=state.accountAudit?.metrics||{};
+    const accounts=state.accountAudit?.accounts||[];
+    const life=accounts.map(accountLifecycle);
+    const expired=life.filter((x)=>x.tone==='expired').length,soon=life.filter((x)=>x.tone==='soon').length,active=life.filter((x)=>x.tone==='active').length;
     return `<div class="cm-kpis">
-      <div class="cm-kpi"><b>${m.clientes??'—'}</b><span>Clientes actuales</span></div>
-      <div class="cm-kpi"><b>${m.servicios??'—'}</b><span>Servicios en Sublichat</span></div>
-      <div class="cm-kpi"><b>${m.filasExcel??'—'}</b><span>Filas recuperadas del Excel</span></div>
-      <div class="cm-kpi"><b>${m.cuentas??'—'}</b><span>Correos/cuentas agrupados</span></div>
-      <div class="cm-kpi ${m.conProblemas?'bad':'good'}"><b>${m.conProblemas??'—'}</b><span>Cuentas con diferencias</span></div>
-      <div class="cm-kpi ${m.pendientes15?'warn':'good'}"><b>${m.pendientes15??'—'}</b><span>Revisión quincenal pendiente</span></div>
+      <div class="cm-kpi"><b>${m.cuentas??'—'}</b><span>Cuentas agrupadas</span></div>
+      <div class="cm-kpi bad"><b>${expired}</b><span>🔴 Cuentas con vencidos</span></div>
+      <div class="cm-kpi warn"><b>${soon}</b><span>🟡 Próximas a vencer</span></div>
+      <div class="cm-kpi good"><b>${active}</b><span>🟢 Cuentas vigentes</span></div>
+      <div class="cm-kpi ${m.conProblemas?'bad':'good'}"><b>${m.conProblemas??'—'}</b><span>Diferencias internas</span></div>
     </div>`;
   }
 
@@ -678,7 +736,7 @@
     if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
     const expanded=!!document.fullscreenElement||document.getElementById('screen-control-cuentas')?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">🗃️</div><div><h2>Control Maestro</h2><p>Conciliación completa por correo entre Excel, Clientes y Bodega.</p></div></div><div class="cm-hero-actions"><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
+      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
@@ -688,9 +746,10 @@
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=state.accountPlatform==='all'?220:5000;render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1200;render();});
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1500;state.expandedAccountKey='';render();});
     const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;state.accountLimit=5000;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
+    host.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
     host.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     host.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
     host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
@@ -704,6 +763,15 @@
     host.querySelectorAll('[data-cm-account]').forEach(b=>b.onclick=()=>openAccount(state.visible[Number(b.dataset.cmAccount)]));
     host.querySelectorAll('[data-cm-download]').forEach(b=>b.onclick=()=>downloadStored(b.dataset.cmDownload));
     host.querySelectorAll('[data-cm-restore]').forEach(b=>b.onclick=()=>restoreStored(b.dataset.cmRestore));
+  }
+
+  function toggleAccountDetails(key){
+    state.expandedAccountKey=state.expandedAccountKey===key?'':key;
+    render();
+    setTimeout(()=>{
+      const button=[...document.querySelectorAll('[data-cm-toggle-account]')].find((x)=>x.dataset.cmToggleAccount===key);
+      if(button&&state.expandedAccountKey===key)button.closest('.cm-ledger-account')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+    },0);
   }
 
   function toggleAccountSecret(index){
@@ -985,9 +1053,10 @@
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
     try{
       if(document.fullscreenElement){await document.exitFullscreen();screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');}
-      else if(screen.requestFullscreen){await screen.requestFullscreen();}
+      else if(screen.requestFullscreen){screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');await screen.requestFullscreen();}
       else{screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
     }catch(_){screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
+    screen.scrollTop=0;
     render();
   }
 
@@ -1033,7 +1102,7 @@
     document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]'))setTimeout(boot,90);},true);
     const observer=new MutationObserver(()=>{if(screenActive()&&!state.loading)boot();});
     const screen=document.getElementById('screen-control-cuentas');if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
-    document.addEventListener('fullscreenchange',()=>{if(screenActive())render();});
+    document.addEventListener('fullscreenchange',()=>{if(screenActive()){const active=document.fullscreenElement===screen;if(active)requestAnimationFrame(()=>{screen.scrollTop=0;});render();}});
     if(screenActive())boot();
   }
 
