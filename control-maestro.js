@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-EDICION-SEGURA-20260805-7';
+  const BUILD='CONTROL-MAESTRO-REVISION-QUINCENAL-20260805-8';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -552,6 +552,37 @@
     catch(_){return d.toLocaleString('es-HN');}
   }
 
+  function accountReviewDates(v){
+    const d=new Date(v||'');
+    if(isNaN(d))return {reviewed:'—',next:'—'};
+    try{
+      const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Tegucigalpa',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
+      const get=(type)=>parts.find((x)=>x.type===type)?.value||'';
+      const year=Number(get('year')),month=Number(get('month')),day=Number(get('day'));
+      if(!year||!month||!day)throw new Error('Fecha inválida');
+      const next=new Date(Date.UTC(year,month-1,day+15,12));
+      const pad=(n)=>String(n).padStart(2,'0');
+      return {
+        reviewed:`${pad(day)}/${pad(month)}/${year}`,
+        next:`${pad(next.getUTCDate())}/${pad(next.getUTCMonth()+1)}/${next.getUTCFullYear()}`
+      };
+    }catch(_){
+      const next=new Date(d);next.setDate(next.getDate()+15);
+      const format=(x)=>`${String(x.getDate()).padStart(2,'0')}/${String(x.getMonth()+1).padStart(2,'0')}/${x.getFullYear()}`;
+      return {reviewed:format(d),next:format(next)};
+    }
+  }
+
+  function accountReviewSchedule(a){
+    const review=a?.revision;
+    if(!review)return {tone:'due',label:'🕒 PENDIENTE',rowText:'Nunca revisada',detail:'Esta cuenta aún no se ha revisado.',reviewed:'—',next:'—',isReviewed:false};
+    const dates=accountReviewDates(review.revisadoAt);
+    if(review.resultado==='incidencia')return {tone:'bad',label:'⚠️ INCIDENCIA',rowText:`Revisada: ${dates.reviewed}`,detail:`Incidencia registrada el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    if(a.reviewDataChanged)return {tone:'due',label:'🕒 TOCA REVISAR',rowText:'Cambió la asignación',detail:`La cuenta cambió después de revisarla el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    if(a.reviewDue)return {tone:'due',label:'🕒 TOCA REVISAR',rowText:`Venció: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · debía revisarse: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    return {tone:'ok',label:'✅ REVISADA',rowText:`Próxima: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · próxima revisión: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:true};
+  }
+
   const EXPIRY_SOON_DAYS=3;
   const AUDIT_PLATFORM_COLORS={
     netflix:'#e50914',vipnetflix:'#c9184a',disney:'#1769d2',hbomax:'#6f42c1',primevideo:'#00a8e1',
@@ -595,6 +626,7 @@
       if(state.accountStatus==='soon'&&life.tone!=='soon')return false;
       if(state.accountStatus==='active'&&life.tone!=='active')return false;
       if(state.accountStatus==='problems'&&!a.issueCount)return false;
+      if(state.accountStatus==='reviewed'&&!accountReviewSchedule(a).isReviewed)return false;
       if(state.accountStatus==='review_due'&&!a.reviewDue)return false;
       if(!q)return true;
       return norm([a.platform,a.email,a.clave,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount,dateLabel(r.date)])].join(' ')).includes(q);
@@ -647,9 +679,8 @@
     const savedCorrect=review?.resultado==='correcta'&&!a.reviewDue;
     const okLabel=saving?'⏳ Guardando…':(savedCorrect?'✅ Coincidencia guardada':'✅ Revisada: coincide');
     const feedback=state.accountFeedback?.key===a.key?state.accountFeedback:null;
-    const reviewText=!review?'Sin revisión manual':(review.resultado==='incidencia'?`Incidencia · ${accountDateTime(review.revisadoAt)}`:`Revisada · ${accountDateTime(review.revisadoAt)}`);
-    const reviewTone=!review||a.reviewDue?'due':(review.resultado==='incidencia'?'bad':'ok');
-    const reviewAge=!review?'Nunca revisada':(a.reviewDataChanged?'Cambió la asignación · toca revisar':(a.reviewDue?`Hace ${a.reviewAge} días · toca revisar`:`Hace ${a.reviewAge} día${a.reviewAge===1?'':'s'}`));
+    const reviewSchedule=accountReviewSchedule(a);
+    const reviewTone=reviewSchedule.tone;
     const inventoryIds=a.accountIds.filter(Boolean);
     const editableAccount=inventoryIds.length===1;
     const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
@@ -660,11 +691,11 @@
         <div class="cm-ledger-identity"><b title="${esc(a.email||'CUENTA SIN CORREO')}">${esc(a.email||'CUENTA SIN CORREO')}</b><small>🔑 ${password}</small></div>
         <div class="cm-ledger-clients"><b>${a.roster.length}</b><small>${a.occupied}/${a.capacity||'—'} cupos</small></div>
         <div class="cm-ledger-expiry"><div><span class="expired">${life.expired} vencido${life.expired===1?'':'s'}</span><span class="soon">${life.soon} próximo${life.soon===1?'':'s'}</span><span class="active">${life.active} vigente${life.active===1?'':'s'}</span>${life.noDate?`<span class="nodate">${life.noDate} sin fecha</span>`:''}</div><small>${esc(life.nextText)}</small></div>
-        <div class="cm-ledger-control"><span class="${a.issueCount?'bad':'ok'}">${a.issueCount?`⚠️ ${a.issueCount} diferencia${a.issueCount===1?'':'s'}`:'✅ Sin diferencias'}</span><small class="${reviewTone}">${esc(reviewAge)}</small></div>
+        <div class="cm-ledger-control"><span class="cm-control-diff ${a.issueCount?'bad':'ok'}">${a.issueCount?`⚠️ ${a.issueCount} diferencia${a.issueCount===1?'':'s'}`:'✅ Sin diferencias'}</span><span class="cm-review-box ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.rowText)}</small></span></div>
         <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
       ${expanded?`<div class="cm-ledger-detail">
-        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
+        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
           <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
@@ -684,7 +715,9 @@
     const audit=state.accountAudit;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
     const platforms=[['all','Todas',audit.accounts.length,audit.metrics.registros],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n,audit.platformRows[k]||0])];
-    const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['review_due','🕒 Toca revisar']];
+    const reviewedCount=audit.accounts.filter((a)=>accountReviewSchedule(a).isReviewed).length;
+    const reviewDueCount=audit.accounts.filter((a)=>a.reviewDue).length;
+    const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['reviewed',`✅ Revisadas (${reviewedCount})`],['review_due',`🕒 Toca revisar (${reviewDueCount})`]];
     const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
