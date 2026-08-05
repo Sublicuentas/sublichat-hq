@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-REVISION-QUINCENAL-20260805-8';
+  const BUILD='CONTROL-MAESTRO-BASE-VIVA-20260805-9';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -342,7 +342,7 @@
         const matchIndex=g.services.findIndex((s,i)=>!used.has(i)&&name&&s._name===name);
         let service=null,status='solo_bodega',level='bad',detail=hasExcelAudit?'Está asignado en Bodega, pero no tiene servicio activo en Clientes ni fila coincidente en Excel.':'Está asignado en Bodega, pero no tiene servicio activo en Clientes.';
         if(matchIndex>=0){
-          used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail=hasExcelAudit?'Coincide entre Clientes, Bodega y Excel.':'Coincide entre Clientes y Bodega.';
+          used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail='Coincide entre Clientes y Bodega.';
           if(duplicate){status='duplicado';level='bad';detail='El cliente aparece asignado en más de una cuenta de esta plataforma.';}
           else if(isExpired(service.fecha)){status='vencido';level='warn';detail='El cliente coincide, pero su fecha está vencida.';}
         }else{
@@ -351,7 +351,8 @@
           else if(other){status='otra_cuenta';detail=`El servicio activo está registrado en ${other._email||'otra cuenta'}.`;service=other;}
         }
         const excel=takeExcel({name:p.nombre||service?.nombre,phone:service?._phone,profile:service?.perfil||p.slot});
-        if(status==='ok'&&hasExcelAudit&&!excel){status='falta_excel';level='warn';detail='Coincide entre Clientes y Bodega, pero no aparece en el Excel cargado.';}
+        if(status==='ok'&&excel)detail='Coincide entre Clientes, Bodega y el respaldo Excel.';
+        else if(status==='ok'&&hasExcelAudit&&!excel)detail='Coincide entre Clientes y Bodega. El Excel es un respaldo histórico y no modifica ni duplica la base actual.';
         else if(!service&&excel){status='excel_bodega';level='warn';detail='Aparece en Excel y Bodega, pero no tiene servicio activo en Clientes.';}
         roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
       });
@@ -374,7 +375,7 @@
       const inventoryPlatformCounts={};
       g.inventoryAccounts.forEach((a)=>{const p=canonPlatform(a.plataforma);inventoryPlatformCounts[p]=(inventoryPlatformCounts[p]||0)+1;});
       const duplicateDocs=Object.values(inventoryPlatformCounts).some((n)=>n>1);
-      const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length,g.excelRows.length)>g.capacidad;
+      const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length)>g.capacidad;
       const rosterIssues=roster.filter((r)=>r.status!=='ok').length;
       const revisionKey=g.email?`${g.family}|${g.email}`:'';
       const revision=revisionKey?revisions.get(revisionKey)||null:null;
@@ -383,7 +384,10 @@
       const internalIssueCount=rosterIssues+Number(missingInventory)+Number(duplicateDocs)+Number(overCapacity)+Number(!g.email)+Number(missingPassword);
       const issueCount=internalIssueCount+Number(recordedIncident);
       const reviewAge=revision?daysSince(revision.revisadoAt):99999;
-      const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==roster.length||Number(revision.diferencias)!==internalIssueCount);
+      // Una diferencia administrativa corregida no invalida la revisión real del
+      // proveedor. Sí se solicita otra revisión si cambian los clientes o aparecen
+      // más diferencias que las guardadas anteriormente.
+      const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==roster.length||internalIssueCount>Number(revision.diferencias||0));
       const reviewDue=!revision||reviewAge>=15||reviewDataChanged;
       const occupied=g.inventoryAccounts.length?g.invClients.length:(g.services.length||g.excelRows.length);
       const maxExcelProfile=Math.max(0,...g.excelRows.map((x)=>Number(x.profile)||0));
@@ -481,10 +485,11 @@
 
     for(const s of live.filter(x=>!x._used)){
       const invDiff=!!s._inv&&!!s._inv.account&&!!s._email&&s._inv.account!==s._email;
-      items.push({kind:'solo_sublichat',level:invDiff?'bad':'warn',status:'Falta en Excel',detail:invDiff?'Además, la cuenta del servicio difiere del inventario.':'El servicio actual todavía no está colocado en la plantilla.',name:s.nombre||'Sin nombre',phone:s._phone,platform:s.plataformaLabel||s.plataforma||s._plat,excelAccount:'',liveAccount:s._email,inventoryAccount:s._inv?.account||'',excelDate:'',liveDate:s._date,service:s});
+      const currentOk=!!s._inv&&!!s._inv.account&&!!s._email&&s._inv.account===s._email&&!s._invDuplicate;
+      items.push({kind:'solo_sublichat',level:invDiff?'bad':(currentOk?'ok':'warn'),status:invDiff?'Revisar cuenta':(currentOk?'Base actual coincide':'Falta en Bodega'),detail:invDiff?'La cuenta del servicio difiere de la asignación en Bodega.':(currentOk?'Existe una sola vez en Clientes y está asignado a la misma cuenta en Bodega. El Excel se conserva únicamente como respaldo histórico.':'El servicio está activo en Clientes, pero todavía no está asignado en Bodega.'),currentOk,name:s.nombre||'Sin nombre',phone:s._phone,platform:s.plataformaLabel||s.plataforma||s._plat,excelAccount:'',liveAccount:s._email,inventoryAccount:s._inv?.account||'',excelDate:'',liveDate:s._date,service:s});
     }
 
-    const correct=items.filter(x=>x.kind==='ok').length;
+    const correct=items.filter(x=>x.kind==='ok'||x.currentOk).length;
     const metrics={
       clientes:new Set(live.map(x=>x.clienteId||`${x._name}|${x._phone}`)).size,
       servicios:live.length,cuentas:(src.cuentas||[]).length,filasExcel:excelRows.length,correctos:correct,
@@ -517,8 +522,8 @@
   function resultClass(item){return item.level==='ok'?'ok':(item.level==='warn'?'warn':'bad');}
   function resultFilter(item){
     if(state.filter==='all')return true;
-    if(state.filter==='ok')return item.kind==='ok';
-    if(state.filter==='revision')return item.kind!=='ok';
+    if(state.filter==='ok')return item.kind==='ok'||item.currentOk;
+    if(state.filter==='revision')return item.kind!=='ok'&&!item.currentOk;
     if(state.filter==='solo_excel')return item.kind==='solo_excel';
     if(state.filter==='solo_sublichat')return item.kind==='solo_sublichat';
     if(state.filter==='cuenta')return ['cuenta','duplicado'].includes(item.kind);
@@ -763,7 +768,7 @@
   function reviewHtml(){
     if(!state.analysis)return `<details class="cm-panel cm-details"><summary><span><b>📎 Cruce histórico con el Excel</b><small>Opcional: cargue el formato y presione “Revisar ahora” para comparar también las filas antiguas.</small></span><i>Ver</i></summary></details>`;
     const all=filteredItems();state.visible=all.slice(0,300);
-    const filters=[['revision','Revisar'],['cuenta','Cuentas'],['solo_sublichat','Faltan en Excel'],['solo_excel','Solo Excel'],['ok','Correctos'],['all','Todos']];
+    const filters=[['revision','Revisar'],['cuenta','Cuentas'],['solo_sublichat','Nuevos para respaldo'],['solo_excel','Solo Excel'],['ok','Correctos'],['all','Todos']];
     const rows=state.visible.map((x,i)=>`<tr>
       <td><div class="cm-client"><b>${esc(x.name||'Sin nombre')}</b><small>${esc(x.phone||'Sin teléfono')}</small></div></td>
       <td><span class="cm-platform">${esc(x.platform||'—')}</span></td>
@@ -1074,7 +1079,7 @@
       let target=candidates[0];
       if(s.perfil){const exact=candidates.find(r=>norm(r.profile)===norm(s.perfil));if(exact)target=exact;}
       used.add(`${target.sheet}|${target.row}`);writeService(target,{service:s});
-      item.detail='Se agregó automáticamente en un espacio disponible de la cuenta.';item.status='Agregado al generar';item.level='warn';
+      item.detail='Se agregó automáticamente al Excel de respaldo. No se creó ni duplicó ningún dato en Firebase.';item.status='Agregado al respaldo';item.level='ok';item.currentOk=true;
       item.generatedRow=target;added++;
     });
     return added;
