@@ -1,6 +1,10 @@
-// api/partidos.js  ·  VERSION 13  ·  Todo sobre ESPN (sin key) + Fútbol ampliado + Tenis + F1
+// api/partidos.js  ·  VERSION 14  ·  ESPN (sin key) + Copa Centroamericana + canales
 //
-// v13 — cambios:
+// v14 — cambios:
+//   - Se agregó la Copa Centroamericana Concacaf con el slug oficial usado por ESPN.
+//   - Para Honduras/Centroamérica muestra ESPN y Disney+ Premium como señales del torneo.
+//
+// v13:
 //   - Se quitó "Mundial 2026" como pestaña/fuente por pedido explícito.
 //   - Fútbol deja de depender de openfootball (5 ligas fijas, JSON estático que
 //     había que actualizar cada temporada) y pasa 100% a ESPN: ahora cubre
@@ -25,7 +29,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST" && req.method !== "GET")
-    return res.status(200).json({ ok: true, version: 13, msg: "partidos v13 activo (fútbol ampliado + tenis + F1)." });
+    return res.status(200).json({ ok: true, version: 14, msg: "partidos v14 activo (Copa Centroamericana + canales + fútbol ampliado)." });
 
   const src = (req.method === "GET") ? (req.query || {}) : (req.body || {});
   const { modo, q, liga } = src;
@@ -52,6 +56,7 @@ export default async function handler(req, res) {
     if (l.includes("liga mx")) return "TUDN / Sky (aprox.)";
     if (l.includes("libertadores") || l.includes("sudamericana") || l.includes("recopa")) return "ESPN / Disney+ (aprox.)";
     if (l.includes("copa américa") || l.includes("copa america")) return "Televisoras nacionales / DirecTV (aprox.)";
+    if (l.includes("central american cup") || l.includes("centroamericana")) return "ESPN / Disney+ Premium (Centroamérica)";
     if (l.includes("concacaf")) return "Televisoras nacionales HN / Fox Sports (aprox.)";
     if (l.includes("argentina")) return "ESPN / Disney+ (aprox.)";
     if (l.includes("brasil") || l.includes("brasileirão") || l.includes("brasileirao")) return "ESPN / Disney+ (aprox.)";
@@ -198,6 +203,7 @@ export default async function handler(req, res) {
   // (ej. https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard).
   const LIGAS_FUTBOL = [
     { slug: "hon.1", nombre: "Liga Nacional de Honduras" },
+    { slug: "concacaf.central.american.cup", nombre: "Copa Centroamericana Concacaf" },
     { slug: "usa.1", nombre: "MLS" },
     { slug: "mex.1", nombre: "Liga MX" },
     { slug: "eng.1", nombre: "Premier League" },

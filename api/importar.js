@@ -583,7 +583,8 @@ function controlDateKey(value) {
 
 function controlEsAdmin(body) {
   const usuario = String(body && (body.usuario || body.editor) || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  return ["sublicuentas", "naara"].includes(usuario);
+  const rol = String(body && body.rol || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return ["sublicuentas", "naara"].includes(usuario) || ["sublicuentas", "admin", "administrador", "owner"].includes(rol);
 }
 
 function controlDenegado() {
@@ -1350,7 +1351,7 @@ async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-cuentas-20260804", msg: "api/importar activo", acciones: ["control_estado","control_guardar_revision_cuenta","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
+  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-cuentas-20260805-2", msg: "api/importar activo", acciones: ["control_estado","control_guardar_revision_cuenta","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
 
   try {
