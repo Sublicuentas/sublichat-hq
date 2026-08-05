@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-LECTURA-Y-REVISION-20260805-6">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-EDICION-SEGURA-20260805-7">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -5664,9 +5664,12 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const grupo = forceBlank ? {} : (g || cobroActual || null);
     fichaGrupoActual=grupo||{};
     fichaServiciosActuales=forceBlank?[]:fichaServiciosCompletos(grupo||{});
-    const serv=fichaServiciosActuales[0] || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
+    const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
+    let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
+    if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
+    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
-    fichaServicioPosActual=serv?0:-1;
+    fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
     fichaServicioOriginalActual=serv?{plataforma:serv.plataformaRaw||serv.plataforma||"",correo:serv.correo||""}:null;
     fichaResetButtons();
@@ -7823,7 +7826,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-LECTURA-Y-REVISION-20260805-6"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-EDICION-SEGURA-20260805-7"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

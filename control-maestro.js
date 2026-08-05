@@ -2,7 +2,9 @@
   'use strict';
 
   const API='/api/importar';
-  const BUILD='CONTROL-MAESTRO-LECTURA-Y-REVISION-20260805-6';
+  const INVENTORY_API='/api/inventario';
+  const RENEW_API='/api/renovar';
+  const BUILD='CONTROL-MAESTRO-EDICION-SEGURA-20260805-7';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -57,8 +59,8 @@
     }catch(_){return {servicios:[],cuentas:[]};}
   }
 
-  async function api(payload){
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+  async function api(payload,endpoint=API){
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
     const j=await r.json().catch(()=>({ok:false,error:'Respuesta inválida del servidor.'}));
     if(!r.ok||!j.ok)throw new Error(j.error||`Error ${r.status}`);
     return j;
@@ -287,7 +289,7 @@
       if(!g.clave&&account.clave!=null)g.clave=String(account.clave);
       g.capacidad+=Math.max(0,Number(account.capacidad)||0);g.disponibles+=Math.max(0,Number(account.disponibles)||0);
       if(!g.estado&&account.estado)g.estado=String(account.estado);
-      (account.clientes||[]).forEach((p)=>g.invClients.push({...p,_accountId:account.id||'',_family:family,_email:mail}));
+      (account.clientes||[]).forEach((p,clientIndex)=>g.invClients.push({...p,_accountId:account.id||'',_clientIndex:clientIndex,_family:family,_email:mail}));
     });
 
     allServices.forEach((s)=>{
@@ -318,6 +320,9 @@
     const revisions=new Map((state.meta?.revisiones||[]).map((r)=>[String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`),r]));
     const accounts=[];
     groups.forEach((g)=>{
+      // El Excel queda como respaldo histórico, no como fuente viva. Las cuentas
+      // que ya no existen ni en Clientes ni en Bodega no vuelven a aparecer aquí.
+      if(!g.inventoryAccounts.length&&!g.services.length)return;
       const used=new Set(),usedExcel=new Set(),roster=[];
       const takeExcel=(target)=>{
         const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(fieldText(target?.profile));
@@ -348,7 +353,7 @@
         const excel=takeExcel({name:p.nombre||service?.nombre,phone:service?._phone,profile:service?.perfil||p.slot});
         if(status==='ok'&&hasExcelAudit&&!excel){status='falta_excel';level='warn';detail='Coincide entre Clientes y Bodega, pero no aparece en el Excel cargado.';}
         else if(!service&&excel){status='excel_bodega';level='warn';detail='Aparece en Excel y Bodega, pero no tiene servicio activo en Clientes.';}
-        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex});
+        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
       });
       g.services.forEach((service,i)=>{
         if(used.has(i))return;
@@ -618,11 +623,18 @@
     const rawProfile=fieldText(r.profile);
     const profile=rawProfile?(/^perfil\b/i.test(rawProfile)?rawProfile:`Perfil ${rawProfile}`):'Perfil sin indicar';
     const sources=[r.excel?`📘 Excel · ${r.excel.sheet} fila ${r.excel.row}`:'',r.service?'👤 Clientes':'',r.inv?'📦 Bodega':''].filter(Boolean);
+    const pointer=`${accountIndex}:${rowIndex}`;
+    const actions=[
+      r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">✏️ Editar</button>`:'',
+      r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">📤 Sacar</button>`:'',
+      r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">🗑️ Eliminar</button>`:''
+    ].filter(Boolean).join('');
     return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
       <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small><div class="cm-roster-sources">${sources.map((x)=>`<i>${esc(x)}</i>`).join('')}</div></div>
       <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}</small></button>
       <div class="cm-roster-date"><b>${esc(dateLabel(r.date))}</b><small>Vencimiento</small></div>
       <div class="cm-roster-result"><span class="cm-roster-status ${s.tone}">${s.icon} ${esc(s.label)}</span><small>${esc(r.detail||'')}</small></div>
+      <div class="cm-roster-actions">${actions||'<span>Solo respaldo Excel</span>'}</div>
     </div>`;
   }
 
@@ -638,6 +650,8 @@
     const reviewText=!review?'Sin revisión manual':(review.resultado==='incidencia'?`Incidencia · ${accountDateTime(review.revisadoAt)}`:`Revisada · ${accountDateTime(review.revisadoAt)}`);
     const reviewTone=!review||a.reviewDue?'due':(review.resultado==='incidencia'?'bad':'ok');
     const reviewAge=!review?'Nunca revisada':(a.reviewDataChanged?'Cambió la asignación · toca revisar':(a.reviewDue?`Hace ${a.reviewAge} días · toca revisar`:`Hace ${a.reviewAge} día${a.reviewAge===1?'':'s'}`));
+    const inventoryIds=a.accountIds.filter(Boolean);
+    const editableAccount=inventoryIds.length===1;
     const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
     const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join(''):'';
     return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" style="--platform-color:${platformColor(a.family)}">
@@ -650,7 +664,7 @@
         <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
       ${expanded?`<div class="cm-ledger-detail">
-        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span></div>
+        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewText)}</b><small>${esc(reviewAge)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
           <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
@@ -674,7 +688,7 @@
     const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
-      <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. El color lateral identifica la plataforma. Presione <b>Ver clientes</b> para desplegar un solo correo.</div>
+      <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
       <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" style="--platform-color:${k==='all'?'#168fd3':platformColor(k)}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} perfiles</span></button>`).join('')}</div>
       <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
       <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
@@ -771,6 +785,11 @@
     host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
     host.querySelectorAll('[data-cm-open-audit]').forEach(b=>b.onclick=()=>openAuditAccount(Number(b.dataset.cmOpenAudit)));
     host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
+    host.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
+    host.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
+    host.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
+    host.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
+    host.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
     host.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
     host.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
     host.querySelectorAll('[data-cm-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.cmFilter;render();});
@@ -821,6 +840,97 @@
     const [ai,ri]=String(pointer||'').split(':').map(Number);
     const r=state.accountVisible[ai]?.roster?.[ri];if(!r)return;
     openClient(r.service||{name:r.name,phone:r.phone});
+  }
+
+  function auditRoster(pointer){
+    const [ai,ri]=String(pointer||'').split(':').map(Number);
+    const account=state.accountVisible[ai]||null;
+    return {account,row:account?.roster?.[ri]||null,accountIndex:ai,rowIndex:ri};
+  }
+
+  function mutationMessage(text,type='good'){
+    state.status=text;state.statusType=type;
+    try{if(typeof window.mostrarToast==='function')window.mostrarToast(text);}catch(_){}
+  }
+
+  async function reloadControlAfterMutation(message,preferredKey=''){
+    let reloadWarning='';
+    try{if(typeof window.sublichatControlReload==='function')await window.sublichatControlReload();}
+    catch(_){reloadWarning=' La operación sí se guardó; presione “Actualizar base” para verla.';}
+    state.accountAudit=null;
+    state.expandedAccountKey=preferredKey;
+    mutationMessage(message+reloadWarning,'good');
+  }
+
+  function editAuditService(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row?.service)return;
+    const raw=row.service;
+    const serviceIndex=Number.isInteger(Number(raw.servicioIndex))?Number(raw.servicioIndex):null;
+    const service={...raw,srvIndex:serviceIndex,plataformaRaw:raw.plataforma||account.family,plataforma:raw.plataformaLabel||account.platform,fechaRaw:raw.fecha||'',fecha:dateValue(raw.fecha),pin:raw.clave||'',clave:raw.clave||'',pinPerfil:raw.pinPerfil||'',perfil:raw.perfil||row.profile||''};
+    const group={clienteId:raw.clienteId||'',nombre:raw.nombre||row.name||'',telefono:raw.telefono||row.phone||'',vendedor:raw.vendedor||'',nombreNorm:norm(raw.nombre||row.name),servicios:[service]};
+    if(typeof window.abrirEntregaFicha==='function')window.abrirEntregaFicha(group,{servicioIndex});
+    else openAuditClient(pointer);
+  }
+
+  async function deleteAuditService(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row?.service||state.busy)return;
+    const service=row.service;
+    const platform=service.plataformaLabel||account.platform;
+    if(!confirm(`¿Eliminar este servicio de Firebase?\n\nCliente: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nSe eliminará solo este servicio y se liberará su cupo en Bodega. Los demás servicios del cliente se conservan.`))return;
+    state.busy=true;mutationMessage('Eliminando servicio…','');render();
+    try{
+      const out=await api({accion:'eliminar',clienteId:service.clienteId||'',clienteNorm:norm(service.nombre||row.name),telefono:service.telefono||row.phone||'',plataforma:service.plataforma||account.family,correo:service.correo||account.email||'',servicioIndex:Number.isInteger(Number(service.servicioIndex))?Number(service.servicioIndex):null},RENEW_API);
+      const extra=out.inventario?.tocado?` Cupo liberado: ${out.inventario.disponibles} disponible${out.inventario.disponibles===1?'':'s'}.`:'';
+      await reloadControlAfterMutation(`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
+    }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar el servicio.');mutationMessage(text,'error');alert(text);}
+    finally{state.busy=false;render();}
+  }
+
+  async function removeAuditAssignment(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row?.inv||state.busy)return;
+    const docId=String(row.inv._accountId||'');if(!docId)return alert('Esta asignación no tiene ID de Bodega. Abra la cuenta para corregirla.');
+    if(!confirm(`¿Sacar a ${row.name||'este cliente'} de esta cuenta?\n\nCuenta: ${account.email||'Sin correo'}\nPlataforma: ${account.platform}\n\nEsto solo quita la asignación de Bodega. Si el servicio sigue activo en Clientes, no se elimina.`))return;
+    state.busy=true;mutationMessage('Quitando asignación de Bodega…','');render();
+    try{
+      await api({accion:'quitarCliente',docId,clienteIndex:row.invIndex,nombreCliente:row.inv.nombre||row.name||'',slot:fieldText(row.inv.slot)||row.profile||''},INVENTORY_API);
+      await reloadControlAfterMutation(`✅ ${row.name} fue retirado de la cuenta ${account.email}.`,account.key);
+    }catch(e){const text='⚠️ '+(e.message||'No se pudo quitar la asignación.');mutationMessage(text,'error');alert(text);}
+    finally{state.busy=false;render();}
+  }
+
+  async function editAuditAccount(index){
+    const account=state.accountVisible[index];if(!account||state.busy)return;
+    const ids=account.accountIds.filter(Boolean);
+    if(ids.length!==1)return alert('Esta cuenta está duplicada en Bodega. Ábrala en Bodega y corrija primero el duplicado.');
+    const newEmail=prompt('Correo o usuario de la cuenta:',account.email||'');if(newEmail===null)return;
+    if(!String(newEmail).trim())return alert('El correo no puede quedar vacío.');
+    const newPassword=prompt('Clave de la cuenta:',account.clave||'');if(newPassword===null)return;
+    const capacityRaw=prompt('Capacidad total de clientes/perfiles:',String(account.capacity||1));if(capacityRaw===null)return;
+    const capacity=Math.max(1,Math.round(Number(capacityRaw)||0));
+    if(capacity<account.invClients.length)return alert(`La capacidad no puede ser menor que los ${account.invClients.length} clientes asignados.`);
+    if(!confirm(`¿Guardar estos cambios?\n\nPlataforma: ${account.platform}\nCorreo: ${String(newEmail).trim()}\nClave: ${newPassword||'Sin clave'}\nCapacidad: ${capacity}\n\nEl nuevo correo y clave también se actualizarán en los servicios ligados.`))return;
+    state.busy=true;mutationMessage('Actualizando cuenta y servicios ligados…','');render();
+    try{
+      const out=await api({accion:'editarCuenta',docId:ids[0],correo:String(newEmail).trim(),clave:String(newPassword),capacidad:capacity},INVENTORY_API);
+      const newKey=`${account.family}|${email(newEmail)}`;
+      await reloadControlAfterMutation(`✅ Cuenta actualizada.${out.serviciosActualizados?` ${out.serviciosActualizados} servicio${out.serviciosActualizados===1?'':'s'} sincronizado${out.serviciosActualizados===1?'':'s'}.`:''}`,newKey);
+    }catch(e){const text='⚠️ '+(e.message||'No se pudo editar la cuenta.');mutationMessage(text,'error');alert(text);}
+    finally{state.busy=false;render();}
+  }
+
+  async function deleteAuditAccount(index){
+    const account=state.accountVisible[index];if(!account||state.busy)return;
+    const ids=account.accountIds.filter(Boolean);
+    if(ids.length!==1)return alert('Esta cuenta no puede eliminarse desde aquí porque está duplicada o no existe en Bodega.');
+    if(account.invClients.length)return alert(`Esta cuenta todavía tiene ${account.invClients.length} cliente${account.invClients.length===1?'':'s'} asignado${account.invClients.length===1?'':'s'}. Use “Sacar” o “Eliminar” en cada fila primero.`);
+    if(account.services.length)return alert(`Esta cuenta todavía tiene ${account.services.length} servicio${account.services.length===1?'':'s'} activo${account.services.length===1?'':'s'} en Clientes. Elimínelos o edítelos primero.`);
+    if(!confirm(`¿Eliminar definitivamente esta cuenta de Bodega?\n\n${account.platform}\n${account.email}\n\nEl correo ya está vacío. Esta acción no se puede deshacer.`))return;
+    state.busy=true;mutationMessage('Eliminando cuenta vacía…','');render();
+    try{
+      await api({accion:'eliminarCuenta',docId:ids[0],confirmarCorreo:account.email},INVENTORY_API);
+      await reloadControlAfterMutation(`✅ Cuenta ${account.email} eliminada de Bodega.`,'');
+    }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
+    finally{state.busy=false;render();}
   }
 
   function accountByKey(key){
