@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -5350,6 +5350,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         if(!silent) fichaToast(msg);
         await load({forceServer:true});
         fichaSincronizarServiciosDesdeData(j.servicioIndex!=null?Number(j.servicioIndex):fichaServicioIndexActual,payload);
+        try{if(typeof window.sublichatControlSyncLoadedData==="function")window.sublichatControlSyncLoadedData("✅ Ficha editada y actualizada en Control Maestro.");}catch(_){}
       }else{
         const msg="⚠️ CRM: "+(j.error||"No se pudo guardar");
         fichaStatus(msg,"err");
@@ -5548,6 +5549,24 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaRenderServicePicker();
   }
 
+  function fichaModalHostActual(){
+    const fullscreen=document.fullscreenElement;
+    if(fullscreen&&fullscreen.nodeType===1)return fullscreen;
+    const control=document.getElementById("screen-control-cuentas");
+    if(control&&control.classList.contains("cm-control-expanded"))return control;
+    return document.body;
+  }
+
+  function fichaMontarSobrePantallaActual(){
+    const modal=fichaQ("fichaModal"),host=fichaModalHostActual();
+    if(modal&&host&&modal.parentElement!==host)host.appendChild(modal);
+  }
+
+  function fichaDevolverAlBody(){
+    const modal=fichaQ("fichaModal");
+    if(modal&&document.body&&modal.parentElement!==document.body)document.body.appendChild(modal);
+  }
+
   function fichaCreateModal(){
     if(fichaQ("fichaModal")) return;
     const style=document.createElement("style");
@@ -5649,7 +5668,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         <div class="ficha-note">Al guardar, se actualiza Firebase/CRM; el bot de Telegram verá esos mismos datos. La caja ya incluye 2 bloques en el mismo mensaje: primero la ficha y debajo teléfono + vendedor. El botón abre WhatsApp predeterminado; si el navegador no lo permite, usa WhatsApp Web.</div>
       </div>`;
     document.body.appendChild(wrap);
-    const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");};
+    const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");fichaDevolverAlBody();};
     fichaQ("fichaClose").onclick=fichaCerrar;
     wrap.addEventListener("click",e=>{ if(e.target===wrap)fichaCerrar(); });
     document.addEventListener("keydown",e=>{if(e.key==="Escape"&&wrap.style.display==="flex")fichaCerrar();});
@@ -5683,6 +5702,10 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   window.abrirEntregaFicha=function(g,opts){
     fichaCreateModal();
+    // En pantalla completa el navegador solo muestra descendientes del elemento
+    // expandido. Monte la ficha dentro de Control Maestro para que Editar no
+    // abra una ventana invisible detrás de la mesa.
+    fichaMontarSobrePantallaActual();
     // Si se pide explícitamente en blanco (botón "Crear / actualizar CRM + ficha"), NUNCA
     // se debe rellenar con el último cliente visto en Cobro (cobroActual queda "pegado"
     // de otra pantalla y por eso la ficha salía repetida al crear una cuenta nueva).
@@ -7852,7 +7875,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

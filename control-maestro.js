@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10';
+  const BUILD='CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -950,7 +950,7 @@
     const serviceIndex=Number.isInteger(Number(raw.servicioIndex))?Number(raw.servicioIndex):null;
     const service={...raw,srvIndex:serviceIndex,plataformaRaw:raw.plataforma||account.family,plataforma:raw.plataformaLabel||account.platform,fechaRaw:raw.fecha||'',fecha:dateValue(raw.fecha),pin:raw.clave||'',clave:raw.clave||'',pinPerfil:raw.pinPerfil||'',perfil:raw.perfil||row.profile||''};
     const group={clienteId:raw.clienteId||'',nombre:raw.nombre||row.name||'',telefono:raw.telefono||row.phone||'',vendedor:raw.vendedor||'',nombreNorm:norm(raw.nombre||row.name),servicios:[service]};
-    if(typeof window.abrirEntregaFicha==='function')window.abrirEntregaFicha(group,{servicioIndex});
+    if(typeof window.abrirEntregaFicha==='function')window.abrirEntregaFicha(group,{servicioIndex:serviceIndex});
     else openAuditClient(pointer);
   }
 
@@ -1329,6 +1329,13 @@
     else{state.accountAudit=null;render();}
     if(state.meta?.plantilla&&!state.analysis&&!state.busy)runReview(false);
   }
+
+  window.sublichatControlSyncLoadedData=(message)=>{
+    const view=captureControlView();
+    state.accountAudit=null;state.accountFeedback=null;
+    state.status=message||'✅ Cambio guardado. Control Maestro ya muestra los datos nuevos.';state.statusType='good';
+    if(screenActive()&&root()){render();restoreControlView(view);}
+  };
 
   function install(){
     if(state.installed)return;state.installed=true;
