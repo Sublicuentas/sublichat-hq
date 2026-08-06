@@ -4,12 +4,12 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-BASE-VIVA-20260805-9';
+  const BUILD='CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize()
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:''
   };
 
   function loadUiSize(){
@@ -44,6 +44,50 @@
   };
   const root=()=>document.getElementById('rbac-control-cuentas');
   const screenActive=()=>!!document.getElementById('screen-control-cuentas')?.classList.contains('active');
+
+  function refreshTimeLabel(){
+    if(!state.lastRefreshAt)return 'Lee los cambios nuevos de Firebase y Telegram';
+    const d=new Date(state.lastRefreshAt);if(isNaN(d))return 'Datos actualizados';
+    try{return `Actualizado ${d.toLocaleTimeString('es-HN',{timeZone:'America/Tegucigalpa',hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;}
+    catch(_){return `Actualizado ${d.toLocaleTimeString('es-HN')}`;}
+  }
+
+  function captureControlView(){
+    const screen=document.getElementById('screen-control-cuentas');
+    const host=root();
+    const fullscreen=!!screen&&(document.fullscreenElement===screen||screen.classList.contains('cm-control-expanded'));
+    const active=document.activeElement;
+    const roster=host?.querySelector('.cm-ledger-account.is-open .cm-roster');
+    return {
+      accountPlatform:state.accountPlatform,accountStatus:state.accountStatus,accountQuery:state.accountQuery,
+      accountLimit:state.accountLimit,expandedAccountKey:state.expandedAccountKey,
+      screenTop:screen?.scrollTop||0,windowX:window.scrollX||0,windowY:window.scrollY||0,
+      ledgerLeft:host?.querySelector('.cm-ledger-scroll')?.scrollLeft||0,rosterTop:roster?.scrollTop||0,
+      historicalOpen:!!host?.querySelector('.cm-details[open]'),fullscreen,
+      focusId:active&&host?.contains(active)?active.id||'':'',selectionStart:active?.selectionStart,selectionEnd:active?.selectionEnd
+    };
+  }
+
+  function restoreControlView(view){
+    if(!view)return;
+    state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
+    state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||1500;
+    state.expandedAccountKey=String(view.expandedAccountKey||'');
+    const apply=()=>{
+      const screen=document.getElementById('screen-control-cuentas');const host=root();if(!host)return;
+      const details=host.querySelector('.cm-details');if(details&&view.historicalOpen)details.open=true;
+      const ledger=host.querySelector('.cm-ledger-scroll');if(ledger)ledger.scrollLeft=view.ledgerLeft||0;
+      const roster=host.querySelector('.cm-ledger-account.is-open .cm-roster');if(roster)roster.scrollTop=view.rosterTop||0;
+      if(view.fullscreen&&screen)screen.scrollTop=view.screenTop||0;else window.scrollTo(view.windowX||0,view.windowY||0);
+      if(view.focusId){
+        const field=document.getElementById(view.focusId);if(field){field.focus({preventScroll:true});
+          if(typeof field.setSelectionRange==='function'&&Number.isInteger(view.selectionStart))field.setSelectionRange(view.selectionStart,Number.isInteger(view.selectionEnd)?view.selectionEnd:view.selectionStart);
+        }
+      }
+    };
+    requestAnimationFrame(()=>requestAnimationFrame(apply));
+    setTimeout(apply,120);
+  }
   const activeUser=()=>{
     for(const k of ['sublichat_user','subli_usuario','usuario','subli_user','active_user']){
       const v=localStorage.getItem(k);if(v&&String(v).trim())return norm(v);
@@ -757,7 +801,7 @@
       <div class="cm-actions" style="margin-top:11px">
         <label class="cm-file-btn ${state.busy?'off':''}">📤 ${t?'Reemplazar plantilla':'Cargar Excel actual'}<input id="cmTemplateFile" type="file" accept=".xlsx"></label>
         ${t?'<button class="cm-btn" data-cm-action="download-template">⬇️ Descargar plantilla</button>':''}
-        <button class="cm-btn" data-cm-action="refresh-data">🔄 Actualizar base</button>
+        <button class="cm-btn" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando…':'🔄 Actualizar datos'}</button>
         ${t?'<button class="cm-btn primary" data-cm-action="review">🔎 Revisar ahora</button>':''}
       </div>
       <div class="cm-hint">Para corregir algo, abra el cliente o la cuenta desde la revisión. Después presione “Revisar ahora”; no necesita escribirlo otra vez en Excel.</div>
@@ -802,7 +846,7 @@
     if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
     const expanded=!!document.fullscreenElement||document.getElementById('screen-control-cuentas')?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
+      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
@@ -1224,19 +1268,44 @@
     render();
   }
 
+  async function refreshControlData(){
+    if(state.busy||state.refreshing)return;
+    if(typeof window.sublichatControlReload!=='function')return setStatus('No encontré la conexión para actualizar Firebase.','error');
+    const view=captureControlView();
+    state.busy=true;state.refreshing=true;state.status='Leyendo cambios nuevos de Clientes y Bodega…';state.statusType='';
+    render();restoreControlView(view);
+    try{
+      const summary=await window.sublichatControlReload();
+      let metaWarning='';
+      try{state.meta=await api({accion:'control_estado'});}
+      catch(_){metaWarning=' No se pudo renovar el historial de revisiones, pero Clientes y Bodega sí se actualizaron.';}
+      let excelWarning='';
+      if(state.meta?.plantilla&&window.ExcelJS){
+        try{await analyze(false);}
+        catch(_){state.analysis=null;excelWarning=' El cruce histórico con Excel queda pendiente hasta presionar “Revisar ahora”.';}
+      }else state.accountAudit=null;
+      state.accountAudit=null;
+      const fresh=source();
+      state.lastRefreshAt=new Date().toISOString();
+      const serviceCount=Number(summary?.servicios??fresh.servicios.length)||0;
+      const accountCount=Number(summary?.cuentas??fresh.cuentas.length)||0;
+      state.status=`✅ Datos actualizados desde Firebase: ${serviceCount} servicios · ${accountCount} cuentas.${metaWarning}${excelWarning}`;
+      state.statusType='good';
+      try{if(typeof window.mostrarToast==='function')window.mostrarToast('✅ Control Maestro actualizado sin perder su lugar.');}catch(_){}
+    }catch(e){
+      state.status='⚠️ '+(e.message||'No se pudo actualizar Firebase. Su vista se conservó para volver a intentarlo.');
+      state.statusType='error';
+      try{if(typeof window.mostrarToast==='function')window.mostrarToast(state.status);}catch(_){}
+    }finally{
+      state.busy=false;state.refreshing=false;render();restoreControlView(view);
+    }
+  }
+
   async function handleAction(action){
     if(action==='toggle-fullscreen')return toggleFullscreen();
     if(action==='show-all-accounts'){state.accountLimit=Number.MAX_SAFE_INTEGER;render();return;}
     if(action==='review')return runReview(true);
-    if(action==='refresh-data'){
-      if(typeof window.sublichatControlReload!=='function')return setStatus('No encontré la función para actualizar la base.','error');
-      state.busy=true;setStatus('Actualizando clientes e inventario desde la base…','');
-      try{await window.sublichatControlReload();state.analysis=null;state.accountAudit=null;setStatus(state.meta?.plantilla?'✅ Base actualizada. Ejecutando cruce con el Excel…':'✅ Base actualizada desde Firebase.','good');}
-      catch(e){setStatus('⚠️ '+(e.message||'No se pudo actualizar.'),'error');}
-      finally{state.busy=false;render();}
-      if(state.meta?.plantilla)return runReview(false);
-      return;
-    }
+    if(action==='refresh-data')return refreshControlData();
     if(action==='download-template')return downloadStored(state.meta?.plantilla?.id);
     if(action==='generate-download')return generate({save:true,download:true});
     if(action==='save-backup')return generate({save:true,download:false});

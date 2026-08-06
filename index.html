@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-BASE-VIVA-20260805-9">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1944,6 +1944,8 @@ function countUp(el,to,money){
 
 async function load(options={}){
   const forceServer=options===true || !!(options&&options.forceServer);
+  const requireServer=!!(options&&options.requireServer);
+  const controlOnly=!!(options&&options.controlOnly);
   const cfg=CONFIG.firebase;
   if(cfg && cfg.projectId){
     try{
@@ -1951,32 +1953,56 @@ async function load(options={}){
       const { getFirestore, collection, getDocs, getDocsFromServer } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const app = getApps().length ? getApp() : initializeApp(cfg);
       const db=getFirestore(app);
-      let snap;
-      if(forceServer && typeof getDocsFromServer==="function"){
-        try{ snap=await getDocsFromServer(collection(db,CONFIG.collection)); }
-        catch(serverError){ console.warn("clientes desde servidor",serverError); snap=await getDocs(collection(db,CONFIG.collection)); }
-      }else snap=await getDocs(collection(db,CONFIG.collection));
-      DATA=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+      const readCollection=async(name)=>{
+        const ref=collection(db,name);
+        if(forceServer&&typeof getDocsFromServer==="function"){
+          try{return await getDocsFromServer(ref);}
+          catch(serverError){
+            console.warn(name+" desde servidor",serverError);
+            if(requireServer)throw serverError;
+          }
+        }
+        return getDocs(ref);
+      };
+
+      // Clientes y Bodega se leen antes de sustituir la copia visible. Así una
+      // falla de red no deja Control Maestro con una mitad nueva y otra antigua.
+      const snap=await readCollection(CONFIG.collection);
+      let invSnap=null,invError=null;
+      try{invSnap=await readCollection("inventario");}
+      catch(e){if(requireServer)throw e;invError=e;}
+      const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+      const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
+      DATA=nextData;INVENTARIO=nextInventory;
       document.getElementById("srcLabel").textContent=`Firebase · ${DATA.length} servicios`;
-      // Inventario de cuentas (colección aparte)
-      try{
-        const invSnap=await getDocs(collection(db,"inventario"));
-        INVENTARIO=invSnap.docs.map(d=>({id:d.id,...d.data()}));
-        window._invError="";
-      }catch(e){console.error("inv",e);INVENTARIO=[];window._invError=(e&&e.code)||(e&&e.message)||"error";}
-      // Finanzas (movimientos)
-      try{
-        let fSnap;
-        try{ fSnap=await getDocs(collection(db,"finanzas_movimientos")); }catch(_){ fSnap=null; }
-        if(!fSnap || fSnap.empty){ try{ fSnap=await getDocs(collection(db,"finanzas")); }catch(_){ fSnap=null; } }
-        FINANZAS = fSnap ? fSnap.docs.map(d=>({id:d.id,...d.data()})) : [];
-        window._finError="";
-      }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
-    }catch(e){console.error(e);if(!DATA.length)DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent=DATA.length?"Firebase · última copia visible":"Error · demo";}
-  }else{DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Modo demo";}
+      window._invError=invError?((invError&&invError.code)||(invError&&invError.message)||"error"):"";
+      if(invError)console.error("inv",invError);
+
+      // Control Maestro no necesita volver a descargar Finanzas para reflejar
+      // cambios del bot; se omite en su actualización rápida.
+      if(!controlOnly){
+        try{
+          let fSnap;
+          try{fSnap=await readCollection("finanzas_movimientos");}catch(_){fSnap=null;}
+          if(!fSnap||fSnap.empty){try{fSnap=await readCollection("finanzas");}catch(_){fSnap=null;}}
+          FINANZAS=fSnap?fSnap.docs.map(d=>({id:d.id,...d.data()})):[];
+          window._finError="";
+        }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
+      }
+    }catch(e){
+      console.error(e);
+      if(requireServer)throw new Error('No se pudo leer Firebase directamente. Revise su conexión e intente de nuevo.');
+      if(!DATA.length)DATA=DEMO.flatMap(flattenCliente);
+      document.getElementById("srcLabel").textContent=DATA.length?"Firebase · última copia visible":"Error · demo";
+    }
+  }else{
+    if(requireServer)throw new Error('Firebase no está configurado en esta sesión.');
+    DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Modo demo";
+  }
   render();
   renderInventario();
-  renderFinanzas();
+  if(!controlOnly)renderFinanzas();
+  return {servicios:DATA.length,cuentas:INVENTARIO.length,forceServer};
 }
 
 // Fuente privada para Control Maestro. Solo expone la información que ya está
@@ -1994,7 +2020,7 @@ window.sublichatControlData=()=>({
     disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??''})):[]
   }))
 });
-window.sublichatControlReload=()=>load({forceServer:true});
+window.sublichatControlReload=()=>load({forceServer:true,requireServer:true,controlOnly:true});
 
 function render(){
   const $=id=>document.getElementById(id);
@@ -7826,7 +7852,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-BASE-VIVA-20260805-9"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-ACTUALIZAR-SIN-PERDER-VISTA-20260806-10"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
