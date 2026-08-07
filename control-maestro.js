@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FULLSCREEN-ACTIVO-Y-PROGRESO-20260807-17';
+  const BUILD='CONTROL-MAESTRO-FULLSCREEN-REAL-Y-PROGRESO-COMPACTO-20260807-18';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -650,15 +650,15 @@
       return {family,name:auditPlatformLabel(family),...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    const card=(item,overallCard=false)=>`<button type="button" class="cm-progress-card ${esc(item.tone)} ${state.accountPlatform===(overallCard?'all':item.family)?'on':''}" style="--platform-color:${overallCard?'#168fd3':platformColor(item.family)}" data-cm-review-platform="${overallCard?'all':esc(item.family)}">
-      <div class="cm-progress-title"><b>${overallCard?'Avance total':esc(item.name)}</b><strong>${item.percent}%</strong></div>
-      <div class="cm-progress-track"><i style="width:${item.percent}%"></i></div>
-      <small>${item.reviewed} de ${item.total} cuentas · ${item.pending} pendiente${item.pending===1?'':'s'}</small>
-      <em>${esc(item.label)}</em>
+    const line=(item)=>`<button type="button" class="cm-progress-line ${esc(item.tone)} ${state.accountPlatform===item.family?'on':''}" style="--platform-color:${platformColor(item.family)}" data-cm-review-platform="${esc(item.family)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas · ${item.pending} pendientes`)}">
+      <i class="cm-progress-platform-dot" aria-hidden="true"></i><b>${esc(item.name)}</b><small>${item.reviewed}/${item.total}</small><span class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></span><strong>${item.percent}%</strong>
     </button>`;
+    const rowsPerColumn=Math.max(1,Math.ceil(groups.length/3));
+    const columns=[0,1,2].map((column)=>groups.slice(column*rowsPerColumn,(column+1)*rowsPerColumn)).filter((items)=>items.length);
     return `<section class="cm-review-progress">
-      <div class="cm-progress-head"><div><b>📊 Avance de revisión por plataforma</b><small>Revisiones vigentes por 15 días. Las plataformas que más urgen aparecen primero.</small></div><span>${overall.reviewed}/${overall.total} cuentas revisadas</span></div>
-      <div class="cm-progress-grid">${card({...overall,family:'all',name:'Avance total'},true)}${groups.map((item)=>card(item)).join('')}</div>
+      <div class="cm-progress-head"><div><b>📊 Avance de revisión por plataforma</b><small>Una línea por plataforma · revisión vigente durante 15 días.</small></div><button type="button" class="cm-progress-total ${esc(overall.tone)} ${state.accountPlatform==='all'?'on':''}" data-cm-review-platform="all"><span>Total</span><b>${overall.percent}%</b><small>${overall.reviewed}/${overall.total}</small></button></div>
+      <div class="cm-progress-columns">${columns.map((items)=>`<div class="cm-progress-column">${items.map((item)=>line(item)).join('')}</div>`).join('')}</div>
+      <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>
     </section>`;
   }
 
@@ -876,7 +876,8 @@
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
     if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
-    const expanded=!!document.fullscreenElement||document.getElementById('screen-control-cuentas')?.classList.contains('cm-control-expanded');
+    const controlScreen=document.getElementById('screen-control-cuentas');
+    const expanded=document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
       <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
@@ -1395,11 +1396,20 @@
     setTimeout(()=>{const q=document.getElementById('invQ');if(q){q.value=item.inventoryAccount||item.liveAccount||item.excelAccount||item.platform||'';q.dispatchEvent(new Event('input',{bubbles:true}));q.focus();}},180);
   }
 
+  function syncFullscreenButton(){
+    const screen=document.getElementById('screen-control-cuentas');
+    const button=root()?.querySelector?.('[data-cm-action="toggle-fullscreen"]');
+    if(!button)return;
+    const active=document.fullscreenElement===screen||screen?.classList.contains('cm-control-expanded');
+    button.textContent=active?'↙️ Salir de pantalla completa':'⛶ Pantalla completa';
+    button.setAttribute?.('aria-pressed',String(!!active));
+  }
+
   function closeControlExpanded(){
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
     if(!screen.classList.contains('cm-control-expanded'))return;
     screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
-    render();
+    syncFullscreenButton();
     requestAnimationFrame(()=>{
       try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
       catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
@@ -1408,13 +1418,22 @@
 
   async function toggleFullscreen(){
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
-    // Opera puede bloquear clics y ventanas secundarias dentro del Fullscreen API.
-    // La vista ampliada propia ocupa toda la pantalla sin aislar la interfaz.
-    if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
+    if(document.fullscreenElement===screen){
+      try{await document.exitFullscreen();}catch(e){setStatus('No se pudo salir de pantalla completa. Presione ESC.','error');}
+      syncFullscreenButton();return;
+    }
     if(screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
     state.fullscreenReturnY=window.scrollY||0;
+    if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
+    if(typeof screen.requestFullscreen==='function'){
+      try{
+        await screen.requestFullscreen();
+        screen.scrollTop=0;syncFullscreenButton();return;
+      }catch(e){console.warn('[Control Maestro] El navegador rechazó pantalla completa nativa; se usará la vista ampliada.',e);}
+    }
+    // Respaldo para navegadores que no ofrecen Fullscreen API.
     screen.classList.add('cm-control-expanded');document.body.classList.add('cm-control-no-scroll');
-    screen.scrollTop=0;render();
+    screen.scrollTop=0;syncFullscreenButton();
   }
 
   async function refreshControlData(){
@@ -1491,7 +1510,13 @@
     document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]'))setTimeout(boot,90);},true);
     const observer=new MutationObserver(()=>{if(screenActive()&&!state.loading)boot();});
     const screen=document.getElementById('screen-control-cuentas');if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
-    document.addEventListener('fullscreenchange',()=>{if(screenActive()){const active=document.fullscreenElement===screen;if(active)requestAnimationFrame(()=>{screen.scrollTop=0;});render();}});
+    document.addEventListener('fullscreenchange',()=>{
+      if(!screen)return;
+      if(document.fullscreenElement===screen){
+        screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+        requestAnimationFrame(()=>{screen.scrollTop=0;syncFullscreenButton();});
+      }else syncFullscreenButton();
+    });
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
     if(screenActive())boot();
   }
