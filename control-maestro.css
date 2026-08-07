@@ -215,6 +215,13 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
 .cm-spinner{width:42px;height:42px;margin:0 auto 12px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:cmSpin .8s linear infinite}
 @keyframes cmSpin{to{transform:rotate(360deg)}}
 
+/* Confirmaciones internas: permanecen visibles dentro de la pantalla completa. */
+.cm-dialog-overlay{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:22px;box-sizing:border-box;background:rgba(9,18,38,.62);backdrop-filter:blur(5px)}
+.cm-dialog{width:min(570px,calc(100vw - 34px));max-height:min(84vh,680px);display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 16px;overflow:auto;padding:22px;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--cm-blue) 24%,var(--line));border-radius:21px;background:var(--surface);color:var(--txt);box-shadow:0 24px 70px rgba(0,0,0,.3)}
+.cm-dialog-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:var(--card);font-size:25px}
+.cm-dialog-copy{min-width:0}.cm-dialog-copy h3{margin:2px 0 9px;color:var(--txt);font:950 21px/1.15 'Fredoka','Nunito',system-ui,sans-serif}.cm-dialog-message{color:var(--txt2);font:750 15px/1.55 'Nunito',system-ui,sans-serif;overflow-wrap:anywhere}
+.cm-dialog-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;margin-top:4px}.cm-dialog-actions button{min-height:46px;padding:10px 15px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--txt);font:900 14px/1.15 'Nunito',system-ui,sans-serif;cursor:pointer}.cm-dialog-actions button:focus-visible{outline:3px solid color-mix(in srgb,var(--cm-blue) 45%,transparent);outline-offset:2px}.cm-dialog-actions .cm-dialog-confirm{border-color:var(--cm-blue);background:var(--cm-blue);color:#fff}.cm-dialog-actions .cm-dialog-confirm.danger{border-color:var(--cm-red);background:var(--cm-red)}
+
 @media(max-width:980px){
   #screen-control-cuentas > .card{padding:18px 14px 24px}
   .cm-kpis{grid-template-columns:repeat(3,1fr)}
@@ -234,4 +241,5 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-ledger-detail-head{display:block}.cm-ledger-detail-side{align-items:flex-start;margin-top:10px}.cm-account-tools{justify-content:flex-start}
   .cm-roster-row{grid-template-columns:1fr 1fr;gap:8px}.cm-roster-result,.cm-roster-actions{grid-column:1/-1}.cm-roster-actions{justify-content:flex-start}.cm-account-review{grid-template-columns:1fr}.cm-account-review-actions{display:grid;grid-template-columns:1fr 1fr}.cm-account-review-actions .cm-btn{white-space:normal}
   .cm-details>summary{align-items:flex-start}.cm-details>summary i{white-space:normal;text-align:right}.cm-details-body{padding:13px}
+  .cm-dialog{grid-template-columns:1fr;padding:18px}.cm-dialog-icon{width:42px;height:42px}.cm-dialog-actions{grid-column:1;display:grid;grid-template-columns:1fr}.cm-dialog-actions button{width:100%}
 }

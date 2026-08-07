@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-BORRAR-SOLO-EXCEL-20260807-13';
+  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-FULLSCREEN-20260807-14';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -939,6 +939,44 @@
     try{if(typeof window.mostrarToast==='function')window.mostrarToast(text);}catch(_){}
   }
 
+  function controlDialog({title='Confirmar acción',message='',confirmLabel='Aceptar',cancelLabel='Cancelar',danger=false,icon='⚠️'}={}){
+    if(document.querySelector('.cm-dialog-overlay'))return Promise.resolve(false);
+    return new Promise((resolve)=>{
+      const screen=document.getElementById('screen-control-cuentas');
+      const host=document.fullscreenElement||screen||document.body;
+      const overlay=document.createElement('div');
+      overlay.className='cm-dialog-overlay';
+      overlay.innerHTML=`
+        <div class="cm-dialog" role="dialog" aria-modal="true" aria-labelledby="cm-dialog-title">
+          <div class="cm-dialog-icon" aria-hidden="true">${esc(icon)}</div>
+          <div class="cm-dialog-copy">
+            <h3 id="cm-dialog-title">${esc(title)}</h3>
+            <div class="cm-dialog-message">${esc(message).replace(/\n/g,'<br>')}</div>
+          </div>
+          <div class="cm-dialog-actions">
+            ${cancelLabel?`<button type="button" class="cm-dialog-cancel">${esc(cancelLabel)}</button>`:''}
+            <button type="button" class="cm-dialog-confirm${danger?' danger':''}">${esc(confirmLabel)}</button>
+          </div>
+        </div>`;
+      let finished=false;
+      const finish=(value)=>{
+        if(finished)return;finished=true;
+        document.removeEventListener('keydown',onKey,true);
+        overlay.remove();resolve(value);
+      };
+      const onKey=(event)=>{
+        if(event.key==='Escape'&&cancelLabel){event.preventDefault();finish(false);}
+      };
+      document.addEventListener('keydown',onKey,true);
+      overlay.querySelector('.cm-dialog-confirm').onclick=()=>finish(true);
+      const cancel=overlay.querySelector('.cm-dialog-cancel');
+      if(cancel)cancel.onclick=()=>finish(false);
+      overlay.onclick=(event)=>{if(event.target===overlay&&cancelLabel)finish(false);};
+      host.appendChild(overlay);
+      requestAnimationFrame(()=>overlay.querySelector('.cm-dialog-confirm')?.focus());
+    });
+  }
+
   async function reloadControlAfterMutation(message,preferredKey=''){
     let reloadWarning='';
     try{if(typeof window.sublichatControlReload==='function')await window.sublichatControlReload();}
@@ -988,12 +1026,20 @@
     const excel=row.excel;
     const sheetName=String(excel.sheet||'').trim();
     const rowNumber=Number(excel.row);
-    if(!sheetName||!Number.isInteger(rowNumber)||rowNumber<1)return alert('No pude identificar la fila exacta del respaldo. Actualice la revisión e inténtelo otra vez.');
-    if(!confirm(`¿Borrar este registro únicamente del Excel de respaldo?\n\nCliente: ${row.name||'Sin nombre'}\nHoja: ${sheetName}\nFila: ${rowNumber}\nCuenta: ${account.email||'Sin correo'}\n\nNo se eliminará ningún cliente, servicio ni asignación de Firebase/Bodega. Se conservará una copia anterior cuando haya espacio de respaldo.`))return;
+    if(!sheetName||!Number.isInteger(rowNumber)||rowNumber<1){
+      await controlDialog({title:'No pude identificar la fila',message:'Actualice la revisión e inténtelo otra vez.',confirmLabel:'Entendido',cancelLabel:'',icon:'⚠️'});
+      return;
+    }
+    const approved=await controlDialog({
+      title:'Borrar únicamente del Excel',
+      message:`Cliente: ${row.name||'Sin nombre'}\nHoja: ${sheetName}\nFila: ${rowNumber}\nCuenta: ${account.email||'Sin correo'}\n\nNo se eliminará ningún cliente, servicio ni asignación de Firebase/Bodega. Se conservará una copia anterior cuando haya espacio de respaldo.`,
+      confirmLabel:'Sí, borrar del Excel',cancelLabel:'Cancelar',danger:true,icon:'🗑️'
+    });
+    if(!approved)return;
     state.busy=true;mutationMessage('Borrando la fila histórica del respaldo Excel…','');render();
     try{
       if(!window.ExcelJS)throw new Error('No cargó el lector de Excel. Recargue la página.');
-      const originalBase64=await ensureTemplateBase64(false);
+      const originalBase64=await loadTemplateBase64(false);
       const workbook=new ExcelJS.Workbook();
       await workbook.xlsx.load(base64ToBuffer(originalBase64));
       const ws=workbook.getWorksheet(sheetName);
@@ -1025,7 +1071,9 @@
       state.expandedAccountKey=account.key;
       mutationMessage(`✅ ${row.name||'El registro'} fue borrado únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
     }catch(e){
-      const text='⚠️ '+(e.message||'No se pudo borrar la fila del respaldo Excel.');mutationMessage(text,'error');alert(text);
+      const text='⚠️ '+(e.message||'No se pudo borrar la fila del respaldo Excel.');
+      mutationMessage(text,'error');
+      await controlDialog({title:'No se pudo borrar',message:text,confirmLabel:'Entendido',cancelLabel:'',icon:'⚠️'});
     }finally{state.busy=false;render();}
   }
 
