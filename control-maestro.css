@@ -43,6 +43,7 @@ body.ready #screen-control-cuentas.screen.active:fullscreen{
   margin:0!important;padding:12px!important;box-sizing:border-box!important;background:var(--bg,#edf6ff)!important;
   overflow-x:hidden!important;overflow-y:scroll!important;overscroll-behavior:contain!important;
   -webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;scrollbar-gutter:stable!important;
+  pointer-events:auto!important;
 }
 body.ready #screen-control-cuentas.screen.active.cm-control-expanded>.card,
 body.ready #screen-control-cuentas.screen.active:fullscreen>.card{
@@ -59,6 +60,7 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   width:100%!important;max-width:none!important;height:auto!important;min-height:max-content!important;overflow:visible!important;
 }
 #screen-control-cuentas:fullscreen .cm-roster,#screen-control-cuentas.cm-control-expanded .cm-roster{max-height:none!important;overflow:visible!important}
+#screen-control-cuentas.cm-control-expanded>.card,#screen-control-cuentas.cm-control-expanded #rbac-control-cuentas,#screen-control-cuentas.cm-control-expanded .cm-shell{pointer-events:auto!important}
 
 .cm-kpis{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:10px;margin-bottom:14px}
 .cm-kpi{min-height:76px;padding:12px 14px;border:1px solid var(--line);border-radius:17px;background:var(--card);box-shadow:var(--sh)}
@@ -104,6 +106,13 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
 .cm-platform-filter{min-width:154px;min-height:50px;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-left:6px solid var(--platform-color,#168fd3);border-radius:14px;background:color-mix(in srgb,var(--platform-color,#168fd3) 5%,var(--surface));color:var(--txt2);cursor:pointer;white-space:nowrap}
 .cm-platform-filter b{font:900 11px/1.15 'Nunito',system-ui,sans-serif}.cm-platform-filter span{min-width:72px;display:grid;place-items:center;padding:6px 7px;border-radius:9px;background:var(--card);color:var(--txt);font-size:8px;font-weight:950}
 .cm-platform-filter.on{border-color:var(--platform-color,#168fd3);border-left-width:6px;background:color-mix(in srgb,var(--platform-color,#168fd3) 13%,var(--surface));color:var(--platform-color,#168fd3);box-shadow:0 0 0 1px color-mix(in srgb,var(--platform-color,#168fd3) 20%,transparent)}
+.cm-review-progress{margin:0 0 14px;padding:14px;border:1px solid color-mix(in srgb,var(--cm-blue) 25%,var(--line));border-radius:17px;background:color-mix(in srgb,var(--cm-blue) 4%,var(--surface))}
+.cm-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:11px}.cm-progress-head b{display:block;color:var(--txt);font-size:var(--cm-text-lg);font-weight:950}.cm-progress-head small{display:block;margin-top:3px;color:var(--txt2);font-size:var(--cm-text-sm);font-weight:750}.cm-progress-head>span{padding:7px 10px;border-radius:999px;background:var(--card);color:var(--cm-blue);font-size:var(--cm-text-sm);font-weight:950;white-space:nowrap}
+.cm-progress-grid{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:8px}
+.cm-progress-card{min-width:0;display:block;padding:10px;border:1px solid var(--line);border-left:5px solid var(--platform-color);border-radius:13px;background:var(--surface);color:var(--txt);text-align:left;cursor:pointer}.cm-progress-card:hover,.cm-progress-card.on{border-color:var(--platform-color);box-shadow:0 0 0 2px color-mix(in srgb,var(--platform-color) 15%,transparent)}
+.cm-progress-title{display:flex;align-items:center;justify-content:space-between;gap:8px}.cm-progress-title b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--cm-text-md);font-weight:950}.cm-progress-title strong{color:var(--platform-color);font-size:var(--cm-text-lg);font-weight:950}
+.cm-progress-track{height:8px;margin:7px 0;border-radius:999px;background:color-mix(in srgb,var(--txt) 9%,var(--card));overflow:hidden}.cm-progress-track i{display:block;height:100%;border-radius:inherit;background:var(--platform-color)}
+.cm-progress-card small{display:block;color:var(--txt2);font-size:var(--cm-text-xs);font-weight:800}.cm-progress-card em{display:inline-flex;margin-top:6px;padding:3px 6px;border-radius:7px;background:var(--card);font-size:var(--cm-text-xs);font-style:normal;font-weight:950}.cm-progress-card.complete em{background:var(--goodSoft);color:var(--cm-green)}.cm-progress-card.empty em{background:color-mix(in srgb,var(--cm-red) 10%,var(--card));color:var(--cm-red)}.cm-progress-card.urgent em{background:color-mix(in srgb,#f47521 11%,var(--card));color:#b34c08}.cm-progress-card.partial em{background:var(--warnSoft);color:#8a5b00}
 .cm-account-toolbar{margin-top:3px}.cm-account-count{margin:-2px 0 10px;color:var(--txt2);font-size:11px;font-weight:750}.cm-account-count b{color:var(--txt)}
 .cm-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:start}
 .cm-account-no-results{grid-column:1/-1;border:1px dashed var(--line);border-radius:16px;background:var(--surface)}
@@ -222,12 +231,14 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-hero{grid-template-columns:1fr}.cm-private{width:max-content}.cm-hero-actions{justify-content:flex-start}.cm-refresh-top-wrap{min-width:min(100%,260px)}.cm-refresh-top{min-width:100%}
 }
 @media(max-width:1250px){.cm-account-grid{grid-template-columns:1fr}}
+@media(max-width:1180px){.cm-progress-grid{grid-template-columns:repeat(3,minmax(180px,1fr))}}
 @media(max-width:620px){
   .cm-hero{padding:17px}.cm-title{align-items:flex-start}.cm-title-icon{width:48px;height:48px;border-radius:16px;font-size:24px}.cm-title h2{font-size:23px}
   .cm-reading-bar{display:block}.cm-size-options{display:grid;grid-template-columns:repeat(3,1fr);margin-top:10px}.cm-size-options button{padding:8px 5px}
   .cm-kpis{grid-template-columns:1fr 1fr}.cm-kpi{min-height:82px}
   .cm-panel{padding:14px}.cm-panel-head{display:block}.cm-template-state{margin-top:9px}
   .cm-toolbar{grid-template-columns:1fr}.cm-filters{width:100%}.cm-platform-filters{flex-wrap:nowrap;overflow-x:auto}
+  .cm-progress-head{display:block}.cm-progress-head>span{display:inline-flex;margin-top:8px}.cm-progress-grid{grid-template-columns:1fr 1fr}
   .cm-actions>.cm-btn,.cm-actions>.cm-file-btn{flex:1;min-width:135px}
   .cm-backup{grid-template-columns:1fr}.cm-backup-actions{justify-content:flex-start}
   .cm-accounts-panel{padding:14px}.cm-account-toolbar{margin-top:4px}.cm-account-head{grid-template-columns:1fr}.cm-review-state{max-width:none;align-items:flex-start;text-align:left}
@@ -236,3 +247,4 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-roster-row{grid-template-columns:1fr 1fr;gap:8px}.cm-roster-result,.cm-roster-actions{grid-column:1/-1}.cm-roster-actions{justify-content:flex-start}.cm-account-review{grid-template-columns:1fr}.cm-account-review-actions{display:grid;grid-template-columns:1fr 1fr}.cm-account-review-actions .cm-btn{white-space:normal}
   .cm-details>summary{align-items:flex-start}.cm-details>summary i{white-space:normal;text-align:right}.cm-details-body{padding:13px}
 }
+@media(max-width:430px){.cm-progress-grid{grid-template-columns:1fr}}

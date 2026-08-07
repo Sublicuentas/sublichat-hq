@@ -4,12 +4,12 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-EN-FILA-20260807-16';
+  const BUILD='CONTROL-MAESTRO-FULLSCREEN-ACTIVO-Y-PROGRESO-20260807-17';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:''
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0
   };
 
   function loadUiSize(){
@@ -633,6 +633,35 @@
     return {tone:'ok',label:'✅ REVISADA',rowText:`Próxima: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · próxima revisión: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:true};
   }
 
+  function reviewProgress(accounts){
+    const list=Array.isArray(accounts)?accounts:[];
+    const total=list.length;
+    const reviewed=list.filter((a)=>accountReviewSchedule(a).isReviewed).length;
+    const pending=Math.max(0,total-reviewed);
+    const percent=total?Math.round((reviewed/total)*100):0;
+    const tone=percent===100?'complete':(percent===0?'empty':(percent<50?'urgent':'partial'));
+    const label=percent===100?'✅ Completa':(percent===0?'🔴 Sin revisar':(percent<50?'🟠 Urge avanzar':'🟡 Parcial'));
+    return {total,reviewed,pending,percent,tone,label};
+  }
+
+  function platformReviewProgressHtml(audit){
+    const groups=Object.keys(audit.platforms||{}).map((family)=>{
+      const accounts=audit.accounts.filter((a)=>a.family===family);
+      return {family,name:auditPlatformLabel(family),...reviewProgress(accounts)};
+    }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
+    const overall=reviewProgress(audit.accounts);
+    const card=(item,overallCard=false)=>`<button type="button" class="cm-progress-card ${esc(item.tone)} ${state.accountPlatform===(overallCard?'all':item.family)?'on':''}" style="--platform-color:${overallCard?'#168fd3':platformColor(item.family)}" data-cm-review-platform="${overallCard?'all':esc(item.family)}">
+      <div class="cm-progress-title"><b>${overallCard?'Avance total':esc(item.name)}</b><strong>${item.percent}%</strong></div>
+      <div class="cm-progress-track"><i style="width:${item.percent}%"></i></div>
+      <small>${item.reviewed} de ${item.total} cuentas · ${item.pending} pendiente${item.pending===1?'':'s'}</small>
+      <em>${esc(item.label)}</em>
+    </button>`;
+    return `<section class="cm-review-progress">
+      <div class="cm-progress-head"><div><b>📊 Avance de revisión por plataforma</b><small>Revisiones vigentes por 15 días. Las plataformas que más urgen aparecen primero.</small></div><span>${overall.reviewed}/${overall.total} cuentas revisadas</span></div>
+      <div class="cm-progress-grid">${card({...overall,family:'all',name:'Avance total'},true)}${groups.map((item)=>card(item)).join('')}</div>
+    </section>`;
+  }
+
   const EXPIRY_SOON_DAYS=3;
   const AUDIT_PLATFORM_COLORS={
     netflix:'#e50914',vipnetflix:'#c9184a',disney:'#1769d2',hbomax:'#6f42c1',primevideo:'#00a8e1',
@@ -773,6 +802,7 @@
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
       <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
+      ${platformReviewProgressHtml(audit)}
       <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" style="--platform-color:${k==='all'?'#168fd3':platformColor(k)}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} perfiles</span></button>`).join('')}</div>
       <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
       <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
@@ -861,6 +891,7 @@
     host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
     host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-review-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmReviewPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
     host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1500;state.expandedAccountKey='';render();});
     const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;state.accountLimit=5000;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
     host.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
@@ -1364,15 +1395,26 @@
     setTimeout(()=>{const q=document.getElementById('invQ');if(q){q.value=item.inventoryAccount||item.liveAccount||item.excelAccount||item.platform||'';q.dispatchEvent(new Event('input',{bubbles:true}));q.focus();}},180);
   }
 
+  function closeControlExpanded(){
+    const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
+    if(!screen.classList.contains('cm-control-expanded'))return;
+    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+    render();
+    requestAnimationFrame(()=>{
+      try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
+      catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
+    });
+  }
+
   async function toggleFullscreen(){
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
-    try{
-      if(document.fullscreenElement){await document.exitFullscreen();screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');}
-      else if(screen.requestFullscreen){screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');await screen.requestFullscreen();}
-      else{screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
-    }catch(_){screen.classList.toggle('cm-control-expanded');document.body.classList.toggle('cm-control-no-scroll',screen.classList.contains('cm-control-expanded'));}
-    screen.scrollTop=0;
-    render();
+    // Opera puede bloquear clics y ventanas secundarias dentro del Fullscreen API.
+    // La vista ampliada propia ocupa toda la pantalla sin aislar la interfaz.
+    if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
+    if(screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
+    state.fullscreenReturnY=window.scrollY||0;
+    screen.classList.add('cm-control-expanded');document.body.classList.add('cm-control-no-scroll');
+    screen.scrollTop=0;render();
   }
 
   async function refreshControlData(){
@@ -1450,6 +1492,7 @@
     const observer=new MutationObserver(()=>{if(screenActive()&&!state.loading)boot();});
     const screen=document.getElementById('screen-control-cuentas');if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
     document.addEventListener('fullscreenchange',()=>{if(screenActive()){const active=document.fullscreenElement===screen;if(active)requestAnimationFrame(()=>{screen.scrollTop=0;});render();}});
+    document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
     if(screenActive())boot();
   }
 
