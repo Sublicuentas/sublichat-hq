@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-FULLSCREEN-20260807-14';
+  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-VISIBLE-20260807-15';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -944,8 +944,10 @@
     return new Promise((resolve)=>{
       const screen=document.getElementById('screen-control-cuentas');
       const host=document.fullscreenElement||screen||document.body;
+      const screenTop=screen?.scrollTop||0;
+      const pageX=window.scrollX||0,pageY=window.scrollY||0;
       const overlay=document.createElement('div');
-      overlay.className='cm-dialog-overlay';
+      overlay.className=`cm-dialog-overlay cm-shell cm-size-${state.uiSize||'large'}`;
       overlay.innerHTML=`
         <div class="cm-dialog" role="dialog" aria-modal="true" aria-labelledby="cm-dialog-title">
           <div class="cm-dialog-icon" aria-hidden="true">${esc(icon)}</div>
@@ -962,7 +964,10 @@
       const finish=(value)=>{
         if(finished)return;finished=true;
         document.removeEventListener('keydown',onKey,true);
-        overlay.remove();resolve(value);
+        overlay.remove();
+        if(screen)screen.scrollTop=screenTop;
+        try{window.scrollTo({left:pageX,top:pageY,behavior:'instant'});}catch(_){window.scrollTo(pageX,pageY);}
+        resolve(value);
       };
       const onKey=(event)=>{
         if(event.key==='Escape'&&cancelLabel){event.preventDefault();finish(false);}
@@ -973,7 +978,10 @@
       if(cancel)cancel.onclick=()=>finish(false);
       overlay.onclick=(event)=>{if(event.target===overlay&&cancelLabel)finish(false);};
       host.appendChild(overlay);
-      requestAnimationFrame(()=>overlay.querySelector('.cm-dialog-confirm')?.focus());
+      requestAnimationFrame(()=>{
+        try{overlay.querySelector('.cm-dialog-confirm')?.focus({preventScroll:true});}catch(_){}
+        if(screen)screen.scrollTop=screenTop;
+      });
     });
   }
 
@@ -1031,9 +1039,9 @@
       return;
     }
     const approved=await controlDialog({
-      title:'Borrar únicamente del Excel',
-      message:`Cliente: ${row.name||'Sin nombre'}\nHoja: ${sheetName}\nFila: ${rowNumber}\nCuenta: ${account.email||'Sin correo'}\n\nNo se eliminará ningún cliente, servicio ni asignación de Firebase/Bodega. Se conservará una copia anterior cuando haya espacio de respaldo.`,
-      confirmLabel:'Sí, borrar del Excel',cancelLabel:'Cancelar',danger:true,icon:'🗑️'
+      title:'¿Borrar del Excel?',
+      message:`${row.name||'Este registro'} · ${sheetName}, fila ${rowNumber}`,
+      confirmLabel:'Borrar del Excel',cancelLabel:'Cancelar',danger:true,icon:'🗑️'
     });
     if(!approved)return;
     state.busy=true;mutationMessage('Borrando la fila histórica del respaldo Excel…','');render();
