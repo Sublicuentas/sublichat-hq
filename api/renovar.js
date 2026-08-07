@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 18  ·  compras con varios perfiles y un solo precio/renovación
+// api/renovar.js  ·  VERSION 19  ·  multiperfil confirmado + inventario por plataforma
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -99,6 +99,11 @@ function canonPlat(v) {
   return key;
 }
 
+function familiaInventario(v) {
+  const p = canonPlat(v);
+  return ["disneyp", "disneys", "disney"].includes(p) ? "disney" : p;
+}
+
 // Busca el índice del servicio dentro del array guardado en Firestore. El índice
 // explícito solo se acepta si también coincide con plataforma/correo; así un índice
 // válido pero perteneciente a otra ficha no puede renovar el servicio equivocado.
@@ -138,6 +143,8 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("deezer") ||
     p.includes("youtube") ||
     p.includes("office") ||
+    p.includes("paramount") ||
+    p.includes("appletv") ||
     p.includes("vix") ||
     p.includes("canva") ||
     p.includes("gemini") ||
@@ -282,20 +289,22 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
 async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "" } = {}) {
   const antes = anterior ? perfilesOperativos(anterior, nombreTitular) : [];
   const despues = nuevo ? perfilesOperativos(nuevo, nombreTitular) : [];
-  const key = (p) => `${normCorreo(p.correo)}|${normName(p.nombre)}`;
-  const nuevas = new Set(despues.map(key));
+  const plataformaAnterior = anterior?.plataforma || nuevo?.plataforma || "";
+  const plataformaNueva = nuevo?.plataforma || anterior?.plataforma || "";
+  const key = (p, plataforma) => `${familiaInventario(plataforma)}|${normCorreo(p.correo)}|${normName(p.nombre)}`;
+  const nuevas = new Set(despues.map((p) => key(p, plataformaNueva)));
   const resultados = [];
 
   for (const p of antes) {
-    if (!nuevas.has(key(p))) {
+    if (!nuevas.has(key(p, plataformaAnterior))) {
       resultados.push(await ajustarInventario(db, {
-        modo: "liberar", correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+        modo: "liberar", plataforma: plataformaAnterior, correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
       }));
     }
   }
   for (const p of despues) {
     resultados.push(await ajustarInventario(db, {
-      modo: "ocupar", correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+      modo: "ocupar", plataforma: plataformaNueva, correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
     }));
   }
 
@@ -322,13 +331,24 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
 // cambió, se actualiza en el mismo registro en vez de crear uno nuevo.
 // También se agregó el tope de capacidad, que antes no existía acá (por eso
 // una cuenta de 5 cupos podía terminar con 15 "clientes").
-async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
+async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pin }) {
   if (!correo) return { tocado: false, motivo: "sin correo" };
   try {
-    const invSnap = await db.collection("inventario").where("correo", "==", correo).get();
+    const correoOriginal = String(correo || "").trim();
+    const correoNormalizado = normCorreo(correoOriginal);
+    let invSnap = await db.collection("inventario").where("correo", "==", correoOriginal).get();
+    if (invSnap.empty && correoNormalizado !== correoOriginal) {
+      invSnap = await db.collection("inventario").where("correo", "==", correoNormalizado).get();
+    }
     if (invSnap.empty) return { tocado: false, motivo: "correo no está en inventario" };
-    const ref = invSnap.docs[0].ref;
-    const data = invSnap.docs[0].data();
+    const familiaBuscada = familiaInventario(plataforma);
+    let cuenta = invSnap.docs.find((d) => familiaInventario(d.data()?.plataforma) === familiaBuscada) || null;
+    // Compatibilidad con una cuenta antigua sin plataforma: solo es seguro usarla
+    // cuando el correo devuelve un único documento.
+    if (!cuenta && invSnap.docs.length === 1 && !String(invSnap.docs[0].data()?.plataforma || "").trim()) cuenta = invSnap.docs[0];
+    if (!cuenta) return { tocado: false, motivo: `correo no está en inventario para ${familiaBuscada || "esa plataforma"}` };
+    const ref = cuenta.ref;
+    const data = cuenta.data();
     let clientes = Array.isArray(data.clientes) ? [...data.clientes] : [];
     const cap = Number(data.capacidad) || 0;
 
@@ -363,7 +383,7 @@ async function ajustarInventario(db, { modo, correo, nombreCliente, pin }) {
     };
     if (data.disp != null) update.disp = disponibles;
     await ref.update(update);
-    return { tocado: true, ocupados, disponibles };
+    return { tocado: true, plataforma: familiaBuscada, ocupados, disponibles };
   } catch (e) {
     return { tocado: false, motivo: e.message };
   }
@@ -394,8 +414,8 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   //   pinPerfil = PIN del perfil cuando aplique
   // Reglas principales:
   //   Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
-  //   Netflix VIP, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
-  //   ViX+, Canva, Gemini, ChatGPT y Duolingo son solo correo.
+  //   Netflix VIP, Paramount+, ViX+, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
+  //   Canva, Gemini, ChatGPT y Duolingo son solo correo.
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
   const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
@@ -412,6 +432,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   const perfiles = normalizarPerfilesServicio(servicio, anterior, nombreTitular);
   const principal = perfiles[0] || {};
   const out = {
+    schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
     modalidad: perfiles.length > 1 ? "multiperfil" : "individual",
     plataforma: servicio.plataforma || "",
@@ -507,7 +528,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 18, msg: "renovar v18 activo (compras multiperfil + PIN individual + edición exacta). Usá POST." });
+    return res.status(200).json({ ok: true, version: 19, msg: "renovar v19 activo (multiperfil confirmado + inventario por plataforma). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
@@ -648,13 +669,25 @@ export default async function handler(req, res) {
         invResult = { tocado: false, motivo: e.message };
       }
 
+      const perfilesGuardados = perfilesOperativos(servicios[idx], nombreFinal);
+
       return res.status(200).json({
         ok: true,
         accion: acc,
+        guardadoEnFirebase: true,
+        schemaVersion: Number(servicios[idx]?.schemaVersion) || 2,
+        compraId: String(servicios[idx]?.compraId || nuevo.compraId || ""),
         created,
         clienteId: docRef.id,
         totalServicios: servicios.length,
-        totalPerfiles: perfilesOperativos(servicios[idx], nombreFinal).length,
+        totalPerfiles: perfilesGuardados.length,
+        perfilesGuardados: perfilesGuardados.map((p) => ({
+          perfilId: p.perfilId,
+          nombre: p.nombre,
+          correo: p.correo,
+          tieneClave: !!p.clave,
+          tienePin: !!p.pinPerfil
+        })),
         servicioActualizado,
         servicioIndex: idx,
         inventario: invResult
