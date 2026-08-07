@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 17  ·  renovación y ficha CRM por documento/servicio exactos
+// api/renovar.js  ·  VERSION 18  ·  compras con varios perfiles y un solo precio/renovación
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -151,7 +151,6 @@ function servicioNoUsaPinPerfil(plataforma) {
 function servicioNoUsaClave(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   return (
-    p.includes("universal") ||
     p.includes("canva") ||
     p.includes("gemini") ||
     p.includes("chatgpt") ||
@@ -207,6 +206,108 @@ function parseMoney(v) {
   const clean = String(v).replace(/Lps\.?/gi, "").replace(/,/g, ".").replace(/[^0-9.]/g, "");
   const n = Number(clean);
   return Number.isFinite(n) ? n : 0;
+}
+
+function recordId(prefix = "id") {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `${prefix}_${Date.now().toString(36)}_${random}`;
+}
+
+function perfilPinRaw(perfil = {}) {
+  return String(
+    perfil.pinPerfil ?? perfil.pin_perfil ?? perfil.perfilPin ?? perfil.pin ?? ""
+  ).trim();
+}
+
+function perfilesOperativos(servicio = {}, nombreTitular = "") {
+  const lista = Array.isArray(servicio.perfiles) && servicio.perfiles.length
+    ? servicio.perfiles
+    : [{
+        perfilId: servicio.perfilId || "",
+        nombre: servicio.nombrePerfil || servicio.perfil || nombreTitular || "Cliente",
+        perfil: servicio.perfil || servicio.nombrePerfil || nombreTitular || "",
+        correo: servicio.correo || "",
+        clave: servicio.clave || servicio.password || servicio.contrasena || servicio.pin || "",
+        pinPerfil: servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || ""
+      }];
+
+  return lista.map((p, index) => ({
+    perfilId: String(p?.perfilId || p?.id || ""),
+    nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
+    perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
+    correo: String(p?.correo ?? servicio.correo ?? "").trim(),
+    clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? servicio.password ?? servicio.contrasena ?? "").trim(),
+    pinPerfil: perfilPinRaw(p) || (index === 0 ? perfilPinRaw(servicio) : "")
+  }));
+}
+
+function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular = "") {
+  const tieneListaNueva = Array.isArray(servicio.perfiles);
+  let base;
+  if (tieneListaNueva && servicio.perfiles.length) base = servicio.perfiles;
+  else if (!tieneListaNueva && Array.isArray(anterior.perfiles) && anterior.perfiles.length) base = anterior.perfiles;
+  else base = perfilesOperativos({ ...anterior, ...servicio }, nombreTitular);
+
+  const prev = perfilesOperativos(anterior, nombreTitular);
+  const plataforma = servicio.plataforma || anterior.plataforma || "";
+  const sinClave = servicioNoUsaClave(plataforma);
+  const sinPin = servicioNoUsaPinPerfil(plataforma);
+
+  return base.map((raw = {}, index) => {
+    const previo = prev.find((p) => p.perfilId && p.perfilId === String(raw.perfilId || raw.id || "")) || prev[index] || {};
+    const topCorreo = index === 0 && servicio.correo != null ? servicio.correo : undefined;
+    const topClave = index === 0 && (servicio.clave != null || servicio.password != null || servicio.contrasena != null)
+      ? (servicio.clave ?? servicio.password ?? servicio.contrasena ?? "")
+      : undefined;
+    const topPin = index === 0 && (servicio.pinPerfil != null || servicio.pin_perfil != null || servicio.perfilPin != null)
+      ? (servicio.pinPerfil ?? servicio.pin_perfil ?? servicio.perfilPin ?? "")
+      : undefined;
+    const topNombre = index === 0 && servicio.perfil != null ? servicio.perfil : undefined;
+    const nombre = String(topNombre ?? raw.nombre ?? raw.nombrePerfil ?? raw.cliente ?? raw.perfil ?? previo.nombre ?? nombreTitular ?? `Perfil ${index + 1}`).trim();
+    const out = {
+      perfilId: String(raw.perfilId || raw.id || previo.perfilId || recordId("perfil")),
+      nombre,
+      perfil: String(topNombre ?? raw.perfil ?? raw.nombrePerfil ?? raw.nombre ?? previo.perfil ?? nombre).trim(),
+      correo: String(topCorreo ?? raw.correo ?? previo.correo ?? servicio.correo ?? anterior.correo ?? "").trim(),
+      clave: sinClave ? "" : String(topClave ?? raw.clave ?? raw.password ?? raw.contrasena ?? previo.clave ?? servicio.clave ?? anterior.clave ?? "").trim()
+    };
+    const pin = sinPin ? "" : String(
+      topPin ?? raw.pinPerfil ?? raw.pin_perfil ?? raw.perfilPin ?? raw.pin ?? previo.pinPerfil ?? ""
+    ).trim();
+    if (pin) out.pinPerfil = pin;
+    return out;
+  });
+}
+
+async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "" } = {}) {
+  const antes = anterior ? perfilesOperativos(anterior, nombreTitular) : [];
+  const despues = nuevo ? perfilesOperativos(nuevo, nombreTitular) : [];
+  const key = (p) => `${normCorreo(p.correo)}|${normName(p.nombre)}`;
+  const nuevas = new Set(despues.map(key));
+  const resultados = [];
+
+  for (const p of antes) {
+    if (!nuevas.has(key(p))) {
+      resultados.push(await ajustarInventario(db, {
+        modo: "liberar", correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+      }));
+    }
+  }
+  for (const p of despues) {
+    resultados.push(await ajustarInventario(db, {
+      modo: "ocupar", correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+    }));
+  }
+
+  const ultimo = [...resultados].reverse().find((x) => x && x.tocado) || {};
+  return {
+    tocado: resultados.some((x) => x?.tocado),
+    perfiles: despues.length,
+    ocupados: ultimo.ocupados,
+    disponibles: ultimo.disponibles,
+    resultados,
+    advertencias: resultados.filter((x) => x && !x.tocado && x.motivo).map((x) => x.motivo)
+  };
 }
 
 // Ajusta los cupos de una cuenta del inventario buscándola por correo.
@@ -287,7 +388,7 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
   return null;
 }
 
-function buildServicio(servicio = {}, fichaTexto = "") {
+function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitular = "") {
   // Modelo limpio del CRM:
   //   clave     = contraseña/acceso de la cuenta cuando aplique
   //   pinPerfil = PIN del perfil cuando aplique
@@ -308,19 +409,24 @@ function buildServicio(servicio = {}, fichaTexto = "") {
     ? String(servicio.pinPerfil || "")
     : String(servicio.pin_perfil || servicio.perfilPin || servicio.pinDePerfil || servicio.pin_de_perfil || (tieneClaveNueva && servicio.pin != null ? servicio.pin || "" : "")));
 
+  const perfiles = normalizarPerfilesServicio(servicio, anterior, nombreTitular);
+  const principal = perfiles[0] || {};
   const out = {
+    compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
+    modalidad: perfiles.length > 1 ? "multiperfil" : "individual",
     plataforma: servicio.plataforma || "",
     precio: parseMoney(servicio.precio || servicio.precioLps || servicio.pago || servicio.monto),
     fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
-    correo: servicio.correo || "",
-    clave,
-    perfil: servicio.perfil || "",
+    correo: principal.correo || servicio.correo || "",
+    clave: sinClave ? "" : (principal.clave || clave),
+    perfil: principal.perfil || servicio.perfil || principal.nombre || "",
+    perfiles,
     updatedAt: isoNow()
   };
 
   if (sinClave) out.sinClave = true;
   if (sinPinPerfil) out.sinPinPerfil = true;
-  else if (pinPerfil) out.pinPerfil = pinPerfil;
+  else if (principal.pinPerfil || pinPerfil) out.pinPerfil = principal.pinPerfil || pinPerfil;
 
   if (fichaTexto) {
     out.fichaTexto = fichaTexto;
@@ -343,6 +449,30 @@ function limpiarServicioCRM(servicio = {}) {
   if (servicioNoUsaClave(s.plataforma)) s.clave = "";
   if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
   if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
+  if (Array.isArray(s.perfiles) && s.perfiles.length) {
+    s.perfiles = s.perfiles.map((perfil, index) => {
+      const p = { ...(perfil || {}) };
+      p.perfilId = String(p.perfilId || p.id || recordId("perfil"));
+      p.nombre = String(p.nombre || p.nombrePerfil || p.perfil || `Perfil ${index + 1}`).trim();
+      p.perfil = String(p.perfil || p.nombrePerfil || p.nombre || "").trim();
+      p.correo = String(p.correo ?? s.correo ?? "").trim();
+      p.clave = servicioNoUsaClave(s.plataforma) ? "" : String(p.clave ?? p.password ?? p.contrasena ?? s.clave ?? "").trim();
+      const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
+      if (pPin) p.pinPerfil = pPin;
+      else delete p.pinPerfil;
+      delete p.id; delete p.nombrePerfil; delete p.pin; delete p.pin_perfil; delete p.perfilPin;
+      delete p.password; delete p.contrasena;
+      return p;
+    });
+    s.modalidad = s.perfiles.length > 1 ? "multiperfil" : "individual";
+    if (!s.compraId) s.compraId = recordId("compra");
+    const principal = s.perfiles[0];
+    s.correo = principal.correo || s.correo || "";
+    s.clave = servicioNoUsaClave(s.plataforma) ? "" : (principal.clave || s.clave || "");
+    s.perfil = principal.perfil || principal.nombre || s.perfil || "";
+    if (principal.pinPerfil) s.pinPerfil = principal.pinPerfil;
+    else delete s.pinPerfil;
+  }
   delete s.pin;
   delete s.pin_perfil;
   delete s.perfilPin;
@@ -377,7 +507,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 17, msg: "renovar v17 activo (documento + servicio exactos en renovación y ficha CRM). Usá POST." });
+    return res.status(200).json({ ok: true, version: 18, msg: "renovar v18 activo (compras multiperfil + PIN individual + edición exacta). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
@@ -436,9 +566,11 @@ export default async function handler(req, res) {
       }
 
       let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
-      const nuevo = buildServicio(servicio, body.fichaTexto || "");
-      const pNorm = normPlat(nuevo.plataforma);
-      const correoNorm = String(nuevo.correo || "").trim().toLowerCase();
+      const pNorm = normPlat(servicio.plataforma);
+      const correoEntrada = Array.isArray(servicio.perfiles) && servicio.perfiles.length
+        ? (servicio.perfiles[0]?.correo ?? servicio.correo ?? "")
+        : (servicio.correo || "");
+      const correoNorm = String(correoEntrada || "").trim().toLowerCase();
 
       // Una ficha abierta desde el CRM trae el índice real del servicio. Se valida
       // también contra sus datos originales para impedir que un índice viejo edite
@@ -471,16 +603,23 @@ export default async function handler(req, res) {
         }
       }
 
-      const correoAnterior = idx >= 0 ? String(servicios[idx].correo || "").trim().toLowerCase() : "";
       const servicioActualizado = idx >= 0;
+      const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
+      const servicioAnterior = idx >= 0 ? { ...servicios[idx] } : null;
+      const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
+      for (let i = 0; i < nuevo.perfiles.length; i++) {
+        const p = nuevo.perfiles[i] || {};
+        if (!String(p.nombre || "").trim()) return res.status(200).json({ error: `Falta el nombre del perfil ${i + 1}.` });
+        if (!String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
+        if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
+        if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
+      }
 
       if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
       else {
         idx = servicios.length;
         servicios.push(aplicarNuevoServicio({}, nuevo));
       }
-
-      const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
 
       const update = {
         nombrePerfil: nombreFinal,
@@ -496,22 +635,15 @@ export default async function handler(req, res) {
 
       await docRef.set(update, { merge: true });
 
-      // Sincroniza el cupo en inventario (esto antes NO se hacía en ficha_upsert,
-      // por eso el correo aparecía "sin perfiles" aunque la ficha se hubiera guardado).
+      // Cada perfil de una compra ocupa su propio cupo. El precio y la fecha,
+      // en cambio, siguen guardados una sola vez en el servicio/compra.
       let invResult = null;
       try {
-        if (correoAnterior && correoAnterior !== correoNorm) {
-          // Cambió de correo/cuenta: libera el cupo viejo y ocupa el nuevo.
-          await ajustarInventario(db, { modo: "liberar", correo: correoAnterior, nombreCliente: nombreFinal });
-        }
-        if (correoNorm) {
-          invResult = await ajustarInventario(db, {
-            modo: "ocupar",
-            correo: nuevo.correo,
-            nombreCliente: nombreFinal,
-            pin: nuevo.pinPerfil || ""
-          });
-        }
+        invResult = await sincronizarInventarioServicio(db, {
+          anterior: servicioAnterior,
+          nuevo: servicios[idx],
+          nombreTitular: nombreFinal
+        });
       } catch (e) {
         invResult = { tocado: false, motivo: e.message };
       }
@@ -522,6 +654,7 @@ export default async function handler(req, res) {
         created,
         clienteId: docRef.id,
         totalServicios: servicios.length,
+        totalPerfiles: perfilesOperativos(servicios[idx], nombreFinal).length,
         servicioActualizado,
         servicioIndex: idx,
         inventario: invResult
@@ -566,8 +699,9 @@ export default async function handler(req, res) {
 
     const docRef = elegido.ref;
     const data = elegido.data();
-    let servicios = Array.isArray(data.servicios) ? data.servicios : [];
+    let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
     let invResult = null;
+    const nombreTitular = data.nombrePerfil || data.nombre || "";
 
     let fechaAnterior = null, fechaNueva = null, touchedIndex = null;
 
@@ -601,25 +735,55 @@ export default async function handler(req, res) {
       const servEliminado = servicios[idx];
       servicios = servicios.filter((_, i) => i !== idx);
 
-      invResult = await ajustarInventario(db, {
-        modo: "liberar",
-        correo: servEliminado.correo,
-        nombreCliente: data.nombrePerfil || data.nombre || ""
+      invResult = await sincronizarInventarioServicio(db, {
+        anterior: servEliminado,
+        nuevo: null,
+        nombreTitular
       });
+
+    } else if (acc === "eliminar_perfil") {
+      const { servicioIndex, perfilIndex, perfilId } = body;
+      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
+      if (idx === -1) return res.status(200).json({ error: "No encontré esa compra en el cliente." });
+      const anterior = servicios[idx];
+      const perfiles = perfilesOperativos(anterior, nombreTitular);
+      let pidx = Number.isInteger(Number(perfilIndex)) ? Number(perfilIndex) : -1;
+      if (perfilId) pidx = perfiles.findIndex((p) => String(p.perfilId || "") === String(perfilId));
+      if (pidx < 0 || pidx >= perfiles.length) return res.status(200).json({ error: "No encontré ese perfil en la compra." });
+      const eliminado = perfiles[pidx];
+      const restantes = perfiles.filter((_, i) => i !== pidx);
+      if (!restantes.length) {
+        servicios = servicios.filter((_, i) => i !== idx);
+        invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: null, nombreTitular });
+      } else {
+        const actualizado = buildServicio({
+          ...anterior,
+          perfiles: restantes,
+          correo: restantes[0].correo,
+          clave: restantes[0].clave,
+          pinPerfil: restantes[0].pinPerfil,
+          perfil: restantes[0].perfil
+        }, anterior.fichaTexto || "", anterior, nombreTitular);
+        servicios[idx] = aplicarNuevoServicio(anterior, actualizado);
+        invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: servicios[idx], nombreTitular });
+        touchedIndex = idx;
+      }
+      invResult = { ...(invResult || {}), perfilEliminado: eliminado.nombre || eliminado.perfil || "Perfil" };
 
     } else if (acc === "agregar") {
       const { servicio } = body;
       if (!servicio || !servicio.plataforma) return res.status(200).json({ error: "Faltan datos del servicio nuevo." });
 
-      const nuevo = buildServicio(servicio, "");
+      const nuevo = buildServicio(servicio, "", {}, nombreTitular);
+      for (let i = 0; i < nuevo.perfiles.length; i++) {
+        const p = nuevo.perfiles[i] || {};
+        if (!p.nombre || !p.correo) return res.status(200).json({ error: `Complete nombre y correo/usuario del perfil ${i + 1}.` });
+        if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
+        if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
+      }
       servicios = [...servicios, nuevo];
 
-      invResult = await ajustarInventario(db, {
-        modo: "ocupar",
-        correo: nuevo.correo,
-        nombreCliente: data.nombrePerfil || data.nombre || "",
-        pin: nuevo.pinPerfil || ""
-      });
+      invResult = await sincronizarInventarioServicio(db, { anterior: null, nuevo, nombreTitular });
 
     } else if (acc === "editar") {
       const { plataformaOriginal, correoOriginal, servicio, servicioIndex } = body;
@@ -630,16 +794,21 @@ export default async function handler(req, res) {
       const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma: buscar, correo: correoOriginal || correo });
       if (idx === -1) return res.status(200).json({ error: "No encontré ese servicio." });
 
+      const anterior = servicios[idx];
       const nuevo = buildServicio({
         plataforma: servicio.plataforma || servicios[idx].plataforma,
         precio: servicio.precio != null ? servicio.precio : servicios[idx].precio,
         fechaRenovacion: servicio.fechaRenovacion ? servicio.fechaRenovacion : servicios[idx].fechaRenovacion,
         correo: servicio.correo != null ? servicio.correo : (servicios[idx].correo || ""),
         clave: servicio.clave != null ? servicio.clave : (servicios[idx].clave || servicios[idx].pin || ""),
-        pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (servicios[idx].pinPerfil || servicios[idx].pin_perfil || servicios[idx].perfilPin || "")
-      }, servicio.fichaTexto || servicios[idx].fichaTexto || "");
+        pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (servicios[idx].pinPerfil || servicios[idx].pin_perfil || servicios[idx].perfilPin || ""),
+        perfil: servicio.perfil != null ? servicio.perfil : (servicios[idx].perfil || nombreTitular),
+        perfiles: Array.isArray(servicio.perfiles) ? servicio.perfiles : undefined,
+        compraId: servicio.compraId || servicios[idx].compraId || ""
+      }, servicio.fichaTexto || servicios[idx].fichaTexto || "", anterior, nombreTitular);
 
       servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
+      invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: servicios[idx], nombreTitular });
 
     } else {
       return res.status(200).json({ error: "Acción no reconocida." });

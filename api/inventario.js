@@ -1,4 +1,4 @@
-// api/inventario.js  ·  VERSION 3  ·  Editar, vaciar y eliminar cuentas del inventario
+// api/inventario.js  ·  VERSION 4  ·  Editar cuentas y sincronizar compras multiperfil
 //
 // Usa la misma cuenta de servicio que renovar.js (mismas env vars en Vercel):
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -84,7 +84,29 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
     const services = Array.isArray(data.servicios) ? data.servicios : [];
     let changed = false;
     const next = services.map((service) => {
-      const matches = canonPlatform(service && service.plataforma) === platform && normEmail(service && service.correo) === oldEmail;
+      if (canonPlatform(service && service.plataforma) !== platform) return service;
+      const perfiles = Array.isArray(service?.perfiles) ? service.perfiles : [];
+      if (perfiles.length) {
+        let profileChanged = false;
+        const nextProfiles = perfiles.map((perfil) => {
+          if (normEmail(perfil?.correo ?? service?.correo) !== oldEmail) return perfil;
+          references++;
+          if (options.countOnly) return perfil;
+          const copy = { ...(perfil || {}) };
+          if (options.emailProvided) copy.correo = String(options.newEmail || "").trim();
+          if (options.passwordProvided) copy.clave = String(options.newPassword == null ? "" : options.newPassword).trim();
+          profileChanged = true;updated++;
+          return copy;
+        });
+        if (!profileChanged) return service;
+        const copy = { ...service, perfiles: nextProfiles, updatedAt: new Date().toISOString() };
+        const principal = nextProfiles[0] || {};
+        copy.correo = principal.correo || copy.correo || "";
+        copy.clave = principal.clave != null ? String(principal.clave) : String(copy.clave || "");
+        changed = true;
+        return copy;
+      }
+      const matches = normEmail(service && service.correo) === oldEmail;
       if (!matches) return service;
       references++;
       if (options.countOnly) return service;
@@ -107,7 +129,7 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 3, msg: "inventario v3 activo. Usá POST." });
+    return res.status(200).json({ ok: true, version: 4, msg: "inventario v4 activo (sincronización multiperfil). Usá POST." });
 
   const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo } = req.body || {};
 
