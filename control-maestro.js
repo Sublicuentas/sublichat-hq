@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11';
+  const BUILD='CONTROL-MAESTRO-COMPRAS-MULTIPERFIL-20260806-12';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -306,7 +306,7 @@
     const hasExcelAudit=!!analysis?.sheets?.length;
     const allServices=(src.servicios||[]).map((s,i)=>({
       ...s,_auditIndex:i,_family:auditFamily(s.plataforma||s.plataformaLabel),_email:email(s.correo),
-      _name:norm(s.nombre),_phone:phone(s.telefono),_date:dateKey(s.fecha)
+      _name:norm(s.nombre),_titular:String(s.titular||s.nombre||''),_phone:phone(s.telefono),_date:dateKey(s.fecha)
     }));
     const assignmentCounts=new Map();
     (src.cuentas||[]).forEach((account)=>{
@@ -949,7 +949,8 @@
     const raw=row.service;
     const serviceIndex=Number.isInteger(Number(raw.servicioIndex))?Number(raw.servicioIndex):null;
     const service={...raw,srvIndex:serviceIndex,plataformaRaw:raw.plataforma||account.family,plataforma:raw.plataformaLabel||account.platform,fechaRaw:raw.fecha||'',fecha:dateValue(raw.fecha),pin:raw.clave||'',clave:raw.clave||'',pinPerfil:raw.pinPerfil||'',perfil:raw.perfil||row.profile||''};
-    const group={clienteId:raw.clienteId||'',nombre:raw.nombre||row.name||'',telefono:raw.telefono||row.phone||'',vendedor:raw.vendedor||'',nombreNorm:norm(raw.nombre||row.name),servicios:[service]};
+    const titular=raw.titular||raw._titular||raw.nombre||row.name||'';
+    const group={clienteId:raw.clienteId||'',nombre:titular,telefono:raw.telefono||row.phone||'',vendedor:raw.vendedor||'',nombreNorm:norm(titular),servicios:[service]};
     if(typeof window.abrirEntregaFicha==='function')window.abrirEntregaFicha(group,{servicioIndex:serviceIndex});
     else openAuditClient(pointer);
   }
@@ -958,12 +959,15 @@
     const {account,row}=auditRoster(pointer);if(!account||!row?.service||state.busy)return;
     const service=row.service;
     const platform=service.plataformaLabel||account.platform;
-    if(!confirm(`¿Eliminar este servicio de Firebase?\n\nCliente: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nSe eliminará solo este servicio y se liberará su cupo en Bodega. Los demás servicios del cliente se conservan.`))return;
+    const multiperfil=Number(service.cantidadPerfiles||0)>1;
+    if(!confirm(multiperfil
+      ?`¿Quitar solamente este perfil de la compra?\n\nPerfil: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nLa compra, su precio y los demás perfiles se conservarán. También se liberará este cupo en Bodega.`
+      :`¿Eliminar este servicio de Firebase?\n\nCliente: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nSe eliminará solo este servicio y se liberará su cupo en Bodega. Los demás servicios del cliente se conservan.`))return;
     state.busy=true;mutationMessage('Eliminando servicio…','');render();
     try{
-      const out=await api({accion:'eliminar',clienteId:service.clienteId||'',clienteNorm:norm(service.nombre||row.name),telefono:service.telefono||row.phone||'',plataforma:service.plataforma||account.family,correo:service.correo||account.email||'',servicioIndex:Number.isInteger(Number(service.servicioIndex))?Number(service.servicioIndex):null},RENEW_API);
+      const out=await api({accion:multiperfil?'eliminar_perfil':'eliminar',clienteId:service.clienteId||'',clienteNorm:norm(service.titular||service.nombre||row.name),telefono:service.telefono||row.phone||'',plataforma:service.plataforma||account.family,correo:multiperfil?'':(service.correo||account.email||''),servicioIndex:Number.isInteger(Number(service.servicioIndex))?Number(service.servicioIndex):null,perfilIndex:Number.isInteger(Number(service.perfilIndex))?Number(service.perfilIndex):null,perfilId:service.perfilId||''},RENEW_API);
       const extra=out.inventario?.tocado?` Cupo liberado: ${out.inventario.disponibles} disponible${out.inventario.disponibles===1?'':'s'}.`:'';
-      await reloadControlAfterMutation(`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
+      await reloadControlAfterMutation(multiperfil?`✅ Perfil ${row.name} retirado de la compra ${platform}.${extra}`:`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar el servicio.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();}
   }
@@ -1156,9 +1160,9 @@
   function addIdSheet(analysis){
     const wb=analysis.workbook;removeSheet(wb,'__SUBLICHAT_IDS');
     const ws=wb.addWorksheet('__SUBLICHAT_IDS');ws.state='veryHidden';
-    ws.addRow(['clienteId','servicioIndex','hoja','fila','plataforma','cuenta','generadoAt']);
-    analysis.matched.forEach((x)=>{if(x.service&&x.row)ws.addRow([x.service.clienteId||'',x.service.servicioIndex??'',x.row.sheet,x.row.row,x.service._plat,x.service._email,new Date().toISOString()]);});
-    analysis.items.filter(x=>x.generatedRow&&x.service).forEach((x)=>ws.addRow([x.service.clienteId||'',x.service.servicioIndex??'',x.generatedRow.sheet,x.generatedRow.row,x.service._plat,x.service._email,new Date().toISOString()]));
+    ws.addRow(['clienteId','servicioIndex','perfilIndex','perfilId','compraId','hoja','fila','plataforma','cuenta','generadoAt']);
+    analysis.matched.forEach((x)=>{if(x.service&&x.row)ws.addRow([x.service.clienteId||'',x.service.servicioIndex??'',x.service.perfilIndex??'',x.service.perfilId||'',x.service.compraId||'',x.row.sheet,x.row.row,x.service._plat,x.service._email,new Date().toISOString()]);});
+    analysis.items.filter(x=>x.generatedRow&&x.service).forEach((x)=>ws.addRow([x.service.clienteId||'',x.service.servicioIndex??'',x.service.perfilIndex??'',x.service.perfilId||'',x.service.compraId||'',x.generatedRow.sheet,x.generatedRow.row,x.service._plat,x.service._email,new Date().toISOString()]));
   }
 
   function columnLetter(number){

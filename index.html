@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-COMPRAS-MULTIPERFIL-20260806-12">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1908,6 +1908,23 @@ function statusOf(date){
   if(n<=7) return {k:"soon",t:`En ${n} día${n>1?"s":""}`};
   return {k:"ok",t:`En ${n} días`};
 }
+function perfilesDeCompra(servicio,nombreTitular=""){
+  const s=servicio||{};
+  const lista=Array.isArray(s.perfiles)&&s.perfiles.length?s.perfiles:[{
+    perfilId:s.perfilId||"",nombre:s.nombrePerfil||s.perfil||nombreTitular,perfil:s.perfil||s.nombrePerfil||nombreTitular,
+    correo:s.correo||"",clave:s.clave||s.contrasena||s.password||"",
+    pinPerfil:s.pinPerfil||s.pin_perfil||s.perfilPin||((s.clave||s.contrasena||s.password)?s.pin||"":"")
+  }];
+  return lista.map((p,index)=>{
+    const clave=String(p?.clave??p?.contrasena??p?.password??s.clave??s.contrasena??s.password??"");
+    const pinPerfil=String(p?.pinPerfil??p?.pin_perfil??p?.perfilPin??p?.pin??(index===0?(s.pinPerfil??s.pin_perfil??s.perfilPin??""):""));
+    const nombre=String(p?.nombre||p?.nombrePerfil||p?.cliente||p?.perfil||nombreTitular||`Perfil ${index+1}`).trim();
+    return {
+      perfilId:String(p?.perfilId||p?.id||""),nombre,perfil:String(p?.perfil||p?.nombrePerfil||p?.nombre||nombre).trim(),
+      correo:String(p?.correo??s.correo??"").trim(),clave,pinPerfil
+    };
+  });
+}
 function flattenCliente(doc, clienteId=""){
   const F=CONFIG.fields;
   const nombre=doc[F.nombre]||"—", vendedor=doc[F.vendedor]||"—";
@@ -1915,23 +1932,26 @@ function flattenCliente(doc, clienteId=""){
   const nombreNorm=doc.nombre_norm||"";
   const servs=Array.isArray(doc[F.servicios])?doc[F.servicios]:[];
   return servs.map((s,srvIndex)=>{
-    const rawClave=s.clave||s.contrasena||s.password||"";
+    const perfiles=perfilesDeCompra(s,nombre);
+    const principal=perfiles[0]||{};
+    const rawClave=principal.clave||s.clave||s.contrasena||s.password||"";
     const rawPin=s[F.s_pin]||"";
     const clave=rawClave || rawPin; // compatibilidad: antes el campo pin era la clave
-    const pinPerfil=s.pinPerfil||s.pin_perfil||s.perfilPin||(rawClave?rawPin:"");
+    const pinPerfil=principal.pinPerfil||s.pinPerfil||s.pin_perfil||s.perfilPin||(rawClave?rawPin:"");
     return {
       nombre,vendedor,telefono,nombreNorm,clienteId,
       srvIndex,
+      compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
       fecha:parseDate(s[F.s_fecha]),
       fechaRaw:s[F.s_fecha]||"",
-      correo:s[F.s_correo]||"",
+      correo:principal.correo||s[F.s_correo]||"",
       pin:clave,
       clave,
       pinPerfil,
-      perfil:s.perfil||s.nombrePerfil||"",
+      perfil:principal.perfil||s.perfil||s.nombrePerfil||nombre,
       fichaTexto:s.fichaTexto||""
     };
   });
@@ -2009,12 +2029,14 @@ async function load(options={}){
 // cargada dentro de la sesión actual; el módulo y su API vuelven a validar que
 // el usuario sea Sublicuentas antes de permitir plantillas o respaldos.
 window.sublichatControlData=()=>({
-  servicios:DATA.map(c=>({
-    clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,nombre:c.nombre||'',telefono:c.telefono||'',vendedor:c.vendedor||'',
-    plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:Number(c.precio)||0,
-    fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha.toISOString():String(c.fechaRaw||''),correo:c.correo||'',
-    clave:c.clave||'',pinPerfil:c.pinPerfil||'',perfil:c.perfil||''
-  })),
+  servicios:DATA.flatMap(c=>(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre)).map((p,perfilIndex)=>({
+    clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
+    cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),titular:c.nombre||'',
+    nombre:p.nombre||c.nombre||'',telefono:c.telefono||'',vendedor:c.vendedor||'',
+    plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:perfilIndex===0?(Number(c.precio)||0):0,precioCompra:Number(c.precio)||0,
+    fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha.toISOString():String(c.fechaRaw||''),correo:p.correo||c.correo||'',
+    clave:p.clave||c.clave||'',pinPerfil:p.pinPerfil||'',perfil:p.perfil||p.nombre||c.perfil||''
+  }))),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
     disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??''})):[]
@@ -2135,7 +2157,10 @@ function renderTable(){
   document.querySelectorAll("[data-client-status]").forEach(btn=>btn.classList.toggle("active",(btn.dataset.clientStatus||"")===fe));
   // 1) aplicar filtros sobre cada servicio
   const filtrados=DATA.map(c=>({...c,st:statusOf(c.fecha)}))
-    .filter(c=>(!q||c.nombre.toLowerCase().includes(q))&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe));
+    .filter(c=>{
+      const perfiles=(c.perfiles||[]).flatMap(p=>[p.nombre,p.perfil,p.correo,p.pinPerfil]).join(" ").toLowerCase();
+      return (!q||c.nombre.toLowerCase().includes(q)||perfiles.includes(q))&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe);
+    });
   // 2) agrupar por documento real de Firestore. No mezclar fichas duplicadas con el mismo nombre.
   const grupos={};
   filtrados.forEach(c=>{
@@ -3658,9 +3683,10 @@ function fechaLarga(d){ return d?d.toLocaleDateString("es-HN",{day:"numeric",mon
 
 // Describe los servicios: 1 plataforma => "su Netflix"; varias => "sus servicios de Netflix, Disney+ y HBO Max"
 function descServicios(g){
-  const plats=(g.servicios||[{plataforma:g.plataforma}]).map(s=>s.plataforma);
+  const servicios=g.servicios||[{plataforma:g.plataforma,cantidadPerfiles:g.cantidadPerfiles}];
+  const plats=servicios.map(s=>s.plataforma);
   const unicas=[...new Set(plats.filter(Boolean))];
-  if(plats.length===1) return `su suscripción de ${plats[0]}`;
+  if(plats.length===1){const perfiles=Number(servicios[0]?.cantidadPerfiles)||1;return perfiles>1?`su compra de ${plats[0]} para ${perfiles} perfiles`:`su suscripción de ${plats[0]}`;}
   if(unicas.length===1) return `sus ${plats.length} suscripciones de ${unicas[0]}`;
   const ultimo=unicas[unicas.length-1];
   return `sus servicios de ${unicas.slice(0,-1).join(", ")} y ${ultimo}`;
@@ -3700,7 +3726,8 @@ function _sacarPlantillaIndex(){
   return idx;
 }
 function cobroAvisoServicio(s){
-  const plat=`*${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}*`;
+  const cantidad=Number(s.cantidadPerfiles)||1;
+  const plat=`*${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}${cantidad>1?` · ${cantidad} perfiles`:""}*`;
   if(!s.fecha) return `📅 ${plat} tiene fecha pendiente de confirmar.`;
   const dias=daysTo(s.fecha), fecha=`*${fechaLarga(s.fecha)}*`;
   if(dias<0) return `⚠️ ${plat} venció el ${fecha}.`;
@@ -3819,7 +3846,8 @@ function abrirCobro(grupo){
   cobroActual=g;
   const total = g.total!=null ? g.total : g.precio;
   const servicios=g.servicios||[{plataforma:g.plataforma}];
-  const resumen=servicios.length>1?`${servicios.length} servicios`:servicios[0]?.plataforma||"Servicio";
+  const perfilesCompra=servicios.reduce((sum,s)=>sum+(Number(s.cantidadPerfiles)||1),0);
+  const resumen=servicios.length>1?`${servicios.length} servicios · ${perfilesCompra} perfiles`:`${servicios[0]?.plataforma||"Servicio"}${perfilesCompra>1?` · ${perfilesCompra} perfiles`:""}`;
   const fechaResumen=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
   $cobro("cobroCliente").textContent=`${g.nombre} · ${resumen} ${fechaResumen} · ${fmt(total)}`;
   cobroSetMensaje(generarMensajeCobro(g),generarMensajeCobro.tema);
@@ -3975,7 +4003,7 @@ function pintarGestion(){
     <div class="cg-item">
       <div class="cg-info">
         <div class="cg-plat">${s.plataforma}</div>
-        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"}</div>
+        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"}</div>
       </div>
       <div class="cg-act">
         <button class="edit" data-i="${i}" title="Editar">✏️</button>
@@ -3987,7 +4015,8 @@ function pintarGestion(){
 }
 async function eliminarServicio(s){
   const g=cobroActual; if(!g)return;
-  if(!confirm(`¿Dar de baja este servicio?\n\nCliente: ${g.nombre}\nServicio: ${s.plataforma}\n\nSe eliminará de la base de datos.`)) return;
+  const perfiles=Number(s.cantidadPerfiles)||1;
+  if(!confirm(`¿Dar de baja esta compra completa?\n\nCliente: ${g.nombre}\nServicio: ${s.plataforma}\nPerfiles incluidos: ${perfiles}\n\nSe eliminará el precio, la renovación y ${perfiles===1?"su perfil":"todos sus perfiles"}; también se liberarán los cupos en Bodega.`)) return;
   $cobro("cgHint").textContent="Eliminando…";
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
@@ -4004,11 +4033,12 @@ let servModo="agregar", servEditandoPlat=null, servEditandoCorreo=null, servEdit
 function abrirServForm(modo, serv){
   servModo=modo;
   const g=cobroActual;
-  $cobro("servTitle").textContent=modo==="agregar"?"Agregar servicio":"Editar servicio";
+  $cobro("servTitle").textContent=modo==="agregar"?"Agregar compra / servicio":"Editar compra (perfil principal)";
   $cobro("servSub").textContent=g?g.nombre:"";
   // llenar selector de plataformas
   $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   if(modo==="editar" && serv){
+    const principal=(Array.isArray(serv.perfiles)&&serv.perfiles[0])||{};
     servEditandoPlat=serv.plataformaRaw||serv.plataforma;
     servEditandoCorreo=serv.correo||"";
     servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
@@ -4017,14 +4047,17 @@ function abrirServForm(modo, serv){
     if(raw && PLATS_DISPONIBLES.some(([v])=>v===raw)) $cobro("servPlat").value=raw;
     $cobro("servPrecio").value=serv.precio||"";
     $cobro("servFecha").value=fbAISO(serv.fechaRaw);
-    $cobro("servCorreo").value=serv.correo||"";
-    $cobro("servPin").value=serv.pin||"";
+    $cobro("servNombrePerfil").value=principal.nombre||principal.perfil||serv.perfil||g?.nombre||"";
+    $cobro("servCorreo").value=principal.correo||serv.correo||"";
+    $cobro("servPin").value=principal.clave||serv.clave||serv.pin||"";
+    $cobro("servPinPerfil").value=principal.pinPerfil||principal.pin||serv.pinPerfil||"";
   }else{
     servEditandoPlat=null;
     servEditandoCorreo=null;
     servEditandoIndex=null;
-    $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servCorreo").value=""; $cobro("servPin").value="";
+    $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servNombrePerfil").value=g?.nombre||""; $cobro("servCorreo").value=""; $cobro("servPin").value=""; $cobro("servPinPerfil").value="";
   }
+  servActualizarCampos();
   $cobro("servHint").textContent="";
   servModal.classList.add("show");
 }
@@ -4033,6 +4066,13 @@ $cobro("servClose").addEventListener("click",()=>servModal.classList.remove("sho
 $cobro("servCancel").addEventListener("click",()=>servModal.classList.remove("show"));
 $cobro("servModal").addEventListener("click",e=>{ if(e.target.id==="servModal") servModal.classList.remove("show"); });
 $cobro("cgAddBtn").addEventListener("click",()=>abrirServForm("agregar"));
+$cobro("servPlat").addEventListener("change",servActualizarCampos);
+function servActualizarCampos(){
+  const plat=$cobro("servPlat")?.value||"";
+  const keyBox=$cobro("servClaveField"),pinBox=$cobro("servPinPerfilField");
+  if(keyBox)keyBox.style.display=fichaNeedsClave(plat)?"block":"none";
+  if(pinBox)pinBox.style.display=fichaNeedsPin(plat)?"block":"none";
+}
 $cobro("servSave").addEventListener("click",async()=>{
   const g=cobroActual; if(!g)return;
   const servicio={
@@ -4040,9 +4080,13 @@ $cobro("servSave").addEventListener("click",async()=>{
     precio:$cobro("servPrecio").value,
     fechaRenovacion:$cobro("servFecha").value,
     correo:$cobro("servCorreo").value.trim(),
-    clave:$cobro("servPin").value.trim()
+    clave:$cobro("servPin").value.trim(),
+    perfil:$cobro("servNombrePerfil").value.trim()||g.nombre,
+    pinPerfil:$cobro("servPinPerfil").value.trim()
   };
-  if(!servicio.precio||!servicio.fechaRenovacion){ $cobro("servHint").textContent="Poné al menos precio y fecha."; return; }
+  if(!servicio.precio||!servicio.fechaRenovacion||!servicio.correo){ $cobro("servHint").textContent="Ponga precio, fecha y correo/usuario."; return; }
+  if(fichaNeedsClave(servicio.plataforma)&&!servicio.clave){$cobro("servHint").textContent="Esta plataforma requiere clave.";return;}
+  if(fichaNeedsPin(servicio.plataforma)&&!servicio.pinPerfil){$cobro("servHint").textContent="Esta plataforma requiere un PIN individual.";return;}
   $cobro("servHint").textContent="Guardando…";
   const payload=servModo==="agregar"
     ? {accion:"agregar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",servicio}
@@ -4727,7 +4771,7 @@ function gCaminoBombas(){
   // con correo + PIN (sin clave): Universal+
   // sin PIN: Netflix VIP, Spotify, YouTube, Deezer, Office 365, Oleada/IPTV
   // solo correo: Canva, Gemini, ChatGPT y Duolingo
-  const FICHA_SOLO_CORREO=new Set(["universal","canva","gemini","chatgpt","duolingo"]);
+  const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo"]);
   const FICHA_SIN_PIN=new Set(["vipnetflix","vix","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
@@ -5062,6 +5106,10 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
   let fichaServicioPosActual=-1;
   let fichaServicioIndexActual=null;
   let fichaServicioOriginalActual=null;
+  let fichaCompraIdActual="";
+  let fichaPerfilPrincipalIdActual="";
+  let fichaPerfilesExtraActuales=[];
+  const fichaNuevoId=prefix=>`${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
   function fichaStatus(txt,type="info"){
     const el=fichaQ("fichaStatus");
     if(!el) return;
@@ -5140,6 +5188,62 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     return hit?hit[0]:"netflix";
   }
   const fichaGetVal=id=>(fichaQ(id)&&fichaQ(id).value||"").trim();
+  function fichaPerfilesDesdeServicio(servicio,grupo){
+    const s=servicio||{};
+    const titular=(grupo&&grupo.nombre)||"";
+    const tieneDatos=(Array.isArray(s.perfiles)&&s.perfiles.length)||s.perfil||s.nombrePerfil||s.correo||s.clave||s.pinPerfil;
+    if(!tieneDatos)return [{perfilId:fichaNuevoId("perfil"),nombre:titular,perfil:titular,correo:"",clave:"",pinPerfil:""}];
+    return perfilesDeCompra(s,titular).map((p,index)=>({
+      perfilId:p.perfilId||fichaNuevoId("perfil"),
+      nombre:p.nombre||p.perfil||titular||`Perfil ${index+1}`,
+      perfil:p.perfil||p.nombre||titular||`Perfil ${index+1}`,
+      correo:p.correo||"",clave:p.clave||"",pinPerfil:p.pinPerfil||""
+    }));
+  }
+  function fichaRecolectarPerfiles(){
+    const titular=fichaGetVal("fichaNombre")||"Cliente";
+    const principal={
+      perfilId:fichaPerfilPrincipalIdActual||fichaNuevoId("perfil"),
+      nombre:fichaGetVal("fichaPerfil")||titular,
+      perfil:fichaGetVal("fichaPerfil")||titular,
+      correo:fichaGetVal("fichaCorreo"),clave:fichaNeedsClave(fichaGetVal("fichaPlat"))?fichaGetVal("fichaClave"):"",
+      pinPerfil:fichaNeedsPin(fichaGetVal("fichaPlat"))?fichaGetVal("fichaPinPerfil"):""
+    };
+    fichaPerfilPrincipalIdActual=principal.perfilId;
+    return [principal,...fichaPerfilesExtraActuales.map((p,index)=>({
+      perfilId:p.perfilId||fichaNuevoId("perfil"),nombre:String(p.nombre||p.perfil||`Perfil ${index+2}`).trim(),
+      perfil:String(p.perfil||p.nombre||`Perfil ${index+2}`).trim(),correo:String(p.correo||"").trim(),
+      clave:fichaNeedsClave(fichaGetVal("fichaPlat"))?String(p.clave||"").trim():"",
+      pinPerfil:fichaNeedsPin(fichaGetVal("fichaPlat"))?String(p.pinPerfil||"").trim():""
+    }))];
+  }
+  function fichaRenderPerfilesExtra(){
+    const list=fichaQ("fichaPerfilesExtraList"),count=fichaQ("fichaPerfilesCount"),removePrimary=fichaQ("fichaRemovePrimary");
+    if(!list||!count)return;
+    const showClave=fichaNeedsClave(fichaGetVal("fichaPlat")),showPin=fichaNeedsPin(fichaGetVal("fichaPlat"));
+    count.textContent=`${1+fichaPerfilesExtraActuales.length} perfil${fichaPerfilesExtraActuales.length?"es":""} · 1 solo precio`;
+    if(removePrimary)removePrimary.style.display=fichaPerfilesExtraActuales.length?"inline-flex":"none";
+    list.innerHTML=fichaPerfilesExtraActuales.map((p,index)=>`<div class="ficha-profile-extra" data-ficha-profile-row="${index}">
+      <div class="ficha-profile-extra-head"><b>Perfil ${index+2}</b><button type="button" data-ficha-profile-remove="${index}">🗑️ Quitar</button></div>
+      <div class="ficha-profile-extra-grid">
+        <label class="ficha-field"><span>Nombre de la persona/perfil</span><input class="ficha-input" data-ficha-profile-field="nombre" value="${fichaEsc(p.nombre||"")}" placeholder="Ej. Luis"></label>
+        <label class="ficha-field"><span>Correo / usuario asignado</span><input class="ficha-input" data-ficha-profile-field="correo" value="${fichaEsc(p.correo||"")}" placeholder="Cuenta donde está el perfil"></label>
+        <label class="ficha-field" style="${showClave?"":"display:none"}"><span>Clave de esa cuenta</span><input class="ficha-input" data-ficha-profile-field="clave" value="${fichaEsc(p.clave||"")}" placeholder="Clave de acceso"></label>
+        <label class="ficha-field" style="${showPin?"":"display:none"}"><span>PIN individual</span><input class="ficha-input" data-ficha-profile-field="pinPerfil" value="${fichaEsc(p.pinPerfil||"")}" placeholder="0000"></label>
+      </div>
+    </div>`).join("");
+    list.querySelectorAll("[data-ficha-profile-field]").forEach(input=>input.addEventListener("input",()=>{
+      const row=input.closest("[data-ficha-profile-row]");const i=Number(row&&row.dataset.fichaProfileRow);
+      if(!Number.isInteger(i)||!fichaPerfilesExtraActuales[i])return;
+      fichaPerfilesExtraActuales[i][input.dataset.fichaProfileField]=input.value;
+      if(input.dataset.fichaProfileField==="nombre")fichaPerfilesExtraActuales[i].perfil=input.value;
+      fichaRefreshTemplate();
+    }));
+    list.querySelectorAll("[data-ficha-profile-remove]").forEach(btn=>btn.addEventListener("click",()=>{
+      const i=Number(btn.dataset.fichaProfileRemove);if(!Number.isInteger(i))return;
+      fichaPerfilesExtraActuales.splice(i,1);fichaRenderPerfilesExtra();fichaRefreshTemplate();
+    }));
+  }
   const fichaPrecioDefault=plat=>Number(FICHA_PRECIOS[fichaNorm(plat)]||0);
   const fichaPrecioActual=()=>{
     const val=Number(fichaGetVal("fichaPrecio"));
@@ -5192,6 +5296,16 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const iptvpantallas=iptvPant+" DISPOSITIVO"+(iptvPant==="1"?"":"S");
     const oleadaDisp=fichaGetVal("fichaOleadaDispositivos")||"1";
     const oleadalimite=oleadaDisp+" dispositivo"+(oleadaDisp==="1"?"":"s");
+    const perfiles=fichaRecolectarPerfiles();
+    if(perfiles.length>1){
+      const detalle=perfiles.map((p,index)=>{
+        const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`,`📧 ${p.correo||"—"}`];
+        if(fichaNeedsClave(plat))acceso.push(`🔑 ${p.clave||"—"}`);
+        if(fichaNeedsPin(plat))acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
+        return acceso.join("\n");
+      }).join("\n\n");
+      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · COMPRA MULTIPERFIL*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}\n\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n✅ Los ${perfiles.length} perfiles pertenecen a una sola compra y se renuevan juntos.\n🚀 Sublicuentas`;
+    }
     return fichaTemplateFor(plat)
       .replaceAll("{plat}",fichaPlatformLabel(plat))
       .replaceAll("{nombre}",nombre||"Cliente")
@@ -5299,16 +5413,21 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(!fecha && dia) fecha=fichaNextDateFromDay(dia);
     const plat=fichaGetVal("fichaPlat");
     const clave=fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"";
+    const perfiles=fichaRecolectarPerfiles();
+    const principal=perfiles[0]||{};
     const servicio={
+      compraId:fichaCompraIdActual||fichaNuevoId("compra"),
+      modalidad:perfiles.length>1?"multiperfil":"individual",
       plataforma:plat,
       precio:fichaPrecioActual(),
       fechaRenovacion:fecha,
-      correo:fichaGetVal("fichaCorreo"),
-      clave:clave,
+      correo:principal.correo||fichaGetVal("fichaCorreo"),
+      clave:principal.clave||clave,
       sinClave:!fichaNeedsClave(plat),
-      perfil:fichaGetVal("fichaPerfil")||fichaGetVal("fichaNombre")
+      perfil:principal.perfil||fichaGetVal("fichaPerfil")||fichaGetVal("fichaNombre"),
+      perfiles
     };
-    if(fichaNeedsPin(plat)) servicio.pinPerfil=fichaGetVal("fichaPinPerfil");
+    if(fichaNeedsPin(plat)) servicio.pinPerfil=principal.pinPerfil||fichaGetVal("fichaPinPerfil");
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
     return {
       accion:"ficha_upsert",
@@ -5336,6 +5455,13 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       fichaToast("Seleccione la plataforma.");
       return null;
     }
+    for(let i=0;i<(payload.servicio.perfiles||[]).length;i++){
+      const p=payload.servicio.perfiles[i]||{},label=`Perfil ${i+1}`;
+      if(!String(p.nombre||"").trim()){fichaToast(`${label}: escriba el nombre de la persona/perfil.`);return null;}
+      if(!String(p.correo||"").trim()){fichaToast(`${label}: falta el correo o usuario asignado.`);return null;}
+      if(fichaNeedsClave(payload.servicio.plataforma)&&!String(p.clave||"").trim()){fichaToast(`${label}: falta la clave de la cuenta.`);return null;}
+      if(fichaNeedsPin(payload.servicio.plataforma)&&!String(p.pinPerfil||"").trim()){fichaToast(`${label}: falta su PIN individual.`);return null;}
+    }
     const btn=button || (!silent ? fichaQ("fichaSave") : null);
     const old=btn?btn.textContent:"";
     if(btn){ btn.disabled=true; btn.textContent="Guardando…"; }
@@ -5345,6 +5471,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const j=await r.json().catch(()=>({}));
       if(j.ok){
         fichaClienteIdActual=j.clienteId||fichaClienteIdActual;
+        fichaCompraIdActual=payload.servicio.compraId||fichaCompraIdActual;
         const msg=j.created?"✅ Cliente creado y ficha guardada en CRM":"✅ Ficha actualizada en CRM";
         fichaStatus(msg,"ok");
         if(!silent) fichaToast(msg);
@@ -5447,6 +5574,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
   function fichaPrefillFromService(g, serv){
     const s=serv||{};
+    const perfiles=fichaPerfilesDesdeServicio(s,g||{});
+    const principal=perfiles[0]||{};
+    fichaCompraIdActual=String(s.compraId||"");
+    fichaPerfilPrincipalIdActual=String(principal.perfilId||fichaNuevoId("perfil"));
+    fichaPerfilesExtraActuales=perfiles.slice(1).map(p=>({...p}));
     const fechaISO=(s.fechaRaw?fbAISO(s.fechaRaw):"") || (s.fecha?s.fecha.toISOString().slice(0,10):"");
     fichaQ("fichaNombre").value=(g&&g.nombre)||"";
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
@@ -5460,10 +5592,11 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaSetPrecioDefault(!s.precio);
     fichaQ("fichaFecha").value=fechaISO;
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
-    fichaQ("fichaCorreo").value=s.correo||"";
-    fichaQ("fichaClave").value=s.clave||s.pin||"";
-    fichaQ("fichaPinPerfil").value=s.pinPerfil||"";
-    fichaQ("fichaPerfil").value=s.perfil||((g&&g.nombre)||"");
+    fichaQ("fichaCorreo").value=principal.correo||s.correo||"";
+    fichaQ("fichaClave").value=principal.clave||s.clave||s.pin||"";
+    fichaQ("fichaPinPerfil").value=principal.pinPerfil||s.pinPerfil||"";
+    fichaQ("fichaPerfil").value=principal.nombre||principal.perfil||s.perfil||((g&&g.nombre)||"");
+    fichaRenderPerfilesExtra();
     fichaRefreshTemplate();
     const guardada=String(s.fichaTexto||"").trim();
     if(guardada){
@@ -5608,13 +5741,17 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       .ficha-status.err{display:block;background:rgba(232,49,63,.12);border-color:rgba(232,49,63,.35);color:var(--accent)}
       .ficha-status.info{display:block;background:rgba(47,155,224,.13);border-color:rgba(47,155,224,.35);color:var(--info)}
       .ficha-note{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:8px}
+      .ficha-profiles-editor{margin:5px 0 14px;padding:13px;border:1px solid rgba(37,211,102,.38);border-radius:18px;background:rgba(37,211,102,.07)}
+      .ficha-profiles-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.ficha-profiles-editor-head b{font-size:14px}.ficha-profiles-editor-head span{font-size:11px;font-weight:900;color:#25a956}.ficha-remove-primary{display:none;align-items:center;border:1px solid rgba(232,49,63,.35);background:rgba(232,49,63,.1);color:var(--accent);border-radius:10px;padding:7px 9px;font-weight:800;cursor:pointer;margin:0 0 9px auto}
+      .ficha-profiles-help{font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:10px}.ficha-add-profile{width:100%;border:1px dashed rgba(37,211,102,.7);background:rgba(37,211,102,.12);color:var(--txt);border-radius:13px;padding:11px;font-weight:900;cursor:pointer}
+      .ficha-profile-extra{margin-top:10px;padding:11px;border:1px solid var(--line);border-radius:15px;background:var(--card)}.ficha-profile-extra-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.ficha-profile-extra-head b{font-size:13px}.ficha-profile-extra-head button{border:1px solid rgba(232,49,63,.35);background:rgba(232,49,63,.1);color:var(--accent);border-radius:10px;padding:7px 9px;font-weight:800;cursor:pointer}.ficha-profile-extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ficha-profile-extra-grid .ficha-field{margin-bottom:0}
       @media(max-width:560px){
         .ficha-overlay{padding:9px}
         .ficha-sheet{max-height:calc(100dvh - 18px);padding:14px;border-radius:21px}
         .ficha-head{top:-14px;margin:-14px -14px 12px;padding:14px 14px 11px}
         .ficha-title{font-size:17px}.ficha-sub{font-size:11px;line-height:1.3}
         .ficha-services-list{grid-template-columns:1fr}
-        .ficha-grid{grid-template-columns:1fr}.ficha-field{margin-bottom:8px}
+        .ficha-grid,.ficha-profile-extra-grid{grid-template-columns:1fr}.ficha-field{margin-bottom:8px}
         .ficha-input,.ficha-select,.ficha-text{padding:11px 12px}
         .ficha-preview{min-height:155px;max-height:220px}
         .ficha-actions,.ficha-actions.three{grid-template-columns:1fr 1fr}
@@ -5638,23 +5775,30 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
           <div class="ficha-services-help">Seleccione una ficha para ver sus propios datos. Si edita algo, guarde antes de cambiar a otra.</div>
         </section>
         <div class="ficha-grid">
-          <label class="ficha-field"><span>Cliente / perfil</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre del cliente"></label>
+          <label class="ficha-field"><span>Cliente titular</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre de quien compra"></label>
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
           <label class="ficha-field"><span>Vendedor</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
           <label class="ficha-field"><span>Día de cada mes</span><input class="ficha-input" id="fichaDia" inputmode="numeric" placeholder="04"></label>
-          <label class="ficha-field"><span>Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
-          <label class="ficha-field" id="fichaClaveBox"><span>Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
-          <label class="ficha-field" id="fichaPinBox"><span>PIN del perfil</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
+          <label class="ficha-field"><span>Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
+          <label class="ficha-field" id="fichaClaveBox"><span>Perfil 1 · Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
+          <label class="ficha-field" id="fichaPinBox"><span>Perfil 1 · PIN individual</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
           <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Proveedor IPTV</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latvgt.com)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV</option></select></label>
           <label class="ficha-field" id="fichaIptvListaBox" style="display:none"><span>Lista (app IPTV)</span><input class="ficha-input" id="fichaIptvLista" placeholder="Ej. Icomplay"></label>
           <label class="ficha-field" id="fichaIptvHoraBox" style="display:none"><span>Hora de activación</span><input class="ficha-input" id="fichaIptvHora" type="time"></label>
           <label class="ficha-field" id="fichaIptvPantallasBox" style="display:none"><span>Pantallas</span><select class="ficha-select" id="fichaIptvPantallas"><option value="1">1 pantalla</option><option value="2">2 pantallas</option><option value="3">3 pantallas</option><option value="4">4 pantallas</option></select></label>
           <label class="ficha-field" id="fichaOleadaBox" style="display:none"><span>Dispositivos Oleada TV</span><select class="ficha-select" id="fichaOleadaDispositivos"><option value="1">1 dispositivo</option><option value="3">3 dispositivos</option></select></label>
-          <label class="ficha-field"><span>Nombre de perfil visible</span><input class="ficha-input" id="fichaPerfil" placeholder="Si es diferente al cliente"></label>
+          <label class="ficha-field"><span>Perfil 1 · Nombre de la persona/perfil</span><input class="ficha-input" id="fichaPerfil" placeholder="Ej. María"></label>
         </div>
+        <section class="ficha-profiles-editor">
+          <div class="ficha-profiles-editor-head"><b>👥 Perfiles incluidos en esta compra</b><span id="fichaPerfilesCount">1 perfil · 1 solo precio</span></div>
+          <div class="ficha-profiles-help">Cada persona puede tener su propio correo y PIN. El precio y la fecha de renovación se guardan una sola vez para toda la compra.</div>
+          <button class="ficha-remove-primary" id="fichaRemovePrimary" type="button">🗑️ Quitar perfil 1</button>
+          <div id="fichaPerfilesExtraList"></div>
+          <button class="ficha-add-profile" id="fichaAddProfile" type="button">➕ Añadir otro perfil a esta compra</button>
+        </section>
         <label class="ficha-field"><span>Ficha para grupo WhatsApp / respaldo</span><div class="ficha-text ficha-preview" id="fichaTextoView" contenteditable="true"></div><textarea id="fichaTexto" style="display:none" aria-hidden="true"></textarea></label>
         <div class="ficha-actions three">
           <button class="ficha-btn" id="fichaRegen" type="button">🆕 Ficha nueva</button>
@@ -5680,7 +5824,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const hidden=fichaQ("fichaTexto");
       if(view && hidden) hidden.value=view.innerText;
     });
-    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRefreshTemplate(); });
+    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
@@ -5689,6 +5833,24 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaRefreshTemplate(); });
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaPrecio").addEventListener("input",()=>{ fichaQ("fichaPrecio").dataset.manual="1"; });
+    fichaQ("fichaAddProfile").addEventListener("click",()=>{
+      fichaPerfilesExtraActuales.push({
+        perfilId:fichaNuevoId("perfil"),nombre:"",perfil:"",correo:fichaGetVal("fichaCorreo"),
+        clave:fichaGetVal("fichaClave"),pinPerfil:""
+      });
+      fichaRenderPerfilesExtra();fichaRefreshTemplate();
+      const rows=fichaQ("fichaPerfilesExtraList")?.querySelectorAll("[data-ficha-profile-row]");
+      const last=rows&&rows[rows.length-1];if(last)last.querySelector('[data-ficha-profile-field="nombre"]')?.focus();
+    });
+    fichaQ("fichaRemovePrimary").addEventListener("click",()=>{
+      if(!fichaPerfilesExtraActuales.length)return;
+      if(!confirm("¿Quitar el perfil 1 de esta compra? El siguiente perfil pasará a ser el principal; el precio y la renovación se conservarán."))return;
+      const nuevo=fichaPerfilesExtraActuales.shift();
+      fichaPerfilPrincipalIdActual=nuevo.perfilId||fichaNuevoId("perfil");
+      fichaQ("fichaPerfil").value=nuevo.nombre||nuevo.perfil||"";
+      fichaQ("fichaCorreo").value=nuevo.correo||"";fichaQ("fichaClave").value=nuevo.clave||"";fichaQ("fichaPinPerfil").value=nuevo.pinPerfil||"";
+      fichaRenderPerfilesExtra();fichaRefreshTemplate();
+    });
     fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
     fichaQ("fichaRegen").onclick=()=>{
       const tieneDatos=fichaGetVal("fichaNombre")||fichaGetVal("fichaCorreo")||fichaGetVal("fichaTelefono");
@@ -5716,7 +5878,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
+    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
@@ -6924,10 +7086,14 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     <input id="servPrecio" class="serv-input" type="number" inputmode="numeric" placeholder="Ej: 130">
     <label class="serv-label">Fecha de renovación</label>
     <input id="servFecha" class="serv-input" type="date">
-    <label class="serv-label">Correo (opcional)</label>
+    <label class="serv-label">Nombre de la persona / perfil</label>
+    <input id="servNombrePerfil" class="serv-input" type="text" placeholder="Ej. María">
+    <label class="serv-label">Correo / usuario asignado</label>
     <input id="servCorreo" class="serv-input" type="text" placeholder="correo de la cuenta">
-    <label class="serv-label">Clave / contraseña (opcional)</label>
-    <input id="servPin" class="serv-input" type="text" placeholder="clave de la cuenta">
+    <div id="servClaveField"><label class="serv-label">Clave / contraseña</label>
+    <input id="servPin" class="serv-input" type="text" placeholder="clave de la cuenta"></div>
+    <div id="servPinPerfilField"><label class="serv-label">PIN individual del perfil</label>
+    <input id="servPinPerfil" class="serv-input" type="text" placeholder="Ej. 0000"></div>
     <div class="cobro-actions" style="margin-top:14px">
       <button class="cobro-btn ghost" id="servCancel">Cancelar</button>
       <button class="cobro-btn wa" id="servSave" style="background:var(--accent);border-color:var(--accent)">Guardar</button>
@@ -7875,7 +8041,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-EDITAR-EN-PANTALLA-COMPLETA-20260806-11"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-COMPRAS-MULTIPERFIL-20260806-12"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
