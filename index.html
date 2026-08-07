@@ -4767,12 +4767,11 @@ function gCaminoBombas(){
     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, oleada:90, iptv:130
   };
   // Reglas de campos por plataforma
-  // con correo + clave + PIN: Netflix Premium, HBO Max, Disney Premium, Disney Standard, Crunchyroll, Prime Video
-  // con correo + PIN (sin clave): Universal+
-  // sin PIN: Netflix VIP, Spotify, YouTube, Deezer, Office 365, Oleada/IPTV
+  // con correo + clave + PIN: Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+
+  // con correo + clave, sin PIN: Netflix VIP, Paramount+, ViX, Spotify, YouTube, Deezer, Office 365 y Oleada/IPTV
   // solo correo: Canva, Gemini, ChatGPT y Duolingo
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","vix","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
     default:
@@ -4916,6 +4915,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 
 👤 Perfil asignado: *_{perfil}_*
 *📧 Correo: {correo}*
+*🔑 Clave: {clave}*
 *🔐 PIN: {pin}*
 *⏳ Próximo pago: {fecha}*
 
@@ -5098,6 +5098,152 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 🚀 Sublicuentas`
   };
 
+  // La compra multiperfil comparte precio y renovación, pero NO pierde las
+  // instrucciones propias de la plataforma. Este bloque replica las reglas de
+  // las fichas individuales para mostrarlas una sola vez después del listado
+  // de perfiles (evita repetir un texto largo por cada persona).
+  const FICHA_REGLAS_MULTIPERFIL={
+    default:
+`🚨 Condiciones del servicio:
+📌 No se modifica el perfil.
+📌 Acceso solo para un dispositivo por perfil.
+📌 Uso solo en Honduras.
+📌 No usar VPN.
+📌 Garantía vigente.`,
+    netflix:
+`🚨 Reglas de su cuenta:
+📌 Acceso solo para un dispositivo por perfil.
+📌 Los perfiles no deben ser modificados.
+📌 Servicio exclusivo para Honduras.
+📌 Cuenta con garantía total activa.
+
+⚠️ Aviso de Sistema:
+Es posible que en 15 días o más el sistema solicite un código temporal. Cuando le aparezca, notifíquenos y se lo daremos al instante.`,
+    vipnetflix:
+`📺 Puede iniciar sesión en el dispositivo que prefiera (celular, TV o tableta), pero cada acceso reproduce en UNO a la vez.
+
+✅ Garantía activa por todo el periodo contratado.`,
+    disneyp:
+`🚨 Reglas de su cuenta:
+📌 Acceso solo para un dispositivo por perfil.
+📌 No se modifican los perfiles.
+📌 Uso exclusivo en Honduras (No usar VPN).
+
+✅ Garantía activa sujeta al estricto cumplimiento de estas condiciones.`,
+    disneys:
+`🚨 Condiciones del servicio:
+📌 No se modifican los perfiles.
+📌 Acceso solo para un dispositivo por perfil.
+📌 Uso solo en Honduras.
+📌 No usar VPN.
+📌 Garantía vigente.`,
+    hbomax:
+`⚠️ Condiciones del servicio:
+📌 Acceso solo para un dispositivo por perfil.
+📌 No se modifican los perfiles.
+📌 Conexión válida únicamente para Honduras.
+
+✔️ Garantía vigente durante todo el periodo adquirido.`,
+    primevideo:
+`🚨 Condiciones del servicio:
+📌 No modificar los perfiles.
+📌 Acceso solo para un dispositivo por perfil.
+📌 Uso solo en Honduras.
+📌 Garantía vigente.
+
+⚠️ Importante:
+📌 Compras y rentas de películas no disponibles.
+📌 Acceso exclusivo al catálogo oficial de Prime Video.`,
+    crunchyroll:
+`🚨 Condiciones del servicio:
+📌 Acceso solo para un dispositivo por perfil.
+📌 Uso solo en Honduras.
+📌 No usar VPN.
+📌 Garantía vigente.`,
+    universal:
+`⚠️ Condiciones del servicio:
+📌 Válido para 1 dispositivo por perfil.
+📌 No se modifican los perfiles.
+📌 Conexión válida únicamente para Honduras.
+
+✔️ Garantía vigente durante todo el periodo adquirido.`,
+    vix:
+`⚠️ Detalles del servicio:
+📌 Acceso solo para un dispositivo por perfil.
+🎬 Acceso a Pelis, Series y Novelas.
+⚽ Deportes (Válido únicamente en USA/MX 🇺🇸🇲🇽).
+📺 Compatible con TV, Celular, Tablet y Web.
+
+✔️ Garantía vigente durante todo el periodo adquirido.`,
+    paramount:
+`🚨 Condiciones del servicio:
+📌 No se modifican los perfiles.
+📌 Acceso solo para un dispositivo por perfil.
+📌 Uso solo en Honduras.
+📌 No usar VPN.
+📌 Garantía vigente.`,
+    spotify:
+`🪩🎶 Reproduce música sin anuncios ni interrupciones.
+⬇️ Descargas y reproducción sin conexión.
+📗 Creación de playlists incluida.
+📌 Un dispositivo a la vez por acceso.`,
+    youtube:
+`✅ YouTube sin anuncios.
+✅ YouTube Music incluido.
+✅ Descargas para ver sin conexión.
+✅ Uso en 1 dispositivo/cuenta asignada.
+
+🚨 Condiciones del servicio:
+📌 No cambiar datos de la cuenta.
+📌 Uso solo en Honduras.
+📌 No usar VPN.
+📌 Garantía vigente.`,
+    deezer:
+`🛡️ REGLAS DE ORO:
+🚫 No cambiar el correo ni la contraseña.
+👤 Uso exclusivo: solo un dispositivo a la vez por acceso.`,
+    office:
+`⚙️ Pasos exactos de instalación:
+1️⃣ Ingrese desde su navegador a www.office.com e inicie sesión.
+2️⃣ Presione "Instalar aplicaciones" o "Instalar Office".
+3️⃣ Abra el instalador descargado y siga las instrucciones.
+4️⃣ Si una aplicación solicita activación, inicie sesión con los mismos datos.
+
+⚠️ Condiciones del servicio:
+📌 No cambiar la contraseña ni alterar la información de la cuenta.
+📌 Compatible con Windows, Mac, Android e iOS.
+
+✔️ Garantía vigente durante todo el año adquirido, sujeta al cumplimiento de estas normativas.`,
+    canva:
+`⚠️ Condiciones del servicio:
+📌 Acceso vinculado únicamente al correo indicado.
+
+✔️ Garantía vigente durante todo el periodo adquirido.`,
+    gemini:
+`⚠️ Condiciones del servicio:
+📌 Acceso vinculado únicamente al correo indicado.
+📌 Cada persona debe aceptar la invitación de Google en su correo.
+
+✔️ Garantía vigente durante todo el periodo adquirido.`,
+    chatgpt:
+`🚨 Condiciones del servicio:
+📌 Acceso únicamente para el correo indicado.
+📌 No modificar datos internos.
+📌 Garantía vigente durante su tiempo adquirido.`,
+    duolingo:
+`📌 Cada persona debe aceptar la invitación enviada a su correo para activar las funciones Plus.
+📌 La garantía permanece vigente durante el periodo adquirido.`,
+    oleada:
+`🚨 Condiciones del servicio:
+📌 Límite autorizado: {oleadalimite} por acceso.
+📌 No compartir usuario ni clave.
+📌 Garantía vigente durante su tiempo adquirido.`,
+    iptv:
+`📲 Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.
+📌 Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.
+📌 No comparta sus accesos fuera de los dispositivos contratados.`
+  };
+
   const fichaNorm=s=>String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"");
   const fichaQ=id=>document.getElementById(id);
   let fichaClienteIdActual="";
@@ -5146,6 +5292,12 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(k==="netflixpremium") return FICHA_TEMPLATES.netflix;
     if(k==="vipnetflix"||k==="vip") return FICHA_TEMPLATES.vipnetflix;
     return FICHA_TEMPLATES[k] || FICHA_TEMPLATES.default;
+  };
+  const fichaReglasFor=plat=>{
+    const k=fichaNorm(plat);
+    if(k==="netflixpremium")return FICHA_REGLAS_MULTIPERFIL.netflix;
+    if(k==="vipnetflix"||k==="vip")return FICHA_REGLAS_MULTIPERFIL.vipnetflix;
+    return FICHA_REGLAS_MULTIPERFIL[k]||FICHA_REGLAS_MULTIPERFIL.default;
   };
   const fichaPlatformLabel=plat=>{ try{ return platLabel(plat); }catch(_){ return plat||"—"; } };
   function fichaPlatformEmoji(plat){
@@ -5297,33 +5449,25 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     const oleadaDisp=fichaGetVal("fichaOleadaDispositivos")||"1";
     const oleadalimite=oleadaDisp+" dispositivo"+(oleadaDisp==="1"?"":"s");
     const perfiles=fichaRecolectarPerfiles();
+    const variables={
+      plat:fichaPlatformLabel(plat),nombre:nombre||"Cliente",perfil:perfil||nombre||"Cliente",correo,clave:clave||"—",pin:pin||"—",
+      claveLine,pinLine,iptvurl,iptvlista,iptvhora,iptvpantallas,oleadalimite,renovTexto,
+      dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
+    };
+    const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
     if(perfiles.length>1){
       const detalle=perfiles.map((p,index)=>{
-        const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`,`📧 ${p.correo||"—"}`];
+        const tipoAcceso=["oleada","iptv"].includes(fichaNorm(plat))?"👤 Usuario":"📧 Correo";
+        const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`,`${tipoAcceso}: ${p.correo||"—"}`];
         if(fichaNeedsClave(plat))acceso.push(`🔑 ${p.clave||"—"}`);
         if(fichaNeedsPin(plat))acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
         return acceso.join("\n");
       }).join("\n\n");
-      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · COMPRA MULTIPERFIL*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}\n\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n✅ Los ${perfiles.length} perfiles pertenecen a una sola compra y se renuevan juntos.\n🚀 Sublicuentas`;
+      const datosIptv=fichaNorm(plat)==="iptv"?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n`:"";
+      const reglas=aplicarVariables(fichaReglasFor(plat));
+      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n✅ Los ${perfiles.length} perfiles pertenecen a una sola compra, con un solo precio y una sola renovación.\n🚀 Sublicuentas`;
     }
-    return fichaTemplateFor(plat)
-      .replaceAll("{plat}",fichaPlatformLabel(plat))
-      .replaceAll("{nombre}",nombre||"Cliente")
-      .replaceAll("{perfil}",perfil||nombre||"Cliente")
-      .replaceAll("{correo}",correo)
-      .replaceAll("{clave}",clave||"—")
-      .replaceAll("{pin}",pin||"—")
-      .replaceAll("{claveLine}",claveLine)
-      .replaceAll("{pinLine}",pinLine)
-      .replaceAll("{iptvurl}",iptvurl)
-      .replaceAll("{iptvlista}",iptvlista)
-      .replaceAll("{iptvhora}",iptvhora)
-      .replaceAll("{iptvpantallas}",iptvpantallas)
-      .replaceAll("{oleadalimite}",oleadalimite)
-      .replaceAll("{renovTexto}",renovTexto)
-      .replaceAll("{dia}",dia?fichaD2(dia):"—")
-      .replaceAll("{fecha}",fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—")
-      .replaceAll("{precio}",precio?String(precio):"—");
+    return aplicarVariables(fichaTemplateFor(plat));
   }
 
   function fichaVendedorIcono(v){
@@ -5470,10 +5614,26 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const j=await r.json().catch(()=>({}));
       if(j.ok){
+        const perfilesEsperados=(payload.servicio.perfiles||[]).length;
+        const perfilesConfirmados=Number(j.totalPerfiles);
+        const listaConfirmada=Array.isArray(j.perfilesGuardados)?j.perfilesGuardados:[];
+        const perfilesCoinciden=listaConfirmada.length===perfilesEsperados&&listaConfirmada.every((guardado,index)=>{
+          const esperado=payload.servicio.perfiles[index]||{};
+          return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!fichaNeedsClave(payload.servicio.plataforma)||guardado.tieneClave===true)&&(!fichaNeedsPin(payload.servicio.plataforma)||guardado.tienePin===true);
+        });
+        if(j.guardadoEnFirebase!==true||!Number.isInteger(perfilesConfirmados)||perfilesConfirmados!==perfilesEsperados||!perfilesCoinciden){
+          const msg=`⚠️ Firebase no confirmó los ${perfilesEsperados} perfiles. No se abrirá WhatsApp hasta reemplazar también api/renovar.js y volver a guardar.`;
+          fichaStatus(msg,"err");
+          fichaToast(msg);
+          return {...j,ok:false,error:msg};
+        }
         fichaClienteIdActual=j.clienteId||fichaClienteIdActual;
-        fichaCompraIdActual=payload.servicio.compraId||fichaCompraIdActual;
-        const msg=j.created?"✅ Cliente creado y ficha guardada en CRM":"✅ Ficha actualizada en CRM";
-        fichaStatus(msg,"ok");
+        fichaCompraIdActual=j.compraId||payload.servicio.compraId||fichaCompraIdActual;
+        const nombres=listaConfirmada.map(p=>p.nombre).filter(Boolean).join(" + ");
+        const advertencias=Array.isArray(j.inventario?.advertencias)?j.inventario.advertencias.filter(Boolean):[];
+        const base=j.created?"✅ Cliente creado en Firebase":"✅ Compra actualizada en Firebase";
+        const msg=`${base}: ${perfilesConfirmados} perfil${perfilesConfirmados===1?"":"es"} confirmado${perfilesConfirmados===1?"":"s"}${nombres?` (${nombres})`:""} · 1 precio · 1 renovación.${advertencias.length?` ⚠️ Bodega: ${advertencias.join("; ")}.`:""}`;
+        fichaStatus(msg,advertencias.length?"info":"ok");
         if(!silent) fichaToast(msg);
         await load({forceServer:true});
         fichaSincronizarServiciosDesdeData(j.servicioIndex!=null?Number(j.servicioIndex):fichaServicioIndexActual,payload);
@@ -5550,7 +5710,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     if(j&&j.ok){
       await fichaCopy(true);
       if(btn) btn.textContent="Abriendo WhatsApp…";
-      fichaStatus("✅ CRM actualizado. Abriendo WhatsApp con la ficha completa en 1 solo mensaje. También quedó copiada.","ok");
+      fichaStatus(`✅ Firebase confirmó ${j.totalPerfiles||1} perfil${Number(j.totalPerfiles)===1?"":"es"}. Abriendo WhatsApp con la ficha completa y las reglas de ${fichaPlatformLabel(fichaGetVal("fichaPlat"))}.`,"ok");
       fichaOpenWhatsApp(texto);
       setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=old; } },3500);
     }else{
@@ -5599,7 +5759,8 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     fichaRenderPerfilesExtra();
     fichaRefreshTemplate();
     const guardada=String(s.fichaTexto||"").trim();
-    if(guardada){
+    const multiperfilAntiguaSinReglas=perfiles.length>1&&/COMPRA MULTIPERFIL/i.test(guardada)&&!/(reglas|condiciones|reglas de oro|pasos exactos|garant[ií]a)/i.test(guardada);
+    if(guardada&&!multiperfilAntiguaSinReglas){
       const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
       if(txt)txt.value=guardada;
       if(view)view.innerHTML=fichaMarkdownToHtml(guardada);
@@ -5794,7 +5955,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
         </div>
         <section class="ficha-profiles-editor">
           <div class="ficha-profiles-editor-head"><b>👥 Perfiles incluidos en esta compra</b><span id="fichaPerfilesCount">1 perfil · 1 solo precio</span></div>
-          <div class="ficha-profiles-help">Cada persona puede tener su propio correo y PIN. El precio y la fecha de renovación se guardan una sola vez para toda la compra.</div>
+          <div class="ficha-profiles-help">Cada perfil se guarda por separado en Firebase y ocupa su cupo en Bodega. Correo, clave y PIN siguen las reglas de la plataforma seleccionada; el precio y la renovación se guardan una sola vez.</div>
           <button class="ficha-remove-primary" id="fichaRemovePrimary" type="button">🗑️ Quitar perfil 1</button>
           <div id="fichaPerfilesExtraList"></div>
           <button class="ficha-add-profile" id="fichaAddProfile" type="button">➕ Añadir otro perfil a esta compra</button>
