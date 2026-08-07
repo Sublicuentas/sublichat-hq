@@ -5465,7 +5465,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       }).join("\n\n");
       const datosIptv=fichaNorm(plat)==="iptv"?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n`:"";
       const reglas=aplicarVariables(fichaReglasFor(plat));
-      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n✅ Los ${perfiles.length} perfiles pertenecen a una sola compra, con un solo precio y una sola renovación.\n🚀 Sublicuentas`;
+      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
     return aplicarVariables(fichaTemplateFor(plat));
   }
@@ -5510,8 +5510,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return (fichaBuildText()+fichaRespaldoBlock()).trim();
   }
 
+  const fichaLimpiarTextoCliente=txt=>String(txt||"")
+    .replace(/^\s*✅\s*Los\s+\d+\s+perfiles?\s+pertenecen\s+a\s+una\s+sola\s+compra,\s+con\s+un\s+solo\s+precio\s+y\s+una\s+sola\s+renovaci[oó]n\.\s*$/gim,"")
+    .replace(/\n{3,}/g,"\n\n")
+    .trim();
+
   function fichaWhatsAppText(){
-    const base=(fichaGetVal("fichaTexto") || fichaBuildText()).trim();
+    const base=fichaLimpiarTextoCliente(fichaGetVal("fichaTexto") || fichaBuildText());
     const respaldo=fichaRespaldoCore();
     if(!respaldo) return base;
     // Si la caja ya contiene el bloque de respaldo, no lo duplique.
@@ -5585,7 +5590,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         vendedor:fichaVendedorActual()
       },
       servicio,
-      fichaTexto:fichaGetVal("fichaTexto")
+      fichaTexto:fichaLimpiarTextoCliente(fichaGetVal("fichaTexto"))
     };
   }
 
@@ -5758,7 +5763,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaPerfil").value=principal.nombre||principal.perfil||s.perfil||((g&&g.nombre)||"");
     fichaRenderPerfilesExtra();
     fichaRefreshTemplate();
-    const guardada=String(s.fichaTexto||"").trim();
+    const guardada=fichaLimpiarTextoCliente(s.fichaTexto||"");
     const multiperfilAntiguaSinReglas=perfiles.length>1&&/COMPRA MULTIPERFIL/i.test(guardada)&&!/(reglas|condiciones|reglas de oro|pasos exactos|garant[ií]a)/i.test(guardada);
     if(guardada&&!multiperfilAntiguaSinReglas){
       const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
