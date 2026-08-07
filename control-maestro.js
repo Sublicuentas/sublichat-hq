@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-VISIBLE-20260807-15';
+  const BUILD='CONTROL-MAESTRO-BORRAR-EXCEL-EN-FILA-20260807-16';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -871,7 +871,7 @@
     host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
     host.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
     host.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
-    host.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>deleteExcelBackupRow(b.dataset.cmDeleteExcel));
+    host.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,b.dataset.cmDeleteExcel));
     host.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
     host.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     host.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
@@ -881,7 +881,7 @@
     const q=host.querySelector('#cmSearch');if(q)q.oninput=()=>{state.query=q.value;render();setTimeout(()=>document.getElementById('cmSearch')?.focus(),0);};
     host.querySelectorAll('[data-cm-client]').forEach(b=>b.onclick=()=>openClient(state.visible[Number(b.dataset.cmClient)]));
     host.querySelectorAll('[data-cm-account]').forEach(b=>b.onclick=()=>openAccount(state.visible[Number(b.dataset.cmAccount)]));
-    host.querySelectorAll('[data-cm-delete-historical-excel]').forEach(b=>b.onclick=()=>deleteExcelBackupRow('',state.visible[Number(b.dataset.cmDeleteHistoricalExcel)]));
+    host.querySelectorAll('[data-cm-delete-historical-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,'',state.visible[Number(b.dataset.cmDeleteHistoricalExcel)]));
     host.querySelectorAll('[data-cm-download]').forEach(b=>b.onclick=()=>downloadStored(b.dataset.cmDownload));
     host.querySelectorAll('[data-cm-restore]').forEach(b=>b.onclick=()=>restoreStored(b.dataset.cmRestore));
   }
@@ -939,50 +939,35 @@
     try{if(typeof window.mostrarToast==='function')window.mostrarToast(text);}catch(_){}
   }
 
-  function controlDialog({title='Confirmar acción',message='',confirmLabel='Aceptar',cancelLabel='Cancelar',danger=false,icon='⚠️'}={}){
-    if(document.querySelector('.cm-dialog-overlay'))return Promise.resolve(false);
-    return new Promise((resolve)=>{
-      const screen=document.getElementById('screen-control-cuentas');
-      const host=document.fullscreenElement||screen||document.body;
-      const screenTop=screen?.scrollTop||0;
-      const pageX=window.scrollX||0,pageY=window.scrollY||0;
-      const overlay=document.createElement('div');
-      overlay.className=`cm-dialog-overlay cm-shell cm-size-${state.uiSize||'large'}`;
-      overlay.innerHTML=`
-        <div class="cm-dialog" role="dialog" aria-modal="true" aria-labelledby="cm-dialog-title">
-          <div class="cm-dialog-icon" aria-hidden="true">${esc(icon)}</div>
-          <div class="cm-dialog-copy">
-            <h3 id="cm-dialog-title">${esc(title)}</h3>
-            <div class="cm-dialog-message">${esc(message).replace(/\n/g,'<br>')}</div>
-          </div>
-          <div class="cm-dialog-actions">
-            ${cancelLabel?`<button type="button" class="cm-dialog-cancel">${esc(cancelLabel)}</button>`:''}
-            <button type="button" class="cm-dialog-confirm${danger?' danger':''}">${esc(confirmLabel)}</button>
-          </div>
-        </div>`;
-      let finished=false;
-      const finish=(value)=>{
-        if(finished)return;finished=true;
-        document.removeEventListener('keydown',onKey,true);
-        overlay.remove();
-        if(screen)screen.scrollTop=screenTop;
-        try{window.scrollTo({left:pageX,top:pageY,behavior:'instant'});}catch(_){window.scrollTo(pageX,pageY);}
-        resolve(value);
-      };
-      const onKey=(event)=>{
-        if(event.key==='Escape'&&cancelLabel){event.preventDefault();finish(false);}
-      };
-      document.addEventListener('keydown',onKey,true);
-      overlay.querySelector('.cm-dialog-confirm').onclick=()=>finish(true);
-      const cancel=overlay.querySelector('.cm-dialog-cancel');
-      if(cancel)cancel.onclick=()=>finish(false);
-      overlay.onclick=(event)=>{if(event.target===overlay&&cancelLabel)finish(false);};
-      host.appendChild(overlay);
-      requestAnimationFrame(()=>{
-        try{overlay.querySelector('.cm-dialog-confirm')?.focus({preventScroll:true});}catch(_){}
-        if(screen)screen.scrollTop=screenTop;
-      });
-    });
+  function restoreExcelDeleteButton(holder){
+    const original=holder?._cmOriginalButton;
+    if(holder?.isConnected&&original)holder.replaceWith(original);
+  }
+
+  function setExcelDeleteInline(holder,text,tone='working'){
+    if(!holder?.isConnected)return;
+    holder.className=`cm-excel-delete-confirm ${tone}`;
+    holder.innerHTML=`<b>${esc(text)}</b>`;
+  }
+
+  function askDeleteExcelBackupRow(button,pointer,historicalItem=null){
+    if(!button?.isConnected||state.busy)return;
+    const holder=document.createElement('span');
+    holder.className='cm-excel-delete-confirm';
+    holder._cmOriginalButton=button;
+    holder._cmView=captureControlView();
+    holder.innerHTML='<b>¿Borrar del Excel?</b><button type="button" class="cm-excel-delete-cancel">Cancelar</button><button type="button" class="cm-excel-delete-ok">Sí, borrar</button>';
+    button.replaceWith(holder);
+    holder.querySelector('.cm-excel-delete-cancel').onclick=(event)=>{event.stopPropagation();restoreExcelDeleteButton(holder);};
+    holder.querySelector('.cm-excel-delete-ok').onclick=async(event)=>{
+      event.stopPropagation();
+      setExcelDeleteInline(holder,'⏳ Borrando del Excel…');
+      const result=await deleteExcelBackupRow(pointer,historicalItem,holder);
+      if(result.ok||!holder.isConnected)return;
+      holder.className='cm-excel-delete-confirm error';
+      holder.innerHTML=`<b>⚠️ ${esc(result.message||'No se pudo borrar.')}</b><button type="button" class="cm-excel-delete-back">Volver</button>`;
+      holder.querySelector('.cm-excel-delete-back').onclick=(e)=>{e.stopPropagation();restoreExcelDeleteButton(holder);};
+    };
   }
 
   async function reloadControlAfterMutation(message,preferredKey=''){
@@ -1022,7 +1007,7 @@
     finally{state.busy=false;render();}
   }
 
-  async function deleteExcelBackupRow(pointer,historicalItem=null){
+  async function deleteExcelBackupRow(pointer,historicalItem=null,feedbackHost=null){
     let account,row;
     if(historicalItem){
       account={key:`${auditFamily(historicalItem.platform)}|${email(historicalItem.excelAccount)}`,email:historicalItem.excelAccount||''};
@@ -1030,21 +1015,15 @@
     }else{
       ({account,row}=auditRoster(pointer));
     }
-    if(!account||!row?.excel||row.service||row.inv||state.busy)return;
+    if(!account||!row?.excel||row.service||row.inv||state.busy)return {ok:false,message:'Este registro ya no está disponible.'};
     const excel=row.excel;
     const sheetName=String(excel.sheet||'').trim();
     const rowNumber=Number(excel.row);
     if(!sheetName||!Number.isInteger(rowNumber)||rowNumber<1){
-      await controlDialog({title:'No pude identificar la fila',message:'Actualice la revisión e inténtelo otra vez.',confirmLabel:'Entendido',cancelLabel:'',icon:'⚠️'});
-      return;
+      return {ok:false,message:'No pude identificar la fila. Actualice los datos.'};
     }
-    const approved=await controlDialog({
-      title:'¿Borrar del Excel?',
-      message:`${row.name||'Este registro'} · ${sheetName}, fila ${rowNumber}`,
-      confirmLabel:'Borrar del Excel',cancelLabel:'Cancelar',danger:true,icon:'🗑️'
-    });
-    if(!approved)return;
-    state.busy=true;mutationMessage('Borrando la fila histórica del respaldo Excel…','');render();
+    const view=feedbackHost?._cmView||captureControlView();
+    state.busy=true;mutationMessage('Borrando la fila histórica del respaldo Excel…','');
     try{
       if(!window.ExcelJS)throw new Error('No cargó el lector de Excel. Recargue la página.');
       const originalBase64=await loadTemplateBase64(false);
@@ -1062,6 +1041,12 @@
         try{cell.note=undefined;}catch(_){}
       });
 
+      // El archivo histórico trae miles de reglas de color dañadas. ExcelJS puede
+      // abrirlo, pero falla al guardarlo con “reading '0'”. Se sustituyen por las
+      // alertas válidas de vencimiento antes de escribir la nueva plantilla.
+      const repairedAnalysis=parseWorkbook(workbook,{servicios:[],cuentas:[]});
+      rebuildConditionalFormatting(repairedAnalysis);
+
       let backupCreated=false;
       try{
         const before=await api({accion:'control_guardar_respaldo',filename:`ANTES-DE-BORRAR-${state.meta?.plantilla?.filename||'Sublicuentas.xlsx'}`,size:base64ToBuffer(originalBase64).byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:originalBase64,motivo:'antes_eliminar_fila_excel',metricas:state.analysis?.metrics||{}});
@@ -1078,11 +1063,16 @@
       catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar la vista.';}
       state.expandedAccountKey=account.key;
       mutationMessage(`✅ ${row.name||'El registro'} fue borrado únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
+      state.busy=false;
+      render();restoreControlView(view);
+      return {ok:true};
     }catch(e){
-      const text='⚠️ '+(e.message||'No se pudo borrar la fila del respaldo Excel.');
-      mutationMessage(text,'error');
-      await controlDialog({title:'No se pudo borrar',message:text,confirmLabel:'Entendido',cancelLabel:'',icon:'⚠️'});
-    }finally{state.busy=false;render();}
+      const detail=String(e?.message||'No se pudo guardar el archivo.');
+      console.error('[Control Maestro] No se pudo borrar del Excel:',e);
+      mutationMessage(`⚠️ No se pudo borrar del Excel: ${detail}`,'error');
+      state.busy=false;
+      return {ok:false,message:detail};
+    }
   }
 
   async function removeAuditAssignment(pointer){
