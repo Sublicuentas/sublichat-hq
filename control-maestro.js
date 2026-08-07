@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPRAS-MULTIPERFIL-20260806-12';
+  const BUILD='CONTROL-MAESTRO-BORRAR-SOLO-EXCEL-20260807-13';
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -142,6 +142,7 @@
       if(v.text!=null)return String(v.text);
       if(Array.isArray(v.richText))return v.richText.map(x=>x.text||'').join('');
       if(v.formula!=null&&v.result!=null)return valueText(v.result);
+      return '';
     }
     return String(v).trim();
   }
@@ -708,7 +709,8 @@
     const actions=[
       r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">✏️ Editar</button>`:'',
       r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">📤 Sacar</button>`:'',
-      r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">🗑️ Eliminar</button>`:''
+      r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">🗑️ Eliminar</button>`:'',
+      r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">🗑️ Borrar del Excel</button>`:''
     ].filter(Boolean).join('');
     return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
       <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small><div class="cm-roster-sources">${sources.map((x)=>`<i>${esc(x)}</i>`).join('')}</div></div>
@@ -819,7 +821,7 @@
       <td>${esc(maskAccount(x.excelAccount))}</td><td>${esc(maskAccount(x.liveAccount))}</td><td>${esc(maskAccount(x.inventoryAccount))}</td>
       <td>${esc(dateLabel(x.excelDate))}</td><td>${esc(dateLabel(x.liveDate))}</td>
       <td><span class="cm-result ${resultClass(x)}">${esc(x.status)}</span></td>
-      <td><div class="cm-inline-actions"><button class="cm-mini" data-cm-client="${i}" title="Abrir cliente">👤</button><button class="cm-mini" data-cm-account="${i}" title="Abrir cuenta">📦</button></div></td>
+      <td><div class="cm-inline-actions"><button class="cm-mini" data-cm-client="${i}" title="Abrir cliente">👤</button><button class="cm-mini" data-cm-account="${i}" title="Abrir cuenta">📦</button>${x.kind==='solo_excel'?`<button class="cm-mini" data-cm-delete-historical-excel="${i}" title="Borrar únicamente del Excel">🗑️</button>`:''}</div></td>
     </tr>`).join('');
     return `<details class="cm-panel cm-details">
       <summary><span><b>📎 Cruce histórico con el Excel</b><small>Comparación opcional entre el formato antiguo, Clientes y Bodega.</small></span><i>${state.analysis.metrics.revision?state.analysis.metrics.revision+' diferencias':'Todo coincide'} · Ver</i></summary>
@@ -869,6 +871,7 @@
     host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
     host.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
     host.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
+    host.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>deleteExcelBackupRow(b.dataset.cmDeleteExcel));
     host.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
     host.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     host.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
@@ -878,6 +881,7 @@
     const q=host.querySelector('#cmSearch');if(q)q.oninput=()=>{state.query=q.value;render();setTimeout(()=>document.getElementById('cmSearch')?.focus(),0);};
     host.querySelectorAll('[data-cm-client]').forEach(b=>b.onclick=()=>openClient(state.visible[Number(b.dataset.cmClient)]));
     host.querySelectorAll('[data-cm-account]').forEach(b=>b.onclick=()=>openAccount(state.visible[Number(b.dataset.cmAccount)]));
+    host.querySelectorAll('[data-cm-delete-historical-excel]').forEach(b=>b.onclick=()=>deleteExcelBackupRow('',state.visible[Number(b.dataset.cmDeleteHistoricalExcel)]));
     host.querySelectorAll('[data-cm-download]').forEach(b=>b.onclick=()=>downloadStored(b.dataset.cmDownload));
     host.querySelectorAll('[data-cm-restore]').forEach(b=>b.onclick=()=>restoreStored(b.dataset.cmRestore));
   }
@@ -970,6 +974,59 @@
       await reloadControlAfterMutation(multiperfil?`✅ Perfil ${row.name} retirado de la compra ${platform}.${extra}`:`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar el servicio.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();}
+  }
+
+  async function deleteExcelBackupRow(pointer,historicalItem=null){
+    let account,row;
+    if(historicalItem){
+      account={key:`${auditFamily(historicalItem.platform)}|${email(historicalItem.excelAccount)}`,email:historicalItem.excelAccount||''};
+      row={name:historicalItem.name||'Sin nombre',excel:historicalItem.row||null,service:null,inv:null};
+    }else{
+      ({account,row}=auditRoster(pointer));
+    }
+    if(!account||!row?.excel||row.service||row.inv||state.busy)return;
+    const excel=row.excel;
+    const sheetName=String(excel.sheet||'').trim();
+    const rowNumber=Number(excel.row);
+    if(!sheetName||!Number.isInteger(rowNumber)||rowNumber<1)return alert('No pude identificar la fila exacta del respaldo. Actualice la revisión e inténtelo otra vez.');
+    if(!confirm(`¿Borrar este registro únicamente del Excel de respaldo?\n\nCliente: ${row.name||'Sin nombre'}\nHoja: ${sheetName}\nFila: ${rowNumber}\nCuenta: ${account.email||'Sin correo'}\n\nNo se eliminará ningún cliente, servicio ni asignación de Firebase/Bodega. Se conservará una copia anterior cuando haya espacio de respaldo.`))return;
+    state.busy=true;mutationMessage('Borrando la fila histórica del respaldo Excel…','');render();
+    try{
+      if(!window.ExcelJS)throw new Error('No cargó el lector de Excel. Recargue la página.');
+      const originalBase64=await ensureTemplateBase64(false);
+      const workbook=new ExcelJS.Workbook();
+      await workbook.xlsx.load(base64ToBuffer(originalBase64));
+      const ws=workbook.getWorksheet(sheetName);
+      if(!ws)throw new Error(`No encontré la hoja ${sheetName}.`);
+      const header=findHeader(ws);
+      if(!header||rowNumber<=header.row)throw new Error('La fila ya no coincide con el listado revisado. Presione “Actualizar base”.');
+      const excelRow=ws.getRow(rowNumber);
+      const clientColumns=[header.name,header.seller,header.phone,header.profile,header.pin,header.price,header.expiry,header.alert,header.days].filter((v,i,a)=>v&&a.indexOf(v)===i);
+      if(!clientColumns.length)throw new Error('No encontré las columnas del cliente en esa hoja.');
+      clientColumns.forEach((column)=>{
+        const cell=excelRow.getCell(column);cell.value=null;
+        try{cell.note=undefined;}catch(_){}
+      });
+
+      let backupCreated=false;
+      try{
+        const before=await api({accion:'control_guardar_respaldo',filename:`ANTES-DE-BORRAR-${state.meta?.plantilla?.filename||'Sublicuentas.xlsx'}`,size:base64ToBuffer(originalBase64).byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:originalBase64,motivo:'antes_eliminar_fila_excel',metricas:state.analysis?.metrics||{}});
+        backupCreated=!before.skipped;
+      }catch(_){}
+
+      const buffer=await workbook.xlsx.writeBuffer();
+      const base64=bufferToBase64(buffer);
+      const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
+      await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_fila_solo_excel',metricas:state.analysis?.metrics||{}});
+      state.templateBase64=base64;state.analysis=null;state.accountAudit=null;
+      let reloadWarning='';
+      try{await refreshMeta();await analyze(true);}
+      catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar la vista.';}
+      state.expandedAccountKey=account.key;
+      mutationMessage(`✅ ${row.name||'El registro'} fue borrado únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
+    }catch(e){
+      const text='⚠️ '+(e.message||'No se pudo borrar la fila del respaldo Excel.');mutationMessage(text,'error');alert(text);
+    }finally{state.busy=false;render();}
   }
 
   async function removeAuditAssignment(pointer){
