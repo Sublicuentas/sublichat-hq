@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-MOSTRAR-SOLO-EXCEL-20260808-23';
+  const BUILD='CONTROL-MAESTRO-FIX-TELEFONO-EDITAR-BODEGA-CALMA-20260808-24';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -433,7 +433,11 @@
         if(status==='ok'&&excel)detail='Coincide entre Clientes, Bodega y el respaldo Excel.';
         else if(status==='ok'&&hasExcelAudit&&!excel)detail='Coincide entre Clientes y Bodega. El Excel es un respaldo histórico y no modifica ni duplica la base actual.';
         else if(!service&&excel){status='excel_bodega';level='warn';detail='Aparece en Excel y Bodega, pero no tiene servicio activo en Clientes.';}
-        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
+        // ⚠️ FIX: si Bodega tenía guardado un teléfono en el propio registro del
+        // cliente (p.telefono), antes se ignoraba por completo — el teléfono solo
+        // se tomaba de Clientes o del Excel. Si no había servicio coincidente en
+        // Clientes, el teléfono desaparecía aunque siguiera guardado en Bodega.
+        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||fieldText(p.telefono)||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
       });
       g.services.forEach((service,i)=>{
         if(used.has(i))return;
@@ -773,6 +777,7 @@
     const pointer=`${accountIndex}:${rowIndex}`;
     const actions=[
       r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">✏️ Editar</button>`:'',
+      (r.inv&&!r.service)?`<button class="cm-row-action edit" data-cm-edit-inventory-client="${pointer}">✏️ Editar en Bodega</button>`:'',
       r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">📤 Sacar</button>`:'',
       r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">🗑️ Eliminar</button>`:'',
       r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">🗑️ Borrar del Excel</button>`:''
@@ -941,6 +946,7 @@
     container.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
     container.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,b.dataset.cmDeleteExcel));
     container.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
+    container.querySelectorAll('[data-cm-edit-inventory-client]').forEach(b=>b.onclick=()=>editAuditInventoryClient(b.dataset.cmEditInventoryClient));
     container.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
     container.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
@@ -1183,6 +1189,26 @@
       await api({accion:'quitarCliente',docId,clienteIndex:row.invIndex,nombreCliente:row.inv.nombre||row.name||'',slot:fieldText(row.inv.slot)||row.profile||''},INVENTORY_API);
       await reloadControlAfterMutation(`✅ ${row.name} fue retirado de la cuenta ${account.email}.`,account.key);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo quitar la asignación.');mutationMessage(text,'error');alert(text);}
+    finally{state.busy=false;render();}
+  }
+
+  // ⚠️ FIX: cuando un cliente está asignado en Bodega pero no tiene un servicio
+  // vivo en Clientes (caso "Solo en Bodega" / "Duplicado"), antes no había forma
+  // de corregir su nombre, PIN o teléfono ahí mismo — solo se podía "Sacar". Esto
+  // edita directamente el registro dentro de Bodega (no depende de que exista un
+  // servicio en Clientes), y sí queda guardado en Firebase de inmediato.
+  async function editAuditInventoryClient(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row?.inv||state.busy)return;
+    const docId=String(row.inv._accountId||'');if(!docId)return alert('Esta asignación no tiene ID de Bodega. Abra la cuenta para corregirla.');
+    const newName=prompt('Nombre del cliente en esta cuenta:',row.name||row.inv.nombre||'');if(newName===null)return;
+    if(!String(newName).trim())return alert('El nombre no puede quedar vacío.');
+    const newPin=prompt('PIN de este perfil:',row.pin||fieldText(row.inv.pin)||'');if(newPin===null)return;
+    const newPhone=prompt('Teléfono del cliente:',row.phone||fieldText(row.inv.telefono)||'');if(newPhone===null)return;
+    state.busy=true;mutationMessage('Actualizando cliente en Bodega…','');render();
+    try{
+      await api({accion:'editarCliente',docId,clienteIndex:row.invIndex,nombreCliente:row.inv.nombre||row.name||'',slot:fieldText(row.inv.slot)||row.profile||'',nuevoNombre:String(newName).trim(),nuevoPin:String(newPin).trim(),nuevoTelefono:String(newPhone).trim()},INVENTORY_API);
+      await reloadControlAfterMutation(`✅ ${String(newName).trim()} actualizado en Bodega.`,account.key);
+    }catch(e){const text='⚠️ '+(e.message||'No se pudo editar el cliente en Bodega.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();}
   }
 
