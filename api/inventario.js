@@ -131,7 +131,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(200).json({ ok: true, version: 4, msg: "inventario v4 activo (sincronización multiperfil). Usá POST." });
 
-  const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo } = req.body || {};
+  const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono } = req.body || {};
 
   try {
     const db = getApp().firestore();
@@ -214,6 +214,34 @@ export default async function handler(req, res) {
       await ref.update({clientes:next,ocupados:next.length,disponibles:Math.max(0,cap-next.length),updatedAt:new Date().toISOString()});
       await db.collection("auditoria_eventos").add({tipo:"inventario_cliente_retirado",inventarioId:docId,plataforma:current.plataforma||"",correo:current.correo||"",cliente:String(removed.nombre||nombreCliente||""),slot:plainClientValue(removed.slot),usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
       return res.status(200).json({ok:true,retirado:{nombre:String(removed.nombre||""),slot:plainClientValue(removed.slot)},ocupados:next.length,disponibles:Math.max(0,cap-next.length)});
+    }
+
+    if (accion === "editarCliente") {
+      const clients = Array.isArray(current.clientes) ? current.clientes : [];
+      const wantedName = normText(nombreCliente);
+      const wantedSlot = normText(plainClientValue(slot));
+      let index = Number.isInteger(Number(clienteIndex)) ? Number(clienteIndex) : -1;
+      const matches = (client) => {
+        if (wantedName && normText(client && client.nombre) !== wantedName) return false;
+        if (wantedSlot && normText(plainClientValue(client && client.slot)) !== wantedSlot) return false;
+        return !!(wantedName || wantedSlot);
+      };
+      if (index < 0 || index >= clients.length || !matches(clients[index])) index = clients.findIndex(matches);
+      if (index < 0) return res.status(200).json({ error: "No encontré ese cliente dentro de la cuenta." });
+      const before = { ...(clients[index] || {}) };
+      const next = clients.slice();
+      const updated = { ...next[index] };
+      if (nuevoNombre != null) {
+        const cleanName = String(nuevoNombre).trim();
+        if (!cleanName) return res.status(200).json({ error: "El nombre no puede quedar vacío." });
+        updated.nombre = cleanName;
+      }
+      if (nuevoPin != null) updated.pin = String(nuevoPin).trim();
+      if (nuevoTelefono != null) updated.telefono = String(nuevoTelefono).trim();
+      next[index] = updated;
+      await ref.update({ clientes: next, updatedAt: new Date().toISOString() });
+      await db.collection("auditoria_eventos").add({tipo:"inventario_cliente_editado",inventarioId:docId,plataforma:current.plataforma||"",correo:current.correo||"",antes:{nombre:before.nombre||"",pin:plainClientValue(before.pin),telefono:before.telefono||""},despues:{nombre:updated.nombre||"",pin:plainClientValue(updated.pin),telefono:updated.telefono||""},usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
+      return res.status(200).json({ok:true,cliente:{nombre:updated.nombre||"",pin:plainClientValue(updated.pin),telefono:updated.telefono||""}});
     }
 
     if (accion === "eliminarCuenta") {
