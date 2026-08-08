@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-HOJA-VIP-NETFLIX-20260807-20';
+  const BUILD='CONTROL-MAESTRO-FIX-HOJAS-EXTRAS-VIP-20260807-21';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -205,11 +205,13 @@
     // ⚠️ FIX: antes solo reconocía "netflix vip" en ese orden exacto, así que
     // una hoja llamada "VIP Netflix" (VIP primero, como la tuya) no calzaba y
     // esas cuentas terminaban cayendo en la Netflix normal o sin plataforma.
-    // Ahora detecta "vip" junto a "netflix" sin importar el orden.
+    // Ahora detecta "vip" junto a "netflix" sin importar el orden, y las hojas
+    // "Extras..." (confirmado con el usuario: Extras 2026 Perú, Extras 2026
+    // Bolo y Trap, Netflix vip) son siempre VIP Netflix, no ambiguas.
     const esVip=/\bvip\b/.test(n);
     if(n.includes('netflix')&&esVip)return ['vipnetflix'];
     if(esVip)return ['vipnetflix'];
-    if(n.includes('extra'))return ['vipnetflix','netflix'];
+    if(n.includes('extra'))return ['vipnetflix'];
     if(n.includes('netflix'))return ['netflix'];
     if(n.includes('disney'))return ['disneyp','disneys','disney'];
     if(n.includes('hbo')||n==='max')return ['hbomax'];
