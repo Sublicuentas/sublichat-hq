@@ -4,13 +4,13 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-TELEFONO-EDITAR-BODEGA-CALMA-20260808-24';
+  const BUILD='CONTROL-MAESTRO-FIX-CACHE-HEADERS-20260808-28';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:''
   };
 
   function loadUiSize(){
@@ -688,15 +688,21 @@
       return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,perfiles:audit.platformRows[family]||0,...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    const chip=(item,key,color)=>`<button type="button" class="cm-platform-chip ${esc(item.tone)} ${state.accountPlatform===key?'on':''}" style="--platform-color:${color}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
-      <div class="cm-platform-chip-top"><b>${esc(item.name)}</b><strong>${item.percent}%</strong></div>
+    // ⚠️ REDISEÑO: con muchas plataformas (16+), pintar cada tarjeta de un color
+    // de marca distinto (morado, rojo, verde, teal...) hacía todo ilegible — puro
+    // ruido sin significado. Ahora el color de la tarjeta indica el AVANCE DE
+    // REVISIÓN (rojo=sin revisar, verde=completo), que es lo que realmente
+    // importa para escanear la lista de un vistazo. El color de marca queda
+    // solo como un puntito pequeño junto al nombre, para identificar rápido.
+    const chip=(item,key,color)=>`<button type="button" class="cm-platform-chip ${esc(item.tone)} ${state.accountPlatform===key?'on':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
+      <div class="cm-platform-chip-top"><span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span><b>${esc(item.name)}</b><strong>${item.percent}%</strong></div>
       <span class="cm-platform-chip-meta">${item.ctas} cta${item.ctas===1?'':'s'} · ${item.perfiles} perfil${item.perfiles===1?'':'es'}</span>
       <span class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></span>
       <small>${item.reviewed}/${item.total} revisadas</small>
     </button>`;
     const totalChip=chip({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3');
     return `<section class="cm-review-progress">
-      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>Toque una plataforma para filtrar la mesa de abajo · revisión vigente 15 días.</small></div></div>
+      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>El color muestra qué tan avanzada va la revisión (🔴 falta · 🟢 completa). Toque una para filtrar la mesa de abajo.</small></div></div>
       <div class="cm-platform-filters">${totalChip}${items.map((item)=>chip(item,item.family,platformColor(item.family))).join('')}</div>
       <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>
     </section>`;
@@ -762,14 +768,46 @@
     if(a.missingInventory)list.push('📦 Falta en Bodega');
     if(a.duplicateDocs)list.push('📦 Cuenta repetida');
     if(a.overCapacity)list.push('🚨 Sobre capacidad');
-    if(a.rosterIssues)list.push(`👥 ${a.rosterIssues} diferencia${a.rosterIssues===1?'':'s'}`);
+    if(a.rosterIssues)list.push(`👥 ${a.rosterIssues} por revisar`);
     if(a.recordedIncident)list.push('⚠️ Incidencia manual abierta');
     if(a.reviewDataChanged)list.push('🔄 Cambió desde la última revisión');
     if(!list.length)list.push('✅ Base interna coincide');
     return list.map((x)=>`<span class="cm-account-issue ${a.issueCount?'bad':'ok'}">${esc(x)}</span>`).join('');
   }
 
-  function rosterRowHtml(r,accountIndex,rowIndex){
+  // ⚠️ NUEVO: nota de referencia por perfil, guardada SOLO en este navegador
+  // (localStorage) — nunca se manda a Firebase. Sirve para poner un recordatorio
+  // rápido (ej. "(paga con Manuel)") sin afectar la base viva.
+  function localNoteKey(account,row){
+    return `cmNota::${account.key}::${norm(row.name||'')}::${norm(fieldText(row.profile)||'')}`;
+  }
+  function getLocalNote(key){
+    try{return localStorage.getItem(key)||'';}catch(_){return '';}
+  }
+  function setLocalNote(key,value){
+    try{value?localStorage.setItem(key,value):localStorage.removeItem(key);}catch(_){}
+  }
+  function toggleRosterNote(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row)return;
+    const key=localNoteKey(account,row);
+    state.editingNoteKey=state.editingNoteKey===key?'':key;
+    render();
+  }
+  function saveRosterNote(pointer){
+    const {account,row}=auditRoster(pointer);if(!account||!row)return;
+    const key=localNoteKey(account,row);
+    const host=root();
+    const input=host?.querySelector(`[data-cm-note-input="${pointer}"]`);
+    setLocalNote(key,input?String(input.value||'').trim():'');
+    state.editingNoteKey='';
+    render();
+  }
+  function cancelRosterNote(){
+    state.editingNoteKey='';
+    render();
+  }
+
+  function rosterRowHtml(r,account,accountIndex,rowIndex){
     const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',icon:'⚠️',tone:'bad'};
     const rawProfile=fieldText(r.profile);
     const profile=rawProfile?(/^perfil\b/i.test(rawProfile)?rawProfile:`Perfil ${rawProfile}`):'Perfil sin indicar';
@@ -782,12 +820,17 @@
       r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">🗑️ Eliminar</button>`:'',
       r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">🗑️ Borrar del Excel</button>`:''
     ].filter(Boolean).join('');
+    const noteKey=localNoteKey(account,r);
+    const note=getLocalNote(noteKey);
+    const editingNote=state.editingNoteKey===noteKey;
+    const noteAction=`<button class="cm-row-action note" data-cm-note-toggle="${pointer}" title="Nota de referencia — se guarda solo en este navegador, no en Firebase">${note?'📝 Nota':'📝 +Nota'}</button>`;
     return `<div class="cm-roster-row ${s.tone}" title="${esc(r.detail||'')}">
       <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small><div class="cm-roster-sources">${sources.map((x)=>`<i>${esc(x)}</i>`).join('')}</div></div>
-      <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}</small></button>
+      <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}${note?` · (${esc(note)})`:''}</small></button>
       <div class="cm-roster-date"><b>${esc(dateLabel(r.date))}</b><small>Vencimiento</small></div>
-      <div class="cm-roster-result"><span class="cm-roster-status ${s.tone}">${s.icon} ${esc(s.label)}</span><small>${esc(r.detail||'')}</small></div>
-      <div class="cm-roster-actions">${actions||'<span>Solo respaldo Excel</span>'}</div>
+      <span class="cm-roster-status ${s.tone}" title="${esc(r.detail||'')}">${s.icon} ${esc(s.label)}</span>
+      <div class="cm-roster-actions">${actions}${noteAction}</div>
+      ${editingNote?`<div class="cm-roster-note-edit"><input type="text" class="cm-roster-note-input" data-cm-note-input="${pointer}" placeholder="Nota de referencia (solo en este navegador, no toca Firebase)" value="${esc(note)}"><button class="cm-row-action" data-cm-note-save="${pointer}">💾 Guardar</button><button class="cm-row-action" data-cm-note-cancel="1">✖ Cancelar</button></div>`:''}
     </div>`;
   }
 
@@ -805,7 +848,7 @@
     const inventoryIds=a.accountIds.filter(Boolean);
     const editableAccount=inventoryIds.length===1;
     const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
-    const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,i,j)).join(''):'';
+    const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,a,i,j)).join(''):'';
     return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" style="--platform-color:${platformColor(a.family)}">
       <div class="cm-ledger-row">
         <div class="cm-ledger-platform-cell"><span class="cm-ledger-platform">${esc(a.platform)}</span><span class="cm-life-state ${life.tone}">${life.icon} ${esc(life.label)}</span></div>
@@ -816,18 +859,17 @@
         <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
       ${expanded?`<div class="cm-ledger-detail">
-        <div class="cm-ledger-detail-head"><div><b>${esc(a.email||'CUENTA SIN CORREO')}</b><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
+        <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
           <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
           <div class="cm-credential"><span>Clave de la cuenta</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
         </div>
-        <div class="cm-account-capacity"><span><b>${a.occupied}</b> ocupados</span><span><b>${a.free}</b> libres</span><span><b>${a.capacity||'—'}</b> capacidad</span><span><b>${a.roster.length}</b> clientes/perfiles</span></div>
-        <div class="cm-roster-head"><div><b>Clientes/perfiles que deben estar en esta cuenta</b><small>Abra ${esc(a.platform)} y compare esta lista con los perfiles reales.</small></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
+        <div class="cm-roster-head"><div><b>Clientes que deben estar aquí</b></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
         <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
         ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
         ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
-        <div class="cm-account-review"><div><b>Revisión real del proveedor</b><small>Entre a la cuenta, compare estos perfiles y marque el resultado. Se guarda en Firebase.</small></div><div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div></div>
+        <div class="cm-account-review"><div><b>Revisión real del proveedor</b><small>Entre a la cuenta y compare. Se guarda en Firebase.</small></div><div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div></div>
       </div>`:''}
     </article>`;
   }
@@ -922,7 +964,7 @@
     const controlScreen=document.getElementById('screen-control-cuentas');
     const expanded=document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables.</p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
+      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables. <span class="cm-build-tag" title="Si subís un archivo nuevo y este texto no cambia, el navegador está mostrando una copia guardada — haga Ctrl+Shift+R (o borre caché) para forzar la versión nueva.">v.${esc(BUILD.slice(-8))}</span></p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
@@ -951,6 +993,9 @@
     container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
     container.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
     container.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
+    container.querySelectorAll('[data-cm-note-toggle]').forEach(b=>b.onclick=()=>toggleRosterNote(b.dataset.cmNoteToggle));
+    container.querySelectorAll('[data-cm-note-save]').forEach(b=>b.onclick=()=>saveRosterNote(b.dataset.cmNoteSave));
+    container.querySelectorAll('[data-cm-note-cancel]').forEach(b=>b.onclick=()=>cancelRosterNote());
   }
 
   // Actualiza solamente la mesa de cuentas (conteo + tarjetas) sin tocar el
@@ -1542,9 +1587,17 @@
       catch(_){metaWarning=' No se pudo renovar el historial de revisiones, pero Clientes y Bodega sí se actualizaron.';}
       let excelWarning='';
       if(state.meta?.plantilla&&window.ExcelJS){
+        // ⚠️ BUG REAL encontrado: si la relectura del Excel fallaba (por ejemplo
+        // por una conexión lenta en el celular), esto BORRABA el análisis
+        // anterior que sí había funcionado. Como las cuentas "Solo Excel"
+        // dependen de tener ese análisis cargado, cada vez que fallaba la
+        // relectura, esas cuentas desaparecían de golpe — y volvían a aparecer
+        // en el siguiente refresco exitoso. Eso era el "parpadeo" entre 100% y
+        // 38% en Canva: no eran dos Control Maestro distintos, era el mismo,
+        // perdiendo y recuperando el cruce con el Excel en cada intento.
         try{await analyze(false);}
-        catch(_){state.analysis=null;excelWarning=' El cruce histórico con Excel queda pendiente hasta presionar “Revisar ahora”.';}
-      }else state.accountAudit=null;
+        catch(_){excelWarning=' El cruce histórico con Excel no se pudo releer esta vez (conexión lenta); se mantiene el último cruce cargado.';}
+      }else if(!state.analysis){state.accountAudit=null;}
       state.accountAudit=null;
       const fresh=source();
       state.lastRefreshAt=new Date().toISOString();
