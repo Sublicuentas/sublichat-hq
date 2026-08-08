@@ -3986,7 +3986,7 @@ if(rManual && fechaInput){
 const PLATS_DISPONIBLES=[
   ["netflix","Netflix"],["vipnetflix","VIP Netflix"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["paramount","Paramount+"],["crunchyroll","Crunchyroll"],
-  ["vix","ViX"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
+  ["vix","ViX"],["viki","Viki Rakuten"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
   ["deezer","Deezer"],["duolingo","Duolingo"],["oleada","Oleada TV"],["iptv","IPTV"],["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"]
 ];
 const gestionBtn=$cobro("cobroGestionar"), gestionBox=$cobro("cobroGestion");
@@ -4771,7 +4771,7 @@ function gCaminoBombas(){
   // con correo + clave, sin PIN: Netflix VIP, Paramount+, ViX, Spotify, YouTube, Deezer, Office 365 y Oleada/IPTV
   // solo correo: Canva, Gemini, ChatGPT y Duolingo
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
     default:
