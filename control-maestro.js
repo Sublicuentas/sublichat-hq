@@ -4,7 +4,8 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FULLSCREEN-REAL-Y-PROGRESO-COMPACTO-20260807-18';
+  const BUILD='CONTROL-MAESTRO-BUSCADOR-Y-AVANCE-UNIFICADO-20260807-19';
+  let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -644,20 +645,22 @@
     return {total,reviewed,pending,percent,tone,label};
   }
 
-  function platformReviewProgressHtml(audit){
-    const groups=Object.keys(audit.platforms||{}).map((family)=>{
+  function platformOverviewHtml(audit){
+    const items=Object.keys(audit.platforms||{}).map((family)=>{
       const accounts=audit.accounts.filter((a)=>a.family===family);
-      return {family,name:auditPlatformLabel(family),...reviewProgress(accounts)};
+      return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,perfiles:audit.platformRows[family]||0,...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    const line=(item)=>`<button type="button" class="cm-progress-line ${esc(item.tone)} ${state.accountPlatform===item.family?'on':''}" style="--platform-color:${platformColor(item.family)}" data-cm-review-platform="${esc(item.family)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas · ${item.pending} pendientes`)}">
-      <i class="cm-progress-platform-dot" aria-hidden="true"></i><b>${esc(item.name)}</b><small>${item.reviewed}/${item.total}</small><span class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></span><strong>${item.percent}%</strong>
+    const chip=(item,key,color)=>`<button type="button" class="cm-platform-chip ${esc(item.tone)} ${state.accountPlatform===key?'on':''}" style="--platform-color:${color}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
+      <div class="cm-platform-chip-top"><b>${esc(item.name)}</b><strong>${item.percent}%</strong></div>
+      <span class="cm-platform-chip-meta">${item.ctas} cta${item.ctas===1?'':'s'} · ${item.perfiles} perfil${item.perfiles===1?'':'es'}</span>
+      <span class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></span>
+      <small>${item.reviewed}/${item.total} revisadas</small>
     </button>`;
-    const rowsPerColumn=Math.max(1,Math.ceil(groups.length/3));
-    const columns=[0,1,2].map((column)=>groups.slice(column*rowsPerColumn,(column+1)*rowsPerColumn)).filter((items)=>items.length);
+    const totalChip=chip({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3');
     return `<section class="cm-review-progress">
-      <div class="cm-progress-head"><div><b>📊 Avance de revisión por plataforma</b><small>Una línea por plataforma · revisión vigente durante 15 días.</small></div><button type="button" class="cm-progress-total ${esc(overall.tone)} ${state.accountPlatform==='all'?'on':''}" data-cm-review-platform="all"><span>Total</span><b>${overall.percent}%</b><small>${overall.reviewed}/${overall.total}</small></button></div>
-      <div class="cm-progress-columns">${columns.map((items)=>`<div class="cm-progress-column">${items.map((item)=>line(item)).join('')}</div>`).join('')}</div>
+      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>Toque una plataforma para filtrar la mesa de abajo · revisión vigente 15 días.</small></div></div>
+      <div class="cm-platform-filters">${totalChip}${items.map((item)=>chip(item,item.family,platformColor(item.family))).join('')}</div>
       <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>
     </section>`;
   }
@@ -791,23 +794,25 @@
     </article>`;
   }
 
+  function accountResultsHtml(){
+    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
+    return `<div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
+      <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
+      ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}`;
+  }
+
   function accountAuditHtml(){
     const audit=state.accountAudit;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
-    const platforms=[['all','Todas',audit.accounts.length,audit.metrics.registros],...Object.entries(audit.platforms).sort((a,b)=>auditPlatformLabel(a[0]).localeCompare(auditPlatformLabel(b[0]))).map(([k,n])=>[k,auditPlatformLabel(k),n,audit.platformRows[k]||0])];
     const reviewedCount=audit.accounts.filter((a)=>accountReviewSchedule(a).isReviewed).length;
     const reviewDueCount=audit.accounts.filter((a)=>a.reviewDue).length;
     const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['reviewed',`✅ Revisadas (${reviewedCount})`],['review_due',`🕒 Toca revisar (${reviewDueCount})`]];
-    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
       <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
-      ${platformReviewProgressHtml(audit)}
-      <div class="cm-platform-filters">${platforms.map(([k,l,n,r])=>`<button class="cm-platform-filter ${state.accountPlatform===k?'on':''}" style="--platform-color:${k==='all'?'#168fd3':platformColor(k)}" data-cm-audit-platform="${esc(k)}"><b>${esc(l)}</b><span>${n} ctas · ${r} perfiles</span></button>`).join('')}</div>
+      ${platformOverviewHtml(audit)}
       <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
-      <div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
-      <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
-      ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}
+      <div id="cmAccountResults">${accountResultsHtml()}</div>
     </section>`;
   }
 
@@ -886,31 +891,60 @@
     bind();
   }
 
+  // Vuelve a atar únicamente los botones que viven dentro de la mesa de cuentas
+  // (#cmAccountResults). Se llama tanto en el render completo como en la
+  // actualización liviana que dispara la búsqueda, para no tener que reconstruir
+  // toda la pantalla ni el campo de búsqueda cada vez que se filtra.
+  function bindAccountResults(container){
+    if(!container)return;
+    container.querySelectorAll('[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
+    container.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
+    container.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
+    container.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
+    container.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
+    container.querySelectorAll('[data-cm-open-audit]').forEach(b=>b.onclick=()=>openAuditAccount(Number(b.dataset.cmOpenAudit)));
+    container.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
+    container.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
+    container.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
+    container.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,b.dataset.cmDeleteExcel));
+    container.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
+    container.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
+    container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
+    container.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
+    container.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
+  }
+
+  // Actualiza solamente la mesa de cuentas (conteo + tarjetas) sin tocar el
+  // resto de la pantalla ni el campo de búsqueda. Así el input nunca se destruye
+  // mientras la persona escribe y el teclado del celular no se cierra.
+  function updateAccountResults(){
+    const host=root();if(!host)return;
+    const results=host.querySelector('#cmAccountResults');if(!results)return;
+    results.innerHTML=accountResultsHtml();
+    bindAccountResults(results);
+  }
+
   function bind(){
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
     host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
-    host.querySelectorAll('[data-cm-review-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmReviewPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
     host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1500;state.expandedAccountKey='';render();});
-    const aq=host.querySelector('#cmAccountSearch');if(aq)aq.oninput=()=>{state.accountQuery=aq.value;state.accountLimit=5000;render();setTimeout(()=>{const el=document.getElementById('cmAccountSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
-    host.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
-    host.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
-    host.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
-    host.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
-    host.querySelectorAll('[data-cm-open-audit]').forEach(b=>b.onclick=()=>openAuditAccount(Number(b.dataset.cmOpenAudit)));
-    host.querySelectorAll('[data-cm-audit-client]').forEach(b=>b.onclick=()=>openAuditClient(b.dataset.cmAuditClient));
-    host.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
-    host.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
-    host.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,b.dataset.cmDeleteExcel));
-    host.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
-    host.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
-    host.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
-    host.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
-    host.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
+    const aq=host.querySelector('#cmAccountSearch');
+    if(aq)aq.oninput=()=>{
+      state.accountQuery=aq.value;
+      clearTimeout(accountSearchTimer);
+      accountSearchTimer=setTimeout(()=>{state.accountLimit=5000;updateAccountResults();},180);
+    };
+    bindAccountResults(host);
     host.querySelectorAll('[data-cm-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.cmFilter;render();});
-    const q=host.querySelector('#cmSearch');if(q)q.oninput=()=>{state.query=q.value;render();setTimeout(()=>document.getElementById('cmSearch')?.focus(),0);};
+    const q=host.querySelector('#cmSearch');
+    if(q)q.oninput=()=>{
+      state.query=q.value;
+      clearTimeout(clientSearchTimer);
+      clientSearchTimer=setTimeout(()=>{render();setTimeout(()=>{const el=document.getElementById('cmSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);},180);
+    };
     host.querySelectorAll('[data-cm-client]').forEach(b=>b.onclick=()=>openClient(state.visible[Number(b.dataset.cmClient)]));
     host.querySelectorAll('[data-cm-account]').forEach(b=>b.onclick=()=>openAccount(state.visible[Number(b.dataset.cmAccount)]));
     host.querySelectorAll('[data-cm-delete-historical-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,'',state.visible[Number(b.dataset.cmDeleteHistoricalExcel)]));
