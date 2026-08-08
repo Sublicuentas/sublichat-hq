@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-HOJAS-EXTRAS-VIP-20260807-21';
+  const BUILD='CONTROL-MAESTRO-FIX-MOSTRAR-SOLO-EXCEL-20260808-23';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -355,6 +355,23 @@
       if(!g.clave&&s.clave!=null)g.clave=String(s.clave);
     });
 
+    // ⚠️ FIX: hojas de Excel tipo "solo lista de nombres" (NETFLIX VIP,
+    // EXTRAS...) no tienen columna de correo por fila, así que antes cada
+    // nombre quedaba en su propio grupo aislado sin cuenta en vivo y se
+    // descartaba entero (ver filtro más abajo). Ahora, si el nombre coincide
+    // sin ambigüedad con un cliente ya asignado en Bodega/Clientes de la misma
+    // plataforma, la fila del Excel se ata a esa cuenta real en vez de perderse.
+    const nameToAccountKey=new Map();
+    groups.forEach((g,key)=>{
+      if(!g.inventoryAccounts.length&&!g.services.length)return;
+      const names=new Set([...g.invClients.map((p)=>norm(p.nombre)),...g.services.map((s)=>s._name)]);
+      names.forEach((name)=>{
+        if(!name)return;
+        const k=`${g.family}|${name}`;
+        nameToAccountKey.set(k,nameToAccountKey.has(k)?null:key);
+      });
+    });
+
     const itemByRow=new Map((analysis?.items||[]).filter((x)=>x.row).map((x)=>[x.row,x]));
     const allExcelRows=[];
     (analysis?.sheets||[]).forEach((sheet)=>{
@@ -368,8 +385,10 @@
           date:dateKey(row.expiry),password:String(row.accountPassword||'').trim(),item
         };
         allExcelRows.push(entry);
-        const key=mail?`${family}|${mail}`:`${family}|__excel_${norm(row.sheet)}_${row.row}`;
+        const orphanKey=`${family}|__excel_${norm(row.sheet)}_${row.row}`;
+        const key=mail?`${family}|${mail}`:(nameToAccountKey.get(`${family}|${norm(entry.name)}`)||orphanKey);
         const g=ensureGroup(family,mail,key);g.rawPlatforms.add(family);g.excelRows.push(entry);g.excelSheets.add(row.sheet);
+        if(key===orphanKey)g.orphanExcelOnly=true;
         if(!g.clave&&entry.password)g.clave=entry.password;
       });
     });
@@ -377,9 +396,12 @@
     const revisions=new Map((state.meta?.revisiones||[]).map((r)=>[String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`),r]));
     const accounts=[];
     groups.forEach((g)=>{
-      // El Excel queda como respaldo histórico, no como fuente viva. Las cuentas
-      // que ya no existen ni en Clientes ni en Bodega no vuelven a aparecer aquí.
-      if(!g.inventoryAccounts.length&&!g.services.length)return;
+      // ⚠️ FIX: antes esto ocultaba CUALQUIER cuenta que estuviera solo en el
+      // Excel y no también en Clientes/Bodega — con o sin correo propio, daba
+      // igual. Esa es justo la gente que hay que revisar para darla de alta,
+      // así que ya no se descarta: toda fila del Excel sin coincidencia en
+      // vivo se muestra como "Solo Excel" en vez de desaparecer sin rastro.
+      if(!g.inventoryAccounts.length&&!g.services.length&&!g.excelRows.length)return;
       const used=new Set(),usedExcel=new Set(),roster=[];
       const takeExcel=(target)=>{
         const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(fieldText(target?.profile));
