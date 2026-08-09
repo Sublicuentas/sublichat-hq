@@ -4,13 +4,13 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-RANKING-BARRAS-20260809-31';
+  const BUILD='CONTROL-MAESTRO-COLAPSABLE-20260809-32';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:''
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',platformPanelOpen:false
   };
 
   function loadUiSize(){
@@ -688,10 +688,6 @@
       return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,perfiles:audit.platformRows[family]||0,...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    // ⚠️ REDISEÑO 3: ranking ordenado con barra fina — una fila por plataforma
-    // (peor a mejor), barra de 4px nada más (no domina la fila), color por
-    // avance de revisión. Menos alto por fila que las tarjetas, más fácil de
-    // escanear con 16+ plataformas.
     const row=(item,key,color,isTotal)=>`<button type="button" class="cm-platform-rank ${esc(item.tone)} ${state.accountPlatform===key?'on':''} ${isTotal?'total':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
       <div class="cm-platform-rank-head">
         <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
@@ -702,14 +698,23 @@
       <div class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></div>
     </button>`;
     const totalRow=row({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3',true);
-    // Si el Excel todavía no terminó de leerse (o falló toda la serie de
-    // reintentos), lo decimos claro en vez de dejar que los números se vean
-    // "raros" sin explicación — así se sabe que faltan las cuentas "Solo Excel".
     const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
+    // ⚠️ REDISEÑO 4: el problema real no era el estilo de cada fila, era que
+    // 16 plataformas SIEMPRE desplegadas empujan la mesa de cuentas bien
+    // abajo, obligando a scroll antes de llegar a lo que realmente importa.
+    // Ahora arranca CONTRAÍDA: una sola línea con lo esencial (total, % y
+    // cuántas faltan por revisar). Se despliega solo si la tocás — y se
+    // acuerda de cómo la dejaste, no vuelve a cerrarse sola en cada refresco.
+    const pendingCount=items.filter((i)=>i.percent<100).length;
+    const summary=`<b>${audit.accounts.length} ctas</b> · <b>${overall.percent}%</b> revisado en total${pendingCount?` · ${pendingCount} plataforma${pendingCount===1?'':'s'} por terminar`:' · ✅ todo revisado'}`;
+    const open=!!state.platformPanelOpen;
     return `<section class="cm-review-progress">
-      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>Ordenadas de la que menos avanzó a la que más. Toque una para filtrar la mesa de abajo.</small></div></div>
-      ${excelNote}${totalRow}<div class="cm-platform-ranklist">${items.map((item)=>row(item,item.family,platformColor(item.family),false)).join('')}</div>
-      <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>
+      <button type="button" class="cm-progress-head cm-progress-toggle" data-cm-action="toggle-platform-panel">
+        <div><b>📊 Plataformas: cuentas y revisión</b><small>${summary}</small></div>
+        <span class="cm-progress-chevron ${open?'open':''}" aria-hidden="true">▾</span>
+      </button>
+      ${open?`${excelNote}${totalRow}<div class="cm-platform-ranklist">${items.map((item)=>row(item,item.family,platformColor(item.family),false)).join('')}</div>
+      <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>`:''}
     </section>`;
   }
 
@@ -1634,6 +1639,7 @@
 
   async function handleAction(action){
     if(action==='toggle-fullscreen')return toggleFullscreen();
+    if(action==='toggle-platform-panel'){state.platformPanelOpen=!state.platformPanelOpen;render();return;}
     if(action==='show-all-accounts'){state.accountLimit=Number.MAX_SAFE_INTEGER;render();return;}
     if(action==='review')return runReview(true);
     if(action==='refresh-data')return refreshControlData();
