@@ -4,13 +4,13 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COLAPSABLE-20260809-32';
+  const BUILD='CONTROL-MAESTRO-PANEL-DIVIDIDO-20260809-33';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',platformPanelOpen:false
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:''
   };
 
   function loadUiSize(){
@@ -682,40 +682,24 @@
     return {total,reviewed,pending,percent,tone,label};
   }
 
-  function platformOverviewHtml(audit){
+  function platformSidebarHtml(audit){
     const items=Object.keys(audit.platforms||{}).map((family)=>{
       const accounts=audit.accounts.filter((a)=>a.family===family);
-      return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,perfiles:audit.platformRows[family]||0,...reviewProgress(accounts)};
+      return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    const row=(item,key,color,isTotal)=>`<button type="button" class="cm-platform-rank ${esc(item.tone)} ${state.accountPlatform===key?'on':''} ${isTotal?'total':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
-      <div class="cm-platform-rank-head">
-        <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
-        <b>${esc(item.name)}</b>
-        <span class="cm-platform-rank-meta">${item.ctas} cta${item.ctas===1?'':'s'}</span>
-        <strong>${item.percent}%</strong>
-      </div>
-      <div class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></div>
+    // ⚠️ REDISEÑO 5: panel dividido — la lista de plataformas pasa a ser una
+    // barra lateral fija (como un cliente de correo), en vez de una sección
+    // que crece hacia abajo. Así nunca empuja la mesa de cuentas, sin importar
+    // cuántas plataformas haya. En celular se acuesta arriba como tira
+    // horizontal con scroll, por ancho.
+    const item=(it,key,color,isTotal)=>`<button type="button" class="cm-split-item ${esc(it.tone)} ${state.accountPlatform===key?'on':''} ${isTotal?'total':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${it.label} · ${it.reviewed} de ${it.total} revisadas · ${it.ctas} cuentas`)}">
+      <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
+      <span class="cm-split-item-name">${esc(it.name)}</span>
+      <strong>${it.percent}%</strong>
     </button>`;
-    const totalRow=row({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3',true);
-    const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
-    // ⚠️ REDISEÑO 4: el problema real no era el estilo de cada fila, era que
-    // 16 plataformas SIEMPRE desplegadas empujan la mesa de cuentas bien
-    // abajo, obligando a scroll antes de llegar a lo que realmente importa.
-    // Ahora arranca CONTRAÍDA: una sola línea con lo esencial (total, % y
-    // cuántas faltan por revisar). Se despliega solo si la tocás — y se
-    // acuerda de cómo la dejaste, no vuelve a cerrarse sola en cada refresco.
-    const pendingCount=items.filter((i)=>i.percent<100).length;
-    const summary=`<b>${audit.accounts.length} ctas</b> · <b>${overall.percent}%</b> revisado en total${pendingCount?` · ${pendingCount} plataforma${pendingCount===1?'':'s'} por terminar`:' · ✅ todo revisado'}`;
-    const open=!!state.platformPanelOpen;
-    return `<section class="cm-review-progress">
-      <button type="button" class="cm-progress-head cm-progress-toggle" data-cm-action="toggle-platform-panel">
-        <div><b>📊 Plataformas: cuentas y revisión</b><small>${summary}</small></div>
-        <span class="cm-progress-chevron ${open?'open':''}" aria-hidden="true">▾</span>
-      </button>
-      ${open?`${excelNote}${totalRow}<div class="cm-platform-ranklist">${items.map((item)=>row(item,item.family,platformColor(item.family),false)).join('')}</div>
-      <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>`:''}
-    </section>`;
+    const totalItem=item({...overall,name:'Todas'},'all','#168fd3',true);
+    return `<aside class="cm-split-side"><div class="cm-split-side-scroll">${totalItem}${items.map((it)=>item(it,it.family,platformColor(it.family),false)).join('')}</div></aside>`;
   }
 
   const EXPIRY_SOON_DAYS=3;
@@ -897,12 +881,21 @@
     const reviewedCount=audit.accounts.filter((a)=>accountReviewSchedule(a).isReviewed).length;
     const reviewDueCount=audit.accounts.filter((a)=>a.reviewDue).length;
     const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['reviewed',`✅ Revisadas (${reviewedCount})`],['review_due',`🕒 Toca revisar (${reviewDueCount})`]];
+    // Si el Excel todavía no terminó de leerse (o falló toda la serie de
+    // reintentos), lo decimos claro en vez de dejar que los números se vean
+    // "raros" sin explicación — así se sabe que faltan las cuentas "Solo Excel".
+    const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
     return `<section class="cm-panel cm-accounts-panel">
       <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
       <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
-      ${platformOverviewHtml(audit)}
-      <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
-      <div id="cmAccountResults">${accountResultsHtml()}</div>
+      ${excelNote}
+      <div class="cm-split">
+        ${platformSidebarHtml(audit)}
+        <div class="cm-split-main">
+          <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
+          <div id="cmAccountResults">${accountResultsHtml()}</div>
+        </div>
+      </div>
     </section>`;
   }
 
@@ -1639,7 +1632,6 @@
 
   async function handleAction(action){
     if(action==='toggle-fullscreen')return toggleFullscreen();
-    if(action==='toggle-platform-panel'){state.platformPanelOpen=!state.platformPanelOpen;render();return;}
     if(action==='show-all-accounts'){state.accountLimit=Number.MAX_SAFE_INTEGER;render();return;}
     if(action==='review')return runReview(true);
     if(action==='refresh-data')return refreshControlData();
