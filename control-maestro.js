@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-RACE-Y-CHIPS-COMPACTOS-20260808-29';
+  const BUILD='CONTROL-MAESTRO-RANKING-BARRAS-20260809-31';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -486,7 +486,7 @@
     const platforms={},platformRows={};accounts.forEach(a=>{platforms[a.family]=(platforms[a.family]||0)+1;platformRows[a.family]=(platformRows[a.family]||0)+a.roster.length;});
     return {
       accounts,platforms,platformRows,
-      metrics:{clientes:clients.size,servicios:allServices.length,filasExcel:allExcelRows.length,registros:accounts.reduce((n,a)=>n+a.roster.length,0),cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length}
+      metrics:{clientes:clients.size,servicios:allServices.length,filasExcel:allExcelRows.length,registros:accounts.reduce((n,a)=>n+a.roster.length,0),cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length,hasExcelAudit}
     };
   }
 
@@ -688,26 +688,27 @@
       return {family,name:auditPlatformLabel(family),ctas:audit.platforms[family]||0,perfiles:audit.platformRows[family]||0,...reviewProgress(accounts)};
     }).sort((a,b)=>a.percent-b.percent||b.pending-a.pending||a.name.localeCompare(b.name));
     const overall=reviewProgress(audit.accounts);
-    // ⚠️ REDISEÑO: con muchas plataformas (16+), pintar cada tarjeta de un color
-    // de marca distinto (morado, rojo, verde, teal...) hacía todo ilegible — puro
-    // ruido sin significado. Ahora el color de la tarjeta indica el AVANCE DE
-    // REVISIÓN (rojo=sin revisar, verde=completo), que es lo que realmente
-    // importa para escanear la lista de un vistazo. El color de marca queda
-    // solo como un puntito pequeño junto al nombre, para identificar rápido.
-    // ⚠️ REDISEÑO 2: las tarjetas seguían siendo muy grandes (4 líneas cada
-    // una), obligando a mucho scroll con 16+ plataformas. Las reduje a 2
-    // líneas: nombre+% arriba, cuentas abajo. El detalle de revisadas/pendientes
-    // sigue disponible al mantener el dedo/mouse encima (tooltip), no se perdió.
-    const chip=(item,key,color)=>`<button type="button" class="cm-platform-chip ${esc(item.tone)} ${state.accountPlatform===key?'on':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
-      <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
-      <b>${esc(item.name)}</b>
-      <span class="cm-platform-chip-meta">${item.ctas} cta${item.ctas===1?'':'s'}</span>
-      <strong>${item.percent}%</strong>
+    // ⚠️ REDISEÑO 3: ranking ordenado con barra fina — una fila por plataforma
+    // (peor a mejor), barra de 4px nada más (no domina la fila), color por
+    // avance de revisión. Menos alto por fila que las tarjetas, más fácil de
+    // escanear con 16+ plataformas.
+    const row=(item,key,color,isTotal)=>`<button type="button" class="cm-platform-rank ${esc(item.tone)} ${state.accountPlatform===key?'on':''} ${isTotal?'total':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
+      <div class="cm-platform-rank-head">
+        <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
+        <b>${esc(item.name)}</b>
+        <span class="cm-platform-rank-meta">${item.ctas} cta${item.ctas===1?'':'s'}</span>
+        <strong>${item.percent}%</strong>
+      </div>
+      <div class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></div>
     </button>`;
-    const totalChip=chip({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3');
+    const totalRow=row({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3',true);
+    // Si el Excel todavía no terminó de leerse (o falló toda la serie de
+    // reintentos), lo decimos claro en vez de dejar que los números se vean
+    // "raros" sin explicación — así se sabe que faltan las cuentas "Solo Excel".
+    const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
     return `<section class="cm-review-progress">
-      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>El color muestra qué tan avanzada va la revisión (🔴 falta · 🟢 completa). Toque una para filtrar la mesa de abajo.</small></div></div>
-      <div class="cm-platform-filters">${totalChip}${items.map((item)=>chip(item,item.family,platformColor(item.family))).join('')}</div>
+      <div class="cm-progress-head"><div><b>📊 Plataformas: cuentas y revisión</b><small>Ordenadas de la que menos avanzó a la que más. Toque una para filtrar la mesa de abajo.</small></div></div>
+      ${excelNote}${totalRow}<div class="cm-platform-ranklist">${items.map((item)=>row(item,item.family,platformColor(item.family),false)).join('')}</div>
       <div class="cm-progress-legend"><span>🔴 0% sin revisar</span><span>🟡 revisión parcial</span><span>🟢 100% revisada</span></div>
     </section>`;
   }
@@ -1653,11 +1654,35 @@
     if(ok)localStorage.setItem(key,'guardado');else localStorage.removeItem(key);
   }
 
+  // ⚠️ BUG REAL (el de verdad esta vez): analyze() exige que los Clientes de
+  // Sublichat ya hayan terminado de cargar (src.servicios.length>0). Pero
+  // Control Maestro arranca su propia carga por separado, y normalmente
+  // termina ANTES que la carga completa de Clientes del resto de la app —
+  // así que el primer intento de leer el Excel fallaba en silencio, sin
+  // ningún reintento automático, y esa sesión se quedaba SIN cruce de Excel
+  // (por eso Canva mostraba 100% en vez de 38% — ni siquiera es un problema
+  // de caché, es que nunca llegó a leer el Excel esa vez). Ahora reintenta
+  // solo, en silencio, unas cuantas veces, dándole tiempo a que Clientes
+  // termine de cargar — sin mostrar mensajes de error de los intentos que sí
+  // se van a corregir solos.
+  async function autoAnalyzeWithRetry(attempt){
+    if(state.analysis||state.busy)return;
+    try{
+      await analyze(false);
+      render();
+      setTimeout(()=>maybeAutoBackup(),80);
+      return;
+    }catch(e){
+      if(attempt<5){setTimeout(()=>autoAnalyzeWithRetry(attempt+1),900*(attempt+1));}
+      else{setStatus('⚠️ '+(e.message||'No se pudo leer el Excel para el cruce histórico.'),'error');render();}
+    }
+  }
+
   async function boot(){
     if(!isAdmin()||!root())return;
     if(!state.booted){state.booted=true;await refreshMeta();}
     else{state.accountAudit=null;render();}
-    if(state.meta?.plantilla&&!state.analysis&&!state.busy)runReview(false);
+    if(state.meta?.plantilla&&!state.analysis&&!state.busy)autoAnalyzeWithRetry(0);
   }
 
   window.sublichatControlSyncLoadedData=(message)=>{

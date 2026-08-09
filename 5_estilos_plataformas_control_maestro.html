@@ -1,0 +1,83 @@
+<h2 class="sr-only">Cinco estilos distintos para la sección de plataformas de Control Maestro</h2>
+<div style="display:flex;flex-direction:column;gap:28px;font-size:13px;color:var(--text-primary)">
+
+<div>
+<p style="font-size:12px;font-weight:500;color:var(--text-muted);margin:0 0 8px">1 · Tabla simple</p>
+<div style="border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden">
+<div style="display:grid;grid-template-columns:1fr 50px 34px;gap:6px;padding:6px 10px;background:var(--surface-1);font-size:11px;color:var(--text-muted)">
+<span>Plataforma</span><span style="text-align:right">Ctas</span><span style="text-align:right">%</span>
+</div>
+<div id="t1"></div>
+</div>
+</div>
+
+<div>
+<p style="font-size:12px;font-weight:500;color:var(--text-muted);margin:0 0 8px">2 · Colapsada</p>
+<div style="border:0.5px solid var(--border);border-radius:12px;padding:12px 14px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<div>
+<p style="font-weight:500;margin:0">814 cuentas · 12 revisadas</p>
+<p style="font-size:12px;color:var(--text-secondary);margin:2px 0 0">1% revisado en total</p>
+</div>
+<button id="expBtn" style="font-size:12px">Ver por plataforma</button>
+</div>
+<div id="t2" style="display:none;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)"></div>
+</div>
+</div>
+
+<div>
+<p style="font-size:12px;font-weight:500;color:var(--text-muted);margin:0 0 8px">3 · Solo pendientes</p>
+<div id="t3" style="display:flex;flex-direction:column;gap:6px"></div>
+<button id="doneBtn" style="font-size:12px;margin-top:8px;width:100%">Ver 2 completas</button>
+<div id="t3done" style="display:none;flex-direction:column;gap:6px;margin-top:6px"></div>
+</div>
+
+<div>
+<p style="font-size:12px;font-weight:500;color:var(--text-muted);margin:0 0 8px">4 · Tira compacta</p>
+<div id="t4" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px"></div>
+</div>
+
+<div>
+<p style="font-size:12px;font-weight:500;color:var(--text-muted);margin:0 0 8px">5 · Ranking con barras</p>
+<div id="t5" style="display:flex;flex-direction:column;gap:9px"></div>
+</div>
+
+</div>
+<script>
+const data=[
+{n:'VIP Netflix',c:466,p:0},{n:'IPTV',c:53,p:0},{n:'HBO Max',c:35,p:0},
+{n:'Netflix',c:35,p:0},{n:'Disney+',c:70,p:1},{n:'Crunchyroll',c:7,p:14},
+{n:'Canva',c:21,p:38},{n:'Viki Rakuten',c:1,p:100}
+];
+function tone(p){return p===100?{c:'green',t:'Completa'}:p===0?{c:'red',t:'Sin revisar'}:p<50?{c:'amber',t:'Urge'}:{c:'amber',t:'Parcial'};}
+const dot=p=>{const c=tone(p).c;return \`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--fill-\${c==='amber'?'warning':c==='green'?'success':'danger'})"></span>\`;};
+
+document.getElementById('t1').innerHTML=data.map(d=>\`<div style="display:grid;grid-template-columns:1fr 50px 34px;gap:6px;align-items:center;padding:7px 10px;border-top:0.5px solid var(--border)">
+<span style="display:flex;align-items:center;gap:6px">\${dot(d.p)}\${d.n}</span>
+<span style="text-align:right;color:var(--text-secondary)">\${d.c}</span>
+<span style="text-align:right;font-weight:500;color:var(--text-\${tone(d.p).c==='amber'?'warning':tone(d.p).c==='green'?'success':'danger'})">\${d.p}%</span>
+</div>\`).join('');
+
+document.getElementById('t2').innerHTML=data.map(d=>\`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+<span style="display:flex;align-items:center;gap:6px">\${dot(d.p)}\${d.n}<span style="color:var(--text-muted);font-size:11px">\${d.c} ctas</span></span>
+<span style="font-weight:500">\${d.p}%</span></div>\`).join('');
+document.getElementById('expBtn').onclick=()=>{const t=document.getElementById('t2');const btn=document.getElementById('expBtn');const open=t.style.display==='block';t.style.display=open?'none':'block';btn.textContent=open?'Ver por plataforma':'Ocultar';};
+
+const pending=data.filter(d=>d.p<100),done=data.filter(d=>d.p===100);
+document.getElementById('t3').innerHTML=pending.map(d=>\`<div style="display:flex;align-items:center;justify-content:space-between;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px">
+<span style="display:flex;align-items:center;gap:6px">\${dot(d.p)}\${d.n}<span style="color:var(--text-muted);font-size:11px">\${d.c} ctas</span></span>
+<span style="font-weight:500;color:var(--text-\${tone(d.p).c==='amber'?'warning':'danger'})">\${d.p}%</span></div>\`).join('');
+document.getElementById('t3done').innerHTML=done.map(d=>\`<div style="display:flex;align-items:center;justify-content:space-between;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;opacity:0.7">
+<span style="display:flex;align-items:center;gap:6px">\${dot(d.p)}\${d.n}<span style="color:var(--text-muted);font-size:11px">\${d.c} ctas</span></span>
+<span style="font-weight:500;color:var(--text-success)">100%</span></div>\`).join('');
+document.getElementById('doneBtn').onclick=()=>{const t=document.getElementById('t3done');const open=t.style.display==='flex';t.style.display=open?'none':'flex';};
+
+document.getElementById('t4').innerHTML=data.map(d=>\`<div style="flex:none;display:flex;align-items:center;gap:5px;border:0.5px solid var(--border);border-radius:999px;padding:5px 10px;white-space:nowrap;font-size:12px">
+\${dot(d.p)}\${d.n}<b style="color:var(--text-\${tone(d.p).c==='amber'?'warning':tone(d.p).c==='green'?'success':'danger'})">\${d.p}%</b></div>\`).join('');
+
+const sorted=[...data].sort((a,b)=>a.p-b.p);
+document.getElementById('t5').innerHTML=sorted.map(d=>{const col=tone(d.p).c==='amber'?'warning':tone(d.p).c==='green'?'success':'danger';return\`<div>
+<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>\${d.n} <span style="color:var(--text-muted)">· \${d.c} ctas</span></span><b style="color:var(--text-\${col})">\${d.p}%</b></div>
+<div style="height:5px;background:var(--surface-1);border-radius:99px;overflow:hidden"><div style="height:100%;width:\${Math.max(d.p,3)}%;background:var(--fill-\${col})"></div></div>
+</div>\`;}).join('');
+</script>
