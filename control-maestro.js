@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-CACHE-HEADERS-20260808-28';
+  const BUILD='CONTROL-MAESTRO-FIX-RACE-Y-CHIPS-COMPACTOS-20260808-29';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -694,11 +694,15 @@
     // REVISIÓN (rojo=sin revisar, verde=completo), que es lo que realmente
     // importa para escanear la lista de un vistazo. El color de marca queda
     // solo como un puntito pequeño junto al nombre, para identificar rápido.
+    // ⚠️ REDISEÑO 2: las tarjetas seguían siendo muy grandes (4 líneas cada
+    // una), obligando a mucho scroll con 16+ plataformas. Las reduje a 2
+    // líneas: nombre+% arriba, cuentas abajo. El detalle de revisadas/pendientes
+    // sigue disponible al mantener el dedo/mouse encima (tooltip), no se perdió.
     const chip=(item,key,color)=>`<button type="button" class="cm-platform-chip ${esc(item.tone)} ${state.accountPlatform===key?'on':''}" data-cm-audit-platform="${esc(key)}" title="${esc(`${item.label} · ${item.reviewed} de ${item.total} cuentas revisadas · ${item.pending} pendientes`)}">
-      <div class="cm-platform-chip-top"><span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span><b>${esc(item.name)}</b><strong>${item.percent}%</strong></div>
-      <span class="cm-platform-chip-meta">${item.ctas} cta${item.ctas===1?'':'s'} · ${item.perfiles} perfil${item.perfiles===1?'':'es'}</span>
-      <span class="cm-progress-mini" aria-hidden="true"><i style="width:${item.percent}%"></i></span>
-      <small>${item.reviewed}/${item.total} revisadas</small>
+      <span class="cm-platform-dot" style="background:${color}" aria-hidden="true"></span>
+      <b>${esc(item.name)}</b>
+      <span class="cm-platform-chip-meta">${item.ctas} cta${item.ctas===1?'':'s'}</span>
+      <strong>${item.percent}%</strong>
     </button>`;
     const totalChip=chip({...overall,name:'Todas',ctas:audit.accounts.length,perfiles:audit.metrics.registros},'all','#168fd3');
     return `<section class="cm-review-progress">
@@ -960,7 +964,19 @@
     const host=root();if(!host)return;
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
-    if(!state.accountAudit)state.accountAudit=buildAccountAudit(source(),state.analysis);
+    // ⚠️ BUG REAL encontrado: la mesa se calculaba una vez y quedaba "pegada"
+    // en memoria (`if(!state.accountAudit)`). Al abrir Control Maestro, la
+    // plantilla de Excel todavía no había terminado de leerse en ese primer
+    // instante, así que la mesa se calculaba SIN el cruce de Excel (por eso
+    // Canva salía en 100%, sin las cuentas "Solo Excel"). Cuando el Excel
+    // terminaba de leerse un segundo después, la mesa YA estaba guardada en
+    // memoria y no se volvía a calcular — se quedaba mal hasta que alguien
+    // tocaba "Actualizar datos" a la fuerza. Ahora se vuelve a calcular
+    // automáticamente en cuanto el análisis del Excel cambia de verdad.
+    if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis){
+      state.accountAudit=buildAccountAudit(source(),state.analysis);
+      state.accountAudit._forAnalysis=state.analysis;
+    }
     const controlScreen=document.getElementById('screen-control-cuentas');
     const expanded=document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
