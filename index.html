@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-PANEL-DIVIDIDO-20260809-33">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-FIX-CONGELAMIENTO-20260809-34">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -6355,8 +6355,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .rbac-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--txt2);border-radius:999px;padding:7px 10px;font-size:11px;font-weight:900;box-shadow:var(--sh)}
       .rbac-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.rbac-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:var(--sh)}
       .rbac-card b{display:block;font-family:var(--ff);font-size:22px;line-height:1}.rbac-card span{display:block;color:var(--txt2);font-size:12px;margin-top:6px;font-weight:700}
+      .rbac-card.venc{border-left:4px solid var(--accent)}.rbac-card.hoy{border-left:4px solid var(--warn)}.rbac-card.prox{border-left:4px solid var(--info)}
       .rbac-list{display:flex;flex-direction:column;gap:10px}.rbac-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px;box-shadow:var(--sh)}
-      .rbac-row h3{font-family:var(--ff);font-size:15px;margin:0 0 4px}.rbac-row p{font-size:12px;color:var(--txt2);line-height:1.35;margin:0}.rbac-row small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+      .rbac-row.venc{border-left:4px solid var(--accent)}.rbac-row.hoy{border-left:4px solid var(--warn)}.rbac-row.prox{border-left:4px solid var(--info)}
+      .rbac-row h3{font-family:var(--ff);font-size:15px;margin:0 0 4px}.rbac-plat{color:var(--txt2);font-weight:700;font-size:13px}.rbac-row p{font-size:12px;color:var(--txt2);line-height:1.35;margin:0}.rbac-row small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
       .rbac-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.rbac-btn{border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:12px;padding:9px 11px;font-weight:900;font-size:12px;cursor:pointer}.rbac-btn.good{background:#25d366;color:#062b16;border-color:#25d366}.rbac-btn.warn{background:rgba(232,163,23,.16);border-color:rgba(232,163,23,.35);color:var(--warn)}.rbac-btn.red{background:rgba(232,49,63,.16);border-color:rgba(232,49,63,.35);color:var(--accent)}
       .rbac-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.rbac-field{display:block}.rbac-field span{display:block;font-size:12px;color:var(--txt2);font-weight:900;margin:0 0 5px 2px}.rbac-input{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:13px;padding:12px;font-family:inherit;font-size:14px;outline:none}.rbac-wide{grid-column:1/-1}.rbac-table{width:100%;min-width:0}.rbac-table th,.rbac-table td{padding:10px;border-top:1px solid var(--line);font-size:12px;text-align:left}.rbac-table th{color:var(--muted);font-family:var(--ff);font-weight:700;background:var(--surface)}
       .rbac-badge{display:inline-flex;border-radius:999px;padding:4px 8px;background:var(--surface);border:1px solid var(--line);font-size:11px;font-weight:900;color:var(--txt2)}
@@ -6527,7 +6529,17 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const semana=DATA.filter(c=>c.fecha&&daysTo(c.fecha)>0&&daysTo(c.fecha)<=7).sort((a,b)=>a.fecha-b.fecha);
     const lista=[...vencidos,...hoy,...semana].slice(0,80);
     const montoHoy=hoy.reduce((s,c)=>s+c.precio,0), montoVenc=vencidos.reduce((s,c)=>s+c.precio,0);
-    el.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${hoy.length}</b><span>Vencen hoy · ${fmt(montoHoy)}</span></div><div class="rbac-card"><b>${vencidos.length}</b><span>Vencidos · ${fmt(montoVenc)}</span></div><div class="rbac-card"><b>${semana.length}</b><span>Próximos 7 días</span></div></div><div class="rbac-list">${lista.length?lista.map((c,i)=>`<div class="rbac-row"><div><h3>${esc(c.nombre)} · ${esc(c.plataforma)}</h3><p>${esc(c.telefono||'Sin teléfono')} · ${esc(c.vendedor||'Sin vendedor')} · ${fmt(c.precio)}</p><small>Renueva: ${c.fecha?dateDMY(c.fecha):'—'} · ${statusOf(c.fecha).t}</small></div><div class="rbac-actions"><button class="rbac-btn" data-rbac-cobro="${i}">💬 Cobro</button><button class="rbac-btn warn" data-rbac-ficha="${i}">✅ Ficha</button><button class="rbac-btn good" data-rbac-pagado="${i}">Pagado +30</button></div></div>`).join(''):'<div class="empty">No hay vencimientos en agenda.</div>'}</div>`;
+    // ⚠️ Mejora visual: antes cada fila se veía igual sin importar si estaba
+    // vencida, vence hoy o falta una semana — todo texto plano. Ahora cada
+    // fila y cada tarjeta lleva un color y un emoji según urgencia, usando la
+    // misma paleta que ya usa el resto de Sublichat (--accent, --warn, --info).
+    const tone=(c)=>{const d=daysTo(c.fecha);return d<0?'venc':d===0?'hoy':'prox';};
+    const toneEmoji={venc:'🔴',hoy:'🟡',prox:'🔵'};
+    el.innerHTML=`<div class="rbac-grid">
+      <div class="rbac-card venc"><b>🔴 ${vencidos.length}</b><span>Vencidos · ${fmt(montoVenc)}</span></div>
+      <div class="rbac-card hoy"><b>🟡 ${hoy.length}</b><span>Vencen hoy · ${fmt(montoHoy)}</span></div>
+      <div class="rbac-card prox"><b>🔵 ${semana.length}</b><span>Próximos 7 días</span></div>
+    </div><div class="rbac-list">${lista.length?lista.map((c,i)=>{const t=tone(c);return `<div class="rbac-row ${t}"><div><h3>${toneEmoji[t]} ${esc(c.nombre)} <span class="rbac-plat">· ${esc(c.plataforma)}</span></h3><p>📞 ${esc(c.telefono||'Sin teléfono')} · 🧑‍💼 ${esc(c.vendedor||'Sin vendedor')} · 💰 ${fmt(c.precio)}</p><small>📅 ${c.fecha?dateDMY(c.fecha):'—'} · ${statusOf(c.fecha).t}</small></div><div class="rbac-actions"><button class="rbac-btn" data-rbac-cobro="${i}">💬 Cobro</button><button class="rbac-btn warn" data-rbac-ficha="${i}">✅ Ficha</button><button class="rbac-btn good" data-rbac-pagado="${i}">💵 Pagado +30</button></div></div>`;}).join(''):'<div class="empty">🎉 No hay vencimientos en agenda.</div>'}</div>`;
     window._rbacAgendaRows=lista;
     el.querySelectorAll('[data-rbac-cobro]').forEach(b=>b.onclick=()=>{ const c=window._rbacAgendaRows[+b.dataset.rbacCobro]; if(c&&typeof abrirCobro==='function') abrirCobro(groupFromService(c)); });
     el.querySelectorAll('[data-rbac-ficha]').forEach(b=>b.onclick=()=>{ const c=window._rbacAgendaRows[+b.dataset.rbacFicha]; if(c&&window.abrirEntregaFicha) window.abrirEntregaFicha(groupFromService(c)); });
@@ -8207,7 +8219,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-PANEL-DIVIDIDO-20260809-33"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-FIX-CONGELAMIENTO-20260809-34"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

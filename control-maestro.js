@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PANEL-DIVIDIDO-20260809-33';
+  const BUILD='CONTROL-MAESTRO-FIX-CONGELAMIENTO-20260809-34';
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
@@ -1693,8 +1693,26 @@
   function install(){
     if(state.installed)return;state.installed=true;
     document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]'))setTimeout(boot,90);},true);
-    const observer=new MutationObserver(()=>{if(screenActive()&&!state.loading)boot();});
-    const screen=document.getElementById('screen-control-cuentas');if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
+    const screen=document.getElementById('screen-control-cuentas');
+    // ⚠️ BUG DEL CONGELAMIENTO: cuando "Pantalla completa" usaba el respaldo
+    // en CSS (celulares/navegadores que no soportan la Fullscreen API nativa),
+    // esas clases quedaban pegadas si el usuario navegaba a OTRA sección desde
+    // ahí (tocando Inicio, Clientes, etc.) en vez de cerrar Control Maestro
+    // primero. document.body se quedaba sin scroll y sin poder interactuar —
+    // por eso "se congelaba" y ninguna categoría del menú se veía seleccionada
+    // de verdad. Ahora se cierra sola apenas Control Maestro deja de ser la
+    // pantalla activa, sin importar por qué medio se salió.
+    const observer=new MutationObserver(()=>{
+      if(screenActive()){if(!state.loading)boot();return;}
+      if(screen?.classList.contains('cm-control-expanded')){
+        screen.classList.remove('cm-control-expanded');
+        document.body.classList.remove('cm-control-no-scroll');
+      }
+      if(document.fullscreenElement===screen){
+        document.exitFullscreen().catch(()=>{});
+      }
+    });
+    if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
     document.addEventListener('fullscreenchange',()=>{
       if(!screen)return;
       if(document.fullscreenElement===screen){
