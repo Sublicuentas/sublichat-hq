@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-FIX-CONGELAMIENTO-20260809-34">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-FIX-FICHA-Y-ACCIONES-20260809-35">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -2184,7 +2184,7 @@ function renderTable(){
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
     const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="view" data-client-index="${i}">Ver ficha y servicios</button><button type="button" data-client-action="edit" data-client-index="${i}">Editar cliente</button><button type="button" data-client-action="crm" data-client-index="${i}">Ficha CRM + WhatsApp</button><button type="button" data-client-action="renew" data-client-index="${i}">Pago o renovación</button></div></td></tr>`;
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button></div></td></tr>`;
   }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
   document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
@@ -4028,52 +4028,65 @@ async function eliminarServicio(s){
 }
 
 // Formulario agregar/editar
-const servModal=$cobro("servModal");
+// ⚠️ Antes, si CUALQUIER paso de abrirServForm fallaba a medio camino (un
+// campo que no existía, un dato raro del cliente, etc.), la función se
+// interrumpía ANTES de llegar a la última línea (mostrar el modal) — y como
+// no había ningún try/catch, el error quedaba completamente silencioso: el
+// botón "no hacía nada" sin ninguna pista de por qué. Ahora se captura el
+// error, se avisa con un toast, y se busca "servModal" fresco cada vez en vez
+// de guardarlo una sola vez al cargar la página.
 let servModo="agregar", servEditandoPlat=null, servEditandoCorreo=null, servEditandoIndex=null;
 function abrirServForm(modo, serv){
-  servModo=modo;
-  const g=cobroActual;
-  $cobro("servTitle").textContent=modo==="agregar"?"Agregar compra / servicio":"Editar compra (perfil principal)";
-  $cobro("servSub").textContent=g?g.nombre:"";
-  // llenar selector de plataformas
-  $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
-  if(modo==="editar" && serv){
-    const principal=(Array.isArray(serv.perfiles)&&serv.perfiles[0])||{};
-    servEditandoPlat=serv.plataformaRaw||serv.plataforma;
-    servEditandoCorreo=serv.correo||"";
-    servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
-    // seleccionar la plataforma actual si está en la lista
-    const raw=(serv.plataformaRaw||"").toLowerCase();
-    if(raw && PLATS_DISPONIBLES.some(([v])=>v===raw)) $cobro("servPlat").value=raw;
-    $cobro("servPrecio").value=serv.precio||"";
-    $cobro("servFecha").value=fbAISO(serv.fechaRaw);
-    $cobro("servNombrePerfil").value=principal.nombre||principal.perfil||serv.perfil||g?.nombre||"";
-    $cobro("servCorreo").value=principal.correo||serv.correo||"";
-    $cobro("servPin").value=principal.clave||serv.clave||serv.pin||"";
-    $cobro("servPinPerfil").value=principal.pinPerfil||principal.pin||serv.pinPerfil||"";
-  }else{
-    servEditandoPlat=null;
-    servEditandoCorreo=null;
-    servEditandoIndex=null;
-    $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servNombrePerfil").value=g?.nombre||""; $cobro("servCorreo").value=""; $cobro("servPin").value=""; $cobro("servPinPerfil").value="";
+  try{
+    servModo=modo;
+    const g=cobroActual;
+    $cobro("servTitle").textContent=modo==="agregar"?"Agregar compra / servicio":"Editar compra (perfil principal)";
+    $cobro("servSub").textContent=g?g.nombre:"";
+    // llenar selector de plataformas
+    $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+    if(modo==="editar" && serv){
+      const principal=(Array.isArray(serv.perfiles)&&serv.perfiles[0])||{};
+      servEditandoPlat=serv.plataformaRaw||serv.plataforma;
+      servEditandoCorreo=serv.correo||"";
+      servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
+      // seleccionar la plataforma actual si está en la lista
+      const raw=(serv.plataformaRaw||"").toLowerCase();
+      if(raw && PLATS_DISPONIBLES.some(([v])=>v===raw)) $cobro("servPlat").value=raw;
+      $cobro("servPrecio").value=serv.precio||"";
+      $cobro("servFecha").value=fbAISO(serv.fechaRaw);
+      $cobro("servNombrePerfil").value=principal.nombre||principal.perfil||serv.perfil||g?.nombre||"";
+      $cobro("servCorreo").value=principal.correo||serv.correo||"";
+      $cobro("servPin").value=principal.clave||serv.clave||serv.pin||"";
+      $cobro("servPinPerfil").value=principal.pinPerfil||principal.pin||serv.pinPerfil||"";
+    }else{
+      servEditandoPlat=null;
+      servEditandoCorreo=null;
+      servEditandoIndex=null;
+      $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servNombrePerfil").value=g?.nombre||""; $cobro("servCorreo").value=""; $cobro("servPin").value=""; $cobro("servPinPerfil").value="";
+    }
+    servActualizarCampos();
+    $cobro("servHint").textContent="";
+    const modalEl=$cobro("servModal");
+    if(!modalEl){mostrarToast("⚠️ No se encontró el formulario de servicio. Recargue la página.");return;}
+    modalEl.classList.add("show");
+  }catch(e){
+    console.error("[abrirServForm] falló:",e);
+    mostrarToast("⚠️ No se pudo abrir el formulario ("+(e.message||"error")+"). Recargue la página e intente de nuevo.");
   }
-  servActualizarCampos();
-  $cobro("servHint").textContent="";
-  servModal.classList.add("show");
 }
 function fbAISO(f){ if(!f)return""; if(f.includes("-"))return f.slice(0,10); const m=f.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:""; }
-$cobro("servClose").addEventListener("click",()=>servModal.classList.remove("show"));
-$cobro("servCancel").addEventListener("click",()=>servModal.classList.remove("show"));
-$cobro("servModal").addEventListener("click",e=>{ if(e.target.id==="servModal") servModal.classList.remove("show"); });
-$cobro("cgAddBtn").addEventListener("click",()=>abrirServForm("agregar"));
-$cobro("servPlat").addEventListener("change",servActualizarCampos);
+$cobro("servClose")?.addEventListener("click",()=>$cobro("servModal")?.classList.remove("show"));
+$cobro("servCancel")?.addEventListener("click",()=>$cobro("servModal")?.classList.remove("show"));
+$cobro("servModal")?.addEventListener("click",e=>{ if(e.target.id==="servModal") $cobro("servModal").classList.remove("show"); });
+$cobro("cgAddBtn")?.addEventListener("click",()=>abrirServForm("agregar"));
+$cobro("servPlat")?.addEventListener("change",servActualizarCampos);
 function servActualizarCampos(){
   const plat=$cobro("servPlat")?.value||"";
   const keyBox=$cobro("servClaveField"),pinBox=$cobro("servPinPerfilField");
   if(keyBox)keyBox.style.display=fichaNeedsClave(plat)?"block":"none";
   if(pinBox)pinBox.style.display=fichaNeedsPin(plat)?"block":"none";
 }
-$cobro("servSave").addEventListener("click",async()=>{
+$cobro("servSave")?.addEventListener("click",async()=>{
   const g=cobroActual; if(!g)return;
   const servicio={
     plataforma:$cobro("servPlat").value,
@@ -4099,11 +4112,12 @@ $cobro("servSave").addEventListener("click",async()=>{
       if(servModo==="agregar" && j.inventario){
         if(j.inventario.tocado) extra=` · cupo ocupado en Stock (${j.inventario.disponibles} libres)`;
       }
-      mostrarToast(`✅ ${g.nombre}: servicio ${servModo==="agregar"?"agregado":"actualizado"}${extra}`); servModal.classList.remove("show"); cerrarCobro(); await load({forceServer:true});
+      mostrarToast(`✅ ${g.nombre}: servicio ${servModo==="agregar"?"agregado":"actualizado"}${extra}`); $cobro("servModal")?.classList.remove("show"); cerrarCobro(); await load({forceServer:true});
     }
     else $cobro("servHint").textContent="⚠️ "+(j.error||"Error");
   }catch(e){ $cobro("servHint").textContent="⚠️ No pude conectar."; }
 });
+
 
 $cobro("cobroClose").addEventListener("click",cerrarCobro);
 $cobro("cobroModal").addEventListener("click",e=>{ if(e.target.id==="cobroModal") cerrarCobro(); });
@@ -8219,7 +8233,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-FIX-CONGELAMIENTO-20260809-34"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-FIX-FICHA-Y-ACCIONES-20260809-35"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
