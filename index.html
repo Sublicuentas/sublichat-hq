@@ -4775,7 +4775,7 @@ function gCaminoBombas(){
     ["office","Office 365"],["oleada","Oleada TV"],["iptv","IPTV"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
-  const FICHA_VENDEDOR_TELS={ relojes:"97313055", yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+  const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
   // VERSION 23 · Cuatro variantes elegibles. Guardar ya no abre WhatsApp por
   // fuerza: primero se muestra la URL y luego el vendedor elige qué texto usar.
@@ -4846,7 +4846,7 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
     const t=FICHA_MENSAJES_CLIENTE[indice];
     let texto=t.cuerpo;
     if(fichaVendedorTieneDespedida(vendedor)) texto+="\n\n"+t.despedida;
-    const tel=fichaVendedorTel(vendedor)||String(telefono||"").trim();
+    const tel=String(telefono||"").trim();
     const contacto=[];
     if(tel) contacto.push(`📞 *${tel}*`);
     if(vendedor) contacto.push(`${fichaVendedorIcono(vendedor)} Vendedor *${vendedor}*`);
@@ -4880,7 +4880,7 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
     const nombre=fichaGetVal("fichaNombre")||"Cliente";
     const vendedor=fichaVendedorActual();
     const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
-    const telefono=fichaVendedorTel(vendedor)||fichaGetVal("fichaTelefono");
+    const telefono=fichaGetVal("fichaTelefono");
     const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor,telefono,variante:fichaVarianteMensajeActual});
     const view=fichaQ("fichaMensajeClienteView");
     if(view) view.textContent=msg;
@@ -5665,8 +5665,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
 
   function fichaRespaldoCore(){
+    const tel=fichaGetVal("fichaTelefono");
     const vendedor=fichaVendedorActual();
-    const tel=fichaVendedorTel(vendedor)||fichaGetVal("fichaTelefono");
     const lineas=[];
     if(tel) lineas.push(tel);
     if(vendedor) lineas.push(fichaVendedorIcono(vendedor)+" Vendedor "+vendedor);
