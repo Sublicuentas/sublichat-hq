@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 1
+// api/acceso.js · VERSION 2
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y nunca expone nada
@@ -50,7 +50,7 @@ function celularSoloCodigo(plataforma) {
   return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("netflix");
 }
 
-const VENDEDOR_TELS = { yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
+const VENDEDOR_TELS = { relojes: "97313055", yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
 function vendedorTel(v) {
   const n = normPlat(v);
   return VENDEDOR_TELS[n] || "";
@@ -174,7 +174,9 @@ export default async function handler(req, res) {
       fechaRenovacion: servicio.fechaRenovacion || "",
       terminos: termsFor(plataforma),
       vendedor: cliente.vendedor || "",
-      vendedorTelefono: cliente.telefono || vendedorTel(cliente.vendedor) || ""
+      // El contacto fijo del vendedor tiene prioridad. Para vendedores nuevos
+      // sin número configurado, se conserva el teléfono escrito en la ficha CRM.
+      vendedorTelefono: vendedorTel(cliente.vendedor) || cliente.telefono || ""
     };
 
     res.setHeader("Cache-Control", "no-store");
