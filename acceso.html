@@ -29,11 +29,15 @@
   .card{ background:var(--card); border:1px solid var(--edge); border-radius:26px; padding:22px; box-shadow:0 14px 34px rgba(30,20,10,.08); }
   .plat-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .plat-left{ display:flex; align-items:center; gap:12px; }
-  .plat-icon{ width:52px; height:52px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:22px; background:#111; color:#fff; }
+  .plat-icon{ width:52px; height:52px; flex:0 0 52px; border-radius:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:7px; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
+  .plat-logo{ display:block; width:100%; height:100%; object-fit:contain; }
+  .plat-fallback{ line-height:1; letter-spacing:-.04em; }
   .plat-name{ font-family:'Anton',sans-serif; font-weight:400; font-size:18px; }
   .plat-holder{ font-size:12.5px; color:var(--muted); margin-top:2px; }
   .pill{ display:inline-flex; align-items:center; gap:6px; background:var(--green-soft); color:var(--green); font-weight:700; font-size:11.5px; padding:6px 12px; border-radius:999px; }
   .pill i{ width:7px;height:7px;border-radius:50%; background:var(--green); display:inline-block; }
+  .pill.expired{ background:var(--red-soft); color:var(--red); }
+  .pill.expired i{ background:var(--red); }
   .exp-row{ display:flex; justify-content:space-between; align-items:center; background:var(--bg); border-radius:14px; padding:12px 15px; margin-bottom:18px; }
   .exp-label{ font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
   .exp-val{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; }
@@ -56,6 +60,8 @@
   .renew-support-note{ margin-top:10px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; border-radius:14px; padding:12px 14px; text-align:center; line-height:1.5; }
   .renew-support-note b{ display:block; color:var(--blue); font-size:12.5px; margin-bottom:3px; }
   .renew-support-note span{ display:block; font-size:11.5px; }
+  .expired-note{ border:1px solid #efbbb6; background:var(--red-soft); color:#7f211b; border-radius:16px; padding:16px; font-size:13px; line-height:1.6; text-align:center; }
+  .expired-note b{ display:block; color:var(--red); font-size:15px; margin-bottom:4px; }
   .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:var(--black); color:#fff; font-weight:700; font-size:13px; padding:10px 18px; border-radius:999px; opacity:0; pointer-events:none; transition:all .2s ease; z-index:200; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
   .state{ text-align:center; padding:60px 20px; color:var(--muted); font-size:14px; line-height:1.6; }
@@ -71,15 +77,52 @@
   <div class="toast" id="toast">¡Copiado!</div>
 
 <script>
-  const PLAT_EMOJI = {
-    netflix:"🎬", vipnetflix:"🎬", hbomax:"🍿", disneyp:"🏰", disneys:"🏰",
-    primevideo:"🎥", crunchyroll:"🌀", universal:"🌐", vix:"✅", paramount:"⭐",
-    spotify:"🎧", deezer:"🎧", youtube:"▶️", canva:"🎨", gemini:"✦",
-    chatgpt:"🤖", duolingo:"📚", office:"💻", oleada:"🌊", iptv:"📺",
-    viki:"📺", appletv:"📺"
+  const ICONIFY="https://api.iconify.design";
+  const PLAT_VISUALS = {
+    netflix:{logo:`${ICONIFY}/thesvg-color/netflix.svg`,bg:"#090909",fallback:"N"},
+    vipnetflix:{logo:`${ICONIFY}/thesvg-color/netflix.svg`,bg:"#090909",fallback:"N"},
+    disneyp:{logo:`${ICONIFY}/thesvg-color/disneyplus.svg`,bg:"#eef3ff",fallback:"D+",color:"#01147b"},
+    disneys:{logo:`${ICONIFY}/thesvg-color/disneyplus.svg`,bg:"#eef3ff",fallback:"D+",color:"#01147b"},
+    hbomax:{logo:`${ICONIFY}/thesvg-color/hbo-max.svg`,bg:"#f4efff",fallback:"MAX",color:"#5b2be0"},
+    primevideo:{logo:`${ICONIFY}/thesvg-color/prime-video.svg`,bg:"#edf8ff",fallback:"prime",color:"#00a8e1"},
+    crunchyroll:{logo:`${ICONIFY}/thesvg-color/crunchyroll.svg`,bg:"#fff3eb",fallback:"CR",color:"#ff5e00"},
+    universal:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/Universal_Plus_logo.png?width=180",bg:"#080808",fallback:"U+",color:"#fccc12"},
+    vix:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/ViX_Logo.svg",bg:"#fff2e8",fallback:"ViX",color:"#ff5a00"},
+    paramount:{logo:`${ICONIFY}/thesvg-color/paramountplus.svg`,bg:"#edf4ff",fallback:"P+",color:"#0064ff"},
+    spotify:{logo:`${ICONIFY}/thesvg-color/spotify.svg`,bg:"#07150d",fallback:"S",color:"#1ed760"},
+    deezer:{logo:`${ICONIFY}/thesvg-color/deezer.svg`,bg:"#f4efff",fallback:"D",color:"#a238ff"},
+    youtube:{logo:`${ICONIFY}/thesvg-color/youtube.svg`,bg:"#fff0f0",fallback:"YT",color:"#ff0000"},
+    canva:{logo:`${ICONIFY}/thesvg-color/canva.svg`,bg:"#f1f6ff",fallback:"C",color:"#7d2ae7"},
+    gemini:{logo:`${ICONIFY}/logos/google-gemini.svg`,bg:"#eef4ff",fallback:"G",color:"#4285f4"},
+    chatgpt:{logo:`${ICONIFY}/thesvg-color/openai-chatgpt.svg`,bg:"#edf7f3",fallback:"AI",color:"#10a37f"},
+    duolingo:{logo:`${ICONIFY}/thesvg-color/duolingo.svg`,bg:"#effbe8",fallback:"D",color:"#58cc02"},
+    office:{logo:`${ICONIFY}/thesvg-color/microsoft-office.svg`,bg:"#fff0eb",fallback:"O",color:"#d83b01"},
+    oleada:{logo:`${ICONIFY}/mdi/television-classic.svg?color=%2300b8d9`,bg:"#e9faff",fallback:"TV",color:"#007f99"},
+    iptv:{logo:`${ICONIFY}/mdi/television-classic.svg?color=%23ffffff`,bg:"#111827",fallback:"TV"},
+    viki:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/Rakuten_Viki_2022.svg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
+    appletv:{logo:`${ICONIFY}/simple-icons/appletv.svg?color=%23ffffff`,bg:"#111111",fallback:"tv"}
   };
 
-  function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv"};
+
+  function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  function platKey(v){
+    const k=String(v||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    return PLAT_ALIASES[k]||k;
+  }
+  function platVisual(v){ return PLAT_VISUALS[platKey(v)]||{logo:"",bg:"#111827",fallback:"TV"}; }
+  function platLogo(v,label){
+    const visual=platVisual(v);
+    const style=`--plat-bg:${visual.bg||"#111827"};--plat-color:${visual.color||"#fff"}`;
+    const logo=visual.logo?`<img class="plat-logo" src="${visual.logo}" alt="Logo ${esc(label||"plataforma")}" referrerpolicy="no-referrer" onerror="this.hidden=true;this.nextElementSibling.hidden=false">`:"";
+    return `<div class="plat-icon" style="${style}">${logo}<span class="plat-fallback" ${visual.logo?"hidden":""}>${esc(visual.fallback||"TV")}</span></div>`;
+  }
+
+  function supportData(d){
+    const phone=String(d.vendedorTelefono||"").replace(/\D/g,"");
+    const intl=phone?(phone.startsWith("504")?phone:`504${phone}`):"";
+    return {phone,href:intl?`https://wa.me/${intl}`:"#"};
+  }
 
   function copyToClipboard(text, btn){
     const doIt = async () => {
@@ -111,7 +154,6 @@
   }
 
   function render(d){
-    const emoji = PLAT_EMOJI[String(d.plataforma||"").toLowerCase()] || "📱";
     let fieldsHtml = "";
     let noteHtml = "";
 
@@ -132,18 +174,16 @@
 
     const termsHtml = (d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
 
-    const supportPhone = String(d.vendedorTelefono||"").replace(/\D/g,"");
-    const supportPhoneIntl = supportPhone ? (supportPhone.startsWith("504")?supportPhone:`504${supportPhone}`) : "";
-    const supportHref = supportPhoneIntl ? `https://wa.me/${supportPhoneIntl}` : "#";
+    const support=supportData(d);
 
     document.getElementById('stage').innerHTML = `
       <div class="live-row"><span class="live-dot"></span><span class="live-label">Entrega en vivo</span></div>
       <h1 class="h1">Bienvenido a su acceso <span>Premium</span></h1>
-      <div class="sub">¡Hola, estimado ${esc(d.titular)}! Le sugerimos guardar este enlace; podrá consultarlo en cualquier momento para ver los detalles de su servicio. ${emoji}</div>
+      <div class="sub">¡Hola, estimado ${esc(d.titular)}! Le sugerimos guardar este enlace; podrá consultarlo en cualquier momento para ver los detalles de su servicio.</div>
       <div class="card">
         <div class="plat-row">
           <div class="plat-left">
-            <div class="plat-icon">${emoji}</div>
+            ${platLogo(d.plataforma,d.plataformaLabel)}
             <div><div class="plat-name">${esc(d.plataformaLabel)}</div><div class="plat-holder">${esc(d.perfil||d.titular)}</div></div>
           </div>
           <span class="pill"><i></i>Activo</span>
@@ -153,9 +193,9 @@
         ${noteHtml}
         <div class="section-title">Condiciones del servicio</div>
         <div class="terms"><ul>${termsHtml}</ul></div>
-        ${(d.vendedor||supportPhone) ? `<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${supportPhone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>` : ""}
-        <a href="${supportHref}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
-        ${supportPhone?`<div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Realice su renovación o solicite ayuda directamente con su vendedor al número indicado en esta ficha.</span></div>`:""}
+        ${(d.vendedor||support.phone) ? `<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>` : ""}
+        <a href="${support.href}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
+        ${support.phone?`<div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Realice su renovación o solicite ayuda directamente con su vendedor al número indicado en esta ficha.</span></div>`:""}
       </div>
     `;
 
@@ -165,6 +205,26 @@
         if(el) copyToClipboard(el.textContent.trim(), btn);
       });
     });
+  }
+
+  function renderExpired(d){
+    const support=supportData(d);
+    document.getElementById('stage').innerHTML=`
+      <h1 class="h1">Su acceso está <span>vencido</span></h1>
+      <div class="sub">Las credenciales quedaron protegidas porque el servicio no registra una renovación vigente.</div>
+      <div class="card">
+        <div class="plat-row">
+          <div class="plat-left">
+            ${platLogo(d.plataforma,d.plataformaLabel)}
+            <div><div class="plat-name">${esc(d.plataformaLabel||"Servicio")}</div><div class="plat-holder">${esc(d.titular||"Cliente")}</div></div>
+          </div>
+          <span class="pill expired"><i></i>Vencido</span>
+        </div>
+        <div class="exp-row"><span class="exp-label">Venció</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
+        <div class="expired-note"><b>Acceso temporalmente desactivado</b>Al renovar, este mismo enlace volverá a mostrar los datos actualizados. No necesita una URL nueva.</div>
+        ${(d.vendedor||support.phone)?`<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>`:""}
+        ${support.phone?`<a href="${support.href}" target="_blank" rel="noopener" class="cta">🔄 Solicitar renovación</a>`:""}
+      </div>`;
   }
 
   function renderError(msg){
@@ -184,6 +244,7 @@
     try{
       const resp = await fetch('/api/acceso?token=' + encodeURIComponent(token));
       const data = await resp.json();
+      if (data.vencido) { renderExpired(data); return; }
       if (!resp.ok || !data.ok) { renderError(data.error); return; }
       render(data);
     }catch(e){
