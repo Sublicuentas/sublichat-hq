@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/c/:token", "destination": "/acceso.html?token=:token" }
+  ],
   "headers": [
     {
       "source": "/",

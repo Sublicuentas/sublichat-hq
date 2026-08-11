@@ -4775,6 +4775,57 @@ function gCaminoBombas(){
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+
+  // VERSION 20 · Mensaje corto que recibe el CLIENTE por WhatsApp (ya no la ficha
+  // completa con correo/clave — eso queda de respaldo interno). Rota entre estas
+  // 5 plantillas al azar. La despedida ("¡Gracias/Agradecemos...!") SOLO se
+  // incluye cuando el vendedor es Relojes o Sublicuentas; para el resto de
+  // vendedores el mensaje corta justo antes de esa línea.
+  const FICHA_MENSAJES_CLIENTE=[
+`🍿 ¡Es hora de disfrutar de {servicio}!
+Hola, {nombre}. Hemos generado sus datos de acceso de manera segura.
+👉 Toque el enlace para ingresar a su panel de acceso:
+{link}
+⚡ Su servicio incluye soporte prioritario activo.
+¡Agradecemos su preferencia en Sublicuentas!`,
+`🎬 Su entretenimiento comienza ahora, {nombre}.
+Le damos la bienvenida a su servicio de {servicio}.
+📲 Abra el siguiente enlace para ver sus credenciales:
+{link}
+🛠️ Soporte y respaldo continuo durante todo su período.
+¡Gracias por confiar en el equipo de Sublicuentas!`,
+`✨ ¡Acceso Confirmado!
+Estimado(a) {nombre}, su suscripción a {servicio} se encuentra activa y lista para ser utilizada.
+🔑 Consulte los datos de su cuenta aquí:
+{link}
+🛡️ Cuenta con garantía y soporte técnico garantizado durante toda su vigencia.
+¡Gracias por formar parte de Sublicuentas!`,
+`🎉 ¡Su acceso está confirmado, {nombre}!
+Ya puede disfrutar de {servicio} sin contratiempos.
+🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:
+{link}
+📞 Soporte disponible durante toda su vigencia.
+¡Gracias por elegir Sublicuentas!`,
+`🚀 {nombre}, su cuenta {servicio} ya fue activada.
+Toque el enlace para consultar sus datos de acceso cuando lo necesite:
+{link}
+✅ Respaldo y soporte activos durante todo el período contratado.
+En Sublicuentas, gracias por su confianza.`
+  ];
+  function fichaVendedorTieneDespedida(v){
+    const n=fichaNorm(v);
+    return n==="relojes" || n==="sublicuentas";
+  }
+  function fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor}){
+    const plantilla=FICHA_MENSAJES_CLIENTE[Math.floor(Math.random()*FICHA_MENSAJES_CLIENTE.length)];
+    const lineas=plantilla.split("\n");
+    // La última línea de cada plantilla es siempre la despedida.
+    const cuerpo=fichaVendedorTieneDespedida(vendedor) ? lineas : lineas.slice(0,-1);
+    return cuerpo.join("\n")
+      .replace(/\{nombre\}/g, nombre||"Cliente")
+      .replace(/\{servicio\}/g, servicioLabel||"su servicio")
+      .replace(/\{link\}/g, link||"");
+  }
   const FICHA_PRECIOS={
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
@@ -5301,6 +5352,36 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
   const fichaNeedsClave=plat=>!FICHA_SOLO_CORREO.has(fichaNorm(plat));
   const fichaNeedsPin=plat=>!FICHA_SIN_PIN.has(fichaNorm(plat));
+
+  // VERSION 20 · Regla NUEVA confirmada (11-ago-2026): en celular, estas cuentas
+  // se entregan SOLO con correo — el cliente inicia sesión con "código" que pide
+  // a su vendedor. No aplica a Netflix VIP (esa sí lleva clave normal).
+  const FICHA_CELULAR_SOLO_CODIGO=new Set(["disneyp","disneys","hbomax","vix","netflix"]);
+  const fichaCelularSoloCodigo=plat=>FICHA_CELULAR_SOLO_CODIGO.has(fichaNorm(plat));
+
+  // Combina plataforma + dispositivo (TV/Celular) + ¿Roku? para decidir qué
+  // campos se piden en la ficha. Esto es SOLO para la interfaz del CRM (qué
+  // se le pregunta al vendedor); lo que ya guardaba Firebase no cambia de forma.
+  //   TV + Roku       -> correo + clave (+pin si la plataforma lo usa)
+  //   TV + no Roku     -> nada de correo/clave, solo perfil + pin
+  //   Celular + grupo código -> SOLO correo
+  //   Celular + resto  -> correo + clave (+pin si la plataforma lo usa), como antes
+  function fichaCamposEfectivos(){
+    const plat=fichaGetVal("fichaPlat");
+    const dispositivo=fichaGetVal("fichaDispositivo");
+    const esRoku=fichaGetVal("fichaEsRoku")==="si";
+    const platClave=fichaNeedsClave(plat), platPin=fichaNeedsPin(plat);
+    if(dispositivo==="tv"){
+      if(esRoku) return {correo:true, clave:platClave, pin:platPin, modo:"cred"};
+      return {correo:false, clave:false, pin:platPin, modo:"perfil"};
+    }
+    if(dispositivo==="cel"){
+      if(platClave && fichaCelularSoloCodigo(plat)) return {correo:true, clave:false, pin:false, modo:"codigo"};
+      return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
+    }
+    // Sin dispositivo elegido todavía: se comporta como antes de este cambio.
+    return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
+  }
   const fichaTemplateFor=plat=>{
     const k=fichaNorm(plat);
     if(k==="netflixpremium") return FICHA_TEMPLATES.netflix;
@@ -5551,6 +5632,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaRefreshTemplate(){
     fichaSetPrecioDefault(false);
     const plat=fichaGetVal("fichaPlat");
+    // Los campos del CRM siguen mostrándose según la PLATAFORMA solamente (igual
+    // que siempre) — el vendedor debe poder guardar correo/clave/PIN reales sin
+    // importar el dispositivo, para no perder ese dato. El dispositivo/Roku solo
+    // decide qué ve el CLIENTE en su ficha pública (ver fichaAvisoDispositivo).
     const showClave=fichaNeedsClave(plat);
     const showPin=fichaNeedsPin(plat);
     const showIptv=fichaNorm(plat)==="iptv";
@@ -5564,10 +5649,28 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(iptvHoraBox)iptvHoraBox.style.display=showIptv?"block":"none";
     if(iptvPantallasBox)iptvPantallasBox.style.display=showIptv?"block":"none";
     if(oleadaBox)oleadaBox.style.display=showOleada?"block":"none";
+    fichaAvisoDispositivo();
     const txt=fichaQ("fichaTexto");
     if(txt) txt.value=fichaFullPreviewText();
     const view=fichaQ("fichaTextoView");
     if(view) view.innerHTML=fichaMarkdownToHtml((txt&&txt.value)||"");
+  }
+
+  // Aviso informativo (no borra ni oculta nada guardado): le recuerda al
+  // vendedor qué verá el cliente en /c/{token} según dispositivo + ¿Roku? +
+  // plataforma, sin tocar los campos reales del CRM.
+  function fichaAvisoDispositivo(){
+    const box=fichaQ("fichaAvisoDispositivoBox");
+    if(!box) return;
+    const dispositivo=fichaGetVal("fichaDispositivo");
+    if(!dispositivo){ box.style.display="none"; return; }
+    const campos=fichaCamposEfectivos();
+    let msg="";
+    if(campos.modo==="codigo") msg="📲 El cliente verá SOLO el correo. Accederá con \"código\" (se lo pide a su vendedor) — la clave que guarde aquí no se le mostrará.";
+    else if(campos.modo==="perfil") msg="📺 El cliente no verá correo ni clave — solo su perfil y PIN, porque el TV ya tiene la cuenta vinculada.";
+    else msg="✅ El cliente verá correo"+(campos.clave?" y clave":"")+(campos.pin?" y PIN":"")+" normalmente.";
+    box.style.display="block";
+    box.textContent=msg;
   }
 
   function fichaPayload(){
@@ -5588,7 +5691,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       clave:principal.clave||clave,
       sinClave:!fichaNeedsClave(plat),
       perfil:principal.perfil||fichaGetVal("fichaPerfil")||fichaGetVal("fichaNombre"),
-      perfiles
+      perfiles,
+      // VERSION 20 · metadata para /c/{token}: no afecta lo que se guarda de
+      // correo/clave/PIN (eso sigue dependiendo solo de la plataforma).
+      dispositivo:fichaGetVal("fichaDispositivo"),
+      esRoku:fichaGetVal("fichaEsRoku")==="si"
     };
     if(fichaNeedsPin(plat)) servicio.pinPerfil=principal.pinPerfil||fichaGetVal("fichaPinPerfil");
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
@@ -5727,10 +5834,23 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(btn){ btn.disabled=true; btn.textContent="Guardando CRM…"; }
     const j=await fichaGuardarCRM({silent:true});
     if(j&&j.ok){
-      await fichaCopy(true);
+      await fichaCopy(true); // sigue copiando la ficha completa, para el respaldo interno
       if(btn) btn.textContent="Abriendo WhatsApp…";
-      fichaStatus(`✅ Firebase confirmó ${j.totalPerfiles||1} perfil${Number(j.totalPerfiles)===1?"":"es"}. Abriendo WhatsApp con la ficha completa y las reglas de ${fichaPlatformLabel(fichaGetVal("fichaPlat"))}.`,"ok");
-      fichaOpenWhatsApp(texto);
+      // VERSION 20 · Al cliente ya NO se le manda la ficha completa por WhatsApp:
+      // se le manda un mensaje corto rotativo con el link a /c/{token}. La ficha
+      // completa (con correo/clave) queda copiada arriba para el respaldo interno.
+      const nombre=fichaGetVal("fichaNombre")||"Cliente";
+      const vendedor=fichaVendedorActual();
+      const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
+      const link=j.linkPublico ? (window.location.origin+j.linkPublico) : "";
+      if(link){
+        const mensajeCliente=fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor});
+        fichaStatus(`✅ Firebase confirmó ${j.totalPerfiles||1} perfil${Number(j.totalPerfiles)===1?"":"es"}. Se copió la ficha completa (respaldo) y se abre WhatsApp con el mensaje corto + enlace para el cliente.`,"ok");
+        fichaOpenWhatsApp(mensajeCliente);
+      } else {
+        // Si por algún motivo no vino token (p.ej. función vieja sin desplegar el cambio), no se manda nada roto.
+        fichaStatus("⚠️ Se guardó el CRM pero no se generó el enlace público todavía. Intente de nuevo en un momento.","err");
+      }
       setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=old; } },3500);
     }else{
       fichaStatus("⚠️ No abrí WhatsApp porque el CRM no se guardó.","err");
@@ -5959,10 +6079,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
           <label class="ficha-field"><span>Vendedor</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
+          <label class="ficha-field"><span>📺📱 ¿Dónde va a usar la cuenta?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
+          <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
+          <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
           <label class="ficha-field"><span>Día de cada mes</span><input class="ficha-input" id="fichaDia" inputmode="numeric" placeholder="04"></label>
-          <label class="ficha-field"><span>Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
+          <label class="ficha-field" id="fichaCorreoBox"><span>Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
           <label class="ficha-field" id="fichaClaveBox"><span>Perfil 1 · Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
           <label class="ficha-field" id="fichaPinBox"><span>Perfil 1 · PIN individual</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
           <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Proveedor IPTV</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latvgt.com)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV</option></select></label>
@@ -6005,6 +6128,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       if(view && hidden) hidden.value=view.innerText;
     });
     fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
+    fichaQ("fichaDispositivo").addEventListener("change",()=>{
+      const rokuBox=fichaQ("fichaRokuBox");
+      if(rokuBox) rokuBox.style.display = fichaGetVal("fichaDispositivo")==="tv" ? "block" : "none";
+      fichaRenderPerfilesExtra(); fichaRefreshTemplate();
+    });
+    fichaQ("fichaEsRoku").addEventListener("change",()=>{ fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
