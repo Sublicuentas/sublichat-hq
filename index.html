@@ -4826,6 +4826,43 @@ En Sublicuentas, gracias por su confianza.`
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")
       .replace(/\{link\}/g, link||"");
   }
+
+  // VERSION 21 · Enlace/mensaje del cliente visibles y copiables aparte de la
+  // ficha completa, para no perderlos si se cierra WhatsApp sin enviarlos.
+  let fichaLinkActual="";
+  function fichaMostrarDatosCliente(linkPublico){
+    fichaLinkActual = linkPublico ? (window.location.origin+linkPublico) : "";
+    const linkBox=fichaQ("fichaClienteBox"), msgBox=fichaQ("fichaMensajeClienteBox");
+    if(!fichaLinkActual){
+      if(linkBox) linkBox.style.display="none";
+      if(msgBox) msgBox.style.display="none";
+      return;
+    }
+    if(linkBox){ linkBox.style.display="block"; const inp=fichaQ("fichaLinkCliente"); if(inp) inp.value=fichaLinkActual; }
+    if(msgBox){ msgBox.style.display="block"; fichaRotarMensajeCliente(); }
+  }
+  function fichaRotarMensajeCliente(){
+    if(!fichaLinkActual) return;
+    const nombre=fichaGetVal("fichaNombre")||"Cliente";
+    const vendedor=fichaVendedorActual();
+    const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
+    const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor});
+    const view=fichaQ("fichaMensajeClienteView");
+    if(view) view.textContent=msg;
+  }
+  async function fichaCopiarCampo(texto,btn){
+    if(!texto) return;
+    try{
+      if(navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(texto);
+      else{
+        const ta=document.createElement("textarea");
+        ta.value=texto; ta.style.position="fixed"; ta.style.left="-9999px";
+        document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand("copy"); ta.remove();
+      }
+      fichaToast("✅ Copiado");
+      if(btn){ const old=btn.textContent; btn.textContent="✅ Copiado"; setTimeout(()=>{btn.textContent=old;},1400); }
+    }catch(e){ fichaToast("⚠️ No se pudo copiar automático."); }
+  }
   const FICHA_PRECIOS={
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
@@ -5763,6 +5800,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         if(!silent) fichaToast(msg);
         await load({forceServer:true});
         fichaSincronizarServiciosDesdeData(j.servicioIndex!=null?Number(j.servicioIndex):fichaServicioIndexActual,payload);
+        fichaMostrarDatosCliente(j.linkPublico||"");
         try{if(typeof window.sublichatControlSyncLoadedData==="function")window.sublichatControlSyncLoadedData("✅ Ficha editada y actualizada en Control Maestro.");}catch(_){}
       }else{
         const msg="⚠️ CRM: "+(j.error||"No se pudo guardar");
@@ -5844,7 +5882,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
       const link=j.linkPublico ? (window.location.origin+j.linkPublico) : "";
       if(link){
-        const mensajeCliente=fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor});
+        const mensajeCliente=fichaQ("fichaMensajeClienteView")?.textContent || fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor});
         fichaStatus(`✅ Firebase confirmó ${j.totalPerfiles||1} perfil${Number(j.totalPerfiles)===1?"":"es"}. Se copió la ficha completa (respaldo) y se abre WhatsApp con el mensaje corto + enlace para el cliente.`,"ok");
         fichaOpenWhatsApp(mensajeCliente);
       } else {
@@ -5873,6 +5911,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function fichaPrefillFromService(g, serv){
     const s=serv||{};
+    fichaMostrarDatosCliente(""); // limpia el enlace/mensaje del cliente anterior, si había uno visible
     const perfiles=fichaPerfilesDesdeServicio(s,g||{});
     const principal=perfiles[0]||{};
     fichaCompraIdActual=String(s.compraId||"");
@@ -6103,6 +6142,21 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <button class="ficha-add-profile" id="fichaAddProfile" type="button">➕ Añadir otro perfil a esta compra</button>
         </section>
         <label class="ficha-field"><span>Ficha para grupo WhatsApp / respaldo</span><div class="ficha-text ficha-preview" id="fichaTextoView" contenteditable="true"></div><textarea id="fichaTexto" style="display:none" aria-hidden="true"></textarea></label>
+        <label class="ficha-field" id="fichaClienteBox" style="display:none">
+          <span>🔗 Enlace para el cliente</span>
+          <div style="display:flex;gap:8px;">
+            <input class="ficha-input" id="fichaLinkCliente" readonly placeholder="Se genera al guardar…" style="flex:1">
+            <button class="ficha-btn" id="fichaCopyLink" type="button" style="flex:0 0 auto;">📋 Enlace</button>
+          </div>
+        </label>
+        <label class="ficha-field" id="fichaMensajeClienteBox" style="display:none">
+          <span>💬 Mensaje corto para el cliente (rota entre 5 variantes)</span>
+          <div class="ficha-text ficha-preview" id="fichaMensajeClienteView" style="white-space:pre-wrap"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="ficha-btn" id="fichaCopyMensaje" type="button" style="flex:1">📋 Copiar mensaje</button>
+            <button class="ficha-btn" id="fichaRotarMensaje" type="button" style="flex:0 0 auto;">🔄 Otra variante</button>
+          </div>
+        </label>
         <div class="ficha-actions three">
           <button class="ficha-btn" id="fichaRegen" type="button">🆕 Ficha nueva</button>
           <button class="ficha-btn crm" id="fichaSave" type="button">💾 Guardar CRM</button>
@@ -6112,7 +6166,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <button class="ficha-btn wa" id="fichaWA" type="button">✅ Guardar CRM + abrir WhatsApp</button>
         </div>
         <div class="ficha-status" id="fichaStatus"></div>
-        <div class="ficha-note">Al guardar, se actualiza Firebase/CRM; el bot de Telegram verá esos mismos datos. La caja ya incluye 2 bloques en el mismo mensaje: primero la ficha y debajo teléfono + vendedor. El botón abre WhatsApp predeterminado; si el navegador no lo permite, usa WhatsApp Web.</div>
+        <div class="ficha-note">Al guardar, se actualiza Firebase/CRM; el bot de Telegram verá esos mismos datos. La caja de arriba es la ficha completa (correo/clave/condiciones) para su respaldo interno — mándela usted mismo al grupo de WhatsApp que use para eso. El botón verde "Guardar CRM + abrir WhatsApp" ya NO manda la ficha completa: abre WhatsApp con el mensaje corto + enlace para el cliente. Debajo de la ficha completa quedan el enlace y el mensaje del cliente con su propio botón de copiar, por si necesita volver a mandarlos.</div>
       </div>`;
     document.body.appendChild(wrap);
     const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");fichaDevolverAlBody();};
@@ -6134,6 +6188,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaRenderPerfilesExtra(); fichaRefreshTemplate();
     });
     fichaQ("fichaEsRoku").addEventListener("change",()=>{ fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
+    fichaQ("fichaCopyLink").addEventListener("click",e=>fichaCopiarCampo(fichaLinkActual,e.currentTarget));
+    fichaQ("fichaCopyMensaje").addEventListener("click",e=>fichaCopiarCampo(fichaQ("fichaMensajeClienteView")?.textContent||"",e.currentTarget));
+    fichaQ("fichaRotarMensaje").addEventListener("click",fichaRotarMensajeCliente);
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
