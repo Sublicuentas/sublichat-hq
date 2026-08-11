@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/c/:token", "destination": "/acceso.html?token=:token" }
+    { "source": "/c/(.*)", "destination": "/acceso.html?token=$1" }
   ],
   "headers": [
     {

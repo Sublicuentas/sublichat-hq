@@ -4776,52 +4776,84 @@ function gCaminoBombas(){
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-  // VERSION 20 · Mensaje corto que recibe el CLIENTE por WhatsApp (ya no la ficha
-  // completa con correo/clave — eso queda de respaldo interno). Rota entre estas
-  // 5 plantillas al azar. La despedida ("¡Gracias/Agradecemos...!") SOLO se
-  // incluye cuando el vendedor es Relojes o Sublicuentas; para el resto de
-  // vendedores el mensaje corta justo antes de esa línea.
+  // VERSION 22 · Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
+  // blanco entre bloques. Cada plantilla es {cuerpo, despedida} — la despedida
+  // se agrega aparte solo si el vendedor es Relojes o Sublicuentas, así el
+  // texto no depende de contar líneas.
   const FICHA_MENSAJES_CLIENTE=[
+    {
+      cuerpo:
 `🍿 ¡Es hora de disfrutar de {servicio}!
-Hola, {nombre}. Hemos generado sus datos de acceso de manera segura.
-👉 Toque el enlace para ingresar a su panel de acceso:
+
+Hola, *{nombre}*. Hemos generado sus datos de acceso de manera segura.
+
+_👉 Toque el enlace para ingresar a su panel de acceso:_
+
 {link}
-⚡ Su servicio incluye soporte prioritario activo.
-¡Agradecemos su preferencia en Sublicuentas!`,
-`🎬 Su entretenimiento comienza ahora, {nombre}.
+
+*⚡ Su servicio incluye soporte prioritario activo.*`,
+      despedida: "¡Agradecemos su preferencia en Sublicuentas!"
+    },
+    {
+      cuerpo:
+`🎬 Su entretenimiento comienza ahora, *{nombre}*.
+
 Le damos la bienvenida a su servicio de {servicio}.
-📲 Abra el siguiente enlace para ver sus credenciales:
+
+_📲 Abra el siguiente enlace para ver sus credenciales:_
+
 {link}
-🛠️ Soporte y respaldo continuo durante todo su período.
-¡Gracias por confiar en el equipo de Sublicuentas!`,
+
+*🛠️ Soporte y respaldo continuo durante todo su período.*`,
+      despedida: "¡Gracias por confiar en el equipo de Sublicuentas!"
+    },
+    {
+      cuerpo:
 `✨ ¡Acceso Confirmado!
-Estimado(a) {nombre}, su suscripción a {servicio} se encuentra activa y lista para ser utilizada.
-🔑 Consulte los datos de su cuenta aquí:
+
+Estimado(a) *{nombre}*, su suscripción a {servicio} se encuentra activa y lista para ser utilizada.
+
+_🔑 Consulte los datos de su cuenta aquí:_
+
 {link}
-🛡️ Cuenta con garantía y soporte técnico garantizado durante toda su vigencia.
-¡Gracias por formar parte de Sublicuentas!`,
-`🎉 ¡Su acceso está confirmado, {nombre}!
+
+*🛡️ Cuenta con garantía y soporte técnico garantizado durante toda su vigencia.*`,
+      despedida: "¡Gracias por formar parte de Sublicuentas!"
+    },
+    {
+      cuerpo:
+`🎉 ¡Su acceso está confirmado, *{nombre}*!
+
 Ya puede disfrutar de {servicio} sin contratiempos.
-🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:
+
+_🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
+
 {link}
-📞 Soporte disponible durante toda su vigencia.
-¡Gracias por elegir Sublicuentas!`,
-`🚀 {nombre}, su cuenta {servicio} ya fue activada.
-Toque el enlace para consultar sus datos de acceso cuando lo necesite:
+
+*📞 Soporte disponible durante toda su vigencia.*`,
+      despedida: "¡Gracias por elegir Sublicuentas!"
+    },
+    {
+      cuerpo:
+`🚀 *{nombre}*, su cuenta {servicio} ya fue activada.
+
+_Toque el enlace para consultar sus datos de acceso cuando lo necesite:_
+
 {link}
-✅ Respaldo y soporte activos durante todo el período contratado.
-En Sublicuentas, gracias por su confianza.`
+
+*✅ Respaldo y soporte activos durante todo el período contratado.*`,
+      despedida: "En Sublicuentas, gracias por su confianza."
+    }
   ];
   function fichaVendedorTieneDespedida(v){
     const n=fichaNorm(v);
     return n==="relojes" || n==="sublicuentas";
   }
   function fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor}){
-    const plantilla=FICHA_MENSAJES_CLIENTE[Math.floor(Math.random()*FICHA_MENSAJES_CLIENTE.length)];
-    const lineas=plantilla.split("\n");
-    // La última línea de cada plantilla es siempre la despedida.
-    const cuerpo=fichaVendedorTieneDespedida(vendedor) ? lineas : lineas.slice(0,-1);
-    return cuerpo.join("\n")
+    const t=FICHA_MENSAJES_CLIENTE[Math.floor(Math.random()*FICHA_MENSAJES_CLIENTE.length)];
+    let texto=t.cuerpo;
+    if(fichaVendedorTieneDespedida(vendedor)) texto+="\n\n"+t.despedida;
+    return texto
       .replace(/\{nombre\}/g, nombre||"Cliente")
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")
       .replace(/\{link\}/g, link||"");

@@ -168,7 +168,13 @@
 
   (async function init(){
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
+    let token = params.get('token');
+    if (!token) {
+      // Respaldo: si la reescritura de Vercel no agregó ?token=, se saca del
+      // path directo (/c/{token}) para que el link funcione de todas formas.
+      const m = window.location.pathname.match(/\/c\/([^/?#]+)/);
+      if (m) token = decodeURIComponent(m[1]);
+    }
     if (!token) { renderError("Falta el código del enlace."); return; }
     try{
       const resp = await fetch('/api/acceso?token=' + encodeURIComponent(token));
