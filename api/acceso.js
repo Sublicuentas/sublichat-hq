@@ -100,6 +100,40 @@ function platLabel(plataforma) {
   return PLAT_LABELS[p] || String(plataforma || "Servicio");
 }
 
+// La ficha permanece vinculada al mismo token, pero las credenciales dejan de
+// exponerse al día siguiente de la fecha de renovación. La comparación usa la
+// fecha local de Honduras para que el cambio no ocurra seis horas antes.
+function fechaPartes(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") {
+    const d = value.toDate();
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+  }
+  const s = String(value || "").trim();
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { y: Number(m[3]), m: Number(m[2]), d: Number(m[1]) };
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+  return null;
+}
+
+function hoyHonduras() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const get = type => Number(parts.find(p => p.type === type)?.value || 0);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
+function fechaClave(p) {
+  return p ? (p.y * 10000 + p.m * 100 + p.d) : 0;
+}
+
+function servicioVencido(fechaRenovacion) {
+  const vence = fechaPartes(fechaRenovacion);
+  return !!vence && fechaClave(vence) < fechaClave(hoyHonduras());
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ ok: false, error: "Método no permitido." });
 
@@ -129,6 +163,24 @@ export default async function handler(req, res) {
     if (!servicio) return res.status(404).json({ ok: false, error: "Este servicio ya no existe. Contacte a su vendedor." });
 
     const plataforma = servicio.plataforma || "";
+    const perfilPrincipal = (Array.isArray(servicio.perfiles) && servicio.perfiles[0]) || {};
+    const fechaRenovacion = servicio.fechaRenovacion || "";
+
+    if (servicioVencido(fechaRenovacion)) {
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(410).json({
+        ok: false,
+        vencido: true,
+        plataforma,
+        plataformaLabel: platLabel(plataforma),
+        titular: cliente.nombrePerfil || cliente.nombre || perfilPrincipal.nombre || "Cliente",
+        fechaRenovacion,
+        vendedor: cliente.vendedor || "",
+        vendedorTelefono: cliente.telefono || vendedorTel(cliente.vendedor) || "",
+        error: "Este servicio está vencido. Renueve con su vendedor para reactivar el mismo enlace."
+      });
+    }
+
     const dispositivo = servicio.dispositivo || "";
     const esRoku = !!servicio.esRoku;
 
@@ -159,8 +211,6 @@ export default async function handler(req, res) {
       modo = platUsaClave ? "cred" : "invite";
     }
 
-    const perfilPrincipal = (Array.isArray(servicio.perfiles) && servicio.perfiles[0]) || {};
-
     const publico = {
       ok: true,
       plataforma,
@@ -171,7 +221,7 @@ export default async function handler(req, res) {
       correo: mostrarCorreo ? (servicio.correo || perfilPrincipal.correo || "") : "",
       clave: mostrarClave ? (servicio.clave || perfilPrincipal.clave || "") : "",
       pin: mostrarPin ? (servicio.pinPerfil || perfilPrincipal.pinPerfil || "") : "",
-      fechaRenovacion: servicio.fechaRenovacion || "",
+      fechaRenovacion,
       terminos: termsFor(plataforma),
       vendedor: cliente.vendedor || "",
       // El número guardado en la ficha CRM tiene prioridad; los números conocidos
