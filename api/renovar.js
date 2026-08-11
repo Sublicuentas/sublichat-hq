@@ -220,6 +220,32 @@ function recordId(prefix = "id") {
   return `${prefix}_${Date.now().toString(36)}_${random}`;
 }
 
+// VERSION 20 · token público para la ficha del cliente (/c/{token}).
+// Alfabeto sin caracteres ambiguos (0/O, 1/l/I) por si alguien lo transcribe a mano.
+function genToken(len = 11) {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let out = "";
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
+// VERSION 20 · Regla NUEVA confirmada (11-ago-2026): en celular, estas plataformas
+// se entregan SOLO con correo — el cliente inicia sesión con "código", no con clave.
+// No confundir con servicioNoUsaClave/servicioNoUsaPinPerfil, que rigen lo que se
+// GUARDA en el CRM (la clave real sigue guardándose como respaldo interno). Esta
+// regla solo controla qué se muestra en la ficha pública /c/{token} y en el
+// mensaje corto de WhatsApp.
+function celularSoloCodigo(plataforma) {
+  const p = normPlat(plataforma).replace(/\s+/g, "");
+  if (p.includes("netflix") && p.includes("vip")) return false; // Netflix VIP no entra aquí
+  return (
+    p.includes("disney") ||
+    p.includes("hbo") || p === "max" ||
+    p.includes("vix") ||
+    p.includes("netflix")
+  );
+}
+
 function perfilPinRaw(perfil = {}) {
   return String(
     perfil.pinPerfil ?? perfil.pin_perfil ?? perfil.perfilPin ?? perfil.pin ?? ""
@@ -442,6 +468,12 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
     perfiles,
+    // VERSION 20 · dónde y cómo se entrega el acceso (pregunta nueva en la ficha CRM).
+    dispositivo: servicio.dispositivo || anterior.dispositivo || "",       // "tv" | "cel"
+    esRoku: servicio.dispositivo === "tv" ? !!servicio.esRoku : !!anterior.esRoku,
+    // Token de la ficha pública /c/{token}. Se genera una sola vez y se conserva
+    // en renovaciones/ediciones para que el link que ya tiene el cliente no cambie.
+    token: anterior.token || servicio.token || genToken(),
     updatedAt: isoNow()
   };
 
@@ -656,6 +688,26 @@ export default async function handler(req, res) {
 
       await docRef.set(update, { merge: true });
 
+      // VERSION 20 · Puntero liviano para resolver /c/{token} en O(1) sin tener
+      // que recorrer todos los clientes. Se reescribe en cada guardado (idempotente);
+      // el token en sí no cambia salvo que se pida regenerar explícitamente.
+      const tokenServicio = servicios[idx]?.token || "";
+      if (tokenServicio) {
+        try {
+          await db.collection("enlaces").doc(tokenServicio).set({
+            clienteId: docRef.id,
+            servicioIndex: idx,
+            compraId: String(servicios[idx]?.compraId || ""),
+            plataforma: servicios[idx]?.plataforma || "",
+            activo: true,
+            updatedAt: isoNow()
+          }, { merge: true });
+        } catch (e) {
+          // No bloquea el guardado del CRM si esto falla; solo el link público no
+          // quedaría listo hasta el próximo guardado.
+        }
+      }
+
       // Cada perfil de una compra ocupa su propio cupo. El precio y la fecha,
       // en cambio, siguen guardados una sola vez en el servicio/compra.
       let invResult = null;
@@ -690,7 +742,9 @@ export default async function handler(req, res) {
         })),
         servicioActualizado,
         servicioIndex: idx,
-        inventario: invResult
+        inventario: invResult,
+        token: tokenServicio,
+        linkPublico: tokenServicio ? `/c/${tokenServicio}` : ""
       });
     }
 
