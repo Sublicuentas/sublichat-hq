@@ -53,6 +53,9 @@
   .vendor-name{ font-size:13px; font-weight:700; }
   .vendor-phone{ font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:700; background:var(--black); color:#fff; padding:6px 12px; border-radius:999px; }
   .cta{ display:block; text-align:center; margin-top:16px; background:var(--black); color:#fff; font-weight:700; font-size:14px; padding:15px; border-radius:16px; text-decoration:none; }
+  .renew-support-note{ margin-top:10px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; border-radius:14px; padding:12px 14px; text-align:center; line-height:1.5; }
+  .renew-support-note b{ display:block; color:var(--blue); font-size:12.5px; margin-bottom:3px; }
+  .renew-support-note span{ display:block; font-size:11.5px; }
   .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:var(--black); color:#fff; font-weight:700; font-size:13px; padding:10px 18px; border-radius:999px; opacity:0; pointer-events:none; transition:all .2s ease; z-index:200; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
   .state{ text-align:center; padding:60px 20px; color:var(--muted); font-size:14px; line-height:1.6; }
@@ -130,7 +133,8 @@
     const termsHtml = (d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
 
     const supportPhone = String(d.vendedorTelefono||"").replace(/\D/g,"");
-    const supportHref = supportPhone ? `https://wa.me/504${supportPhone}` : "#";
+    const supportPhoneIntl = supportPhone ? (supportPhone.startsWith("504")?supportPhone:`504${supportPhone}`) : "";
+    const supportHref = supportPhoneIntl ? `https://wa.me/${supportPhoneIntl}` : "#";
 
     document.getElementById('stage').innerHTML = `
       <div class="live-row"><span class="live-dot"></span><span class="live-label">Entrega en vivo</span></div>
@@ -149,8 +153,9 @@
         ${noteHtml}
         <div class="section-title">Condiciones del servicio</div>
         <div class="terms"><ul>${termsHtml}</ul></div>
-        ${d.vendedor ? `<div class="vendor-row"><span class="vendor-name">Vendedor ${esc(d.vendedor)}</span>${supportPhone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>` : ""}
+        ${(d.vendedor||supportPhone) ? `<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${supportPhone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>` : ""}
         <a href="${supportHref}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
+        ${supportPhone?`<div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Realice su renovación o solicite ayuda directamente con su vendedor al número indicado en esta ficha.</span></div>`:""}
       </div>
     `;
 

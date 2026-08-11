@@ -1942,6 +1942,7 @@ function flattenCliente(doc, clienteId=""){
       nombre,vendedor,telefono,nombreNorm,clienteId,
       srvIndex,
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
+      token:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
@@ -2184,12 +2185,12 @@ function renderTable(){
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
     const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button></div></td></tr>`;
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button></div></td></tr>`;
   }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
   document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
   document.querySelectorAll("[data-client-menu]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const panel=document.querySelector(`[data-client-menu-panel="${btn.dataset.clientMenu}"]`),open=panel&&panel.classList.contains("show");document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(panel&&!open)panel.classList.add("show");}));
-  document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(btn.dataset.clientAction==="edit"||btn.dataset.clientAction==="crm"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g);}else abrirCobro(g);}));
+  document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));const action=btn.dataset.clientAction;if(action==="edit"||action==="crm"||action==="access"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g,action==="access"?{focusAccess:true}:undefined);}else abrirCobro(g);}));
   if(!window._clientesMenuCloseBound){window._clientesMenuCloseBound=true;document.addEventListener("click",()=>document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show")));}
 }
 ["q","fPlat","fVend","fEstado","fCantidad"].forEach(id=>{const el=document.getElementById(id);el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
@@ -4774,9 +4775,11 @@ function gCaminoBombas(){
     ["office","Office 365"],["oleada","Oleada TV"],["iptv","IPTV"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
-  const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+  const FICHA_VENDEDOR_TELS={ relojes:"97313055", yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-  // VERSION 22 · Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
+  // VERSION 23 · Cuatro variantes elegibles. Guardar ya no abre WhatsApp por
+  // fuerza: primero se muestra la URL y luego el vendedor elige qué texto usar.
+  // Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
   // blanco entre bloques. Cada plantilla es {cuerpo, despedida} — la despedida
   // se agrega aparte solo si el vendedor es Relojes o Sublicuentas, así el
   // texto no depende de contar líneas.
@@ -4832,27 +4835,22 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
 
 *📞 Soporte disponible durante toda su vigencia.*`,
       despedida: "¡Gracias por elegir Sublicuentas!"
-    },
-    {
-      cuerpo:
-`🚀 *{nombre}*, su cuenta {servicio} ya fue activada.
-
-_Toque el enlace para consultar sus datos de acceso cuando lo necesite:_
-
-{link}
-
-*✅ Respaldo y soporte activos durante todo el período contratado.*`,
-      despedida: "En Sublicuentas, gracias por su confianza."
     }
   ];
   function fichaVendedorTieneDespedida(v){
     const n=fichaNorm(v);
     return n==="relojes" || n==="sublicuentas";
   }
-  function fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor}){
-    const t=FICHA_MENSAJES_CLIENTE[Math.floor(Math.random()*FICHA_MENSAJES_CLIENTE.length)];
+  function fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor,telefono,variante=0}){
+    const indice=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(variante)||0));
+    const t=FICHA_MENSAJES_CLIENTE[indice];
     let texto=t.cuerpo;
     if(fichaVendedorTieneDespedida(vendedor)) texto+="\n\n"+t.despedida;
+    const tel=fichaVendedorTel(vendedor)||String(telefono||"").trim();
+    const contacto=[];
+    if(tel) contacto.push(`📞 *${tel}*`);
+    if(vendedor) contacto.push(`${fichaVendedorIcono(vendedor)} Vendedor *${vendedor}*`);
+    if(contacto.length) texto+="\n\n"+contacto.join("\n");
     return texto
       .replace(/\{nombre\}/g, nombre||"Cliente")
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")
@@ -4862,8 +4860,11 @@ _Toque el enlace para consultar sus datos de acceso cuando lo necesite:_
   // VERSION 21 · Enlace/mensaje del cliente visibles y copiables aparte de la
   // ficha completa, para no perderlos si se cierra WhatsApp sin enviarlos.
   let fichaLinkActual="";
+  let fichaVarianteMensajeActual=0;
   function fichaMostrarDatosCliente(linkPublico){
-    fichaLinkActual = linkPublico ? (window.location.origin+linkPublico) : "";
+    const nuevoLink=linkPublico ? (/^https?:\/\//i.test(String(linkPublico))?String(linkPublico):(window.location.origin+linkPublico)) : "";
+    if(nuevoLink!==fichaLinkActual) fichaVarianteMensajeActual=0;
+    fichaLinkActual=nuevoLink;
     const linkBox=fichaQ("fichaClienteBox"), msgBox=fichaQ("fichaMensajeClienteBox");
     if(!fichaLinkActual){
       if(linkBox) linkBox.style.display="none";
@@ -4871,16 +4872,23 @@ _Toque el enlace para consultar sus datos de acceso cuando lo necesite:_
       return;
     }
     if(linkBox){ linkBox.style.display="block"; const inp=fichaQ("fichaLinkCliente"); if(inp) inp.value=fichaLinkActual; }
-    if(msgBox){ msgBox.style.display="block"; fichaRotarMensajeCliente(); }
+    if(msgBox){ msgBox.style.display="block"; fichaMostrarVarianteMensajeCliente(fichaVarianteMensajeActual); }
   }
-  function fichaRotarMensajeCliente(){
+  function fichaMostrarVarianteMensajeCliente(indice=fichaVarianteMensajeActual){
     if(!fichaLinkActual) return;
+    fichaVarianteMensajeActual=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(indice)||0));
     const nombre=fichaGetVal("fichaNombre")||"Cliente";
     const vendedor=fichaVendedorActual();
     const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
-    const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor});
+    const telefono=fichaVendedorTel(vendedor)||fichaGetVal("fichaTelefono");
+    const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor,telefono,variante:fichaVarianteMensajeActual});
     const view=fichaQ("fichaMensajeClienteView");
     if(view) view.textContent=msg;
+    document.querySelectorAll("[data-ficha-variante]").forEach(btn=>{
+      const active=Number(btn.dataset.fichaVariante)===fichaVarianteMensajeActual;
+      btn.classList.toggle("active",active);
+      btn.setAttribute("aria-pressed",active?"true":"false");
+    });
   }
   async function fichaCopiarCampo(texto,btn){
     if(!texto) return;
@@ -5403,7 +5411,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
   function fichaResetButtons(){
     const wa=fichaQ("fichaWA"), save=fichaQ("fichaSave"), regen=fichaQ("fichaRegen"), copy=fichaQ("fichaCopy");
-    if(wa){ wa.disabled=false; wa.textContent="✅ Guardar CRM + abrir WhatsApp"; }
+    if(wa){ wa.disabled=false; wa.textContent="✅ Guardar CRM + mostrar 4 variantes"; }
     if(save){ save.disabled=false; save.textContent="💾 Guardar CRM"; }
     if(regen){ regen.disabled=false; regen.textContent="🆕 Ficha nueva"; }
     if(copy){ copy.disabled=false; copy.textContent="📋 Copiar"; }
@@ -5657,8 +5665,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
 
   function fichaRespaldoCore(){
-    const tel=fichaGetVal("fichaTelefono");
     const vendedor=fichaVendedorActual();
+    const tel=fichaVendedorTel(vendedor)||fichaGetVal("fichaTelefono");
     const lineas=[];
     if(tel) lineas.push(tel);
     if(vendedor) lineas.push(fichaVendedorIcono(vendedor)+" Vendedor "+vendedor);
@@ -5723,6 +5731,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(txt) txt.value=fichaFullPreviewText();
     const view=fichaQ("fichaTextoView");
     if(view) view.innerHTML=fichaMarkdownToHtml((txt&&txt.value)||"");
+    if(fichaLinkActual) fichaMostrarVarianteMensajeCliente(fichaVarianteMensajeActual);
   }
 
   // Aviso informativo (no borra ni oculta nada guardado): le recuerda al
@@ -5817,7 +5826,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!fichaNeedsClave(payload.servicio.plataforma)||guardado.tieneClave===true)&&(!fichaNeedsPin(payload.servicio.plataforma)||guardado.tienePin===true);
         });
         if(j.guardadoEnFirebase!==true||!Number.isInteger(perfilesConfirmados)||perfilesConfirmados!==perfilesEsperados||!perfilesCoinciden){
-          const msg=`⚠️ Firebase no confirmó los ${perfilesEsperados} perfiles. No se abrirá WhatsApp hasta reemplazar también api/renovar.js y volver a guardar.`;
+          const msg=`⚠️ Firebase no confirmó los ${perfilesEsperados} perfiles. No se mostrarán el enlace ni las variantes hasta reemplazar también api/renovar.js y volver a guardar.`;
           fichaStatus(msg,"err");
           fichaToast(msg);
           return {...j,ok:false,error:msg};
@@ -5897,34 +5906,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     },1600);
   }
 
-  async function fichaWhatsApp(){
-    const texto=fichaWhatsAppText();
-    if(!texto){ fichaToast("La ficha está vacía."); return; }
-    const btn=fichaQ("fichaWA"); const old=btn?btn.textContent:"✅ Guardar CRM + abrir WhatsApp";
-    if(btn){ btn.disabled=true; btn.textContent="Guardando CRM…"; }
-    const j=await fichaGuardarCRM({silent:true});
-    if(j&&j.ok){
-      await fichaCopy(true); // sigue copiando la ficha completa, para el respaldo interno
-      if(btn) btn.textContent="Abriendo WhatsApp…";
-      // VERSION 20 · Al cliente ya NO se le manda la ficha completa por WhatsApp:
-      // se le manda un mensaje corto rotativo con el link a /c/{token}. La ficha
-      // completa (con correo/clave) queda copiada arriba para el respaldo interno.
-      const nombre=fichaGetVal("fichaNombre")||"Cliente";
-      const vendedor=fichaVendedorActual();
-      const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
-      const link=j.linkPublico ? (window.location.origin+j.linkPublico) : "";
-      if(link){
-        const mensajeCliente=fichaQ("fichaMensajeClienteView")?.textContent || fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor});
-        fichaStatus(`✅ Firebase confirmó ${j.totalPerfiles||1} perfil${Number(j.totalPerfiles)===1?"":"es"}. Se copió la ficha completa (respaldo) y se abre WhatsApp con el mensaje corto + enlace para el cliente.`,"ok");
-        fichaOpenWhatsApp(mensajeCliente);
-      } else {
-        // Si por algún motivo no vino token (p.ej. función vieja sin desplegar el cambio), no se manda nada roto.
-        fichaStatus("⚠️ Se guardó el CRM pero no se generó el enlace público todavía. Intente de nuevo en un momento.","err");
-      }
-      setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=old; } },3500);
-    }else{
-      fichaStatus("⚠️ No abrí WhatsApp porque el CRM no se guardó.","err");
-      if(btn){ btn.disabled=false; btn.textContent=old; }
+  function fichaAbrirVarianteWhatsApp(){
+    if(!fichaLinkActual){ fichaToast("Primero guarde el CRM para generar el enlace."); return; }
+    const mensaje=fichaQ("fichaMensajeClienteView")?.textContent||"";
+    if(!mensaje){ fichaToast("Seleccione una variante antes de abrir WhatsApp."); return; }
+    fichaOpenWhatsApp(mensaje);
+  }
+
+  async function fichaGuardarYMostrarVariantes(){
+    const btn=fichaQ("fichaWA");
+    const j=await fichaGuardarCRM({silent:true,button:btn});
+    if(j&&j.ok&&j.linkPublico){
+      fichaMostrarDatosCliente(j.linkPublico);
+      fichaStatus(`✅ CRM guardado. Elija una de las 4 variantes y toque “Copiar variante”. WhatsApp no se abrirá automáticamente.`,"ok");
+      setTimeout(()=>fichaQ("fichaMensajeClienteBox")?.scrollIntoView({behavior:"smooth",block:"center"}),80);
+    }else if(j&&j.ok){
+      fichaStatus("⚠️ Se guardó el CRM, pero todavía no se generó el enlace público. Intente guardar nuevamente.","err");
+    }else if(j){
+      fichaStatus(j.error||"⚠️ No se generaron las variantes porque el CRM no se guardó.","err");
     }
   }
 
@@ -5943,7 +5942,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function fichaPrefillFromService(g, serv){
     const s=serv||{};
-    fichaMostrarDatosCliente(""); // limpia el enlace/mensaje del cliente anterior, si había uno visible
+    fichaMostrarDatosCliente(""); // limpia el enlace/mensaje del servicio anterior mientras se cargan los datos
     const perfiles=fichaPerfilesDesdeServicio(s,g||{});
     const principal=perfiles[0]||{};
     fichaCompraIdActual=String(s.compraId||"");
@@ -5962,19 +5961,27 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaSetPrecioDefault(!s.precio);
     fichaQ("fichaFecha").value=fechaISO;
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
+    const dispositivo=["tv","cel"].includes(String(s.dispositivo||""))?String(s.dispositivo):"";
+    fichaQ("fichaDispositivo").value=dispositivo;
+    fichaQ("fichaEsRoku").value=s.esRoku?"si":"no";
+    const rokuBox=fichaQ("fichaRokuBox");
+    if(rokuBox) rokuBox.style.display=dispositivo==="tv"?"block":"none";
     fichaQ("fichaCorreo").value=principal.correo||s.correo||"";
     fichaQ("fichaClave").value=principal.clave||s.clave||s.pin||"";
     fichaQ("fichaPinPerfil").value=principal.pinPerfil||s.pinPerfil||"";
     fichaQ("fichaPerfil").value=principal.nombre||principal.perfil||s.perfil||((g&&g.nombre)||"");
     fichaRenderPerfilesExtra();
     fichaRefreshTemplate();
-    const guardada=fichaLimpiarTextoCliente(s.fichaTexto||"");
+    let guardada=fichaLimpiarTextoCliente(s.fichaTexto||"");
+    const respaldoActual=fichaRespaldoCore();
+    if(guardada&&respaldoActual&&!guardada.includes(respaldoActual)) guardada=(guardada+"\n\n"+respaldoActual).trim();
     const multiperfilAntiguaSinReglas=perfiles.length>1&&/COMPRA MULTIPERFIL/i.test(guardada)&&!/(reglas|condiciones|reglas de oro|pasos exactos|garant[ií]a)/i.test(guardada);
     if(guardada&&!multiperfilAntiguaSinReglas){
       const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
       if(txt)txt.value=guardada;
       if(view)view.innerHTML=fichaMarkdownToHtml(guardada);
     }
+    fichaMostrarDatosCliente(s.token?`/c/${encodeURIComponent(String(s.token))}`:"");
   }
 
   function fichaServiciosCompletos(grupo){
@@ -6107,6 +6114,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .ficha-btn.crm{background:rgba(47,155,224,.16);border-color:rgba(47,155,224,.44)}
       .ficha-btn.wa{background:#25d366;color:#062b16;border-color:#25d366}
       .ficha-btn.tg{background:#2a6df4;color:white;border-color:#2a6df4}
+      .ficha-variant-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0}
+      .ficha-variant-tab{border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:11px;padding:9px 6px;font-size:11px;font-weight:900;cursor:pointer}
+      .ficha-variant-tab.active{background:rgba(37,211,102,.16);border-color:#25d366;color:#179447;box-shadow:0 0 0 2px rgba(37,211,102,.1)}
+      .ficha-message-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+      .ficha-message-actions .open-wa{background:#25d366;color:#062b16;border-color:#25d366}
       .ficha-status{display:none;margin-top:10px;border-radius:13px;padding:10px 12px;font-weight:800;font-size:12.5px;line-height:1.35;border:1px solid var(--line);background:var(--surface);color:var(--txt)}
       .ficha-status.ok{display:block;background:rgba(31,191,134,.14);border-color:rgba(31,191,134,.35);color:var(--good)}
       .ficha-status.err{display:block;background:rgba(232,49,63,.12);border-color:rgba(232,49,63,.35);color:var(--accent)}
@@ -6126,6 +6138,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         .ficha-input,.ficha-select,.ficha-text{padding:11px 12px}
         .ficha-preview{min-height:155px;max-height:220px}
         .ficha-actions,.ficha-actions.three{grid-template-columns:1fr 1fr}
+        .ficha-variant-tabs{grid-template-columns:1fr 1fr}
+        .ficha-message-actions{grid-template-columns:1fr}
         .ficha-btn.wa{grid-column:1/-1}
       }
       @media(max-width:370px){.ficha-actions,.ficha-actions.three{grid-template-columns:1fr}}
@@ -6182,11 +6196,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           </div>
         </label>
         <label class="ficha-field" id="fichaMensajeClienteBox" style="display:none">
-          <span>💬 Mensaje corto para el cliente (rota entre 5 variantes)</span>
+          <span>💬 Elija una de las 4 variantes para entregar la URL</span>
+          <div class="ficha-variant-tabs" aria-label="Variantes del mensaje para el cliente">
+            ${FICHA_MENSAJES_CLIENTE.map((_,i)=>`<button class="ficha-variant-tab${i===0?" active":""}" type="button" data-ficha-variante="${i}" aria-pressed="${i===0?"true":"false"}">Variante ${i+1}</button>`).join("")}
+          </div>
           <div class="ficha-text ficha-preview" id="fichaMensajeClienteView" style="white-space:pre-wrap"></div>
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="ficha-btn" id="fichaCopyMensaje" type="button" style="flex:1">📋 Copiar mensaje</button>
-            <button class="ficha-btn" id="fichaRotarMensaje" type="button" style="flex:0 0 auto;">🔄 Otra variante</button>
+          <div class="ficha-message-actions">
+            <button class="ficha-btn" id="fichaCopyMensaje" type="button">📋 Copiar variante</button>
+            <button class="ficha-btn open-wa" id="fichaOpenMensaje" type="button">💬 Abrir WhatsApp</button>
           </div>
         </label>
         <div class="ficha-actions three">
@@ -6195,10 +6212,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <button class="ficha-btn" id="fichaCopy" type="button">📋 Copiar</button>
         </div>
         <div class="ficha-actions" style="grid-template-columns:1fr">
-          <button class="ficha-btn wa" id="fichaWA" type="button">✅ Guardar CRM + abrir WhatsApp</button>
+          <button class="ficha-btn wa" id="fichaWA" type="button">✅ Guardar CRM + mostrar 4 variantes</button>
         </div>
         <div class="ficha-status" id="fichaStatus"></div>
-        <div class="ficha-note">Al guardar, se actualiza Firebase/CRM; el bot de Telegram verá esos mismos datos. La caja de arriba es la ficha completa (correo/clave/condiciones) para su respaldo interno — mándela usted mismo al grupo de WhatsApp que use para eso. El botón verde "Guardar CRM + abrir WhatsApp" ya NO manda la ficha completa: abre WhatsApp con el mensaje corto + enlace para el cliente. Debajo de la ficha completa quedan el enlace y el mensaje del cliente con su propio botón de copiar, por si necesita volver a mandarlos.</div>
+        <div class="ficha-note">Al guardar, se actualiza Firebase/CRM y se conserva la misma URL del cliente. WhatsApp ya no se abre solo. Debajo de la ficha completa quedan el enlace y cuatro variantes; elija una y toque “Copiar variante”. Desde Clientes → Acciones puede recuperar la URL y volver a enviar cualquiera de las cuatro.</div>
       </div>`;
     document.body.appendChild(wrap);
     const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");fichaDevolverAlBody();};
@@ -6222,7 +6239,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaEsRoku").addEventListener("change",()=>{ fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
     fichaQ("fichaCopyLink").addEventListener("click",e=>fichaCopiarCampo(fichaLinkActual,e.currentTarget));
     fichaQ("fichaCopyMensaje").addEventListener("click",e=>fichaCopiarCampo(fichaQ("fichaMensajeClienteView")?.textContent||"",e.currentTarget));
-    fichaQ("fichaRotarMensaje").addEventListener("click",fichaRotarMensajeCliente);
+    fichaQ("fichaOpenMensaje").addEventListener("click",fichaAbrirVarianteWhatsApp);
+    document.querySelectorAll("[data-ficha-variante]").forEach(btn=>btn.addEventListener("click",()=>fichaMostrarVarianteMensajeCliente(Number(btn.dataset.fichaVariante))));
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
@@ -6257,7 +6275,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     };
     fichaQ("fichaSave").onclick=()=>fichaGuardarCRM({button:fichaQ("fichaSave")});
     fichaQ("fichaCopy").onclick=()=>fichaCopy(false);
-    fichaQ("fichaWA").onclick=fichaWhatsApp;
+    fichaQ("fichaWA").onclick=fichaGuardarYMostrarVariantes;
   }
 
   window.abrirEntregaFicha=function(g,opts){
@@ -6276,7 +6294,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex}:null);
+    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
@@ -6288,6 +6306,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaModal").style.display="flex";
     const sheet=fichaQ("fichaModal").querySelector(".ficha-sheet");
     if(sheet)sheet.scrollTop=0;
+    if(opts&&opts.focusAccess){
+      setTimeout(()=>{
+        const box=fichaQ("fichaClienteBox");
+        if(box&&box.style.display!=="none") box.scrollIntoView({behavior:"smooth",block:"center"});
+        else fichaStatus("Esta ficha todavía no tiene URL. Guarde el CRM una vez para generar el enlace y mostrar las 4 variantes.","info");
+      },100);
+    }
   };
 
   function fichaInjectButtons(){
@@ -6400,7 +6425,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   const PROFILE_DEFAULTS={
     finanzas:{nombre:'Relojes',cargo:'Finanzas · Cobros · Atención al cliente',area:'Caja y cartera final',emoji:'⌚',color:'#8B1538',funciones:['Cobrar clientes finales','Crear y actualizar CRM','Generar ficha WhatsApp','Marcar pagado y renovar','Registrar egresos','Preparar cierre semanal']},
-    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Guardar CRM + abrir WhatsApp','Administrar inventario y compras','Revisar Control Maestro','Supervisar finanzas','Configurar sistema y bot']},
+    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Generar URL + 4 variantes','Administrar inventario y compras','Revisar Control Maestro','Supervisar finanzas','Configurar sistema y bot']},
     auditor:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Control y rendimiento',emoji:'📊',color:'#6C5CE7',funciones:['Revisar CRM master','Auditar cobros y renovaciones','Detectar servicios sin pago','Ver métricas por vendedor','Medir retención','Controlar fugas de dinero']}
   };
   const USER_PROFILE_DEFAULTS={
