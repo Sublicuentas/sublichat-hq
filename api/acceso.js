@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 3 · URL permanente con varios servicios
+// api/acceso.js · VERSION 4 · URL permanente + entrega exacta por plataforma
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
@@ -45,11 +45,29 @@ function servicioNoUsaClave(plataforma) {
   return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") ||
     p.includes("duolingo") || p.includes("adobeexpress");
 }
+function servicioEsSerial(plataforma) {
+  const p = normPlat(plataforma);
+  return p === "windows10" || p === "windows11" || p === "eset";
+}
+function servicioCredencialesSiempre(plataforma) {
+  const p = normPlat(plataforma);
+  if (p.includes("netflix") && p.includes("vip")) return true;
+  return [
+    "vipnetflix", "spotify", "youtube", "oleada", "iptv",
+    "viki", "deezer", "crunchyroll"
+  ].includes(p);
+}
+function servicioUsaSelectorDispositivo(plataforma) {
+  const p = normPlat(plataforma);
+  if (p.includes("netflix") && !p.includes("vip")) return true;
+  return p.includes("disney") || p.includes("hbo") || p === "max" ||
+    p.includes("vix") || p.includes("universal") || p.includes("prime");
+}
 // Regla NUEVA (11-ago-2026): en celular, estas plataformas van SOLO con correo.
 function celularSoloCodigo(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return false;
-  return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("netflix");
+  return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("universal") || p.includes("netflix");
 }
 
 const VENDEDOR_TELS = { yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
@@ -80,7 +98,11 @@ const TERMS = {
   chatgpt: ["Acceso únicamente para el correo indicado", "No modificar datos internos", "Garantía vigente durante su tiempo adquirido"],
   duolingo: ["Cada persona debe aceptar la invitación enviada a su correo para activar las funciones Plus.", "La garantía permanece vigente durante el periodo adquirido."],
   oleada: ["No compartir usuario ni clave.", "Garantía vigente durante su tiempo adquirido."],
-  iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."]
+  iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."],
+  viki: ["No cambie el correo ni la contraseña de la cuenta.", "Acceso para un dispositivo a la vez.", "Garantía vigente durante el periodo contratado."],
+  windows10: ["Licencia digital para Windows 10.", "Conserve este serial en un lugar seguro.", "La activación está sujeta a la edición indicada en su compra."],
+  windows11: ["Licencia digital para Windows 11.", "Conserve este serial en un lugar seguro.", "La activación está sujeta a la edición indicada en su compra."],
+  eset: ["Licencia digital ESET.", "No comparta el serial con terceros.", "Garantía vigente durante el periodo contratado."]
 };
 function termsFor(plataforma) {
   const p = normPlat(plataforma);
@@ -177,6 +199,23 @@ function resolverModo(servicio = {}) {
   const platUsaPin = !servicioNoUsaPinPerfil(plataforma);
   const platUsaClave = !servicioNoUsaClave(plataforma);
   let mostrarCorreo = true, mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
+
+  // Windows y ESET son licencias: nunca se presentan como correo/contraseña.
+  if (servicioEsSerial(plataforma)) {
+    return { modo: "serial", mostrarCorreo: false, mostrarClave: true, mostrarPin: false };
+  }
+
+  // Estas plataformas siempre entregan correo/usuario + clave, sin importar
+  // si antes quedó guardado por error TV/celular en un registro antiguo.
+  if (servicioCredencialesSiempre(plataforma)) {
+    return { modo: "cred", mostrarCorreo: true, mostrarClave: true, mostrarPin: platUsaPin };
+  }
+
+  // En plataformas cuyo método cambia según TV/celular no se adivina. Las
+  // fichas antiguas quedan protegidas hasta que el vendedor elija el destino.
+  if (servicioUsaSelectorDispositivo(plataforma) && !dispositivo) {
+    return { modo: "pendiente", mostrarCorreo: false, mostrarClave: false, mostrarPin: false };
+  }
 
   if (dispositivo === "tv") {
     if (esRoku) {

@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 21  ·  URL permanente por beneficiario
+// api/renovar.js  ·  VERSION 22  ·  URL permanente + reglas reales de entrega
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -173,6 +173,29 @@ function servicioNoUsaClave(plataforma) {
     p.includes("duolingo") ||
     p.includes("adobeexpress")
   );
+}
+
+function servicioEsSerial(plataforma) {
+  const p = canonPlat(plataforma);
+  return p === "windows10" || p === "windows11" || p === "eset";
+}
+
+function servicioCredencialesSiempre(plataforma) {
+  const p = canonPlat(plataforma);
+  if (p.includes("netflix") && p.includes("vip")) return true;
+  return [
+    "vipnetflix", "spotify", "youtube", "oleada", "iptv",
+    "viki", "deezer", "crunchyroll"
+  ].includes(p);
+}
+
+function servicioUsaSelectorDispositivo(plataforma) {
+  const p = canonPlat(plataforma);
+  return ["netflix", "disneyp", "disneys", "hbomax", "vix", "universal", "primevideo"].includes(p);
+}
+
+function servicioRequiereCorreo(plataforma) {
+  return !servicioEsSerial(plataforma);
 }
 
 function normName(v) {
@@ -367,6 +390,7 @@ function celularSoloCodigo(plataforma) {
     p.includes("disney") ||
     p.includes("hbo") || p === "max" ||
     p.includes("vix") ||
+    p.includes("universal") ||
     p.includes("netflix")
   );
 }
@@ -587,11 +611,16 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
     beneficiario: servicio.beneficiario != null ? servicio.beneficiario : anterior.beneficiario
   }, nombreTitular);
+  const plataformaFinal = servicio.plataforma || anterior.plataforma || "";
+  const usaDispositivo = servicioUsaSelectorDispositivo(plataformaFinal);
+  const dispositivoFinal = usaDispositivo
+    ? String(servicio.dispositivo != null ? servicio.dispositivo : (anterior.dispositivo || ""))
+    : "";
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
     modalidad: perfiles.length > 1 ? "multiperfil" : "individual",
-    plataforma: servicio.plataforma || "",
+    plataforma: plataformaFinal,
     precio: parseMoney(servicio.precio || servicio.precioLps || servicio.pago || servicio.monto),
     fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
     correo: principal.correo || servicio.correo || "",
@@ -601,9 +630,11 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     beneficiarioTipo: beneficiario.tipo,
     beneficiarioNombre: beneficiario.nombre,
     beneficiarioKey: beneficiario.key,
-    // VERSION 20 · dónde y cómo se entrega el acceso (pregunta nueva en la ficha CRM).
-    dispositivo: servicio.dispositivo || anterior.dispositivo || "",       // "tv" | "cel"
-    esRoku: servicio.dispositivo === "tv" ? !!servicio.esRoku : !!anterior.esRoku,
+    // Solo las plataformas cuyo método cambia entre TV y celular conservan
+    // esta selección. Netflix VIP y las cuentas con credenciales directas no
+    // deben heredar por accidente la regla "TV ya vinculada".
+    dispositivo: dispositivoFinal,       // "tv" | "cel" | ""
+    esRoku: dispositivoFinal === "tv" ? !!servicio.esRoku : false,
     // Token de la ficha pública /c/{token}. Se genera una sola vez y se conserva
     // en renovaciones/ediciones para que el link que ya tiene el cliente no cambie.
     token: anterior.token || servicio.token || genToken(),
@@ -693,7 +724,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 21, msg: "renovar v21 activo (URL permanente por beneficiario). Usá POST." });
+    return res.status(200).json({ ok: true, version: 22, msg: "renovar v22 activo (URL permanente y entrega por plataforma). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
@@ -706,6 +737,57 @@ export default async function handler(req, res) {
     const db = getApp().firestore();
     const authUser = await requireFirebaseUser(req, res);
     if (!authUser) return;
+
+    // Permite recuperar/generar las URLs de clientes antiguos desde
+    // Clientes → Acciones, sin obligar a editar ni volver a guardar sus datos.
+    if (acc === "asegurar_enlaces") {
+      const exactId = cleanExistingDocId(clienteId);
+      if (!exactId) return res.status(200).json({ error: "Falta identificar exactamente al cliente." });
+      const docRef = db.collection("clientes").doc(exactId);
+      const doc = await docRef.get();
+      if (!doc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
+      const data = doc.data() || {};
+      const nombreTitular = data.nombrePerfil || data.nombre || "Cliente";
+      const servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+      if (!servicios.length) return res.status(200).json({ error: "Este cliente todavía no tiene servicios para publicar." });
+
+      const accesos = prepararAccesosBeneficiarios({
+        servicios,
+        registroAnterior: data.accesosBeneficiarios,
+        nombreTitular,
+        tokenTitularAnterior: data.tokenAcceso
+      });
+      const serviciosLimpios = servicios.map(limpiarServicioCRM);
+      await docRef.update({
+        servicios: serviciosLimpios,
+        tokenAcceso: accesos.tokenTitular,
+        accesosBeneficiarios: accesos.registro,
+        updatedAt: isoNow()
+      });
+      await sincronizarEnlacesPublicos(db, {
+        clienteId: docRef.id,
+        servicios: serviciosLimpios,
+        registro: accesos.registro
+      });
+
+      const solicitado = String(body.beneficiarioKey || "").trim();
+      const key = accesos.registro[solicitado]
+        ? solicitado
+        : (accesos.registro.titular ? "titular" : Object.keys(accesos.registro)[0]);
+      const token = String(accesos.registro[key]?.token || "");
+      const enlaces = Object.fromEntries(Object.entries(accesos.registro).map(([beneficiarioKey, acceso]) => [beneficiarioKey, {
+        nombre: String(acceso?.nombre || ""),
+        linkPublico: acceso?.token ? `/c/${acceso.token}` : ""
+      }]));
+      return res.status(200).json({
+        ok: true,
+        accion: acc,
+        clienteId: docRef.id,
+        beneficiarioKey: key,
+        linkPublico: token ? `/c/${token}` : "",
+        enlaces
+      });
+    }
 
     // NUEVO: crear o actualizar cliente + servicio desde el panel de entrega de ficha.
     if (acc === "ficha_upsert") {
@@ -797,12 +879,15 @@ export default async function handler(req, res) {
       if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
         return res.status(200).json({ error: "Falta el nombre de la persona que usará este acceso." });
       }
+      if (servicioUsaSelectorDispositivo(servicio.plataforma) && !["tv", "cel"].includes(String(servicio.dispositivo || ""))) {
+        return res.status(200).json({ error: "Seleccione si esta cuenta se usará en TV o celular." });
+      }
       const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
-      const entregaSoloPerfil = nuevo.dispositivo === "tv" && nuevo.esRoku !== true;
+      const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && nuevo.dispositivo === "tv" && nuevo.esRoku !== true;
       for (let i = 0; i < nuevo.perfiles.length; i++) {
         const p = nuevo.perfiles[i] || {};
         if (!String(p.nombre || "").trim()) return res.status(200).json({ error: `Falta el nombre del perfil ${i + 1}.` });
-        if (!entregaSoloPerfil && !String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
+        if (!entregaSoloPerfil && servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
         if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
         if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
       }
@@ -1010,7 +1095,7 @@ export default async function handler(req, res) {
       const nuevo = buildServicio(servicio, "", {}, nombreTitular);
       for (let i = 0; i < nuevo.perfiles.length; i++) {
         const p = nuevo.perfiles[i] || {};
-        if (!p.nombre || !p.correo) return res.status(200).json({ error: `Complete nombre y correo/usuario del perfil ${i + 1}.` });
+        if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) return res.status(200).json({ error: `Complete los datos requeridos del perfil ${i + 1}.` });
         if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
         if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
       }
