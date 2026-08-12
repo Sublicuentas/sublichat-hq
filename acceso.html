@@ -27,11 +27,18 @@
   .h1 span{ color:var(--red); }
   .sub{ font-size:14px; color:var(--muted); line-height:1.55; margin-bottom:20px; }
   .card{ background:var(--card); border:1px solid var(--edge); border-radius:26px; padding:22px; box-shadow:0 14px 34px rgba(30,20,10,.08); }
+  .access-list{ display:grid; gap:16px; }
+  .service-card{ position:relative; }
+  .service-order{ margin:-3px 0 8px; text-align:right; color:var(--muted2); font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+  .profile-group{ border-top:1px dashed var(--edge); padding-top:12px; margin-top:12px; }
+  .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:0; }
+  .profile-title{ font-size:11px; font-weight:800; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; }
+  .support-card{ margin-top:18px; padding:18px 20px; }
   .plat-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .plat-left{ display:flex; align-items:center; gap:12px; }
-  .plat-icon{ width:52px; height:52px; flex:0 0 52px; border-radius:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:7px; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
+  .plat-icon{ width:52px; height:52px; flex:0 0 52px; border-radius:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:0; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
   .plat-logo{ display:block; width:100%; height:100%; object-fit:contain; }
-  .plat-fallback{ line-height:1; letter-spacing:-.04em; }
+  .plat-fallback{ line-height:1; letter-spacing:-.04em; padding:7px; }
   .plat-name{ font-family:'Anton',sans-serif; font-weight:400; font-size:18px; }
   .plat-holder{ font-size:12.5px; color:var(--muted); margin-top:2px; }
   .pill{ display:inline-flex; align-items:center; gap:6px; background:var(--green-soft); color:var(--green); font-weight:700; font-size:11.5px; padding:6px 12px; border-radius:999px; }
@@ -77,33 +84,36 @@
   <div class="toast" id="toast">¡Copiado!</div>
 
 <script>
-  const ICONIFY="https://api.iconify.design";
   const PLAT_VISUALS = {
-    netflix:{logo:`${ICONIFY}/thesvg-color/netflix.svg`,bg:"#090909",fallback:"N"},
-    vipnetflix:{logo:`${ICONIFY}/thesvg-color/netflix.svg`,bg:"#090909",fallback:"N"},
-    disneyp:{logo:`${ICONIFY}/thesvg-color/disneyplus.svg`,bg:"#eef3ff",fallback:"D+",color:"#01147b"},
-    disneys:{logo:`${ICONIFY}/thesvg-color/disneyplus.svg`,bg:"#eef3ff",fallback:"D+",color:"#01147b"},
-    hbomax:{logo:`${ICONIFY}/thesvg-color/hbo-max.svg`,bg:"#f4efff",fallback:"MAX",color:"#5b2be0"},
-    primevideo:{logo:`${ICONIFY}/thesvg-color/prime-video.svg`,bg:"#edf8ff",fallback:"prime",color:"#00a8e1"},
-    crunchyroll:{logo:`${ICONIFY}/thesvg-color/crunchyroll.svg`,bg:"#fff3eb",fallback:"CR",color:"#ff5e00"},
-    universal:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/Universal_Plus_logo.png?width=180",bg:"#080808",fallback:"U+",color:"#fccc12"},
-    vix:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/ViX_Logo.svg",bg:"#fff2e8",fallback:"ViX",color:"#ff5a00"},
-    paramount:{logo:`${ICONIFY}/thesvg-color/paramountplus.svg`,bg:"#edf4ff",fallback:"P+",color:"#0064ff"},
-    spotify:{logo:`${ICONIFY}/thesvg-color/spotify.svg`,bg:"#07150d",fallback:"S",color:"#1ed760"},
-    deezer:{logo:`${ICONIFY}/thesvg-color/deezer.svg`,bg:"#f4efff",fallback:"D",color:"#a238ff"},
-    youtube:{logo:`${ICONIFY}/thesvg-color/youtube.svg`,bg:"#fff0f0",fallback:"YT",color:"#ff0000"},
-    canva:{logo:`${ICONIFY}/thesvg-color/canva.svg`,bg:"#f1f6ff",fallback:"C",color:"#7d2ae7"},
-    gemini:{logo:`${ICONIFY}/logos/google-gemini.svg`,bg:"#eef4ff",fallback:"G",color:"#4285f4"},
-    chatgpt:{logo:`${ICONIFY}/thesvg-color/openai-chatgpt.svg`,bg:"#edf7f3",fallback:"AI",color:"#10a37f"},
-    duolingo:{logo:`${ICONIFY}/thesvg-color/duolingo.svg`,bg:"#effbe8",fallback:"D",color:"#58cc02"},
-    office:{logo:`${ICONIFY}/thesvg-color/microsoft-office.svg`,bg:"#fff0eb",fallback:"O",color:"#d83b01"},
-    oleada:{logo:`${ICONIFY}/mdi/television-classic.svg?color=%2300b8d9`,bg:"#e9faff",fallback:"TV",color:"#007f99"},
-    iptv:{logo:`${ICONIFY}/mdi/television-classic.svg?color=%23ffffff`,bg:"#111827",fallback:"TV"},
-    viki:{logo:"https://commons.wikimedia.org/wiki/Special:Redirect/file/Rakuten_Viki_2022.svg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
-    appletv:{logo:`${ICONIFY}/simple-icons/appletv.svg?color=%23ffffff`,bg:"#111111",fallback:"tv"}
+    netflix:{logo:"/assets/platformas/netflix.jpg",bg:"#090909",fallback:"N"},
+    vipnetflix:{logo:"/assets/platformas/netflix.jpg",bg:"#090909",fallback:"N"},
+    disneyp:{logo:"/assets/platformas/disney.jpg",bg:"#eef3ff",fallback:"D+",color:"#01147b"},
+    disneys:{logo:"/assets/platformas/disney.jpg",bg:"#eef3ff",fallback:"D+",color:"#01147b"},
+    hbomax:{logo:"/assets/platformas/hbo.jpg",bg:"#f4efff",fallback:"MAX",color:"#5b2be0"},
+    primevideo:{logo:"/assets/platformas/prime.jpg",bg:"#edf8ff",fallback:"prime",color:"#00a8e1"},
+    crunchyroll:{logo:"/assets/platformas/crunchyroll.jpg",bg:"#fff3eb",fallback:"CR",color:"#ff5e00"},
+    universal:{logo:"/assets/platformas/universal.jpg",bg:"#080808",fallback:"U+",color:"#fccc12"},
+    vix:{logo:"/assets/platformas/vix.jpg",bg:"#fff2e8",fallback:"ViX",color:"#ff5a00"},
+    paramount:{logo:"/assets/platformas/paramount.jpg",bg:"#edf4ff",fallback:"P+",color:"#0064ff"},
+    spotify:{logo:"/assets/platformas/spotify.jpg",bg:"#07150d",fallback:"S",color:"#1ed760"},
+    deezer:{logo:"/assets/platformas/deezer.jpg",bg:"#f4efff",fallback:"D",color:"#a238ff"},
+    youtube:{logo:"/assets/platformas/youtube.jpg",bg:"#fff0f0",fallback:"YT",color:"#ff0000"},
+    canva:{logo:"/assets/platformas/canva.jpg",bg:"#f1f6ff",fallback:"C",color:"#7d2ae7"},
+    gemini:{logo:"/assets/platformas/gemini.jpg",bg:"#eef4ff",fallback:"G",color:"#4285f4"},
+    chatgpt:{logo:"/assets/platformas/chatgpt.jpg",bg:"#edf7f3",fallback:"AI",color:"#10a37f"},
+    duolingo:{logo:"/assets/platformas/duolingo.jpg",bg:"#effbe8",fallback:"D",color:"#58cc02"},
+    office:{logo:"/assets/platformas/office365.jpg",bg:"#fff0eb",fallback:"O",color:"#d83b01"},
+    oleada:{logo:"/assets/platformas/oleada.jpg",bg:"#e9faff",fallback:"TV",color:"#007f99"},
+    iptv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"TV"},
+    viki:{logo:"/assets/platformas/viki.jpg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
+    appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"tv"},
+    windows10:{logo:"/assets/platformas/windows10.jpg",bg:"#1674c8",fallback:"W10"},
+    windows11:{logo:"/assets/platformas/windows11.jpg",bg:"#eaf5ff",fallback:"W11",color:"#1674c8"},
+    adobeexpress:{logo:"/assets/platformas/adobeexpress.jpg",bg:"#ffffff",fallback:"Ae",color:"#e536d2"},
+    eset:{logo:"/assets/platformas/eset.jpg",bg:"#0a909c",fallback:"ESET"}
   };
 
-  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv"};
+  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset"};
 
   function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
   function platKey(v){
@@ -153,79 +163,100 @@
     </div>`;
   }
 
-  function render(d){
-    let fieldsHtml = "";
-    let noteHtml = "";
+  function perfilesDelServicio(d){
+    if(Array.isArray(d.perfiles) && d.perfiles.length) return d.perfiles;
+    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||""}];
+  }
 
-    if (d.modo === "codigo") {
-      fieldsHtml += fieldRow("Correo", d.correo, "f-correo");
-      noteHtml = `<div class="note">📲 Ingrese este correo y presione "Siguiente". Cuando se le solicite la clave, toque <b>"Iniciar sesión con código"</b> — no ingrese contraseña. Solicite el código a su vendedor en ese momento.</div>`;
-    } else if (d.modo === "perfil") {
-      noteHtml = `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Se accede directo desde el perfil ya asignado en su dispositivo.</div>`;
-      if (d.pin) fieldsHtml += fieldRow("PIN", d.pin, "f-pin");
-    } else if (d.modo === "invite") {
-      noteHtml = `<div class="note">📩 Ya enviamos la invitación a <b>su correo personal</b>. Acéptela desde ahí — revise también spam o promociones si no la ve en unos minutos.</div>`;
-      fieldsHtml += fieldRow("Correo", d.correo, "f-correo");
-    } else {
-      if (d.correo) fieldsHtml += fieldRow("Correo", d.correo, "f-correo");
-      if (d.clave) fieldsHtml += fieldRow("Clave", d.clave, "f-clave");
-      if (d.pin) fieldsHtml += fieldRow("PIN", d.pin, "f-pin");
-    }
+  function datosPerfilHtml(d, serviceIndex){
+    const perfiles=perfilesDelServicio(d);
+    return perfiles.map((p,profileIndex)=>{
+      const prefix=`s${serviceIndex}-p${profileIndex}`;
+      let campos="";
+      if(d.modo==="codigo"){
+        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
+      }else if(d.modo==="perfil"){
+        campos+=fieldRow("Perfil",p.perfil||p.nombre||"Asignado",`${prefix}-perfil`);
+        if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
+      }else if(d.modo==="invite"){
+        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
+      }else{
+        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
+        if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
+        if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
+      }
+      const titulo=perfiles.length>1?`<div class="profile-title">Perfil ${profileIndex+1} · ${esc(p.nombre||p.perfil||"Asignado")}</div>`:"";
+      return `<div class="profile-group">${titulo}${campos}</div>`;
+    }).join("");
+  }
 
-    const termsHtml = (d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
+  function notaModo(d){
+    if(d.modo==="codigo") return `<div class="note">📲 Ingrese el correo y presione "Siguiente". Cuando se solicite la clave, toque <b>"Iniciar sesión con código"</b>. Solicite el código a su vendedor en ese momento.</div>`;
+    if(d.modo==="perfil") return `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Abra el perfil indicado e ingrese únicamente su PIN.</div>`;
+    if(d.modo==="invite") return `<div class="note">📩 La invitación fue enviada a <b>su correo personal</b>. Revise también spam o promociones.</div>`;
+    return "";
+  }
 
-    const support=supportData(d);
-
-    document.getElementById('stage').innerHTML = `
-      <div class="live-row"><span class="live-dot"></span><span class="live-label">Entrega en vivo</span></div>
-      <h1 class="h1">Bienvenido a su acceso <span>Premium</span></h1>
-      <div class="sub">¡Hola, estimado ${esc(d.titular)}! Le sugerimos guardar este enlace; podrá consultarlo en cualquier momento para ver los detalles de su servicio.</div>
-      <div class="card">
+  function tarjetaServicio(d,index,total){
+    const principal=perfilesDelServicio(d)[0]||{};
+    const orden=total>1?`<div class="service-order">Acceso ${index+1} de ${total}</div>`:"";
+    if(d.vencido){
+      return `<div class="card service-card">
+        ${orden}
         <div class="plat-row">
-          <div class="plat-left">
-            ${platLogo(d.plataforma,d.plataformaLabel)}
-            <div><div class="plat-name">${esc(d.plataformaLabel)}</div><div class="plat-holder">${esc(d.perfil||d.titular)}</div></div>
-          </div>
-          <span class="pill"><i></i>Activo</span>
+          <div class="plat-left">${platLogo(d.plataforma,d.plataformaLabel)}<div><div class="plat-name">${esc(d.plataformaLabel||"Servicio")}</div><div class="plat-holder">${esc(principal.nombre||d.titular||"Cliente")}</div></div></div>
+          <span class="pill expired"><i></i>Vencido</span>
         </div>
-        <div class="exp-row"><span class="exp-label">Vence</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
-        ${fieldsHtml}
-        ${noteHtml}
-        <div class="section-title">Condiciones del servicio</div>
-        <div class="terms"><ul>${termsHtml}</ul></div>
-        ${(d.vendedor||support.phone) ? `<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>` : ""}
-        <a href="${support.href}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
-        ${support.phone?`<div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Realice su renovación o solicite ayuda directamente con su vendedor al número indicado en esta ficha.</span></div>`:""}
+        <div class="exp-row"><span class="exp-label">Venció</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
+        <div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en esta misma URL.</div>
+      </div>`;
+    }
+    const termsHtml=(d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
+    return `<div class="card service-card">
+      ${orden}
+      <div class="plat-row">
+        <div class="plat-left">${platLogo(d.plataforma,d.plataformaLabel)}<div><div class="plat-name">${esc(d.plataformaLabel)}</div><div class="plat-holder">${esc(principal.nombre||principal.perfil||d.titular)}</div></div></div>
+        <span class="pill"><i></i>Activo</span>
       </div>
-    `;
+      <div class="exp-row"><span class="exp-label">Vence</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
+      ${datosPerfilHtml(d,index)}
+      ${notaModo(d)}
+      <div class="section-title">Condiciones del servicio</div>
+      <div class="terms"><ul>${termsHtml}</ul></div>
+    </div>`;
+  }
 
+  function bloqueSoporte(d){
+    const support=supportData(d);
+    if(!d.vendedor && !support.phone) return "";
+    return `<div class="card support-card">
+      <div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>
+      ${support.phone?`<a href="${support.href}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
+      <div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Renueve o solicite ayuda directamente con el vendedor y número indicados en esta ficha.</span></div>`:""}
+    </div>`;
+  }
+
+  function render(d){
+    const servicios=Array.isArray(d.servicios)&&d.servicios.length?d.servicios:[d];
+    const activos=servicios.filter(s=>!s.vencido).length;
+    const plural=servicios.length>1;
+    const comprador=d.comprador&&String(d.comprador)!==String(d.titular)?` Compra registrada por ${esc(d.comprador)}.`:"";
+    document.getElementById('stage').innerHTML=`
+      <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Acceso activo":"Renovación pendiente"}</span></div>
+      <h1 class="h1">${plural?"Sus accesos":"Bienvenido a su acceso"} <span>Premium</span></h1>
+      <div class="sub">¡Hola, estimado ${esc(d.titular||"Cliente")}! Esta es su URL permanente: aquí aparecerán todas sus plataformas y cada una conservará su propia fecha.${comprador}</div>
+      <div class="access-list">${servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length)).join("")}</div>
+      ${bloqueSoporte(d)}
+    `;
     document.querySelectorAll('.copy-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const el = document.getElementById(btn.dataset.copy);
-        if(el) copyToClipboard(el.textContent.trim(), btn);
+      btn.addEventListener('click',()=>{
+        const el=document.getElementById(btn.dataset.copy);
+        if(el)copyToClipboard(el.textContent.trim(),btn);
       });
     });
   }
 
-  function renderExpired(d){
-    const support=supportData(d);
-    document.getElementById('stage').innerHTML=`
-      <h1 class="h1">Su acceso está <span>vencido</span></h1>
-      <div class="sub">Las credenciales quedaron protegidas porque el servicio no registra una renovación vigente.</div>
-      <div class="card">
-        <div class="plat-row">
-          <div class="plat-left">
-            ${platLogo(d.plataforma,d.plataformaLabel)}
-            <div><div class="plat-name">${esc(d.plataformaLabel||"Servicio")}</div><div class="plat-holder">${esc(d.titular||"Cliente")}</div></div>
-          </div>
-          <span class="pill expired"><i></i>Vencido</span>
-        </div>
-        <div class="exp-row"><span class="exp-label">Venció</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
-        <div class="expired-note"><b>Acceso temporalmente desactivado</b>Al renovar, este mismo enlace volverá a mostrar los datos actualizados. No necesita una URL nueva.</div>
-        ${(d.vendedor||support.phone)?`<div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>`:""}
-        ${support.phone?`<a href="${support.href}" target="_blank" rel="noopener" class="cta">🔄 Solicitar renovación</a>`:""}
-      </div>`;
-  }
+  function renderExpired(d){ render({...d,servicios:[{...d,vencido:true}]}); }
 
   function renderError(msg){
     document.getElementById('stage').innerHTML = `<div class="state"><b>No pudimos abrir este enlace</b>${esc(msg||"Contacte a su vendedor para que le reenvíe el acceso.")}</div>`;

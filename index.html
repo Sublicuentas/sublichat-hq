@@ -1859,7 +1859,7 @@ window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
 };
 
 const PLAT_LABELS = {
-  netflix:"Netflix", netflixpremium:"Netflix Premium", "netflix premium":"Netflix Premium", vipnetflix:"VIP Netflix", "vip netflix":"VIP Netflix", vip:"VIP Netflix",
+  netflix:"Netflix", netflixpremium:"Netflix Premium", "netflix premium":"Netflix Premium", vipnetflix:"⭐ Netflix Premium VIP", "vip netflix":"⭐ Netflix Premium VIP", vip:"⭐ Netflix Premium VIP",
   disneyp:"Disney Premium", disneypremium:"Disney Premium",
   disneys:"Disney Standard", disneystandard:"Disney Standard", disney:"Disney+",
   hbomax:"HBO Max", hbo:"HBO Max", max:"HBO Max",
@@ -1873,7 +1873,8 @@ const PLAT_LABELS = {
   oleada:"Oleada TV", oleada1:"Oleada TV (1)", oleada3:"Oleada TV (3)", oleadatv:"Oleada TV",
   oleadatv1:"Oleada TV (1)", oleadatv3:"Oleada TV (3)", oleadatv4:"Oleada TV (4)",
   iptv:"IPTV", iptv1:"IPTV (1)", iptv3:"IPTV (3)", iptv4:"IPTV (4)",
-  canva:"Canva", gemini:"Gemini", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", microsoft:"Office 365"
+  canva:"Canva", gemini:"Gemini", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", microsoft:"Office 365",
+  viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET"
 };
 const platLabel = p => { const k=String(p||"").toLowerCase().trim();
   return PLAT_LABELS[k] || (p ? p.charAt(0).toUpperCase()+p.slice(1) : "—"); };
@@ -1925,12 +1926,24 @@ function perfilesDeCompra(servicio,nombreTitular=""){
     };
   });
 }
+function clienteBeneficiarioKey(servicio={}){
+  const guardada=String(servicio.beneficiarioKey||"").trim();
+  if(guardada)return guardada;
+  if(String(servicio.beneficiarioTipo||"").toLowerCase()!=="tercero")return "titular";
+  const nombre=String(servicio.beneficiarioNombre||servicio.beneficiario||"persona")
+    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80)||"persona";
+  return `tercero-${nombre}`;
+}
 function flattenCliente(doc, clienteId=""){
   const F=CONFIG.fields;
   const nombre=doc[F.nombre]||"—", vendedor=doc[F.vendedor]||"—";
   const telefono=doc[F.telefono]||"";
+  const vendedorTelefono=doc.vendedorTelefono||"";
   const nombreNorm=doc.nombre_norm||"";
   const servs=Array.isArray(doc[F.servicios])?doc[F.servicios]:[];
+  const accesos=doc.accesosBeneficiarios&&typeof doc.accesosBeneficiarios==="object"&&!Array.isArray(doc.accesosBeneficiarios)?doc.accesosBeneficiarios:{};
+  const tokenTitular=String(doc.tokenAcceso||accesos.titular?.token||"");
   return servs.map((s,srvIndex)=>{
     const perfiles=perfilesDeCompra(s,nombre);
     const principal=perfiles[0]||{};
@@ -1938,11 +1951,16 @@ function flattenCliente(doc, clienteId=""){
     const rawPin=s[F.s_pin]||"";
     const clave=rawClave || rawPin; // compatibilidad: antes el campo pin era la clave
     const pinPerfil=principal.pinPerfil||s.pinPerfil||s.pin_perfil||s.perfilPin||(rawClave?rawPin:"");
+    const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
+    const beneficiarioNombre=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||"").trim():nombre;
+    const beneficiarioKey=clienteBeneficiarioKey(s);
+    const tokenGrupo=String(accesos[beneficiarioKey]?.token||(beneficiarioKey==="titular"?tokenTitular:"")||s.token||"");
     return {
-      nombre,vendedor,telefono,nombreNorm,clienteId,
+      nombre,vendedor,telefono,vendedorTelefono,nombreNorm,clienteId,
       srvIndex,
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
-      token:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
+      token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
+      beneficiarioTipo,beneficiarioNombre,beneficiarioKey,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
@@ -2166,7 +2184,7 @@ function renderTable(){
   const grupos={};
   filtrados.forEach(c=>{
     const key=c.clienteId?`id:${c.clienteId}`:(c.nombre+"|"+(c.telefono||""));
-    if(!grupos[key]) grupos[key]={clienteId:c.clienteId||"",nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",nombreNorm:c.nombreNorm||"",servicios:[]};
+    if(!grupos[key]) grupos[key]={clienteId:c.clienteId||"",nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",vendedorTelefono:c.vendedorTelefono||"",nombreNorm:c.nombreNorm||"",servicios:[]};
     grupos[key].servicios.push(c);
   });
   // 3) cada grupo: fecha más próxima, suma de precios, estado de la más urgente
@@ -2198,11 +2216,12 @@ document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListe
 
 /* ===== INVENTARIO: agregar plataforma/correo nuevo (misma lógica del bot) ===== */
 const INV_PLAT_CANON=[
-  ["netflix","Netflix"],["vipnetflix","Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
+  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["crunchyroll","Crunchyroll"],["universal","Universal+"],
-  ["vix","ViX"],["paramount","Paramount+"],["star","Star+"],["appletv","Apple TV"],
+  ["vix","ViX"],["paramount","Paramount+"],["star","Star+"],["appletv","Apple TV"],["viki","Viki Rakuten"],
   ["spotify","Spotify"],["youtube","YouTube"],["deezer","Deezer"],["duolingo","Duolingo"],
   ["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],["office","Office 365"],
+  ["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
   ["oleada","Oleada TV"],["iptv","IPTV"]
 ];
 function invNuevoInit(){
@@ -3985,10 +4004,11 @@ if(rManual && fechaInput){
 
 /* ===== GESTIONAR SERVICIOS (agregar / editar / eliminar) ===== */
 const PLATS_DISPONIBLES=[
-  ["netflix","Netflix"],["vipnetflix","VIP Netflix"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
+  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["paramount","Paramount+"],["crunchyroll","Crunchyroll"],
   ["vix","ViX"],["viki","Viki Rakuten"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
-  ["deezer","Deezer"],["duolingo","Duolingo"],["oleada","Oleada TV"],["iptv","IPTV"],["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"]
+  ["deezer","Deezer"],["duolingo","Duolingo"],["oleada","Oleada TV"],["iptv","IPTV"],["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],
+  ["office","Office 365"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"]
 ];
 const gestionBtn=$cobro("cobroGestionar"), gestionBox=$cobro("cobroGestion");
 if(gestionBtn)gestionBtn.addEventListener("click",()=>{
@@ -4767,12 +4787,14 @@ function gCaminoBombas(){
 /* SUBLICHAT_CRM_WHATSAPP_AUTO_CRM_NOPINVIP_20260704 */
 (function(){
   const FICHA_PLATS=[
-    ["netflix","Netflix Premium"],["vipnetflix","Netflix Premium VIP"],["hbomax","HBO Max"],
+    ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax","HBO Max"],
     ["disneyp","Disney Premium"],["disneys","Disney Standard sin ESPN"],["primevideo","Prime Video"],
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
-    ["paramount","Paramount+"],["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
+    ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
+    ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
     ["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
-    ["office","Office 365"],["oleada","Oleada TV"],["iptv","IPTV"]
+    ["office","Office 365"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
+    ["oleada","Oleada TV"],["iptv","IPTV"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
@@ -4877,10 +4899,10 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
   function fichaMostrarVarianteMensajeCliente(indice=fichaVarianteMensajeActual){
     if(!fichaLinkActual) return;
     fichaVarianteMensajeActual=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(indice)||0));
-    const nombre=fichaGetVal("fichaNombre")||"Cliente";
+    const nombre=fichaNombreBeneficiario()||"Cliente";
     const vendedor=fichaVendedorActual();
     const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
-    const telefono=fichaGetVal("fichaTelefono");
+    const telefono=fichaVendedorTelefonoActual();
     const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor,telefono,variante:fichaVarianteMensajeActual});
     const view=fichaQ("fichaMensajeClienteView");
     if(view) view.textContent=msg;
@@ -4906,14 +4928,15 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
   const FICHA_PRECIOS={
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
-    youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, oleada:90, iptv:130
+    youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, oleada:90, iptv:130,
+    viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
   };
   // Reglas de campos por plataforma
   // con correo + clave + PIN: Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+
   // con correo + clave, sin PIN: Netflix VIP, Paramount+, ViX, Spotify, YouTube, Deezer, Office 365 y Oleada/IPTV
   // solo correo: Canva, Gemini, ChatGPT y Duolingo
-  const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv"]);
+  const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","appletv","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv","windows10","windows11","adobeexpress","eset"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
     default:
@@ -4953,7 +4976,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
 🚀 El equipo de Sublicuentas`,
     vipnetflix:
-`*🎉 ¡Bienvenido/a Netflix VIP Premium! 🎉*
+`*⭐ ¡Bienvenido/a a Netflix Premium VIP! ⭐*
 
 Hola, *_{nombre}_*. Le hacemos entrega oficial de sus credenciales de acceso:
 
@@ -5471,7 +5494,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(k==="vipnetflix"||k==="vip")return FICHA_REGLAS_MULTIPERFIL.vipnetflix;
     return FICHA_REGLAS_MULTIPERFIL[k]||FICHA_REGLAS_MULTIPERFIL.default;
   };
-  const fichaPlatformLabel=plat=>{ try{ return platLabel(plat); }catch(_){ return plat||"—"; } };
+  const fichaPlatformLabel=plat=>{
+    const p=fichaNorm(plat);
+    if(p==="vipnetflix"||p==="vip"||(p.includes("netflix")&&p.includes("vip")))return "⭐ Netflix Premium VIP";
+    const propia=FICHA_PLATS.find(([codigo])=>fichaNorm(codigo)===p);
+    if(propia)return propia[1];
+    try{ return platLabel(plat); }catch(_){ return plat||"—"; }
+  };
   function fichaPlatformEmoji(plat){
     const p=fichaNorm(plat);
     if(p.includes("netflix"))return "🎬";
@@ -5480,8 +5509,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(p.includes("spotify")||p.includes("deezer"))return "🎧";
     if(p.includes("youtube"))return "▶️";
     if(p.includes("crunchy"))return "🌀";
+    if(p.includes("viki"))return "💙";
+    if(p.includes("apple"))return "";
     if(p.includes("canva"))return "🎨";
     if(p.includes("gemini")||p.includes("chatgpt"))return "🤖";
+    if(p.includes("office")||p.includes("windows"))return "🪟";
+    if(p.includes("adobe"))return "🅰️";
+    if(p.includes("eset"))return "🛡️";
     if(p.includes("oleada")||p.includes("iptv"))return "📺";
     return "📱";
   }
@@ -5498,6 +5532,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(n.includes("universal")) return "universal";
     if(n.includes("vix")) return "vix";
     if(n.includes("paramount")) return "paramount";
+    if(n.includes("viki") || n.includes("rakuten")) return "viki";
+    if(n.includes("apple")) return "appletv";
     if(n.includes("spotify")) return "spotify";
     if(n.includes("deezer")) return "deezer";
     if(n.includes("youtube")) return "youtube";
@@ -5506,12 +5542,40 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(n.includes("chatgpt") || n.includes("openai")) return "chatgpt";
     if(n.includes("duolingo")) return "duolingo";
     if(n.includes("office") || n.includes("365")) return "office";
+    if(n.includes("windows 10") || n.includes("windows10") || n.includes("win10")) return "windows10";
+    if(n.includes("windows 11") || n.includes("windows11") || n.includes("win11")) return "windows11";
+    if(n.includes("adobe")) return "adobeexpress";
+    if(n.includes("eset") || n.includes("nod32")) return "eset";
     if(n.includes("oleada") || n.includes("magis")) return "oleada";
     if(n.includes("iptv") || n.includes("icomplay") || n.includes("lion") || n.includes("tvgo") || n.includes("titan")) return "iptv";
     const hit=FICHA_PLATS.find(([v,l])=>fichaNorm(v)===n || fichaNorm(l)===n);
     return hit?hit[0]:"netflix";
   }
   const fichaGetVal=id=>(fichaQ(id)&&fichaQ(id).value||"").trim();
+  function fichaNombreBeneficiario(){
+    return fichaGetVal("fichaBeneficiarioTipo")==="tercero"
+      ? fichaGetVal("fichaBeneficiarioNombre")
+      : fichaGetVal("fichaNombre");
+  }
+  function fichaToggleBeneficiario(){
+    const tercero=fichaGetVal("fichaBeneficiarioTipo")==="tercero";
+    const box=fichaQ("fichaBeneficiarioNombreBox"), ayuda=fichaQ("fichaBeneficiarioHelp");
+    if(box)box.style.display=tercero?"block":"none";
+    if(ayuda)ayuda.textContent=tercero
+      ? "🔐 Esta persona tendrá su propia URL privada. Sus cuentas no se mezclarán con las del titular ni con las de otros terceros."
+      : "🔗 Todas las plataformas de este cliente se reunirán en una sola URL permanente, aunque compre o renueve en fechas distintas.";
+  }
+  function fichaSincronizarBeneficiarioEnPerfil(){
+    const perfil=fichaQ("fichaPerfil");
+    if(!perfil)return;
+    const titular=fichaGetVal("fichaNombre"), anterior=String(perfil.dataset.beneficiarioAuto||"");
+    const destino=fichaNombreBeneficiario();
+    const actual=String(perfil.value||"").trim();
+    if(!actual||fichaNorm(actual)===fichaNorm(titular)||fichaNorm(actual)===fichaNorm(anterior)){
+      perfil.value=destino;
+      perfil.dataset.beneficiarioAuto=destino;
+    }
+  }
   function fichaPerfilesDesdeServicio(servicio,grupo){
     const s=servicio||{};
     const titular=(grupo&&grupo.nombre)||"";
@@ -5651,8 +5715,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaVendedorTel(v){
     return FICHA_VENDEDOR_TELS[fichaNorm(v)] || "";
   }
+  function fichaVendedorTelefonoActual(){
+    return fichaGetVal("fichaVendedorTelefono")||fichaVendedorTel(fichaVendedorActual());
+  }
   function fichaAplicarTelVendedorDefault(){
-    const telEl=fichaQ("fichaTelefono");
+    const telEl=fichaQ("fichaVendedorTelefono");
     if(!telEl) return;
     const vtel=fichaVendedorTel(fichaVendedorActual());
     const actual=(telEl.value||"").trim();
@@ -5665,7 +5732,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
 
   function fichaRespaldoCore(){
-    const tel=fichaGetVal("fichaTelefono");
+    const tel=fichaVendedorTelefonoActual();
     const vendedor=fichaVendedorActual();
     const lineas=[];
     if(tel) lineas.push(tel);
@@ -5759,6 +5826,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const clave=fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"";
     const perfiles=fichaRecolectarPerfiles();
     const principal=perfiles[0]||{};
+    const beneficiarioTipo=fichaGetVal("fichaBeneficiarioTipo")==="tercero"?"tercero":"titular";
+    const beneficiarioNombre=fichaNombreBeneficiario();
     const servicio={
       compraId:fichaCompraIdActual||fichaNuevoId("compra"),
       modalidad:perfiles.length>1?"multiperfil":"individual",
@@ -5770,6 +5839,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       sinClave:!fichaNeedsClave(plat),
       perfil:principal.perfil||fichaGetVal("fichaPerfil")||fichaGetVal("fichaNombre"),
       perfiles,
+      beneficiarioTipo,
+      beneficiarioNombre,
       // VERSION 20 · metadata para /c/{token}: no afecta lo que se guarda de
       // correo/clave/PIN (eso sigue dependiendo solo de la plataforma).
       dispositivo:fichaGetVal("fichaDispositivo"),
@@ -5786,7 +5857,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       cliente:{
         nombrePerfil:fichaGetVal("fichaNombre"),
         telefono:fichaGetVal("fichaTelefono"),
-        vendedor:fichaVendedorActual()
+        vendedor:fichaVendedorActual(),
+        vendedorTelefono:fichaVendedorTelefonoActual()
       },
       servicio,
       fichaTexto:fichaLimpiarTextoCliente(fichaGetVal("fichaTexto"))
@@ -5803,12 +5875,17 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaToast("Seleccione la plataforma.");
       return null;
     }
+    if(payload.servicio.beneficiarioTipo==="tercero"&&!String(payload.servicio.beneficiarioNombre||"").trim()){
+      fichaToast("Escriba el nombre de la persona que usará este acceso.");
+      return null;
+    }
+    const camposEntrega=fichaCamposEfectivos();
     for(let i=0;i<(payload.servicio.perfiles||[]).length;i++){
       const p=payload.servicio.perfiles[i]||{},label=`Perfil ${i+1}`;
       if(!String(p.nombre||"").trim()){fichaToast(`${label}: escriba el nombre de la persona/perfil.`);return null;}
-      if(!String(p.correo||"").trim()){fichaToast(`${label}: falta el correo o usuario asignado.`);return null;}
-      if(fichaNeedsClave(payload.servicio.plataforma)&&!String(p.clave||"").trim()){fichaToast(`${label}: falta la clave de la cuenta.`);return null;}
-      if(fichaNeedsPin(payload.servicio.plataforma)&&!String(p.pinPerfil||"").trim()){fichaToast(`${label}: falta su PIN individual.`);return null;}
+      if(camposEntrega.correo&&!String(p.correo||"").trim()){fichaToast(`${label}: falta el correo o usuario asignado.`);return null;}
+      if(camposEntrega.clave&&!String(p.clave||"").trim()){fichaToast(`${label}: falta la clave de la cuenta.`);return null;}
+      if(camposEntrega.pin&&!String(p.pinPerfil||"").trim()){fichaToast(`${label}: falta su PIN individual.`);return null;}
     }
     const btn=button || (!silent ? fichaQ("fichaSave") : null);
     const old=btn?btn.textContent:"";
@@ -5823,7 +5900,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         const listaConfirmada=Array.isArray(j.perfilesGuardados)?j.perfilesGuardados:[];
         const perfilesCoinciden=listaConfirmada.length===perfilesEsperados&&listaConfirmada.every((guardado,index)=>{
           const esperado=payload.servicio.perfiles[index]||{};
-          return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!fichaNeedsClave(payload.servicio.plataforma)||guardado.tieneClave===true)&&(!fichaNeedsPin(payload.servicio.plataforma)||guardado.tienePin===true);
+          return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!camposEntrega.clave||guardado.tieneClave===true)&&(!camposEntrega.pin||guardado.tienePin===true);
         });
         if(j.guardadoEnFirebase!==true||!Number.isInteger(perfilesConfirmados)||perfilesConfirmados!==perfilesEsperados||!perfilesCoinciden){
           const msg=`⚠️ Firebase no confirmó los ${perfilesEsperados} perfiles. No se mostrarán el enlace ni las variantes hasta reemplazar también api/renovar.js y volver a guardar.`;
@@ -5952,6 +6029,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaNombre").value=(g&&g.nombre)||"";
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
     fichaSetVendedor((g&&g.vendedor)||"");
+    fichaQ("fichaVendedorTelefono").value=(g&&g.vendedorTelefono)||fichaVendedorTel((g&&g.vendedor)||"");
+    const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
+    fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
+    fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
+    fichaToggleBeneficiario();
     fichaQ("fichaPlat").value=fichaPlatValue(s.plataformaRaw||s.plataforma||"");
     if(![...fichaQ("fichaPlat").options].some(o=>o.value===fichaQ("fichaPlat").value)){
       fichaQ("fichaPlat").value=FICHA_PLATS[0][0];
@@ -5970,6 +6052,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaClave").value=principal.clave||s.clave||s.pin||"";
     fichaQ("fichaPinPerfil").value=principal.pinPerfil||s.pinPerfil||"";
     fichaQ("fichaPerfil").value=principal.nombre||principal.perfil||s.perfil||((g&&g.nombre)||"");
+    fichaQ("fichaPerfil").dataset.beneficiarioAuto=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||""):String((g&&g.nombre)||"");
     fichaRenderPerfilesExtra();
     fichaRefreshTemplate();
     let guardada=fichaLimpiarTextoCliente(s.fichaTexto||"");
@@ -6017,7 +6100,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const active=pos===fichaServicioPosActual;
       const plat=s.plataforma||fichaPlatformLabel(s.plataformaRaw)||"Servicio";
       const acceso=s.correo||"Sin correo/usuario";
-      return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
+      const para=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?`Para ${s.beneficiarioNombre||"tercero"}`:"Titular";
+      return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · ${fichaEsc(para)} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
     }).join("");
     list.querySelectorAll("[data-ficha-servicio]").forEach(btn=>btn.addEventListener("click",()=>fichaSeleccionarServicio(Number(btn.dataset.fichaServicio))));
   }
@@ -6035,7 +6119,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaSincronizarServiciosDesdeData(indicePreferido,payload){
     let lista=fichaServiciosCompletos({...(fichaGrupoActual||{}),clienteId:fichaClienteIdActual});
     if(!lista.length && payload&&payload.servicio){
-      lista=[{...payload.servicio,plataformaRaw:payload.servicio.plataforma,plataforma:fichaPlatformLabel(payload.servicio.plataforma),fechaRaw:payload.servicio.fechaRenovacion,fecha:parseDate(payload.servicio.fechaRenovacion),clave:payload.servicio.clave,pin:payload.servicio.clave,pinPerfil:payload.servicio.pinPerfil||"",srvIndex:indicePreferido,fichaTexto:payload.fichaTexto||""}];
+      lista=[{...payload.servicio,plataformaRaw:payload.servicio.plataforma,plataforma:fichaPlatformLabel(payload.servicio.plataforma),fechaRaw:payload.servicio.fechaRenovacion,fecha:parseDate(payload.servicio.fechaRenovacion),clave:payload.servicio.clave,pin:payload.servicio.clave,pinPerfil:payload.servicio.pinPerfil||"",beneficiarioTipo:payload.servicio.beneficiarioTipo||"titular",beneficiarioNombre:payload.servicio.beneficiarioNombre||"",srvIndex:indicePreferido,fichaTexto:payload.fichaTexto||""}];
     }
     if(!lista.length)return;
     fichaServiciosActuales=lista;
@@ -6054,6 +6138,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       nombre:actual.nombre||(payload&&payload.cliente&&payload.cliente.nombrePerfil)||(fichaGrupoActual&&fichaGrupoActual.nombre)||"",
       telefono:actual.telefono||(payload&&payload.cliente&&payload.cliente.telefono)||(fichaGrupoActual&&fichaGrupoActual.telefono)||"",
       vendedor:actual.vendedor||(payload&&payload.cliente&&payload.cliente.vendedor)||(fichaGrupoActual&&fichaGrupoActual.vendedor)||"",
+      vendedorTelefono:actual.vendedorTelefono||(payload&&payload.cliente&&payload.cliente.vendedorTelefono)||(fichaGrupoActual&&fichaGrupoActual.vendedorTelefono)||"",
       nombreNorm:actual.nombreNorm||(fichaGrupoActual&&fichaGrupoActual.nombreNorm)||"",
       servicios:lista
     };
@@ -6163,6 +6248,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>Cliente titular</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre de quien compra"></label>
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
           <label class="ficha-field"><span>Vendedor</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
+          <label class="ficha-field"><span>Número del vendedor / soporte</span><input class="ficha-input" id="fichaVendedorTelefono" inputmode="tel" placeholder="Solo el número autorizado"></label>
+          <label class="ficha-field"><span>¿Quién usará este acceso?</span><select class="ficha-select" id="fichaBeneficiarioTipo"><option value="titular">El cliente titular</option><option value="tercero">Otra persona / tercero</option></select></label>
+          <label class="ficha-field" id="fichaBeneficiarioNombreBox" style="display:none"><span>Nombre del beneficiario</span><input class="ficha-input" id="fichaBeneficiarioNombre" placeholder="Ej. María López"></label>
+          <div class="ficha-field" id="fichaBeneficiarioHelp" style="grid-column:1/-1;background:rgba(47,155,224,.10);border:1px solid rgba(47,155,224,.28);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;color:var(--muted)">🔗 Todas las plataformas de este cliente se reunirán en una sola URL permanente, aunque compre o renueve en fechas distintas.</div>
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
           <label class="ficha-field"><span>📺📱 ¿Dónde va a usar la cuenta?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
           <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
@@ -6215,15 +6304,30 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <button class="ficha-btn wa" id="fichaWA" type="button">✅ Guardar CRM + mostrar 4 variantes</button>
         </div>
         <div class="ficha-status" id="fichaStatus"></div>
-        <div class="ficha-note">Al guardar, se actualiza Firebase/CRM y se conserva la misma URL del cliente. WhatsApp ya no se abre solo. Debajo de la ficha completa quedan el enlace y cuatro variantes; elija una y toque “Copiar variante”. Desde Clientes → Acciones puede recuperar la URL y volver a enviar cualquiera de las cuatro.</div>
+        <div class="ficha-note">Se conserva una URL permanente por beneficiario: las nuevas plataformas y renovaciones de la misma persona se agregan a esa URL, aunque tengan fechas distintas. Si la compra es para un tercero, seleccione “Otra persona” para crearle una URL privada separada. WhatsApp no se abre solo; elija una de las cuatro variantes y cópiela. Desde Clientes → Acciones puede recuperar cada acceso.</div>
       </div>`;
     document.body.appendChild(wrap);
     const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");fichaDevolverAlBody();};
     fichaQ("fichaClose").onclick=fichaCerrar;
     wrap.addEventListener("click",e=>{ if(e.target===wrap)fichaCerrar(); });
     document.addEventListener("keydown",e=>{if(e.key==="Escape"&&wrap.style.display==="flex")fichaCerrar();});
-    ["fichaNombre","fichaPerfil","fichaTelefono","fichaCorreo","fichaClave","fichaPinPerfil","fichaDia"].forEach(id=>{
+    ["fichaNombre","fichaPerfil","fichaTelefono","fichaVendedorTelefono","fichaCorreo","fichaClave","fichaPinPerfil","fichaDia"].forEach(id=>{
       const el=fichaQ(id); if(el) el.addEventListener("input",fichaRefreshTemplate);
+    });
+    fichaQ("fichaNombre").addEventListener("input",()=>{
+      if(fichaGetVal("fichaBeneficiarioTipo")!=="tercero")fichaSincronizarBeneficiarioEnPerfil();
+      if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();
+    });
+    fichaQ("fichaBeneficiarioTipo").addEventListener("change",()=>{
+      fichaToggleBeneficiario();
+      fichaSincronizarBeneficiarioEnPerfil();
+      fichaRefreshTemplate();
+      if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();
+    });
+    fichaQ("fichaBeneficiarioNombre").addEventListener("input",()=>{
+      fichaSincronizarBeneficiarioEnPerfil();
+      fichaRefreshTemplate();
+      if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();
     });
     fichaQ("fichaTextoView").addEventListener("input",()=>{
       const view=fichaQ("fichaTextoView");
@@ -6248,6 +6352,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaOleadaDispositivos").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaRefreshTemplate(); });
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
+    fichaQ("fichaVendedorTelefono").addEventListener("input",()=>{if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();});
     fichaQ("fichaPrecio").addEventListener("input",()=>{ fichaQ("fichaPrecio").dataset.manual="1"; });
     fichaQ("fichaAddProfile").addEventListener("click",()=>{
       fichaPerfilesExtraActuales.push({
@@ -6294,7 +6399,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku}:null);
+    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
@@ -6416,7 +6521,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function groupFromService(c){
     const precio=Number(c?.precio||0);
     return {
-      clienteId:c?.clienteId||'', nombre:c?.nombre||'', telefono:c?.telefono||'', vendedor:c?.vendedor||'', nombreNorm:c?.nombreNorm||'',
+      clienteId:c?.clienteId||'', nombre:c?.nombre||'', telefono:c?.telefono||'', vendedor:c?.vendedor||'', vendedorTelefono:c?.vendedorTelefono||'', nombreNorm:c?.nombreNorm||'',
       plataforma:c?.plataforma, plataformaRaw:c?.plataformaRaw, precio, total:precio, fecha:c?.fecha, fechaRaw:c?.fechaRaw,
       correo:c?.correo||'', clave:c?.clave||c?.pin||'', pin:c?.pin||c?.clave||'', pinPerfil:c?.pinPerfil||'', perfil:c?.perfil||'',
       servicios:[{...c, precio}]
