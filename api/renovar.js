@@ -413,14 +413,24 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
         pinPerfil: servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || ""
       }];
 
-  return lista.map((p, index) => ({
-    perfilId: String(p?.perfilId || p?.id || ""),
-    nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
-    perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
-    correo: String(p?.correo ?? servicio.correo ?? "").trim(),
-    clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? servicio.password ?? servicio.contrasena ?? "").trim(),
-    pinPerfil: perfilPinRaw(p) || (index === 0 ? perfilPinRaw(servicio) : "")
-  }));
+  const usaDispositivo = servicioUsaSelectorDispositivo(servicio.plataforma);
+  return lista.map((p, index) => {
+    const dispositivoRaw = p?.dispositivo != null ? p.dispositivo : servicio.dispositivo;
+    const dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || ""))
+      ? String(dispositivoRaw)
+      : "";
+    const esRokuRaw = p?.esRoku != null ? p.esRoku : servicio.esRoku;
+    return {
+      perfilId: String(p?.perfilId || p?.id || ""),
+      nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
+      perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
+      correo: String(p?.correo ?? servicio.correo ?? "").trim(),
+      clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? servicio.password ?? servicio.contrasena ?? "").trim(),
+      pinPerfil: perfilPinRaw(p) || (index === 0 ? perfilPinRaw(servicio) : ""),
+      dispositivo,
+      esRoku: dispositivo === "tv" && esRokuRaw === true
+    };
+  });
 }
 
 function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular = "") {
@@ -434,6 +444,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
   const plataforma = servicio.plataforma || anterior.plataforma || "";
   const sinClave = servicioNoUsaClave(plataforma);
   const sinPin = servicioNoUsaPinPerfil(plataforma);
+  const usaDispositivo = servicioUsaSelectorDispositivo(plataforma);
 
   return base.map((raw = {}, index) => {
     const previo = prev.find((p) => p.perfilId && p.perfilId === String(raw.perfilId || raw.id || "")) || prev[index] || {};
@@ -453,6 +464,14 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       correo: String(topCorreo ?? raw.correo ?? previo.correo ?? servicio.correo ?? anterior.correo ?? "").trim(),
       clave: sinClave ? "" : String(topClave ?? raw.clave ?? raw.password ?? raw.contrasena ?? previo.clave ?? servicio.clave ?? anterior.clave ?? "").trim()
     };
+    const dispositivoRaw = raw.dispositivo != null
+      ? raw.dispositivo
+      : (previo.dispositivo != null ? previo.dispositivo : (servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo));
+    out.dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || "")) ? String(dispositivoRaw) : "";
+    const esRokuRaw = raw.esRoku != null
+      ? raw.esRoku
+      : (previo.esRoku != null ? previo.esRoku : (servicio.esRoku != null ? servicio.esRoku : anterior.esRoku));
+    out.esRoku = out.dispositivo === "tv" && esRokuRaw === true;
     const pin = sinPin ? "" : String(
       topPin ?? raw.pinPerfil ?? raw.pin_perfil ?? raw.perfilPin ?? raw.pin ?? previo.pinPerfil ?? ""
     ).trim();
@@ -613,8 +632,8 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   }, nombreTitular);
   const plataformaFinal = servicio.plataforma || anterior.plataforma || "";
   const usaDispositivo = servicioUsaSelectorDispositivo(plataformaFinal);
-  const dispositivoFinal = usaDispositivo
-    ? String(servicio.dispositivo != null ? servicio.dispositivo : (anterior.dispositivo || ""))
+  const dispositivoFinal = usaDispositivo && ["tv", "cel"].includes(String(principal.dispositivo || ""))
+    ? String(principal.dispositivo)
     : "";
   const out = {
     schemaVersion: 2,
@@ -634,7 +653,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     // esta selección. Netflix VIP y las cuentas con credenciales directas no
     // deben heredar por accidente la regla "TV ya vinculada".
     dispositivo: dispositivoFinal,       // "tv" | "cel" | ""
-    esRoku: dispositivoFinal === "tv" ? !!servicio.esRoku : false,
+    esRoku: dispositivoFinal === "tv" && principal.esRoku === true,
     // Token de la ficha pública /c/{token}. Se genera una sola vez y se conserva
     // en renovaciones/ediciones para que el link que ya tiene el cliente no cambie.
     token: anterior.token || servicio.token || genToken(),
@@ -666,6 +685,7 @@ function limpiarServicioCRM(servicio = {}) {
   if (servicioNoUsaClave(s.plataforma)) s.clave = "";
   if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
   if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
+  const usaDispositivo = servicioUsaSelectorDispositivo(s.plataforma);
   if (Array.isArray(s.perfiles) && s.perfiles.length) {
     s.perfiles = s.perfiles.map((perfil, index) => {
       const p = { ...(perfil || {}) };
@@ -677,6 +697,15 @@ function limpiarServicioCRM(servicio = {}) {
       const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
       if (pPin) p.pinPerfil = pPin;
       else delete p.pinPerfil;
+      if (usaDispositivo) {
+        p.dispositivo = ["tv", "cel"].includes(String(p.dispositivo || ""))
+          ? String(p.dispositivo)
+          : (["tv", "cel"].includes(String(s.dispositivo || "")) ? String(s.dispositivo) : "");
+        p.esRoku = p.dispositivo === "tv" && (p.esRoku != null ? p.esRoku === true : s.esRoku === true);
+      } else {
+        delete p.dispositivo;
+        delete p.esRoku;
+      }
       delete p.id; delete p.nombrePerfil; delete p.pin; delete p.pin_perfil; delete p.perfilPin;
       delete p.password; delete p.contrasena;
       return p;
@@ -689,6 +718,14 @@ function limpiarServicioCRM(servicio = {}) {
     s.perfil = principal.perfil || principal.nombre || s.perfil || "";
     if (principal.pinPerfil) s.pinPerfil = principal.pinPerfil;
     else delete s.pinPerfil;
+    if (usaDispositivo) {
+      s.dispositivo = principal.dispositivo || "";
+      s.esRoku = principal.dispositivo === "tv" && principal.esRoku === true;
+    }
+  }
+  if (!usaDispositivo) {
+    delete s.dispositivo;
+    delete s.esRoku;
   }
   delete s.pin;
   delete s.pin_perfil;
@@ -879,13 +916,11 @@ export default async function handler(req, res) {
       if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
         return res.status(200).json({ error: "Falta el nombre de la persona que usará este acceso." });
       }
-      if (servicioUsaSelectorDispositivo(servicio.plataforma) && !["tv", "cel"].includes(String(servicio.dispositivo || ""))) {
-        return res.status(200).json({ error: "Seleccione si esta cuenta se usará en TV o celular." });
-      }
       const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
-      const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && nuevo.dispositivo === "tv" && nuevo.esRoku !== true;
       for (let i = 0; i < nuevo.perfiles.length; i++) {
         const p = nuevo.perfiles[i] || {};
+        if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) return res.status(200).json({ error: `Perfil ${i + 1}: seleccione si se instalará en TV o celular.` });
+        const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && p.dispositivo === "tv" && p.esRoku !== true;
         if (!String(p.nombre || "").trim()) return res.status(200).json({ error: `Falta el nombre del perfil ${i + 1}.` });
         if (!entregaSoloPerfil && servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
         if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
@@ -1095,8 +1130,10 @@ export default async function handler(req, res) {
       const nuevo = buildServicio(servicio, "", {}, nombreTitular);
       for (let i = 0; i < nuevo.perfiles.length; i++) {
         const p = nuevo.perfiles[i] || {};
-        if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) return res.status(200).json({ error: `Complete los datos requeridos del perfil ${i + 1}.` });
-        if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
+        if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) return res.status(200).json({ error: `Perfil ${i + 1}: seleccione si se instalará en TV o celular.` });
+        const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && p.dispositivo === "tv" && p.esRoku !== true;
+        if (!p.nombre || (!entregaSoloPerfil && servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) return res.status(200).json({ error: `Complete los datos requeridos del perfil ${i + 1}.` });
+        if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !p.clave) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
         if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
       }
       servicios = [...servicios, nuevo];
@@ -1124,7 +1161,9 @@ export default async function handler(req, res) {
         perfiles: Array.isArray(servicio.perfiles) ? servicio.perfiles : undefined,
         compraId: servicio.compraId || servicios[idx].compraId || "",
         beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : servicios[idx].beneficiarioTipo,
-        beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : servicios[idx].beneficiarioNombre
+        beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : servicios[idx].beneficiarioNombre,
+        dispositivo: servicio.dispositivo != null ? servicio.dispositivo : servicios[idx].dispositivo,
+        esRoku: servicio.esRoku != null ? servicio.esRoku : servicios[idx].esRoku
       }, servicio.fichaTexto || servicios[idx].fichaTexto || "", anterior, nombreTitular);
 
       servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);

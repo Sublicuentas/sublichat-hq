@@ -183,13 +183,23 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
         clave: servicio.clave || servicio.password || servicio.contrasena || "",
         pinPerfil: servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || ""
       }];
-  return lista.map((p, index) => ({
-    nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
-    perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
-    correo: String(p?.correo ?? servicio.correo ?? "").trim(),
-    clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? "").trim(),
-    pinPerfil: String(p?.pinPerfil ?? p?.pin_perfil ?? p?.perfilPin ?? (index === 0 ? (servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || "") : "")).trim()
-  }));
+  const usaDispositivo = servicioUsaSelectorDispositivo(servicio.plataforma);
+  return lista.map((p, index) => {
+    const dispositivoRaw = p?.dispositivo != null ? p.dispositivo : servicio.dispositivo;
+    const dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || ""))
+      ? String(dispositivoRaw)
+      : "";
+    const esRokuRaw = p?.esRoku != null ? p.esRoku : servicio.esRoku;
+    return {
+      nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
+      perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
+      correo: String(p?.correo ?? servicio.correo ?? "").trim(),
+      clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? "").trim(),
+      pinPerfil: String(p?.pinPerfil ?? p?.pin_perfil ?? p?.perfilPin ?? (index === 0 ? (servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || "") : "")).trim(),
+      dispositivo,
+      esRoku: dispositivo === "tv" && esRokuRaw === true
+    };
+  });
 }
 
 function resolverModo(servicio = {}) {
@@ -252,20 +262,25 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     perfiles = exactos.length ? exactos : perfiles.slice(0, 1);
   }
 
-  const campos = resolverModo(servicio);
-  const perfilesPublicos = perfiles.map(p => ({
-    nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,
-    perfil: p.perfil || p.nombre || "",
-    correo: !vencido && campos.mostrarCorreo ? p.correo : "",
-    clave: !vencido && campos.mostrarClave ? p.clave : "",
-    pin: !vencido && campos.mostrarPin ? p.pinPerfil : ""
-  }));
+  const perfilesPublicos = perfiles.map(p => {
+    const campos = resolverModo({ ...servicio, dispositivo: p.dispositivo, esRoku: p.esRoku });
+    return {
+      nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,
+      perfil: p.perfil || p.nombre || "",
+      correo: !vencido && campos.mostrarCorreo ? p.correo : "",
+      clave: !vencido && campos.mostrarClave ? p.clave : "",
+      pin: !vencido && campos.mostrarPin ? p.pinPerfil : "",
+      modo: campos.modo,
+      dispositivo: p.dispositivo || "",
+      esRoku: p.dispositivo === "tv" && p.esRoku === true
+    };
+  });
   const principal = perfilesPublicos[0] || {};
 
   return {
     plataforma,
     plataformaLabel: platLabel(plataforma),
-    modo: campos.modo,
+    modo: principal.modo || resolverModo(servicio).modo,
     vencido,
     titular: beneficiarioNombre || servicio.beneficiarioNombre || titularCliente,
     perfil: principal.perfil || principal.nombre || "",
