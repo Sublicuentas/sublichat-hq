@@ -278,22 +278,23 @@
 
   function perfilesDelServicio(d){
     if(Array.isArray(d.perfiles) && d.perfiles.length) return d.perfiles;
-    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||""}];
+    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",modo:d.modo||""}];
   }
 
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
     return perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
+      const modo=p.modo||d.modo;
       let campos="";
-      if(d.modo==="serial"){
+      if(modo==="serial"){
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
-      }else if(d.modo==="codigo"){
+      }else if(modo==="codigo"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
-      }else if(d.modo==="perfil"){
+      }else if(modo==="perfil"){
         campos+=fieldRow("Perfil",p.perfil||p.nombre||"Asignado",`${prefix}-perfil`);
         if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
-      }else if(d.modo==="invite"){
+      }else if(modo==="invite"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
       }else{
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
@@ -301,18 +302,20 @@
         if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
       }
       const titulo=perfiles.length>1?`<div class="profile-title">Perfil ${profileIndex+1} · ${esc(p.nombre||p.perfil||"Asignado")}</div>`:"";
-      return `<div class="profile-group">${titulo}${campos}</div>`;
+      const nota=perfiles.length>1?notaModo(d,p):"";
+      return `<div class="profile-group">${titulo}${campos}${nota}</div>`;
     }).join("");
   }
 
-  function notaModo(d){
+  function notaModo(d,perfil=null){
     const plat=platKey(d.plataforma);
+    const modo=(perfil&&perfil.modo)||d.modo;
     if(plat==="vipnetflix") return `<div class="note"><b>📱 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Obtener ayuda</b>.<br>4. Copie y coloque la clave.<br>5. Presione <b>Iniciar sesión</b>.</div>`;
-    if(d.modo==="serial") return `<div class="note"><b>🔐 Activación por licencia</b><br>Copie el serial exactamente como aparece y utilícelo en la pantalla de activación del producto.</div>`;
-    if(d.modo==="pendiente") return `<div class="note"><b>⚙️ Acceso pendiente de configurar</b><br>Su vendedor debe confirmar si esta cuenta será utilizada en TV o celular antes de mostrar los datos correctos.</div>`;
-    if(d.modo==="codigo") return `<div class="note"><b>📲 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Iniciar sesión con código</b>.<br>4. Solicite el código a su vendedor cuando aparezca.</div>`;
-    if(d.modo==="perfil") return `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Abra el perfil indicado e ingrese únicamente su PIN.</div>`;
-    if(d.modo==="invite") return `<div class="note">📩 La invitación fue enviada a <b>su correo personal</b>. Revise también spam o promociones.</div>`;
+    if(modo==="serial") return `<div class="note"><b>🔐 Activación por licencia</b><br>Copie el serial exactamente como aparece y utilícelo en la pantalla de activación del producto.</div>`;
+    if(modo==="pendiente") return `<div class="note"><b>⚙️ Acceso pendiente de configurar</b><br>Su vendedor debe confirmar si esta cuenta será utilizada en TV o celular antes de mostrar los datos correctos.</div>`;
+    if(modo==="codigo") return `<div class="note"><b>📲 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Iniciar sesión con código</b>.<br>4. Solicite el código a su vendedor cuando aparezca.</div>`;
+    if(modo==="perfil") return `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Abra el perfil indicado e ingrese únicamente su PIN.</div>`;
+    if(modo==="invite") return `<div class="note">📩 La invitación fue enviada a <b>su correo personal</b>. Revise también spam o promociones.</div>`;
     if(plat==="primevideo") return `<div class="note">📱 En celular ingrese con el correo y la clave mostrados. Si Prime Video solicita un <b>código de acceso</b>, pídalo a su vendedor.</div>`;
     return "";
   }
@@ -323,8 +326,9 @@
       return `<div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en este mismo enlace.</div>`;
     }
     const termsHtml=(d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
+    const perfiles=perfilesDelServicio(d);
     return `${datosPerfilHtml(d,index)}
-      ${notaModo(d)}
+      ${perfiles.length>1?"":notaModo(d,perfiles[0])}
       <div class="section-title">Condiciones del servicio</div>
       <div class="terms"><ul>${termsHtml}</ul></div>`;
   }

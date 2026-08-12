@@ -1914,15 +1914,18 @@ function perfilesDeCompra(servicio,nombreTitular=""){
   const lista=Array.isArray(s.perfiles)&&s.perfiles.length?s.perfiles:[{
     perfilId:s.perfilId||"",nombre:s.nombrePerfil||s.perfil||nombreTitular,perfil:s.perfil||s.nombrePerfil||nombreTitular,
     correo:s.correo||"",clave:s.clave||s.contrasena||s.password||"",
-    pinPerfil:s.pinPerfil||s.pin_perfil||s.perfilPin||((s.clave||s.contrasena||s.password)?s.pin||"":"")
+    pinPerfil:s.pinPerfil||s.pin_perfil||s.perfilPin||((s.clave||s.contrasena||s.password)?s.pin||"":""),
+    dispositivo:s.dispositivo||"",esRoku:!!s.esRoku
   }];
   return lista.map((p,index)=>{
     const clave=String(p?.clave??p?.contrasena??p?.password??s.clave??s.contrasena??s.password??"");
     const pinPerfil=String(p?.pinPerfil??p?.pin_perfil??p?.perfilPin??p?.pin??(index===0?(s.pinPerfil??s.pin_perfil??s.perfilPin??""):""));
     const nombre=String(p?.nombre||p?.nombrePerfil||p?.cliente||p?.perfil||nombreTitular||`Perfil ${index+1}`).trim();
+    const dispositivo=String(p?.dispositivo!=null?p.dispositivo:(s.dispositivo||"")).trim();
+    const esRoku=dispositivo==="tv"&&(p?.esRoku!=null?!!p.esRoku:!!s.esRoku);
     return {
       perfilId:String(p?.perfilId||p?.id||""),nombre,perfil:String(p?.perfil||p?.nombrePerfil||p?.nombre||nombre).trim(),
-      correo:String(p?.correo??s.correo??"").trim(),clave,pinPerfil
+      correo:String(p?.correo??s.correo??"").trim(),clave,pinPerfil,dispositivo,esRoku
     };
   });
 }
@@ -5523,10 +5526,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   //   TV + no Roku     -> nada de correo/clave, solo perfil + pin
   //   Celular + grupo código -> SOLO correo
   //   Celular + resto  -> correo + clave (+pin si la plataforma lo usa), como antes
-  function fichaCamposEfectivos(){
+  function fichaCamposEfectivos(perfil=null){
     const plat=fichaGetVal("fichaPlat");
-    const dispositivo=fichaGetVal("fichaDispositivo");
-    const esRoku=fichaGetVal("fichaEsRoku")==="si";
+    const desdePerfil=perfil&&typeof perfil==="object";
+    const dispositivo=desdePerfil?String(perfil.dispositivo||"").trim():fichaGetVal("fichaDispositivo");
+    const esRoku=desdePerfil?(dispositivo==="tv"&&perfil.esRoku===true):(fichaGetVal("fichaEsRoku")==="si");
     const platClave=fichaNeedsClave(plat), platPin=fichaNeedsPin(plat);
     if(fichaEsSerial(plat)) return {correo:false,clave:true,pin:false,modo:"serial"};
     if(fichaCredencialesSiempre(plat)) return {correo:true,clave:true,pin:platPin,modo:"cred"};
@@ -5639,12 +5643,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const s=servicio||{};
     const titular=(grupo&&grupo.nombre)||"";
     const tieneDatos=(Array.isArray(s.perfiles)&&s.perfiles.length)||s.perfil||s.nombrePerfil||s.correo||s.clave||s.pinPerfil;
-    if(!tieneDatos)return [{perfilId:fichaNuevoId("perfil"),nombre:titular,perfil:titular,correo:"",clave:"",pinPerfil:""}];
+    if(!tieneDatos)return [{perfilId:fichaNuevoId("perfil"),nombre:titular,perfil:titular,correo:"",clave:"",pinPerfil:"",dispositivo:"",esRoku:false}];
     return perfilesDeCompra(s,titular).map((p,index)=>({
       perfilId:p.perfilId||fichaNuevoId("perfil"),
       nombre:p.nombre||p.perfil||titular||`Perfil ${index+1}`,
       perfil:p.perfil||p.nombre||titular||`Perfil ${index+1}`,
-      correo:p.correo||"",clave:p.clave||"",pinPerfil:p.pinPerfil||""
+      correo:p.correo||"",clave:p.clave||"",pinPerfil:p.pinPerfil||"",
+      dispositivo:p.dispositivo||"",esRoku:p.dispositivo==="tv"&&p.esRoku===true
     }));
   }
   function fichaRecolectarPerfiles(){
@@ -5655,20 +5660,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       nombre:fichaGetVal("fichaPerfil")||titular,
       perfil:fichaGetVal("fichaPerfil")||titular,
       correo:fichaNeedsCorreo(plat)?fichaGetVal("fichaCorreo"):"",clave:fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"",
-      pinPerfil:fichaNeedsPin(plat)?fichaGetVal("fichaPinPerfil"):""
+      pinPerfil:fichaNeedsPin(plat)?fichaGetVal("fichaPinPerfil"):"",
+      dispositivo:fichaUsaSelectorDispositivo(plat)?fichaGetVal("fichaDispositivo"):"",
+      esRoku:fichaUsaSelectorDispositivo(plat)&&fichaGetVal("fichaDispositivo")==="tv"&&fichaGetVal("fichaEsRoku")==="si"
     };
     fichaPerfilPrincipalIdActual=principal.perfilId;
     return [principal,...fichaPerfilesExtraActuales.map((p,index)=>({
       perfilId:p.perfilId||fichaNuevoId("perfil"),nombre:String(p.nombre||p.perfil||`Perfil ${index+2}`).trim(),
       perfil:String(p.perfil||p.nombre||`Perfil ${index+2}`).trim(),correo:fichaNeedsCorreo(plat)?String(p.correo||"").trim():"",
       clave:fichaNeedsClave(plat)?String(p.clave||"").trim():"",
-      pinPerfil:fichaNeedsPin(plat)?String(p.pinPerfil||"").trim():""
+      pinPerfil:fichaNeedsPin(plat)?String(p.pinPerfil||"").trim():"",
+      dispositivo:fichaUsaSelectorDispositivo(plat)?String(p.dispositivo||"").trim():"",
+      esRoku:fichaUsaSelectorDispositivo(plat)&&String(p.dispositivo||"").trim()==="tv"&&p.esRoku===true
     }))];
   }
   function fichaRenderPerfilesExtra(){
     const list=fichaQ("fichaPerfilesExtraList"),count=fichaQ("fichaPerfilesCount"),removePrimary=fichaQ("fichaRemovePrimary");
     if(!list||!count)return;
-    const plat=fichaGetVal("fichaPlat"),showCorreo=fichaNeedsCorreo(plat),showClave=fichaNeedsClave(plat),showPin=fichaNeedsPin(plat),serial=fichaEsSerial(plat);
+    const plat=fichaGetVal("fichaPlat"),showCorreo=fichaNeedsCorreo(plat),showClave=fichaNeedsClave(plat),showPin=fichaNeedsPin(plat),serial=fichaEsSerial(plat),showDispositivo=fichaUsaSelectorDispositivo(plat);
     count.textContent=`${1+fichaPerfilesExtraActuales.length} perfil${fichaPerfilesExtraActuales.length?"es":""} · 1 solo precio`;
     if(removePrimary)removePrimary.style.display=fichaPerfilesExtraActuales.length?"inline-flex":"none";
     list.innerHTML=fichaPerfilesExtraActuales.map((p,index)=>`<div class="ficha-profile-extra" data-ficha-profile-row="${index}">
@@ -5678,13 +5687,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         <label class="ficha-field" style="${showCorreo?"":"display:none"}"><span>Correo / usuario asignado</span><input class="ficha-input" data-ficha-profile-field="correo" value="${fichaEsc(p.correo||"")}" placeholder="Cuenta donde está el perfil"></label>
         <label class="ficha-field" style="${showClave?"":"display:none"}"><span>${serial?"Serial / licencia":"Clave de esa cuenta"}</span><input class="ficha-input" data-ficha-profile-field="clave" value="${fichaEsc(p.clave||"")}" placeholder="${serial?"XXXXX-XXXXX-XXXXX":"Clave de acceso"}"></label>
         <label class="ficha-field" style="${showPin?"":"display:none"}"><span>PIN individual</span><input class="ficha-input" data-ficha-profile-field="pinPerfil" value="${fichaEsc(p.pinPerfil||"")}" placeholder="0000"></label>
+        <label class="ficha-field" style="${showDispositivo?"":"display:none"}"><span>📺📱 ¿Dónde va a usar este perfil?</span><select class="ficha-select" data-ficha-profile-field="dispositivo"><option value=""${!p.dispositivo?" selected":""}>Pregunte al cliente…</option><option value="tv"${p.dispositivo==="tv"?" selected":""}>TV</option><option value="cel"${p.dispositivo==="cel"?" selected":""}>Celular</option></select></label>
+        <label class="ficha-field" style="${showDispositivo&&p.dispositivo==="tv"?"":"display:none"}"><span>¿El TV de este perfil es Roku?</span><select class="ficha-select" data-ficha-profile-field="esRoku"><option value="no"${p.esRoku!==true?" selected":""}>No es Roku</option><option value="si"${p.esRoku===true?" selected":""}>Sí, es Roku</option></select></label>
       </div>
     </div>`).join("");
-    list.querySelectorAll("[data-ficha-profile-field]").forEach(input=>input.addEventListener("input",()=>{
+    list.querySelectorAll("[data-ficha-profile-field]").forEach(input=>input.addEventListener(input.tagName==="SELECT"?"change":"input",()=>{
       const row=input.closest("[data-ficha-profile-row]");const i=Number(row&&row.dataset.fichaProfileRow);
       if(!Number.isInteger(i)||!fichaPerfilesExtraActuales[i])return;
-      fichaPerfilesExtraActuales[i][input.dataset.fichaProfileField]=input.value;
+      const campo=input.dataset.fichaProfileField;
+      fichaPerfilesExtraActuales[i][campo]=campo==="esRoku"?input.value==="si":input.value;
+      if(campo==="dispositivo"&&input.value!=="tv")fichaPerfilesExtraActuales[i].esRoku=false;
       if(input.dataset.fichaProfileField==="nombre")fichaPerfilesExtraActuales[i].perfil=input.value;
+      if(campo==="dispositivo"){fichaRenderPerfilesExtra();fichaRefreshTemplate();return;}
       fichaRefreshTemplate();
     }));
     list.querySelectorAll("[data-ficha-profile-remove]").forEach(btn=>btn.addEventListener("click",()=>{
@@ -5754,11 +5768,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const camposEntrega=fichaCamposEfectivos();
     if(perfiles.length>1){
       const detalle=perfiles.map((p,index)=>{
+        const camposPerfil=fichaCamposEfectivos(p);
         const tipoAcceso=["oleada","iptv"].includes(fichaNorm(plat))?"👤 Usuario":"📧 Correo";
         const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`];
-        if(camposEntrega.correo)acceso.push(`${tipoAcceso}: ${p.correo||"—"}`);
-        if(camposEntrega.clave)acceso.push(`${fichaEsSerial(plat)?"🔐 Serial":"🔑 Clave"}: ${p.clave||"—"}`);
-        if(camposEntrega.pin)acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
+        if(fichaUsaSelectorDispositivo(plat))acceso.push(p.dispositivo==="tv"?`📺 Instalación: TV${p.esRoku?" (Roku)":" (No Roku)"}`:"📱 Instalación: Celular");
+        if(camposPerfil.correo)acceso.push(`${tipoAcceso}: ${p.correo||"—"}`);
+        if(camposPerfil.clave)acceso.push(`${fichaEsSerial(plat)?"🔐 Serial":"🔑 Clave"}: ${p.clave||"—"}`);
+        if(camposPerfil.pin)acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
         return acceso.join("\n");
       }).join("\n\n");
       const datosIptv=fichaNorm(plat)==="iptv"?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n`:"";
@@ -5928,8 +5944,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       beneficiarioNombre,
       // VERSION 20 · metadata para /c/{token}: no afecta lo que se guarda de
       // correo/clave/PIN (eso sigue dependiendo solo de la plataforma).
-      dispositivo:fichaUsaSelectorDispositivo(plat)?fichaGetVal("fichaDispositivo"):"",
-      esRoku:fichaUsaSelectorDispositivo(plat)&&fichaGetVal("fichaDispositivo")==="tv"&&fichaGetVal("fichaEsRoku")==="si"
+      dispositivo:fichaUsaSelectorDispositivo(plat)?(principal.dispositivo||""):"",
+      esRoku:fichaUsaSelectorDispositivo(plat)&&principal.dispositivo==="tv"&&principal.esRoku===true
     };
     if(fichaNeedsPin(plat)) servicio.pinPerfil=principal.pinPerfil||fichaGetVal("fichaPinPerfil");
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
@@ -5964,17 +5980,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaToast("Escriba el nombre de la persona que usará este acceso.");
       return null;
     }
-    if(fichaUsaSelectorDispositivo(payload.servicio.plataforma)&&!["tv","cel"].includes(String(payload.servicio.dispositivo||""))){
-      fichaToast("Seleccione si esta cuenta se usará en TV o celular para entregar los datos correctos.");
-      return null;
-    }
-    const camposEntrega=fichaCamposEfectivos();
-    const entregaSoloPerfil=camposEntrega.modo==="perfil";
-    const requiereCorreoGuardado=!entregaSoloPerfil&&fichaNeedsCorreo(payload.servicio.plataforma);
-    const requiereClaveGuardada=!entregaSoloPerfil&&fichaNeedsClave(payload.servicio.plataforma);
     const requierePinGuardado=fichaNeedsPin(payload.servicio.plataforma);
     for(let i=0;i<(payload.servicio.perfiles||[]).length;i++){
       const p=payload.servicio.perfiles[i]||{},label=`Perfil ${i+1}`;
+      if(fichaUsaSelectorDispositivo(payload.servicio.plataforma)&&!["tv","cel"].includes(String(p.dispositivo||""))){fichaToast(`${label}: seleccione si se instalará en TV o celular.`);return null;}
+      const camposEntrega=fichaCamposEfectivos(p);
+      const entregaSoloPerfil=camposEntrega.modo==="perfil";
+      const requiereCorreoGuardado=!entregaSoloPerfil&&fichaNeedsCorreo(payload.servicio.plataforma);
+      const requiereClaveGuardada=!entregaSoloPerfil&&fichaNeedsClave(payload.servicio.plataforma);
       if(!String(p.nombre||"").trim()){fichaToast(`${label}: escriba el nombre de la persona/perfil.`);return null;}
       if(requiereCorreoGuardado&&!String(p.correo||"").trim()){fichaToast(`${label}: falta el correo o usuario asignado.`);return null;}
       if(requiereClaveGuardada&&!String(p.clave||"").trim()){fichaToast(`${label}: falta la clave, serial o licencia.`);return null;}
@@ -6170,9 +6183,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaSetPrecioDefault(!s.precio);
     fichaQ("fichaFecha").value=fechaISO;
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
-    const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(s.dispositivo||""))?String(s.dispositivo):"";
+    const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
-    fichaQ("fichaEsRoku").value=s.esRoku?"si":"no";
+    fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
     const rokuBox=fichaQ("fichaRokuBox");
     if(rokuBox) rokuBox.style.display=dispositivo==="tv"?"block":"none";
     fichaQ("fichaCorreo").value=principal.correo||s.correo||"";
@@ -6380,8 +6393,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field" id="fichaBeneficiarioNombreBox" style="display:none"><span>Nombre del beneficiario</span><input class="ficha-input" id="fichaBeneficiarioNombre" placeholder="Ej. María López"></label>
           <div class="ficha-field" id="fichaBeneficiarioHelp" style="grid-column:1/-1;background:rgba(47,155,224,.10);border:1px solid rgba(47,155,224,.28);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;color:var(--muted)">🔗 Todas las plataformas de este cliente se reunirán en una sola URL permanente, aunque compre o renueve en fechas distintas.</div>
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
-          <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 ¿Dónde va a usar la cuenta?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
-          <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
+          <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 Perfil 1 · ¿Dónde va a usar este perfil?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
+          <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>Perfil 1 · ¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
           <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
@@ -6484,7 +6497,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaAddProfile").addEventListener("click",()=>{
       fichaPerfilesExtraActuales.push({
         perfilId:fichaNuevoId("perfil"),nombre:"",perfil:"",correo:fichaGetVal("fichaCorreo"),
-        clave:fichaGetVal("fichaClave"),pinPerfil:""
+        clave:fichaGetVal("fichaClave"),pinPerfil:"",dispositivo:"",esRoku:false
       });
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
       const rows=fichaQ("fichaPerfilesExtraList")?.querySelectorAll("[data-ficha-profile-row]");
@@ -6497,6 +6510,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaPerfilPrincipalIdActual=nuevo.perfilId||fichaNuevoId("perfil");
       fichaQ("fichaPerfil").value=nuevo.nombre||nuevo.perfil||"";
       fichaQ("fichaCorreo").value=nuevo.correo||"";fichaQ("fichaClave").value=nuevo.clave||"";fichaQ("fichaPinPerfil").value=nuevo.pinPerfil||"";
+      fichaQ("fichaDispositivo").value=nuevo.dispositivo||"";fichaQ("fichaEsRoku").value=nuevo.esRoku===true?"si":"no";
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
     });
     fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
