@@ -1,8 +1,8 @@
-// api/acceso.js · VERSION 2
+// api/acceso.js · VERSION 3 · URL permanente con varios servicios
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
-// a los datos que el cliente debe ver. Es de SOLO LECTURA y nunca expone nada
-// más del documento del cliente que el servicio puntual al que apunta el token.
+// a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
+// los servicios asignados al mismo beneficiario.
 //
 // Usa Firebase Admin con una cuenta de servicio, igual que renovar.js.
 // Variables en Vercel (ya existentes):
@@ -36,12 +36,14 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("office") || p.includes("paramount") || p.includes("appletv") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("oleada") ||
-    p.includes("iptv") || p.includes("viki")
+    p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
+    p.includes("adobe") || p.includes("eset")
   );
 }
 function servicioNoUsaClave(plataforma) {
   const p = normPlat(plataforma);
-  return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") || p.includes("duolingo");
+  return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") ||
+    p.includes("duolingo") || p.includes("adobeexpress");
 }
 // Regla NUEVA (11-ago-2026): en celular, estas plataformas van SOLO con correo.
 function celularSoloCodigo(plataforma) {
@@ -88,12 +90,13 @@ function termsFor(plataforma) {
 }
 
 const PLAT_LABELS = {
-  netflix: "Netflix Premium", vipnetflix: "Netflix Premium VIP", hbomax: "HBO Max",
+  netflix: "Netflix Premium", vipnetflix: "⭐ Netflix Premium VIP", hbomax: "HBO Max",
   disneyp: "Disney Premium", disneys: "Disney Standard sin ESPN", primevideo: "Prime Video",
   crunchyroll: "Crunchyroll", universal: "Universal+", vix: "ViX+", paramount: "Paramount+",
   spotify: "Spotify Premium", deezer: "Deezer Premium HiFi", youtube: "YouTube Premium",
   canva: "Canva", gemini: "Gemini", chatgpt: "ChatGPT", duolingo: "Duolingo",
-  office: "Office 365", oleada: "Oleada TV", iptv: "IPTV", viki: "Viki Rakuten", appletv: "Apple TV"
+  office: "Office 365", oleada: "Oleada TV", iptv: "IPTV", viki: "Viki Rakuten", appletv: "Apple TV",
+  windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET"
 };
 function platLabel(plataforma) {
   const p = normPlat(plataforma);
@@ -134,6 +137,118 @@ function servicioVencido(fechaRenovacion) {
   return !!vence && fechaClave(vence) < fechaClave(hoyHonduras());
 }
 
+function normName(v) {
+  return String(v || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+}
+
+function keyBeneficiario(servicio = {}) {
+  if (String(servicio.beneficiarioKey || "").trim()) return String(servicio.beneficiarioKey).trim();
+  if (String(servicio.beneficiarioTipo || "").toLowerCase() !== "tercero") return "titular";
+  const key = normName(servicio.beneficiarioNombre || servicio.beneficiario)
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "persona";
+  return `tercero-${key}`;
+}
+
+function perfilesOperativos(servicio = {}, nombreTitular = "") {
+  const lista = Array.isArray(servicio.perfiles) && servicio.perfiles.length
+    ? servicio.perfiles
+    : [{
+        nombre: servicio.nombrePerfil || servicio.perfil || nombreTitular || "Cliente",
+        perfil: servicio.perfil || servicio.nombrePerfil || nombreTitular || "",
+        correo: servicio.correo || "",
+        clave: servicio.clave || servicio.password || servicio.contrasena || "",
+        pinPerfil: servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || ""
+      }];
+  return lista.map((p, index) => ({
+    nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
+    perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
+    correo: String(p?.correo ?? servicio.correo ?? "").trim(),
+    clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? "").trim(),
+    pinPerfil: String(p?.pinPerfil ?? p?.pin_perfil ?? p?.perfilPin ?? (index === 0 ? (servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || "") : "")).trim()
+  }));
+}
+
+function resolverModo(servicio = {}) {
+  const plataforma = servicio.plataforma || "";
+  const dispositivo = servicio.dispositivo || "";
+  const esRoku = !!servicio.esRoku;
+  const platUsaPin = !servicioNoUsaPinPerfil(plataforma);
+  const platUsaClave = !servicioNoUsaClave(plataforma);
+  let mostrarCorreo = true, mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
+
+  if (dispositivo === "tv") {
+    if (esRoku) {
+      modo = "cred";
+    } else {
+      modo = "perfil"; mostrarCorreo = false; mostrarClave = false;
+    }
+  } else if (dispositivo === "cel") {
+    if (platUsaClave && celularSoloCodigo(plataforma)) {
+      modo = "codigo"; mostrarCorreo = true; mostrarClave = false; mostrarPin = false;
+    } else {
+      modo = platUsaClave ? "cred" : "invite";
+    }
+  } else {
+    modo = platUsaClave ? "cred" : "invite";
+  }
+
+  return { modo, mostrarCorreo, mostrarClave, mostrarPin };
+}
+
+function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", beneficiarioNombre = "", limitarPerfil = false } = {}) {
+  const plataforma = servicio.plataforma || "";
+  const fechaRenovacion = servicio.fechaRenovacion || "";
+  const vencido = servicioVencido(fechaRenovacion);
+  const titularCliente = cliente.nombrePerfil || cliente.nombre || "Cliente";
+  let perfiles = perfilesOperativos(servicio, titularCliente);
+
+  // Cuando el enlace pertenece a un tercero, solo muestra su perfil si el
+  // nombre coincide. Si la ficha vieja no tiene esa relación, limita al primer
+  // perfil para no exponer los accesos de otras personas por accidente.
+  if (limitarPerfil || (beneficiarioKey && beneficiarioKey !== "titular")) {
+    const buscado = normName(beneficiarioNombre || servicio.beneficiarioNombre);
+    const exactos = buscado ? perfiles.filter(p => normName(p.nombre) === buscado) : [];
+    perfiles = exactos.length ? exactos : perfiles.slice(0, 1);
+  }
+
+  const campos = resolverModo(servicio);
+  const perfilesPublicos = perfiles.map(p => ({
+    nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,
+    perfil: p.perfil || p.nombre || "",
+    correo: !vencido && campos.mostrarCorreo ? p.correo : "",
+    clave: !vencido && campos.mostrarClave ? p.clave : "",
+    pin: !vencido && campos.mostrarPin ? p.pinPerfil : ""
+  }));
+  const principal = perfilesPublicos[0] || {};
+
+  return {
+    plataforma,
+    plataformaLabel: platLabel(plataforma),
+    modo: campos.modo,
+    vencido,
+    titular: beneficiarioNombre || servicio.beneficiarioNombre || titularCliente,
+    perfil: principal.perfil || principal.nombre || "",
+    correo: principal.correo || "",
+    clave: principal.clave || "",
+    pin: principal.pin || "",
+    perfiles: perfilesPublicos,
+    fechaRenovacion,
+    terminos: termsFor(plataforma),
+    vendedor: cliente.vendedor || "",
+    vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+  };
+}
+
+function ordenarServiciosPublicos(a, b) {
+  if (!!a.vencido !== !!b.vencido) return a.vencido ? 1 : -1;
+  const fa = fechaClave(fechaPartes(a.fechaRenovacion)) || Number.MAX_SAFE_INTEGER;
+  const fb = fechaClave(fechaPartes(b.fechaRenovacion)) || Number.MAX_SAFE_INTEGER;
+  if (fa !== fb) return fa - fb;
+  return String(a.plataformaLabel || "").localeCompare(String(b.plataformaLabel || ""), "es");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ ok: false, error: "Método no permitido." });
 
@@ -147,12 +262,51 @@ export default async function handler(req, res) {
     if (!puntero.exists || puntero.data().activo === false) {
       return res.status(404).json({ ok: false, error: "Este enlace ya no está disponible. Contacte a su vendedor." });
     }
-    const { clienteId, servicioIndex, compraId } = puntero.data();
+    const enlace = puntero.data() || {};
+    const { clienteId, servicioIndex, compraId } = enlace;
 
     const clienteDoc = await db.collection("clientes").doc(clienteId).get();
     if (!clienteDoc.exists) return res.status(404).json({ ok: false, error: "No se encontró la cuenta." });
     const cliente = clienteDoc.data() || {};
     const servicios = Array.isArray(cliente.servicios) ? cliente.servicios : [];
+
+    // URL unificada: devuelve todas las plataformas de la misma persona, cada
+    // una con su propia vigencia. Los servicios vencidos permanecen visibles
+    // como referencia, pero nunca exponen credenciales.
+    if (enlace.tipo === "beneficiario") {
+      const beneficiarioKey = String(enlace.beneficiarioKey || "titular");
+      const registro = cliente.accesosBeneficiarios && typeof cliente.accesosBeneficiarios === "object"
+        ? cliente.accesosBeneficiarios : {};
+      const beneficiarioNombre = String(
+        enlace.beneficiarioNombre || registro[beneficiarioKey]?.nombre ||
+        (beneficiarioKey === "titular" ? (cliente.nombrePerfil || cliente.nombre || "Cliente") : "Cliente")
+      );
+      const filtrados = servicios.filter(s => keyBeneficiario(s) === beneficiarioKey);
+      if (!filtrados.length) {
+        return res.status(404).json({ ok: false, error: "Esta persona no tiene servicios disponibles en este enlace." });
+      }
+      const publicos = filtrados
+        .map(s => servicioPublico(cliente, s, {
+          beneficiarioKey,
+          beneficiarioNombre,
+          limitarPerfil: beneficiarioKey !== "titular"
+        }))
+        .sort(ordenarServiciosPublicos);
+      const activos = publicos.filter(s => !s.vencido).length;
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        ok: true,
+        multi: true,
+        titular: beneficiarioNombre,
+        comprador: cliente.nombrePerfil || cliente.nombre || beneficiarioNombre,
+        servicios: publicos,
+        totalServicios: publicos.length,
+        totalActivos: activos,
+        totalVencidos: publicos.length - activos,
+        vendedor: cliente.vendedor || "",
+        vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+      });
+    }
 
     // El índice puede haber cambiado si se agregaron/quitaron servicios; se
     // revalida contra compraId y si no coincide, se busca por compraId.
@@ -161,76 +315,16 @@ export default async function handler(req, res) {
       servicio = servicios.find(s => String(s?.compraId || "") === String(compraId || ""));
     }
     if (!servicio) return res.status(404).json({ ok: false, error: "Este servicio ya no existe. Contacte a su vendedor." });
-
-    const plataforma = servicio.plataforma || "";
-    const perfilPrincipal = (Array.isArray(servicio.perfiles) && servicio.perfiles[0]) || {};
-    const fechaRenovacion = servicio.fechaRenovacion || "";
-
-    if (servicioVencido(fechaRenovacion)) {
-      res.setHeader("Cache-Control", "no-store");
+    const publico = servicioPublico(cliente, servicio, { limitarPerfil: true });
+    res.setHeader("Cache-Control", "no-store");
+    if (publico.vencido) {
       return res.status(410).json({
         ok: false,
-        vencido: true,
-        plataforma,
-        plataformaLabel: platLabel(plataforma),
-        titular: cliente.nombrePerfil || cliente.nombre || perfilPrincipal.nombre || "Cliente",
-        fechaRenovacion,
-        vendedor: cliente.vendedor || "",
-        vendedorTelefono: cliente.telefono || vendedorTel(cliente.vendedor) || "",
+        ...publico,
         error: "Este servicio está vencido. Renueve con su vendedor para reactivar el mismo enlace."
       });
     }
-
-    const dispositivo = servicio.dispositivo || "";
-    const esRoku = !!servicio.esRoku;
-
-    // Resolución de qué mostrar (correo / clave / pin) según la regla confirmada:
-    //   TV + Roku            -> correo + clave (+pin si la plataforma lo usa)
-    //   TV + no Roku          -> nada de correo/clave, solo perfil + pin
-    //   Celular + grupo código-> SOLO correo (Disney Premium/Standard, HBO, Vix, Netflix Premium)
-    //   Celular + resto       -> correo + clave (+pin si la plataforma lo usa)
-    const platUsaPin = !servicioNoUsaPinPerfil(plataforma);
-    const platUsaClave = !servicioNoUsaClave(plataforma);
-    let mostrarCorreo = true, mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
-
-    if (dispositivo === "tv") {
-      if (esRoku) {
-        modo = "cred"; mostrarCorreo = true; mostrarClave = platUsaClave; mostrarPin = platUsaPin;
-      } else {
-        modo = "perfil"; mostrarCorreo = false; mostrarClave = false; mostrarPin = platUsaPin;
-      }
-    } else if (dispositivo === "cel") {
-      if (platUsaClave && celularSoloCodigo(plataforma)) {
-        modo = "codigo"; mostrarCorreo = true; mostrarClave = false; mostrarPin = false;
-      } else {
-        modo = platUsaClave ? "cred" : "invite";
-        mostrarCorreo = true; mostrarClave = platUsaClave; mostrarPin = platUsaPin;
-      }
-    } else {
-      // Sin dispositivo definido (fichas viejas): se comporta como antes de este cambio.
-      modo = platUsaClave ? "cred" : "invite";
-    }
-
-    const publico = {
-      ok: true,
-      plataforma,
-      plataformaLabel: platLabel(plataforma),
-      modo,
-      titular: cliente.nombrePerfil || cliente.nombre || perfilPrincipal.nombre || "Cliente",
-      perfil: servicio.perfil || perfilPrincipal.nombre || "",
-      correo: mostrarCorreo ? (servicio.correo || perfilPrincipal.correo || "") : "",
-      clave: mostrarClave ? (servicio.clave || perfilPrincipal.clave || "") : "",
-      pin: mostrarPin ? (servicio.pinPerfil || perfilPrincipal.pinPerfil || "") : "",
-      fechaRenovacion,
-      terminos: termsFor(plataforma),
-      vendedor: cliente.vendedor || "",
-      // El número guardado en la ficha CRM tiene prioridad; los números conocidos
-      // solo se usan como respaldo cuando la ficha no tiene teléfono.
-      vendedorTelefono: cliente.telefono || vendedorTel(cliente.vendedor) || ""
-    };
-
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(200).json(publico);
+    return res.status(200).json({ ok: true, ...publico });
   } catch (e) {
     return res.status(500).json({ ok: false, error: "Error del servidor. Intente de nuevo." });
   }

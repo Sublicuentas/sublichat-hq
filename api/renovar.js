@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 19  ·  multiperfil confirmado + inventario por plataforma
+// api/renovar.js  ·  VERSION 21  ·  URL permanente por beneficiario
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -87,7 +87,12 @@ const PLAT_ALIASES = {
   universal: "universal", universalp: "universal",
   spotify: "spotify", youtube: "youtube", deezer: "deezer", duolingo: "duolingo",
   canva: "canva", gemini: "gemini", chatgpt: "chatgpt",
-  office: "office", microsoft: "office", star: "star"
+  office: "office", microsoft: "office", star: "star",
+  viki: "viki", rakutenviki: "viki",
+  windows10: "windows10", win10: "windows10",
+  windows11: "windows11", win11: "windows11",
+  adobeexpress: "adobeexpress", adobe: "adobeexpress",
+  eset: "eset", esetnod32: "eset"
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
@@ -151,7 +156,11 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("chatgpt") ||
     p.includes("duolingo") ||
     p.includes("oleada") ||
-    p.includes("iptv")
+    p.includes("iptv") ||
+    p.includes("viki") ||
+    p.includes("windows") ||
+    p.includes("adobe") ||
+    p.includes("eset")
   );
 }
 
@@ -161,7 +170,8 @@ function servicioNoUsaClave(plataforma) {
     p.includes("canva") ||
     p.includes("gemini") ||
     p.includes("chatgpt") ||
-    p.includes("duolingo")
+    p.includes("duolingo") ||
+    p.includes("adobeexpress")
   );
 }
 
@@ -186,6 +196,18 @@ function safeDocId(v) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
   return x || "cliente";
+}
+
+// Un cliente puede comprar para sí mismo o para terceros. Cada persona que
+// realmente usa las cuentas recibe una sola URL permanente, aunque sus
+// plataformas y fechas de renovación sean diferentes.
+function datosBeneficiario(servicio = {}, nombreTitular = "") {
+  const tipoGuardado = String(servicio.beneficiarioTipo || "").trim().toLowerCase();
+  const tipo = tipoGuardado === "tercero" ? "tercero" : "titular";
+  const nombreTercero = String(servicio.beneficiarioNombre || servicio.beneficiario || "").trim();
+  const nombre = tipo === "tercero" ? nombreTercero : String(nombreTitular || "Cliente").trim();
+  const key = tipo === "tercero" ? `tercero-${safeDocId(normName(nombre) || "persona")}` : "titular";
+  return { tipo, nombre: nombre || String(nombreTitular || "Cliente").trim(), key };
 }
 
 // Valida un ID recibido desde una fila ya cargada. No lo transforma: debe
@@ -227,6 +249,109 @@ function genToken(len = 11) {
   let out = "";
   for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
   return out;
+}
+
+function prepararAccesosBeneficiarios({ servicios = [], registroAnterior = {}, nombreTitular = "", tokenTitularAnterior = "" } = {}) {
+  const lista = Array.isArray(servicios) ? servicios : [];
+  const anterior = registroAnterior && typeof registroAnterior === "object" && !Array.isArray(registroAnterior)
+    ? registroAnterior : {};
+  const registro = {};
+  const grupos = new Map();
+  lista.forEach(servicio => {
+    const b = datosBeneficiario(servicio, nombreTitular);
+    servicio.beneficiarioTipo = b.tipo;
+    servicio.beneficiarioNombre = b.nombre;
+    servicio.beneficiarioKey = b.key;
+    if (!grupos.has(b.key)) grupos.set(b.key, { beneficiario: b, servicios: [] });
+    grupos.get(b.key).servicios.push(servicio);
+  });
+
+  const activos = new Set(grupos.keys());
+  const propietarioAnterior = new Map();
+  Object.entries(anterior).forEach(([key, value]) => {
+    const token = String(value?.token || "").trim();
+    if (token) propietarioAnterior.set(token, key);
+  });
+  const usados = new Set();
+  const elegirToken = (key, serviciosGrupo = []) => {
+    const candidatos = [
+      anterior[key]?.token,
+      key === "titular" ? tokenTitularAnterior : "",
+      ...serviciosGrupo.map(s => s?.token)
+    ].map(x => String(x || "").trim()).filter(Boolean);
+    for (const token of candidatos) {
+      const propietario = propietarioAnterior.get(token);
+      if (usados.has(token)) continue;
+      if (propietario && propietario !== key && activos.has(propietario)) continue;
+      usados.add(token);
+      return token;
+    }
+    let token = genToken();
+    while (usados.has(token)) token = genToken();
+    usados.add(token);
+    return token;
+  };
+
+  // Titular primero para conservar el enlace histórico del cliente siempre
+  // que todavía tenga al menos un servicio propio.
+  const orden = [...grupos.keys()].sort((a, b) => a === "titular" ? -1 : b === "titular" ? 1 : a.localeCompare(b));
+  orden.forEach(key => {
+    const grupo = grupos.get(key);
+    const b = grupo.beneficiario;
+    const token = elegirToken(key, grupo.servicios);
+    registro[b.key] = {
+      ...(anterior[b.key] || {}),
+      tipo: b.tipo,
+      nombre: b.nombre,
+      token,
+      updatedAt: isoNow()
+    };
+  });
+
+  // Se conserva una raíz para compatibilidad del CRM; si el titular aún no
+  // tiene servicios, su URL no se publica y por eso no expone ningún acceso.
+  const tokenTitular = String(
+    registro.titular?.token || tokenTitularAnterior || anterior.titular?.token || genToken()
+  ).trim();
+  return { registro, tokenTitular };
+}
+
+async function sincronizarEnlacesPublicos(db, { clienteId, servicios = [], registro = {} } = {}) {
+  const tokensGrupo = new Set(
+    Object.values(registro).map(x => String(x?.token || "").trim()).filter(Boolean)
+  );
+  const batch = db.batch();
+
+  // Los tokens antiguos que no fueron elegidos como URL unificada siguen
+  // resolviendo su servicio puntual, para no romper mensajes ya enviados.
+  servicios.forEach((servicio, servicioIndex) => {
+    const token = String(servicio?.token || "").trim();
+    if (!token || tokensGrupo.has(token)) return;
+    batch.set(db.collection("enlaces").doc(token), {
+      tipo: "servicio",
+      clienteId,
+      servicioIndex,
+      compraId: String(servicio?.compraId || ""),
+      plataforma: servicio?.plataforma || "",
+      activo: true,
+      updatedAt: isoNow()
+    }, { merge: true });
+  });
+
+  Object.entries(registro).forEach(([beneficiarioKey, acceso]) => {
+    const token = String(acceso?.token || "").trim();
+    if (!token) return;
+    batch.set(db.collection("enlaces").doc(token), {
+      tipo: "beneficiario",
+      clienteId,
+      beneficiarioKey,
+      beneficiarioNombre: String(acceso?.nombre || ""),
+      activo: true,
+      updatedAt: isoNow()
+    }, { merge: true });
+  });
+
+  await batch.commit();
 }
 
 // VERSION 20 · Regla NUEVA confirmada (11-ago-2026): en celular, estas plataformas
@@ -457,6 +582,11 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
 
   const perfiles = normalizarPerfilesServicio(servicio, anterior, nombreTitular);
   const principal = perfiles[0] || {};
+  const beneficiario = datosBeneficiario({
+    beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : anterior.beneficiarioTipo,
+    beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
+    beneficiario: servicio.beneficiario != null ? servicio.beneficiario : anterior.beneficiario
+  }, nombreTitular);
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
@@ -468,6 +598,9 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
     perfiles,
+    beneficiarioTipo: beneficiario.tipo,
+    beneficiarioNombre: beneficiario.nombre,
+    beneficiarioKey: beneficiario.key,
     // VERSION 20 · dónde y cómo se entrega el acceso (pregunta nueva en la ficha CRM).
     dispositivo: servicio.dispositivo || anterior.dispositivo || "",       // "tv" | "cel"
     esRoku: servicio.dispositivo === "tv" ? !!servicio.esRoku : !!anterior.esRoku,
@@ -560,7 +693,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 19, msg: "renovar v19 activo (multiperfil confirmado + inventario por plataforma). Usá POST." });
+    return res.status(200).json({ ok: true, version: 21, msg: "renovar v21 activo (URL permanente por beneficiario). Usá POST." });
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
@@ -581,6 +714,8 @@ export default async function handler(req, res) {
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
       const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
       const vendedor = cliente.vendedor || body.vendedor || "";
+      const vendedorTelefonoPresente = cliente.vendedorTelefono != null || body.vendedorTelefono != null;
+      const vendedorTelefono = cliente.vendedorTelefono || body.vendedorTelefono || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
       const tNorm = normPhone(tel);
 
@@ -659,12 +794,16 @@ export default async function handler(req, res) {
       const servicioActualizado = idx >= 0;
       const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
       const servicioAnterior = idx >= 0 ? { ...servicios[idx] } : null;
+      if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
+        return res.status(200).json({ error: "Falta el nombre de la persona que usará este acceso." });
+      }
       const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
+      const entregaSoloPerfil = nuevo.dispositivo === "tv" && nuevo.esRoku !== true;
       for (let i = 0; i < nuevo.perfiles.length; i++) {
         const p = nuevo.perfiles[i] || {};
         if (!String(p.nombre || "").trim()) return res.status(200).json({ error: `Falta el nombre del perfil ${i + 1}.` });
-        if (!String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
-        if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
+        if (!entregaSoloPerfil && !String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
+        if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
         if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
       }
 
@@ -674,6 +813,16 @@ export default async function handler(req, res) {
         servicios.push(aplicarNuevoServicio({}, nuevo));
       }
 
+      const accesos = prepararAccesosBeneficiarios({
+        servicios,
+        registroAnterior: data.accesosBeneficiarios,
+        nombreTitular: nombreFinal,
+        tokenTitularAnterior: data.tokenAcceso
+      });
+      const serviciosLimpios = servicios.map(limpiarServicioCRM);
+      const beneficiarioActual = datosBeneficiario(servicios[idx], nombreFinal);
+      const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
+
       const update = {
         nombrePerfil: nombreFinal,
         nombre: nombreFinal,
@@ -681,31 +830,26 @@ export default async function handler(req, res) {
         telefono: tel || data.telefono || "",
         telefono_norm: tNorm || data.telefono_norm || "",
         vendedor: vendedor || data.vendedor || "",
-        servicios: servicios.map(limpiarServicioCRM),
+        vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
+        servicios: serviciosLimpios,
+        tokenAcceso: accesos.tokenTitular,
+        accesosBeneficiarios: accesos.registro,
         updatedAt: isoNow()
       };
       if (created) update.createdAt = isoNow();
 
       await docRef.set(update, { merge: true });
 
-      // VERSION 20 · Puntero liviano para resolver /c/{token} en O(1) sin tener
-      // que recorrer todos los clientes. Se reescribe en cada guardado (idempotente);
-      // el token en sí no cambia salvo que se pida regenerar explícitamente.
-      const tokenServicio = servicios[idx]?.token || "";
-      if (tokenServicio) {
-        try {
-          await db.collection("enlaces").doc(tokenServicio).set({
-            clienteId: docRef.id,
-            servicioIndex: idx,
-            compraId: String(servicios[idx]?.compraId || ""),
-            plataforma: servicios[idx]?.plataforma || "",
-            activo: true,
-            updatedAt: isoNow()
-          }, { merge: true });
-        } catch (e) {
-          // No bloquea el guardado del CRM si esto falla; solo el link público no
-          // quedaría listo hasta el próximo guardado.
-        }
+      // Crea una URL permanente por beneficiario y conserva, como enlaces
+      // puntuales, los tokens antiguos que no fueron elegidos para la fusión.
+      try {
+        await sincronizarEnlacesPublicos(db, {
+          clienteId: docRef.id,
+          servicios: serviciosLimpios,
+          registro: accesos.registro
+        });
+      } catch (e) {
+        // El CRM queda guardado; un nuevo guardado reintentará crear los punteros.
       }
 
       // Cada perfil de una compra ocupa su propio cupo. El precio y la fecha,
@@ -743,8 +887,10 @@ export default async function handler(req, res) {
         servicioActualizado,
         servicioIndex: idx,
         inventario: invResult,
-        token: tokenServicio,
-        linkPublico: tokenServicio ? `/c/${tokenServicio}` : ""
+        beneficiarioTipo: beneficiarioActual.tipo,
+        beneficiarioNombre: beneficiarioActual.nombre,
+        token: tokenPublico,
+        linkPublico: tokenPublico ? `/c/${tokenPublico}` : ""
       });
     }
 
@@ -891,7 +1037,9 @@ export default async function handler(req, res) {
         pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (servicios[idx].pinPerfil || servicios[idx].pin_perfil || servicios[idx].perfilPin || ""),
         perfil: servicio.perfil != null ? servicio.perfil : (servicios[idx].perfil || nombreTitular),
         perfiles: Array.isArray(servicio.perfiles) ? servicio.perfiles : undefined,
-        compraId: servicio.compraId || servicios[idx].compraId || ""
+        compraId: servicio.compraId || servicios[idx].compraId || "",
+        beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : servicios[idx].beneficiarioTipo,
+        beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : servicios[idx].beneficiarioNombre
       }, servicio.fichaTexto || servicios[idx].fichaTexto || "", anterior, nombreTitular);
 
       servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
@@ -901,7 +1049,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ error: "Acción no reconocida." });
     }
 
-    await docRef.update({ servicios: servicios.map(limpiarServicioCRM), updatedAt: isoNow() });
+    const accesos = prepararAccesosBeneficiarios({
+      servicios,
+      registroAnterior: data.accesosBeneficiarios,
+      nombreTitular,
+      tokenTitularAnterior: data.tokenAcceso
+    });
+    const serviciosLimpios = servicios.map(limpiarServicioCRM);
+    await docRef.update({
+      servicios: serviciosLimpios,
+      tokenAcceso: accesos.tokenTitular,
+      accesosBeneficiarios: accesos.registro,
+      updatedAt: isoNow()
+    });
+    try {
+      await sincronizarEnlacesPublicos(db, {
+        clienteId: docRef.id,
+        servicios: serviciosLimpios,
+        registro: accesos.registro
+      });
+    } catch (e) {
+      // El próximo guardado vuelve a intentar el enlace sin revertir la operación.
+    }
 
     // Una respuesta de escritura no basta: vuelve a leer el documento y solo
     // confirma la renovación si Firebase devuelve la fecha nueva en el mismo índice.
