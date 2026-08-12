@@ -61,6 +61,9 @@
   .profile-group{ border-top:1px dashed var(--edge); padding-top:12px; margin-top:12px; }
   .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:14px; }
   .profile-title{ font-size:11px; font-weight:800; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; }
+  .profile-destination{ display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:9px 11px; border:1px solid var(--edge); border-left:4px solid var(--red); border-radius:12px; background:#F8F4EC; color:var(--ink); font-size:11.5px; line-height:1.35; }
+  .profile-destination-icon{ flex:0 0 auto; font-size:17px; line-height:1; }
+  .profile-destination b{ font-weight:800; }
   .plat-row{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; margin:0; padding:18px 16px 15px; border:1.5px solid var(--edge); border-top:3px solid var(--red); border-bottom:0; border-radius:20px 20px 0 0; background:#fff; }
   .plat-left{ display:flex; align-items:center; gap:13px; min-width:0; }
   .plat-copy{ min-width:0; flex:1; }
@@ -287,6 +290,19 @@
     return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",modo:d.modo||""}];
   }
 
+  function destinoPerfilHtml(p,modo,multiple){
+    if(!multiple)return "";
+    const dispositivo=String(p&&p.dispositivo||"").toLowerCase();
+    if(dispositivo==="cel"||(!dispositivo&&modo==="codigo")){
+      return `<div class="profile-destination"><span class="profile-destination-icon" aria-hidden="true">📱</span><span><b>Dónde se usa este perfil:</b> Celular</span></div>`;
+    }
+    if(dispositivo==="tv"||(!dispositivo&&modo==="perfil")){
+      const detalle=p&&p.esRoku===true?"TV Roku":"TV (cuenta ya vinculada)";
+      return `<div class="profile-destination"><span class="profile-destination-icon" aria-hidden="true">📺</span><span><b>Dónde se usa este perfil:</b> ${detalle}</span></div>`;
+    }
+    return "";
+  }
+
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
     return perfiles.map((p,profileIndex)=>{
@@ -308,8 +324,9 @@
         if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
       }
       const titulo=perfiles.length>1?`<div class="profile-title">Perfil ${profileIndex+1} · ${esc(p.nombre||p.perfil||"Asignado")}</div>`:"";
+      const destino=destinoPerfilHtml(p,modo,perfiles.length>1);
       const nota=perfiles.length>1?notaModo(d,p):"";
-      return `<div class="profile-group">${titulo}${campos}${nota}</div>`;
+      return `<div class="profile-group">${titulo}${destino}${campos}${nota}</div>`;
     }).join("");
   }
 
