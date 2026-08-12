@@ -5524,7 +5524,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   // se le pregunta al vendedor); lo que ya guardaba Firebase no cambia de forma.
   //   TV + Roku       -> correo + clave (+pin si la plataforma lo usa)
   //   TV + no Roku     -> nada de correo/clave, solo perfil + pin
-  //   Celular + grupo código -> SOLO correo
+  //   Celular + grupo código -> correo + perfil + PIN (sin contraseña)
   //   Celular + resto  -> correo + clave (+pin si la plataforma lo usa), como antes
   function fichaCamposEfectivos(perfil=null){
     const plat=fichaGetVal("fichaPlat");
@@ -5539,7 +5539,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       return {correo:false, clave:false, pin:platPin, modo:"perfil"};
     }
     if(dispositivo==="cel"){
-      if(platClave && fichaCelularSoloCodigo(plat)) return {correo:true, clave:false, pin:false, modo:"codigo"};
+      if(platClave && fichaCelularSoloCodigo(plat)) return {correo:true, clave:false, pin:platPin, modo:"codigo"};
       return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
     }
     // Sin dispositivo elegido todavía: se comporta como antes de este cambio.
@@ -5788,10 +5788,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
     if(camposEntrega.modo==="codigo"){
+      const pinAccesoLinea=camposEntrega.pin?`\n*📎 PIN de acceso: ${pin||"—"}*`:"";
       if(["disneyp","disneys"].includes(fichaNorm(plat))){
-        return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado en Disney+.\n2️⃣ Cuando aparezca *Escribir contraseña*, toque:\n*¿Problemas para iniciar sesión? Enviar un código de acceso único*\n3️⃣ Solicite el código a su vendedor y escríbalo en Disney+.\n\n🚀 Sublicuentas`;
+        return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*${pinAccesoLinea}\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado en Disney+.\n2️⃣ Cuando aparezca *Escribir contraseña*, toque:\n*¿Problemas para iniciar sesión? Enviar un código de acceso único*\n3️⃣ Solicite el código a su vendedor y escríbalo en Disney+.\n\n🚀 Sublicuentas`;
       }
-      return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado.\n2️⃣ Presione *Siguiente*.\n3️⃣ Presione *Iniciar sesión con código*.\n4️⃣ Solicite el código a su vendedor cuando aparezca.\n\n🚀 Sublicuentas`;
+      return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*${pinAccesoLinea}\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado.\n2️⃣ Presione *Siguiente*.\n3️⃣ Presione *Iniciar sesión con código*.\n4️⃣ Solicite el código a su vendedor cuando aparezca.\n\n🚀 Sublicuentas`;
     }
     if(camposEntrega.modo==="perfil"){
       return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📎 PIN de acceso: ${pin||"—"}*\n*📅 Renovación: ${renovTexto}*\n\n📺 La cuenta ya está vinculada al TV. Abra el perfil asignado e ingrese únicamente su PIN.\n\n🚀 Sublicuentas`;
@@ -5919,8 +5920,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const campos=fichaCamposEfectivos();
     let msg="";
     if(campos.modo==="serial") msg="🔐 El cliente verá únicamente el serial o licencia. No se le mostrará un correo porque esta plataforma se activa con código de licencia.";
-    else if(campos.modo==="codigo"&&["disneyp","disneys"].includes(fichaNorm(plat))) msg="📲 El cliente verá SOLO el correo. En Disney+, cuando aparezca ‘Escribir contraseña’, debe tocar ‘¿Problemas para iniciar sesión? Enviar un código de acceso único’ y pedir el código a su vendedor.";
-    else if(campos.modo==="codigo") msg="📲 El cliente verá SOLO el correo: debe presionar Siguiente y luego \"Iniciar sesión con código\". Cuando se lo solicite, debe pedir el código a su vendedor.";
+    else if(campos.modo==="codigo"&&["disneyp","disneys"].includes(fichaNorm(plat))) msg="📲 El cliente verá correo, perfil y PIN. En Disney+, cuando aparezca ‘Escribir contraseña’, debe tocar ‘¿Problemas para iniciar sesión? Enviar un código de acceso único’ y pedir el código a su vendedor.";
+    else if(campos.modo==="codigo") msg="📲 El cliente verá correo, perfil y PIN cuando la plataforma lo requiera; debe presionar Siguiente y luego \"Iniciar sesión con código\".";
     else if(campos.modo==="perfil") msg="📺 El cliente no verá correo ni clave — solo su perfil y PIN, porque el TV ya tiene la cuenta vinculada.";
     else if(fichaNorm(plat)==="vipnetflix") msg="✅ Netflix Premium VIP mostrará siempre correo y clave, sin preguntar dispositivo y sin PIN de acceso.";
     else if(fichaNorm(plat)==="primevideo"&&dispositivo==="cel") msg="✅ Prime Video mostrará correo y clave. Si la app solicita un código de acceso, el cliente deberá pedirlo a su vendedor.";

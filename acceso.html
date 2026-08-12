@@ -89,6 +89,8 @@
   .field-icon{ width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:50%; background:#F6F2EA; color:var(--black); font-size:17px; }
   .field-text{ min-width:0; flex:1; border:0; padding:0; background:transparent; color:inherit; text-align:left; cursor:pointer; font:inherit; }
   .field-text:focus-visible,.copy-btn:focus-visible{ outline:3px solid rgba(232,56,46,.24); outline-offset:2px; }
+  .field-static{ min-width:0; flex:1; }
+  .info-field{ background:#FFFEFC; }
   .field-label{ display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:3px; }
   .field-value{ display:block; font-family:'JetBrains Mono',monospace; font-size:14.5px; font-weight:500; word-break:break-all; }
   .field-copy-hint{ margin-top:5px; color:var(--red); font-size:9.5px; line-height:1.2; font-weight:800; letter-spacing:.01em; }
@@ -97,7 +99,7 @@
   .copy-btn:active{ background:var(--red); }
   .note{ border-radius:16px; padding:14px 16px; font-size:13px; line-height:1.6; margin-bottom:14px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; }
   .note b{ color:var(--blue); }
-  .section-title{ font-weight:800; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:20px 0 10px; }
+  .section-title{ font-weight:900; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink); margin:22px 0 11px; padding-left:9px; border-left:4px solid var(--red); line-height:1.25; }
   .terms{ background:var(--bg); border-radius:16px; padding:15px 17px; margin-top:6px; }
   .terms ul{ margin:0; padding-left:16px; }
   .terms li{ font-size:12.5px; color:#4a453b; line-height:1.75; }
@@ -285,9 +287,16 @@
     </div>`;
   }
 
+  function infoRow(label,value){
+    return `<div class="field info-field">
+      <span class="field-icon" aria-hidden="true">👤</span>
+      <div class="field-static"><span class="field-label">${esc(label)}</span><span class="field-value">${esc(value)}</span></div>
+    </div>`;
+  }
+
   function perfilesDelServicio(d){
     if(Array.isArray(d.perfiles) && d.perfiles.length) return d.perfiles;
-    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",modo:d.modo||""}];
+    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",usaPin:d.usaPin===true,modo:d.modo||""}];
   }
 
   function destinoPerfilHtml(p,modo,multiple){
@@ -309,13 +318,17 @@
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
       let campos="";
+      const perfilAcceso=String(p.perfil||p.nombre||"").trim();
+      const usaPin=p.usaPin===true||!!p.pin;
+      const mostrarPerfil=modo==="codigo"||modo==="perfil"||(modo==="cred"&&usaPin);
+      if(mostrarPerfil&&perfilAcceso)campos+=infoRow("Perfil de acceso",perfilAcceso);
       if(modo==="serial"){
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
       }else if(modo==="codigo"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
+        if(usaPin)campos+=fieldRow("PIN",p.pin||"—",`${prefix}-pin`);
       }else if(modo==="perfil"){
-        campos+=fieldRow("Perfil",p.perfil||p.nombre||"Asignado",`${prefix}-perfil`);
-        if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
+        if(usaPin)campos+=fieldRow("PIN",p.pin||"—",`${prefix}-pin`);
       }else if(modo==="invite"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
       }else{
