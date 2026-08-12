@@ -27,6 +27,25 @@ function normPlat(v) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+// Convierte también etiquetas antiguas al código real. Así el nombre público
+// no depende de si Firestore guardó "disneys", "Disney Standard" o la etiqueta
+// completa "Disney Standard sin ESPN".
+function canonPlat(v) {
+  const p = normPlat(v);
+  const aliases = {
+    netflixpremium: "netflix", netflixpremiumvip: "vipnetflix", vip: "vipnetflix",
+    disneypremium: "disneyp", disneystandard: "disneys", disneystandardsinespn: "disneys",
+    hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
+    universalplus: "universal", universalp: "universal", rakutenviki: "viki",
+    office365: "office", win10: "windows10", win11: "windows11",
+    adobe: "adobeexpress", esetnod32: "eset"
+  };
+  if (aliases[p]) return aliases[p];
+  if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
+  if (p.includes("disney") && p.includes("premium")) return "disneyp";
+  return p;
+}
+
 // Mismo criterio que api/renovar.js (mantener sincronizado si cambian las reglas).
 function servicioNoUsaPinPerfil(plataforma) {
   const p = normPlat(plataforma);
@@ -105,7 +124,7 @@ const TERMS = {
   eset: ["Licencia digital ESET.", "No comparta el serial con terceros.", "Garantía vigente durante el periodo contratado."]
 };
 function termsFor(plataforma) {
-  const p = normPlat(plataforma);
+  const p = canonPlat(plataforma);
   if (p === "netflixpremium") return TERMS.netflix;
   if (p === "vipnetflix" || (p.includes("netflix") && p.includes("vip"))) return TERMS.vipnetflix;
   return TERMS[p] || TERMS.default;
@@ -121,7 +140,7 @@ const PLAT_LABELS = {
   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET"
 };
 function platLabel(plataforma) {
-  const p = normPlat(plataforma);
+  const p = canonPlat(plataforma);
   return PLAT_LABELS[p] || String(plataforma || "Servicio");
 }
 

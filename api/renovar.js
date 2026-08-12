@@ -76,7 +76,7 @@ const PLAT_ALIASES = {
   netflix: "netflix", netflixpremium: "netflix",
   vipnetflix: "vipnetflix", vip: "vipnetflix",
   disneyp: "disneyp", disneypremium: "disneyp",
-  disneys: "disneys", disneystandard: "disneys",
+  disneys: "disneys", disneystandard: "disneys", disneystandardsinespn: "disneys",
   disney: "disney",
   hbomax: "hbomax", hbo: "hbomax", max: "hbomax",
   primevideo: "primevideo", prime: "primevideo",
