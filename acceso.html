@@ -14,44 +14,55 @@
     --red:#E8382E; --red-soft:#FBE3E0;
     --blue:#1a5fb4; --blue-soft:#E4EEFB;
     --green:#1E8E4F; --green-soft:#DEF5E3;
+    --yellow:#956400; --yellow-soft:#FFF1BF;
     --black:#15120F;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
-  body{ background:var(--bg); min-height:100vh; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); }
-  .stage{ max-width:440px; margin:0 auto; padding:26px 16px 40px; }
-  .live-row{ display:flex; align-items:center; gap:7px; margin-bottom:10px; }
-  .live-dot{ width:8px;height:8px;border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-soft); }
+  body{ background:var(--bg); min-height:100vh; padding:10px; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); }
+  .stage{ width:min(560px,100%); margin:0 auto; padding:30px 32px 34px; background:#fff; border:1px solid rgba(236,229,214,.75); border-radius:28px; box-shadow:0 18px 48px rgba(30,20,10,.06); }
+  .live-row{ display:flex; align-items:center; gap:9px; margin-bottom:14px; }
+  .live-dot{ width:11px;height:11px;border-radius:50%; background:var(--red); box-shadow:0 0 0 6px var(--red-soft); position:relative; }
+  .live-dot::after{content:'🔒'; position:absolute; inset:-7px; display:grid; place-items:center; color:#fff; font-size:8px; line-height:1; filter:grayscale(1) brightness(5);}
   .live-label{ font-weight:800; font-size:11.5px; letter-spacing:.14em; color:var(--red); text-transform:uppercase; }
-  .h1{ font-family:'Anton',sans-serif; font-weight:400; font-size:28px; line-height:1.08; margin:0 0 8px; }
-  .h1 span{ color:var(--red); }
-  .sub{ font-size:14px; color:var(--muted); line-height:1.55; margin-bottom:20px; }
-  .card{ background:var(--card); border:1px solid var(--edge); border-radius:26px; padding:22px; box-shadow:0 14px 34px rgba(30,20,10,.08); }
-  .access-list{ display:grid; gap:16px; }
-  .service-card{ position:relative; }
-  .service-order{ margin:-3px 0 8px; text-align:right; color:var(--muted2); font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+  .h1{ font-family:'Anton',sans-serif; font-weight:400; font-size:36px; line-height:1.04; margin:0 0 14px; letter-spacing:-.01em; }
+  .h1 span{ display:block; color:var(--red); }
+  .hello{ font-size:17px; font-weight:800; margin:0 0 3px; }
+  .sub{ font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:22px; }
+  .card{ background:transparent; border:0; border-radius:0; padding:0; box-shadow:none; }
+  .access-list{ display:grid; gap:24px; }
+  .service-card{ position:relative; min-width:0; }
+  .service-order{ margin:0 0 8px; text-align:right; color:var(--muted2); font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
   .profile-group{ border-top:1px dashed var(--edge); padding-top:12px; margin-top:12px; }
-  .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:0; }
+  .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:14px; }
   .profile-title{ font-size:11px; font-weight:800; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; }
-  .plat-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-  .plat-left{ display:flex; align-items:center; gap:12px; }
-  .plat-icon{ width:52px; height:52px; flex:0 0 52px; border-radius:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:0; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
+  .plat-row{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; margin:0; padding:18px 16px 15px; border:1.5px solid var(--edge); border-top:3px solid var(--red); border-bottom:0; border-radius:20px 20px 0 0; background:#fff; }
+  .plat-left{ display:flex; align-items:center; gap:13px; min-width:0; }
+  .plat-copy{ min-width:0; flex:1; }
+  .plat-icon{ width:58px; height:58px; flex:0 0 58px; border-radius:16px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:0; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
   .plat-logo{ display:block; width:100%; height:100%; object-fit:contain; }
   .plat-fallback{ line-height:1; letter-spacing:-.04em; padding:7px; }
-  .plat-name{ font-family:'Anton',sans-serif; font-weight:400; font-size:18px; }
-  .plat-holder{ font-size:12.5px; color:var(--muted); margin-top:2px; }
-  .pill{ display:inline-flex; align-items:center; gap:6px; background:var(--green-soft); color:var(--green); font-weight:700; font-size:11.5px; padding:6px 12px; border-radius:999px; }
+  .plat-name{ display:flex; align-items:center; gap:6px; min-width:0; font-family:'Anton',sans-serif; font-weight:400; font-size:var(--plat-name-size,18px); line-height:1.05; white-space:nowrap; }
+  .plat-star{ flex:0 0 auto; font-family:'Plus Jakarta Sans',sans-serif; font-size:.9em; }
+  .plat-title{ display:block; white-space:nowrap; }
+  .plat-holder{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .plat-holder::before{content:'◎'; color:#4d4941; font-weight:800;}
+  .pill{ display:inline-flex; align-items:center; gap:6px; white-space:nowrap; background:var(--green-soft); color:var(--green); font-weight:700; font-size:11.5px; padding:6px 11px; border-radius:999px; }
   .pill i{ width:7px;height:7px;border-radius:50%; background:var(--green); display:inline-block; }
+  .pill.soon{ background:var(--yellow-soft); color:var(--yellow); }
+  .pill.soon i{ background:#E4A100; }
   .pill.expired{ background:var(--red-soft); color:var(--red); }
   .pill.expired i{ background:var(--red); }
-  .exp-row{ display:flex; justify-content:space-between; align-items:center; background:var(--bg); border-radius:14px; padding:12px 15px; margin-bottom:18px; }
+  .exp-row{ display:flex; justify-content:flex-start; align-items:center; gap:10px; background:#F8F4EC; border:1.5px solid var(--edge); border-top:0; border-radius:0 0 20px 20px; padding:14px 17px; margin:0; }
+  .exp-icon{ color:var(--red); font-size:19px; line-height:1; }
   .exp-label{ font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
-  .exp-val{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; }
-  .field{ border:1.5px solid var(--edge); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  .field-text{ min-width:0; }
+  .exp-val{ margin-left:auto; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; }
+  .field{ border:1.5px solid var(--edge); border-radius:16px; padding:11px 13px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:11px; background:#fff; }
+  .field-icon{ width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:50%; background:#F6F2EA; color:var(--black); font-size:17px; }
+  .field-text{ min-width:0; flex:1; }
   .field-label{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:3px; }
   .field-value{ font-family:'JetBrains Mono',monospace; font-size:14.5px; font-weight:500; word-break:break-all; }
-  .copy-btn{ flex:0 0 auto; width:38px; height:38px; border-radius:11px; background:var(--black); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .copy-btn{ flex:0 0 auto; width:42px; height:42px; border-radius:12px; background:var(--black); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; }
   .copy-btn:active{ background:var(--red); }
   .note{ border-radius:16px; padding:14px 16px; font-size:13px; line-height:1.6; margin-bottom:14px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; }
   .note b{ color:var(--blue); }
@@ -59,7 +70,7 @@
   .terms{ background:var(--bg); border-radius:16px; padding:15px 17px; margin-top:6px; }
   .terms ul{ margin:0; padding-left:16px; }
   .terms li{ font-size:12.5px; color:#4a453b; line-height:1.75; }
-  .vendor-row{ display:flex; justify-content:space-between; align-items:center; background:var(--bg); border-radius:14px; padding:12px 15px; margin-top:18px; }
+  .vendor-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:#F8F4EC; border-radius:14px; padding:12px 15px; margin-top:18px; }
   .vendor-name{ font-size:13px; font-weight:700; }
   .vendor-phone{ font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:700; background:var(--black); color:#fff; padding:6px 12px; border-radius:999px; }
   .cta{ display:block; text-align:center; margin-top:16px; background:var(--black); color:#fff; font-weight:700; font-size:14px; padding:15px; border-radius:16px; text-decoration:none; }
@@ -73,6 +84,25 @@
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
   .state{ text-align:center; padding:60px 20px; color:var(--muted); font-size:14px; line-height:1.6; }
   .state b{ display:block; font-size:17px; color:var(--ink); margin-bottom:8px; font-family:'Anton',sans-serif; font-weight:400; }
+  @media(max-width:520px){
+    body{padding:7px;}
+    .stage{padding:26px 18px 28px;border-radius:24px;}
+    .h1{font-size:33px;}
+    .plat-row{padding:16px 13px 14px;gap:7px;}
+    .plat-left{gap:10px;}
+    .plat-icon{width:52px;height:52px;flex-basis:52px;border-radius:15px;}
+    .pill{font-size:10.5px;padding:6px 8px;gap:5px;}
+    .field-value{font-size:13.5px;}
+  }
+  @media(max-width:370px){
+    .stage{padding-left:14px;padding-right:14px;}
+    .h1{font-size:30px;}
+    .plat-icon{width:46px;height:46px;flex-basis:46px;}
+    .plat-row{padding-left:10px;padding-right:10px;}
+    .pill{font-size:9.5px;padding:5px 7px;}
+    .plat-name{font-size:min(var(--plat-name-size,18px),11.5px);}
+    .plat-holder{font-size:11px;}
+  }
 </style>
 </head>
 <body>
@@ -142,6 +172,37 @@
     return {phone,href:intl?`https://wa.me/${intl}`:"#"};
   }
 
+  function fechaPartes(value){
+    const s=String(value||"").trim();
+    let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(m)return {y:Number(m[3]),m:Number(m[2]),d:Number(m[1])};
+    m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m)return {y:Number(m[1]),m:Number(m[2]),d:Number(m[3])};
+    return null;
+  }
+  function hoyHondurasUTC(){
+    const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/Tegucigalpa",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+    const n=tipo=>Number(parts.find(p=>p.type===tipo)?.value||0);
+    return Date.UTC(n("year"),n("month")-1,n("day"));
+  }
+  function estadoServicio(d){
+    const fecha=fechaPartes(d.fechaRenovacion);
+    const dias=fecha?Math.round((Date.UTC(fecha.y,fecha.m-1,fecha.d)-hoyHondurasUTC())/86400000):9999;
+    if(d.vencido||dias<0)return {kind:"expired",label:"Vencido",dateLabel:"Venció"};
+    if(dias<=3)return {kind:"soon",label:"Vence pronto",dateLabel:"Vence"};
+    return {kind:"active",label:"Activo",dateLabel:"Vence"};
+  }
+  function nombrePlataforma(d){
+    return String(d.plataformaLabel||"Servicio").replace(/^\s*⭐\s*/,"").trim()||"Servicio";
+  }
+  function tituloPlataforma(d){
+    const nombre=nombrePlataforma(d);
+    const largo=nombre.length;
+    const size=largo>25?"clamp(11.5px,3vw,15px)":(largo>20?"clamp(12px,3.4vw,16px)":(largo>16?"clamp(13px,3.7vw,18px)":"18px"));
+    const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:"";
+    return `<div class="plat-name" style="--plat-name-size:${size}">${estrella}<span class="plat-title">${esc(nombre)}</span></div>`;
+  }
+
   function copyToClipboard(text, btn){
     const doIt = async () => {
       try{ await navigator.clipboard.writeText(text); }
@@ -165,7 +226,10 @@
   }
 
   function fieldRow(label, value, id){
+    const key=String(label||"").toLowerCase();
+    const icon=key.includes("correo")?"✉":key.includes("clave")?"🔒":key.includes("pin")?"#":key.includes("serial")||key.includes("licencia")?"🔐":"👤";
     return `<div class="field">
+      <span class="field-icon" aria-hidden="true">${icon}</span>
       <div class="field-text"><div class="field-label">${esc(label)}</div><div class="field-value" id="${id}">${esc(value)}</div></div>
       <button class="copy-btn" data-copy="${id}">⧉</button>
     </div>`;
@@ -215,14 +279,16 @@
   function tarjetaServicio(d,index,total,soporte=""){
     const principal=perfilesDelServicio(d)[0]||{};
     const orden=total>1?`<div class="service-order">Acceso ${index+1} de ${total}</div>`:"";
-    if(d.vencido){
+    const estado=estadoServicio(d);
+    const cabecera=`<div class="plat-row">
+      <div class="plat-left">${platLogo(d.plataforma,nombrePlataforma(d))}<div class="plat-copy">${tituloPlataforma(d)}<div class="plat-holder">${esc(principal.nombre||principal.perfil||d.titular||"Cliente")}</div></div></div>
+      <span class="pill ${estado.kind}"><i></i>${estado.label}</span>
+    </div>
+    <div class="exp-row"><span class="exp-icon" aria-hidden="true">📅</span><span class="exp-label">${estado.dateLabel}:</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>`;
+    if(estado.kind==="expired"){
       return `<div class="card service-card">
         ${orden}
-        <div class="plat-row">
-          <div class="plat-left">${platLogo(d.plataforma,d.plataformaLabel)}<div><div class="plat-name">${esc(d.plataformaLabel||"Servicio")}</div><div class="plat-holder">${esc(principal.nombre||d.titular||"Cliente")}</div></div></div>
-          <span class="pill expired"><i></i>Vencido</span>
-        </div>
-        <div class="exp-row"><span class="exp-label">Venció</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
+        ${cabecera}
         <div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en este mismo enlace.</div>
         ${soporte}
       </div>`;
@@ -230,11 +296,7 @@
     const termsHtml=(d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
     return `<div class="card service-card">
       ${orden}
-      <div class="plat-row">
-        <div class="plat-left">${platLogo(d.plataforma,d.plataformaLabel)}<div><div class="plat-name">${esc(d.plataformaLabel)}</div><div class="plat-holder">${esc(principal.nombre||principal.perfil||d.titular)}</div></div></div>
-        <span class="pill"><i></i>Activo</span>
-      </div>
-      <div class="exp-row"><span class="exp-label">Vence</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
+      ${cabecera}
       ${datosPerfilHtml(d,index)}
       ${notaModo(d)}
       <div class="section-title">Condiciones del servicio</div>
@@ -255,14 +317,15 @@
 
   function render(d){
     const servicios=Array.isArray(d.servicios)&&d.servicios.length?d.servicios:[d];
-    const activos=servicios.filter(s=>!s.vencido).length;
+    const activos=servicios.filter(s=>estadoServicio(s).kind!=="expired").length;
     const primero=servicios.find(s=>!s.vencido)||servicios[0]||{};
     const emoji=PLAT_EMOJI[platKey(primero.plataforma)]||"📱";
     const soporte=bloqueSoporte(d);
     document.getElementById('stage').innerHTML=`
       <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Entrega en vivo":"Renovación pendiente"}</span></div>
-      <h1 class="h1">Bienvenido a su acceso <span>Premium</span></h1>
-      <div class="sub">¡Hola, estimado ${esc(d.titular||"Cliente")}! Le sugerimos guardar este enlace; podrá consultarlo en cualquier momento para ver los detalles de su servicio. ${emoji}</div>
+      <h1 class="h1">¡Acceso entregado <span>con éxito!</span></h1>
+      <div class="hello">Hola, ${esc(d.titular||"Cliente")}</div>
+      <div class="sub">Guarde esta información para consultarla cuando la necesite. ${emoji}</div>
       <div class="access-list">${servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length,i===servicios.length-1?soporte:"")).join("")}</div>
     `;
     document.querySelectorAll('.copy-btn').forEach(btn=>{
