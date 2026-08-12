@@ -254,7 +254,9 @@ function resolverModo(servicio = {}) {
     }
   } else if (dispositivo === "cel") {
     if (platUsaClave && celularSoloCodigo(plataforma)) {
-      modo = "codigo"; mostrarCorreo = true; mostrarClave = false; mostrarPin = false;
+      // En celular la contraseña se sustituye por el código temporal, pero el
+      // PIN individual del perfil sigue siendo parte obligatoria del acceso.
+      modo = "codigo"; mostrarCorreo = true; mostrarClave = false; mostrarPin = platUsaPin;
     } else {
       modo = platUsaClave ? "cred" : "invite";
     }
@@ -289,6 +291,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
       correo: !vencido && campos.mostrarCorreo ? p.correo : "",
       clave: !vencido && campos.mostrarClave ? p.clave : "",
       pin: !vencido && campos.mostrarPin ? p.pinPerfil : "",
+      usaPin: campos.mostrarPin === true,
       modo: campos.modo,
       dispositivo: p.dispositivo || "",
       esRoku: p.dispositivo === "tv" && p.esRoku === true
@@ -306,6 +309,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     correo: principal.correo || "",
     clave: principal.clave || "",
     pin: principal.pin || "",
+    usaPin: principal.usaPin === true,
     perfiles: perfilesPublicos,
     fechaRenovacion,
     terminos: termsFor(plataforma),
