@@ -5587,6 +5587,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(!n) return "netflix";
     if(n.includes("netflix") && (n.includes("vip") || n.includes("exclusivo"))) return "vipnetflix";
     if(n.includes("netflix")) return "netflix";
+    // Los códigos internos también pasan por esta función al volver a editar.
+    // "disneys" contiene la palabra "disney" y antes caía por error en
+    // Disney Premium. Resolver primero los códigos/etiquetas exactos impide
+    // que una compra Standard sin ESPN cambie de plan al guardarla.
+    if(n==="disneys" || n==="disneystandard" || n==="disneystandardsinespn") return "disneys";
+    if(n==="disneyp" || n==="disneypremium") return "disneyp";
     if((n.includes("disney") || n.includes("disneyp")) && (n.includes("standard") || n.includes("sinespn"))) return "disneys";
     if(n.includes("disney")) return "disneyp";
     if(n.includes("hbo") || n.includes("max")) return "hbomax";
@@ -5782,6 +5788,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
     if(camposEntrega.modo==="codigo"){
+      if(["disneyp","disneys"].includes(fichaNorm(plat))){
+        return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado en Disney+.\n2️⃣ Cuando aparezca *Escribir contraseña*, toque:\n*¿Problemas para iniciar sesión? Enviar un código de acceso único*\n3️⃣ Solicite el código a su vendedor y escríbalo en Disney+.\n\n🚀 Sublicuentas`;
+      }
       return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado.\n2️⃣ Presione *Siguiente*.\n3️⃣ Presione *Iniciar sesión con código*.\n4️⃣ Solicite el código a su vendedor cuando aparezca.\n\n🚀 Sublicuentas`;
     }
     if(camposEntrega.modo==="perfil"){
@@ -5910,6 +5919,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const campos=fichaCamposEfectivos();
     let msg="";
     if(campos.modo==="serial") msg="🔐 El cliente verá únicamente el serial o licencia. No se le mostrará un correo porque esta plataforma se activa con código de licencia.";
+    else if(campos.modo==="codigo"&&["disneyp","disneys"].includes(fichaNorm(plat))) msg="📲 El cliente verá SOLO el correo. En Disney+, cuando aparezca ‘Escribir contraseña’, debe tocar ‘¿Problemas para iniciar sesión? Enviar un código de acceso único’ y pedir el código a su vendedor.";
     else if(campos.modo==="codigo") msg="📲 El cliente verá SOLO el correo: debe presionar Siguiente y luego \"Iniciar sesión con código\". Cuando se lo solicite, debe pedir el código a su vendedor.";
     else if(campos.modo==="perfil") msg="📺 El cliente no verá correo ni clave — solo su perfil y PIN, porque el TV ya tiene la cuenta vinculada.";
     else if(fichaNorm(plat)==="vipnetflix") msg="✅ Netflix Premium VIP mostrará siempre correo y clave, sin preguntar dispositivo y sin PIN de acceso.";
