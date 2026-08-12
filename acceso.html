@@ -23,7 +23,8 @@
   .live-row{ display:flex; align-items:center; gap:7px; margin-bottom:10px; }
   .live-dot{ width:8px;height:8px;border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-soft); }
   .live-label{ font-weight:800; font-size:11.5px; letter-spacing:.14em; color:var(--red); text-transform:uppercase; }
-  .h1{ font-family:'Anton',sans-serif; font-weight:400; font-size:28px; line-height:1.08; margin:0 0 8px; }
+  .h1{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:27px; line-height:1.12; margin:0 0 8px; }
+  .h1 strong{ font-weight:800; }
   .h1 span{ color:var(--red); }
   .sub{ font-size:14px; color:var(--muted); line-height:1.55; margin-bottom:20px; }
   .card{ background:var(--card); border:1px solid var(--edge); border-radius:26px; padding:22px; box-shadow:0 14px 34px rgba(30,20,10,.08); }
@@ -173,7 +174,9 @@
     return perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       let campos="";
-      if(d.modo==="codigo"){
+      if(d.modo==="serial"){
+        if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
+      }else if(d.modo==="codigo"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
       }else if(d.modo==="perfil"){
         campos+=fieldRow("Perfil",p.perfil||p.nombre||"Asignado",`${prefix}-perfil`);
@@ -191,9 +194,14 @@
   }
 
   function notaModo(d){
-    if(d.modo==="codigo") return `<div class="note">📲 Ingrese el correo y presione "Siguiente". Cuando se solicite la clave, toque <b>"Iniciar sesión con código"</b>. Solicite el código a su vendedor en ese momento.</div>`;
+    const plat=platKey(d.plataforma);
+    if(plat==="vipnetflix") return `<div class="note"><b>📱 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Obtener ayuda</b>.<br>4. Copie y coloque la clave.<br>5. Presione <b>Iniciar sesión</b>.</div>`;
+    if(d.modo==="serial") return `<div class="note"><b>🔐 Activación por licencia</b><br>Copie el serial exactamente como aparece y utilícelo en la pantalla de activación del producto.</div>`;
+    if(d.modo==="pendiente") return `<div class="note"><b>⚙️ Acceso pendiente de configurar</b><br>Su vendedor debe confirmar si esta cuenta será utilizada en TV o celular antes de mostrar los datos correctos.</div>`;
+    if(d.modo==="codigo") return `<div class="note"><b>📲 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Iniciar sesión con código</b>.<br>4. Solicite el código a su vendedor cuando aparezca.</div>`;
     if(d.modo==="perfil") return `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Abra el perfil indicado e ingrese únicamente su PIN.</div>`;
     if(d.modo==="invite") return `<div class="note">📩 La invitación fue enviada a <b>su correo personal</b>. Revise también spam o promociones.</div>`;
+    if(plat==="primevideo") return `<div class="note">📱 En celular ingrese con el correo y la clave mostrados. Si Prime Video solicita un <b>código de acceso</b>, pídalo a su vendedor.</div>`;
     return "";
   }
 
@@ -243,7 +251,7 @@
     const comprador=d.comprador&&String(d.comprador)!==String(d.titular)?` Compra registrada por ${esc(d.comprador)}.`:"";
     document.getElementById('stage').innerHTML=`
       <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Acceso activo":"Renovación pendiente"}</span></div>
-      <h1 class="h1">${plural?"Sus accesos":"Bienvenido a su acceso"} <span>Premium</span></h1>
+      <h1 class="h1"><strong>Bienvenido a tu acceso <span>Premium</span></strong></h1>
       <div class="sub">¡Hola, estimado ${esc(d.titular||"Cliente")}! Esta es su URL permanente: aquí aparecerán todas sus plataformas y cada una conservará su propia fecha.${comprador}</div>
       <div class="access-list">${servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length)).join("")}</div>
       ${bloqueSoporte(d)}
