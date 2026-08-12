@@ -60,10 +60,20 @@
   .multi-details .section-title{ margin-top:17px; }
   .profile-group{ border-top:1px dashed var(--edge); padding-top:12px; margin-top:12px; }
   .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:14px; }
-  .profile-title{ font-size:11px; font-weight:800; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; }
-  .profile-destination{ display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:9px 11px; border:1px solid var(--edge); border-left:4px solid var(--red); border-radius:12px; background:#F8F4EC; color:var(--ink); font-size:11.5px; line-height:1.35; }
-  .profile-destination-icon{ flex:0 0 auto; font-size:17px; line-height:1; }
-  .profile-destination b{ font-weight:800; }
+  .profiles-accordion-list{ display:grid; gap:9px; margin-top:14px; }
+  .profile-accordion{ overflow:hidden; border:1.5px solid var(--edge); border-radius:14px; background:#fff; transition:border-color .18s ease,box-shadow .18s ease; }
+  .profile-accordion.open{ border-color:#efb4ae; box-shadow:0 6px 18px rgba(47,32,20,.05); }
+  .profile-trigger{ width:100%; min-height:52px; display:flex; align-items:center; gap:9px; border:0; padding:10px 11px; background:#fff; color:var(--ink); text-align:left; cursor:pointer; font:inherit; }
+  .profile-trigger-copy{ min-width:0; flex:1; display:flex; align-items:center; gap:7px; text-transform:uppercase; letter-spacing:.035em; line-height:1.15; }
+  .profile-trigger-index{ flex:0 0 auto; color:var(--red); font-size:10px; font-weight:900; }
+  .profile-trigger-name{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-size:11px; font-weight:900; }
+  .profile-trigger-device{ flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:5px 7px; background:#F8F4EC; color:var(--muted); font-size:9.5px; font-weight:900; white-space:nowrap; }
+  .profile-chevron{ width:26px; height:26px; flex:0 0 26px; display:grid; place-items:center; border-radius:50%; background:#F6F2EA; color:var(--ink); font-size:17px; line-height:1; transition:transform .18s ease,background .18s ease; }
+  .profile-accordion.open .profile-chevron{ transform:rotate(180deg); background:var(--red-soft); color:var(--red); }
+  .profile-details{ border-top:1px solid var(--edge); background:#FFFEFC; }
+  .profile-details[hidden]{ display:none; }
+  .profile-details-inner{ padding:12px; }
+  .profile-details-inner .field:last-child,.profile-details-inner .note:last-child{ margin-bottom:0; }
   .plat-row{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; margin:0; padding:18px 16px 15px; border:1.5px solid var(--edge); border-top:3px solid var(--red); border-bottom:0; border-radius:20px 20px 0 0; background:#fff; }
   .plat-left{ display:flex; align-items:center; gap:13px; min-width:0; }
   .plat-copy{ min-width:0; flex:1; }
@@ -287,9 +297,9 @@
     </div>`;
   }
 
-  function infoRow(label,value){
+  function infoRow(label,value,icon="👤"){
     return `<div class="field info-field">
-      <span class="field-icon" aria-hidden="true">👤</span>
+      <span class="field-icon" aria-hidden="true">${esc(icon)}</span>
       <div class="field-static"><span class="field-label">${esc(label)}</span><span class="field-value">${esc(value)}</span></div>
     </div>`;
   }
@@ -299,22 +309,20 @@
     return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",usaPin:d.usaPin===true,modo:d.modo||""}];
   }
 
-  function destinoPerfilHtml(p,modo,multiple){
-    if(!multiple)return "";
+  function resumenDestinoPerfil(p,modo){
     const dispositivo=String(p&&p.dispositivo||"").toLowerCase();
     if(dispositivo==="cel"||(!dispositivo&&modo==="codigo")){
-      return `<div class="profile-destination"><span class="profile-destination-icon" aria-hidden="true">📱</span><span><b>Dónde se usa este perfil:</b> Celular</span></div>`;
+      return {icon:"📱",label:"Celular"};
     }
     if(dispositivo==="tv"||(!dispositivo&&modo==="perfil")){
-      const detalle=p&&p.esRoku===true?"TV Roku":"TV (cuenta ya vinculada)";
-      return `<div class="profile-destination"><span class="profile-destination-icon" aria-hidden="true">📺</span><span><b>Dónde se usa este perfil:</b> ${detalle}</span></div>`;
+      return {icon:"📺",label:p&&p.esRoku===true?"TV Roku":"TV"};
     }
-    return "";
+    return {icon:"👤",label:"Acceso"};
   }
 
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
-    return perfiles.map((p,profileIndex)=>{
+    const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
       let campos="";
@@ -326,21 +334,32 @@
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
       }else if(modo==="codigo"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
-        if(usaPin)campos+=fieldRow("PIN",p.pin||"—",`${prefix}-pin`);
+        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
       }else if(modo==="perfil"){
-        if(usaPin)campos+=fieldRow("PIN",p.pin||"—",`${prefix}-pin`);
+        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
       }else if(modo==="invite"){
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
       }else{
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
         if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
-        if(p.pin)campos+=fieldRow("PIN",p.pin,`${prefix}-pin`);
+        if(p.pin)campos+=infoRow("PIN",p.pin,"#");
       }
-      const titulo=perfiles.length>1?`<div class="profile-title">Perfil ${profileIndex+1} · ${esc(p.nombre||p.perfil||"Asignado")}</div>`:"";
-      const destino=destinoPerfilHtml(p,modo,perfiles.length>1);
       const nota=perfiles.length>1?notaModo(d,p):"";
-      return `<div class="profile-group">${titulo}${destino}${campos}${nota}</div>`;
+      if(perfiles.length>1){
+        const panelId=`detalle-perfil-${serviceIndex}-${profileIndex}`;
+        const nombre=String(p.nombre||p.perfil||"Asignado").trim()||"Asignado";
+        const destino=resumenDestinoPerfil(p,modo);
+        return `<section class="profile-accordion" data-profile-index="${profileIndex}">
+          <button class="profile-trigger" type="button" aria-expanded="false" aria-controls="${panelId}" aria-label="Abrir perfil ${profileIndex+1}: ${esc(nombre)}, ${esc(destino.label)}">
+            <span class="profile-trigger-copy"><span class="profile-trigger-index">Perfil ${profileIndex+1}</span><span class="profile-trigger-name">${esc(nombre)}</span><span class="profile-trigger-device"><span aria-hidden="true">${destino.icon}</span>${esc(destino.label)}</span></span>
+            <span class="profile-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="profile-details" id="${panelId}" hidden><div class="profile-details-inner">${campos}${nota}</div></div>
+        </section>`;
+      }
+      return `<div class="profile-group">${campos}</div>`;
     }).join("");
+    return perfiles.length>1?`<div class="profiles-accordion-list">${contenido}</div>`:contenido;
   }
 
   function notaModo(d,perfil=null){
@@ -428,6 +447,32 @@
     });
   }
 
+  function activarPerfilesMultiples(){
+    document.querySelectorAll('.profiles-accordion-list').forEach(lista=>{
+      const items=[...lista.children].filter(item=>item.classList.contains('profile-accordion'));
+      items.forEach(item=>{
+        const trigger=item.querySelector('.profile-trigger');
+        const panel=item.querySelector('.profile-details');
+        if(!trigger||!panel)return;
+        trigger.addEventListener('click',()=>{
+          const estabaAbierto=item.classList.contains('open');
+          items.forEach(otro=>{
+            const otroTrigger=otro.querySelector('.profile-trigger');
+            const otroPanel=otro.querySelector('.profile-details');
+            otro.classList.remove('open');
+            if(otroTrigger)otroTrigger.setAttribute('aria-expanded','false');
+            if(otroPanel)otroPanel.hidden=true;
+          });
+          if(!estabaAbierto){
+            item.classList.add('open');
+            trigger.setAttribute('aria-expanded','true');
+            panel.hidden=false;
+          }
+        });
+      });
+    });
+  }
+
   function bloqueSoporte(d){
     const support=supportData(d);
     if(!d.vendedor && !support.phone) return "";
@@ -458,6 +503,7 @@
       <div class="access-list">${contenido}</div>
     `;
     if(multiple)activarAccesosMultiples();
+    activarPerfilesMultiples();
     document.querySelectorAll('.copy-target').forEach(btn=>{
       btn.addEventListener('click',()=>{
         const el=document.getElementById(btn.dataset.copy);
