@@ -23,8 +23,7 @@
   .live-row{ display:flex; align-items:center; gap:7px; margin-bottom:10px; }
   .live-dot{ width:8px;height:8px;border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-soft); }
   .live-label{ font-weight:800; font-size:11.5px; letter-spacing:.14em; color:var(--red); text-transform:uppercase; }
-  .h1{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:27px; line-height:1.12; margin:0 0 8px; }
-  .h1 strong{ font-weight:800; }
+  .h1{ font-family:'Anton',sans-serif; font-weight:400; font-size:28px; line-height:1.08; margin:0 0 8px; }
   .h1 span{ color:var(--red); }
   .sub{ font-size:14px; color:var(--muted); line-height:1.55; margin-bottom:20px; }
   .card{ background:var(--card); border:1px solid var(--edge); border-radius:26px; padding:22px; box-shadow:0 14px 34px rgba(30,20,10,.08); }
@@ -34,7 +33,6 @@
   .profile-group{ border-top:1px dashed var(--edge); padding-top:12px; margin-top:12px; }
   .profile-group:first-of-type{ border-top:0; padding-top:0; margin-top:0; }
   .profile-title{ font-size:11px; font-weight:800; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; }
-  .support-card{ margin-top:18px; padding:18px 20px; }
   .plat-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .plat-left{ display:flex; align-items:center; gap:12px; }
   .plat-icon{ width:52px; height:52px; flex:0 0 52px; border-radius:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:0; font-size:17px; font-weight:800; background:var(--plat-bg,#111); color:var(--plat-color,#fff); }
@@ -65,6 +63,7 @@
   .vendor-name{ font-size:13px; font-weight:700; }
   .vendor-phone{ font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:700; background:var(--black); color:#fff; padding:6px 12px; border-radius:999px; }
   .cta{ display:block; text-align:center; margin-top:16px; background:var(--black); color:#fff; font-weight:700; font-size:14px; padding:15px; border-radius:16px; text-decoration:none; }
+  .support-footer{ margin-top:18px; }
   .renew-support-note{ margin-top:10px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; border-radius:14px; padding:12px 14px; text-align:center; line-height:1.5; }
   .renew-support-note b{ display:block; color:var(--blue); font-size:12.5px; margin-bottom:3px; }
   .renew-support-note span{ display:block; font-size:11.5px; }
@@ -115,6 +114,14 @@
   };
 
   const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset"};
+
+  const PLAT_EMOJI={
+    netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
+    primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
+    spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
+    chatgpt:"🤖",duolingo:"📚",office:"💻",oleada:"🌊",iptv:"📺",
+    viki:"📺",appletv:"📺",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
+  };
 
   function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
   function platKey(v){
@@ -205,7 +212,7 @@
     return "";
   }
 
-  function tarjetaServicio(d,index,total){
+  function tarjetaServicio(d,index,total,soporte=""){
     const principal=perfilesDelServicio(d)[0]||{};
     const orden=total>1?`<div class="service-order">Acceso ${index+1} de ${total}</div>`:"";
     if(d.vencido){
@@ -216,7 +223,8 @@
           <span class="pill expired"><i></i>Vencido</span>
         </div>
         <div class="exp-row"><span class="exp-label">Venció</span><span class="exp-val">${esc(d.fechaRenovacion||"—")}</span></div>
-        <div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en esta misma URL.</div>
+        <div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en este mismo enlace.</div>
+        ${soporte}
       </div>`;
     }
     const termsHtml=(d.terminos||[]).map(t=>`<li>${esc(t)}</li>`).join("");
@@ -231,30 +239,31 @@
       ${notaModo(d)}
       <div class="section-title">Condiciones del servicio</div>
       <div class="terms"><ul>${termsHtml}</ul></div>
+      ${soporte}
     </div>`;
   }
 
   function bloqueSoporte(d){
     const support=supportData(d);
     if(!d.vendedor && !support.phone) return "";
-    return `<div class="card support-card">
+    return `<div class="support-footer">
       <div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>
       ${support.phone?`<a href="${support.href}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
-      <div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Renueve o solicite ayuda directamente con el vendedor y número indicados en esta ficha.</span></div>`:""}
+      <div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Para renovaciones y soporte, favor comunicarse directamente con este número, que fue el que le entregó su acceso.</span></div>`:""}
     </div>`;
   }
 
   function render(d){
     const servicios=Array.isArray(d.servicios)&&d.servicios.length?d.servicios:[d];
     const activos=servicios.filter(s=>!s.vencido).length;
-    const plural=servicios.length>1;
-    const comprador=d.comprador&&String(d.comprador)!==String(d.titular)?` Compra registrada por ${esc(d.comprador)}.`:"";
+    const primero=servicios.find(s=>!s.vencido)||servicios[0]||{};
+    const emoji=PLAT_EMOJI[platKey(primero.plataforma)]||"📱";
+    const soporte=bloqueSoporte(d);
     document.getElementById('stage').innerHTML=`
-      <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Acceso activo":"Renovación pendiente"}</span></div>
-      <h1 class="h1"><strong>Bienvenido a tu acceso <span>Premium</span></strong></h1>
-      <div class="sub">¡Hola, estimado ${esc(d.titular||"Cliente")}! Esta es su URL permanente: aquí aparecerán todas sus plataformas y cada una conservará su propia fecha.${comprador}</div>
-      <div class="access-list">${servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length)).join("")}</div>
-      ${bloqueSoporte(d)}
+      <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Entrega en vivo":"Renovación pendiente"}</span></div>
+      <h1 class="h1">Bienvenido a su acceso <span>Premium</span></h1>
+      <div class="sub">¡Hola, estimado ${esc(d.titular||"Cliente")}! Le sugerimos guardar este enlace; podrá consultarlo en cualquier momento para ver los detalles de su servicio. ${emoji}</div>
+      <div class="access-list">${servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length,i===servicios.length-1?soporte:"")).join("")}</div>
     `;
     document.querySelectorAll('.copy-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
