@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 4 · URL permanente + entrega exacta por plataforma
+// api/acceso.js · VERSION 5 · URL permanente + visibilidad elegible por servicio
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
@@ -9,6 +9,32 @@
 //   FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+
+const accessUsage = new Map();
+
+function setPublicSecretHeaders(res) {
+  res.setHeader("Cache-Control", "private, no-store, max-age=0, must-revalidate");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+}
+
+function allowRequest(req) {
+  const ip = String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket?.remoteAddress || "unknown")
+    .split(",")[0].trim().slice(0, 120);
+  const now = Date.now();
+  const old = accessUsage.get(ip) || { startedAt: now, count: 0 };
+  const state = now - old.startedAt >= 60_000 ? { startedAt: now, count: 0 } : old;
+  state.count += 1;
+  accessUsage.set(ip, state);
+  if (accessUsage.size > 1000) {
+    for (const [key, value] of accessUsage) if (now - value.startedAt > 120_000) accessUsage.delete(key);
+  }
+  return state.count <= 120;
+}
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -267,6 +293,32 @@ function resolverModo(servicio = {}) {
   return { modo, mostrarCorreo, mostrarClave, mostrarPin };
 }
 
+const VISIBILIDAD_URL_MODOS = new Set(["plataforma", "todos", "correo_clave", "solo_correo", "solo_pin", "personalizado"]);
+function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
+  const raw = servicio.visibilidadUrl;
+  const fuente = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { modo: raw };
+  const modo = VISIBILIDAD_URL_MODOS.has(String(fuente?.modo || "")) ? String(fuente.modo) : "plataforma";
+  if (modo === "plataforma") return { ...camposAutomaticos, visibilidadModo: modo };
+
+  let elegidos = { correo: false, clave: false, pin: false };
+  if (modo === "todos") elegidos = { correo: true, clave: true, pin: true };
+  else if (modo === "correo_clave") elegidos = { correo: true, clave: true, pin: false };
+  else if (modo === "solo_correo") elegidos = { correo: true, clave: false, pin: false };
+  else if (modo === "solo_pin") elegidos = { correo: false, clave: false, pin: true };
+  else if (modo === "personalizado") {
+    const c = fuente.campos && typeof fuente.campos === "object" && !Array.isArray(fuente.campos) ? fuente.campos : fuente;
+    elegidos = { correo: c.correo === true, clave: c.clave === true, pin: c.pin === true };
+  }
+
+  return {
+    ...camposAutomaticos,
+    mostrarCorreo: !servicioEsSerial(servicio.plataforma) && elegidos.correo,
+    mostrarClave: !servicioNoUsaClave(servicio.plataforma) && elegidos.clave,
+    mostrarPin: !servicioNoUsaPinPerfil(servicio.plataforma) && elegidos.pin,
+    visibilidadModo: modo
+  };
+}
+
 function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", beneficiarioNombre = "", limitarPerfil = false } = {}) {
   const plataforma = servicio.plataforma || "";
   const fechaRenovacion = servicio.fechaRenovacion || "";
@@ -284,7 +336,10 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
   }
 
   const perfilesPublicos = perfiles.map(p => {
-    const campos = resolverModo({ ...servicio, dispositivo: p.dispositivo, esRoku: p.esRoku });
+    const campos = aplicarVisibilidadUrl(
+      servicio,
+      resolverModo({ ...servicio, dispositivo: p.dispositivo, esRoku: p.esRoku })
+    );
     return {
       nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,
       perfil: p.perfil || p.nombre || "",
@@ -293,6 +348,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
       pin: !vencido && campos.mostrarPin ? p.pinPerfil : "",
       usaPin: campos.mostrarPin === true,
       modo: campos.modo,
+      visibilidadModo: campos.visibilidadModo || "plataforma",
       dispositivo: p.dispositivo || "",
       esRoku: p.dispositivo === "tv" && p.esRoku === true
     };
@@ -310,6 +366,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     clave: principal.clave || "",
     pin: principal.pin || "",
     usaPin: principal.usaPin === true,
+    visibilidadModo: principal.visibilidadModo || "plataforma",
     perfiles: perfilesPublicos,
     fechaRenovacion,
     terminos: termsFor(plataforma),
@@ -327,10 +384,21 @@ function ordenarServiciosPublicos(a, b) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).json({ ok: false, error: "Método no permitido." });
+  setPublicSecretHeaders(res);
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ ok: false, error: "Método no permitido." });
+  }
+  if (!allowRequest(req)) {
+    res.setHeader("Retry-After", "60");
+    return res.status(429).json({ ok: false, error: "Demasiadas consultas. Intente nuevamente en un minuto." });
+  }
 
   const token = String(req.query.token || "").trim();
-  if (!token) return res.status(400).json({ ok: false, error: "Falta el token." });
+  // Admite enlaces históricos y los nuevos tokens criptográficos base64url.
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(token)) {
+    return res.status(400).json({ ok: false, error: "Enlace inválido." });
+  }
 
   try {
     const db = getApp().firestore();
@@ -370,7 +438,6 @@ export default async function handler(req, res) {
         }))
         .sort(ordenarServiciosPublicos);
       const activos = publicos.filter(s => !s.vencido).length;
-      res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({
         ok: true,
         multi: true,
@@ -393,7 +460,6 @@ export default async function handler(req, res) {
     }
     if (!servicio) return res.status(404).json({ ok: false, error: "Este servicio ya no existe. Contacte a su vendedor." });
     const publico = servicioPublico(cliente, servicio, { limitarPerfil: true });
-    res.setHeader("Cache-Control", "no-store");
     if (publico.vencido) {
       return res.status(410).json({
         ok: false,
@@ -403,6 +469,7 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({ ok: true, ...publico });
   } catch (e) {
+    console.error("ACCESO_ERROR", e);
     return res.status(500).json({ ok: false, error: "Error del servidor. Intente de nuevo." });
   }
 }

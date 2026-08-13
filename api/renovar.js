@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 22  ·  URL permanente + reglas reales de entrega
+// api/renovar.js  ·  VERSION 23  ·  URL permanente + visibilidad elegible por servicio
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -7,6 +7,7 @@
 //   FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+import { randomBytes } from "node:crypto";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -27,7 +28,9 @@ async function requireFirebaseUser(req, res) {
     return null;
   }
   try {
-    return await admin.auth().verifyIdToken(token);
+    const user = await admin.auth().verifyIdToken(token);
+    if (!String(user.usuario || "").trim() || !String(user.role || "").trim()) throw new Error("claims_missing");
+    return user;
   } catch (_) {
     res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
     return null;
@@ -261,17 +264,15 @@ function parseMoney(v) {
 }
 
 function recordId(prefix = "id") {
-  const random = Math.random().toString(36).slice(2, 10);
+  const random = randomBytes(8).toString("hex");
   return `${prefix}_${Date.now().toString(36)}_${random}`;
 }
 
-// VERSION 20 · token público para la ficha del cliente (/c/{token}).
-// Alfabeto sin caracteres ambiguos (0/O, 1/l/I) por si alguien lo transcribe a mano.
-function genToken(len = 11) {
-  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
+// Token público tipo bearer para /c/{token}: 128 bits de entropía criptográfica.
+// Los enlaces históricos de 11 caracteres continúan funcionando; solo cambian
+// los tokens que se creen a partir de esta versión.
+function genToken() {
+  return randomBytes(16).toString("base64url");
 }
 
 function prepararAccesosBeneficiarios({ servicios = [], registroAnterior = {}, nombreTitular = "", tokenTitularAnterior = "" } = {}) {
@@ -602,6 +603,25 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
   return null;
 }
 
+const VISIBILIDAD_URL_MODOS = new Set(["plataforma", "todos", "correo_clave", "solo_correo", "solo_pin", "personalizado"]);
+function normalizarVisibilidadUrl(raw, anterior = null) {
+  const valor = raw != null ? raw : anterior;
+  const fuente = valor && typeof valor === "object" && !Array.isArray(valor) ? valor : { modo: valor };
+  const modoRaw = String(fuente?.modo || "plataforma");
+  const modo = VISIBILIDAD_URL_MODOS.has(modoRaw) ? modoRaw : "plataforma";
+  if (modo !== "personalizado") return { modo };
+  const camposRaw = fuente.campos && typeof fuente.campos === "object" && !Array.isArray(fuente.campos)
+    ? fuente.campos : fuente;
+  return {
+    modo,
+    campos: {
+      correo: camposRaw.correo === true,
+      clave: camposRaw.clave === true,
+      pin: camposRaw.pin === true
+    }
+  };
+}
+
 function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitular = "") {
   // Modelo limpio del CRM:
   //   clave     = contraseña/acceso de la cuenta cuando aplique
@@ -646,6 +666,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
     perfiles,
+    visibilidadUrl: normalizarVisibilidadUrl(servicio.visibilidadUrl, anterior.visibilidadUrl),
     beneficiarioTipo: beneficiario.tipo,
     beneficiarioNombre: beneficiario.nombre,
     beneficiarioKey: beneficiario.key,
@@ -673,6 +694,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
 
 function limpiarServicioCRM(servicio = {}) {
   const s = { ...servicio };
+  s.visibilidadUrl = normalizarVisibilidadUrl(s.visibilidadUrl);
   const tieneClave = s.clave != null && String(s.clave) !== "";
 
   if ((s.pinPerfil == null || s.pinPerfil === "") && s.pin_perfil != null) s.pinPerfil = s.pin_perfil;
@@ -760,20 +782,24 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 22, msg: "renovar v22 activo (URL permanente y entrega por plataforma). Usá POST." });
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ ok: false, error: "Método no permitido." });
+  }
 
   const body = req.body || {};
   const { accion, clienteId, clienteNorm, telefono, plataforma, correo } = body;
   const acc = accion || "renovar";
 
-  if (!clienteId && !clienteNorm && !telefono && acc !== "ficha_upsert")
-    return res.status(200).json({ error: "Falta identificar el cliente." });
-
   try {
     const db = getApp().firestore();
     const authUser = await requireFirebaseUser(req, res);
     if (!authUser) return;
+
+    if (!clienteId && !clienteNorm && !telefono && acc !== "ficha_upsert")
+      return res.status(200).json({ error: "Falta identificar el cliente." });
 
     // Permite recuperar/generar las URLs de clientes antiguos desde
     // Clientes → Acciones, sin obligar a editar ni volver a guardar sus datos.
@@ -1163,7 +1189,8 @@ export default async function handler(req, res) {
         beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : servicios[idx].beneficiarioTipo,
         beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : servicios[idx].beneficiarioNombre,
         dispositivo: servicio.dispositivo != null ? servicio.dispositivo : servicios[idx].dispositivo,
-        esRoku: servicio.esRoku != null ? servicio.esRoku : servicios[idx].esRoku
+        esRoku: servicio.esRoku != null ? servicio.esRoku : servicios[idx].esRoku,
+        visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : servicios[idx].visibilidadUrl
       }, servicio.fichaTexto || servicios[idx].fichaTexto || "", anterior, nombreTitular);
 
       servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
@@ -1233,7 +1260,7 @@ export default async function handler(req, res) {
       serviciosResumen
     });
   } catch (e) {
-    console.error(e);
-    return res.status(200).json({ error: "Error: " + (e.message || "") });
+    console.error("RENOVAR_ERROR", e);
+    return res.status(500).json({ error: "No se pudo guardar el cambio. Intente nuevamente." });
   }
 }
