@@ -1964,6 +1964,7 @@ function flattenCliente(doc, clienteId=""){
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
       beneficiarioTipo,beneficiarioNombre,beneficiarioKey,
+      visibilidadUrl:s.visibilidadUrl||{modo:"plataforma"},
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
@@ -4805,8 +4806,9 @@ function gCaminoBombas(){
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-  // VERSION 23 · Cuatro variantes elegibles. Guardar ya no abre WhatsApp por
-  // fuerza: primero se muestra la URL y luego el vendedor elige qué texto usar.
+  // VERSION 24 · Cuatro variantes elegibles para la URL y dos entregas
+  // independientes: ficha tradicional o ficha URL. Solo se abre la opción que
+  // el vendedor toca expresamente.
   // Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
   // blanco entre bloques. Cada plantilla es {cuerpo, despedida} — la despedida
   // se agrega aparte solo si el vendedor es Relojes o Sublicuentas, así el
@@ -5489,8 +5491,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaStatus(txt,"info");
   };
   function fichaResetButtons(){
-    const wa=fichaQ("fichaWA"), save=fichaQ("fichaSave"), regen=fichaQ("fichaRegen"), copy=fichaQ("fichaCopy");
-    if(wa){ wa.disabled=false; wa.textContent="✅ Guardar CRM + mostrar 4 variantes"; }
+    const waTradicional=fichaQ("fichaWATradicional"),waUrl=fichaQ("fichaWAUrl"), save=fichaQ("fichaSave"), regen=fichaQ("fichaRegen"), copy=fichaQ("fichaCopy");
+    if(waTradicional){ waTradicional.disabled=false; waTradicional.textContent="💬 Entregar ficha de la cuenta"; }
+    if(waUrl){ waUrl.disabled=false; waUrl.textContent="🔗 Entregar ficha URL"; }
     if(save){ save.disabled=false; save.textContent="💾 Guardar CRM"; }
     if(regen){ regen.disabled=false; regen.textContent="🆕 Ficha nueva"; }
     if(copy){ copy.disabled=false; copy.textContent="📋 Copiar"; }
@@ -5544,6 +5547,91 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     }
     // Sin dispositivo elegido todavía: se comporta como antes de este cambio.
     return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
+  }
+
+  // La visibilidad de la URL se guarda por servicio. "plataforma" conserva
+  // las reglas automáticas actuales; los demás modos son una autorización
+  // explícita del vendedor y nunca borran los datos privados del CRM.
+  const FICHA_VISIBILIDAD_URL_MODOS=new Set(["plataforma","todos","correo_clave","solo_correo","solo_pin","personalizado"]);
+  function fichaNormalizarVisibilidadUrl(raw){
+    const fuente=raw&&typeof raw==="object"?raw:{modo:raw};
+    const modo=FICHA_VISIBILIDAD_URL_MODOS.has(String(fuente&&fuente.modo||""))?String(fuente.modo):"plataforma";
+    const campos=fuente&&fuente.campos&&typeof fuente.campos==="object"?fuente.campos:fuente||{};
+    return {
+      modo,
+      correo:campos.correo!==false,
+      clave:campos.clave!==false,
+      pin:campos.pin!==false
+    };
+  }
+  function fichaVisibilidadUrlActual(){
+    const modo=FICHA_VISIBILIDAD_URL_MODOS.has(fichaGetVal("fichaVisibilidadUrl"))?fichaGetVal("fichaVisibilidadUrl"):"plataforma";
+    const correo=fichaQ("fichaVerCorreo")?fichaQ("fichaVerCorreo").checked:true;
+    const clave=fichaQ("fichaVerClave")?fichaQ("fichaVerClave").checked:true;
+    const pin=fichaQ("fichaVerPin")?fichaQ("fichaVerPin").checked:true;
+    return modo==="personalizado"?{modo,campos:{correo,clave,pin}}:{modo};
+  }
+  function fichaAplicarVisibilidadUrl(raw){
+    const v=fichaNormalizarVisibilidadUrl(raw);
+    const select=fichaQ("fichaVisibilidadUrl");
+    if(select)select.value=v.modo;
+    const correo=fichaQ("fichaVerCorreo"),clave=fichaQ("fichaVerClave"),pin=fichaQ("fichaVerPin");
+    if(correo)correo.checked=v.correo;
+    if(clave)clave.checked=v.clave;
+    if(pin)pin.checked=v.pin;
+    fichaActualizarVisibilidadUrl(false);
+  }
+  function fichaCamposUrlEfectivos(perfil=null){
+    const auto=fichaCamposEfectivos(perfil);
+    const plat=fichaGetVal("fichaPlat");
+    const disponible={correo:fichaNeedsCorreo(plat),clave:fichaNeedsClave(plat),pin:fichaNeedsPin(plat)};
+    const v=fichaVisibilidadUrlActual();
+    if(v.modo==="plataforma")return {...auto,visibilidadModo:v.modo};
+    let elegidos={correo:false,clave:false,pin:false};
+    if(v.modo==="todos")elegidos={correo:true,clave:true,pin:true};
+    else if(v.modo==="correo_clave")elegidos={correo:true,clave:true,pin:false};
+    else if(v.modo==="solo_correo")elegidos={correo:true,clave:false,pin:false};
+    else if(v.modo==="solo_pin")elegidos={correo:false,clave:false,pin:true};
+    else if(v.modo==="personalizado")elegidos={
+      correo:v.campos&&v.campos.correo===true,
+      clave:v.campos&&v.campos.clave===true,
+      pin:v.campos&&v.campos.pin===true
+    };
+    return {
+      ...auto,
+      correo:disponible.correo&&elegidos.correo,
+      clave:disponible.clave&&elegidos.clave,
+      pin:disponible.pin&&elegidos.pin,
+      visibilidadModo:v.modo
+    };
+  }
+  function fichaActualizarVisibilidadUrl(actualizarAviso=true){
+    const select=fichaQ("fichaVisibilidadUrl");
+    const plat=fichaGetVal("fichaPlat");
+    const permiteCorreo=fichaNeedsCorreo(plat),permiteClave=fichaNeedsClave(plat),permitePin=fichaNeedsPin(plat);
+    if(select){
+      const opcionCorreo=select.querySelector('option[value="solo_correo"]');
+      const opcionPin=select.querySelector('option[value="solo_pin"]');
+      const opcionCorreoClave=select.querySelector('option[value="correo_clave"]');
+      if(opcionCorreo)opcionCorreo.disabled=!permiteCorreo;
+      if(opcionPin)opcionPin.disabled=!permitePin;
+      if(opcionCorreoClave)opcionCorreoClave.disabled=!(permiteCorreo&&permiteClave);
+      if(select.selectedOptions[0]&&select.selectedOptions[0].disabled)select.value="plataforma";
+    }
+    const modo=fichaGetVal("fichaVisibilidadUrl")||"plataforma";
+    const custom=fichaQ("fichaVisibilidadCustom");
+    if(custom)custom.style.display=modo==="personalizado"?"flex":"none";
+    const disponibilidad={
+      fichaVerCorreo:permiteCorreo,
+      fichaVerClave:permiteClave,
+      fichaVerPin:permitePin
+    };
+    Object.entries(disponibilidad).forEach(([id,habilitado])=>{
+      const input=fichaQ(id),label=input&&input.closest("label");
+      if(input)input.disabled=!habilitado;
+      if(label)label.classList.toggle("disabled",!habilitado);
+    });
+    if(actualizarAviso)fichaAvisoDispositivo();
   }
   const fichaTemplateFor=plat=>{
     const k=fichaNorm(plat);
@@ -5916,8 +6004,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(!box) return;
     const plat=fichaGetVal("fichaPlat");
     const dispositivo=fichaGetVal("fichaDispositivo");
-    if(fichaUsaSelectorDispositivo(plat)&&!dispositivo){ box.style.display="none"; return; }
-    const campos=fichaCamposEfectivos();
+    const visibilidad=fichaVisibilidadUrlActual();
+    if(visibilidad.modo!=="plataforma"){
+      const campos=fichaCamposUrlEfectivos();
+      const visibles=[];
+      if(campos.correo)visibles.push("correo/usuario");
+      if(campos.clave)visibles.push(fichaEsSerial(plat)?"serial/licencia":"clave");
+      if(campos.pin)visibles.push("PIN");
+      const detalle=visibles.length?visibles.join(", "):"ninguna credencial";
+      box.style.display="block";
+      box.textContent=`👁️ En la ficha URL el cliente verá: ${detalle}. El perfil, la fecha, las condiciones y el soporte seguirán visibles. Esto no borra nada del CRM ni cambia la ficha tradicional de WhatsApp.`;
+      return;
+    }
+    if(fichaUsaSelectorDispositivo(plat)&&!dispositivo){
+      box.style.display="block";
+      box.textContent="⚙️ Seleccione TV o celular para confirmar qué datos mostrará automáticamente la ficha URL.";
+      return;
+    }
+    const campos=fichaCamposUrlEfectivos();
     let msg="";
     if(campos.modo==="serial") msg="🔐 El cliente verá únicamente el serial o licencia. No se le mostrará un correo porque esta plataforma se activa con código de licencia.";
     else if(campos.modo==="codigo"&&["disneyp","disneys"].includes(fichaNorm(plat))) msg="📲 El cliente verá correo, perfil y PIN. En Disney+, cuando aparezca ‘Escribir contraseña’, debe tocar ‘¿Problemas para iniciar sesión? Enviar un código de acceso único’ y pedir el código a su vendedor.";
@@ -5946,6 +6050,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       plataforma:plat,
       precio:fichaPrecioActual(),
       fechaRenovacion:fecha,
+      visibilidadUrl:fichaVisibilidadUrlActual(),
       correo:fichaNeedsCorreo(plat)?(principal.correo||fichaGetVal("fichaCorreo")):"",
       clave:principal.clave||clave,
       sinClave:!fichaNeedsClave(plat),
@@ -6107,18 +6212,31 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaOpenWhatsApp(mensaje);
   }
 
-  async function fichaGuardarYMostrarVariantes(){
-    const btn=fichaQ("fichaWA");
+  async function fichaGuardarYAbrirWhatsApp(tipo){
+    const esUrl=tipo==="url";
+    const btn=fichaQ(esUrl?"fichaWAUrl":"fichaWATradicional");
     const j=await fichaGuardarCRM({silent:true,button:btn});
-    if(j&&j.ok&&j.linkPublico){
-      fichaMostrarDatosCliente(j.linkPublico);
-      fichaStatus(`✅ CRM guardado. Elija una de las 4 variantes y toque “Copiar variante”. WhatsApp no se abrirá automáticamente.`,"ok");
-      setTimeout(()=>fichaQ("fichaMensajeClienteBox")?.scrollIntoView({behavior:"smooth",block:"center"}),80);
-    }else if(j&&j.ok){
-      fichaStatus("⚠️ Se guardó el CRM, pero todavía no se generó el enlace público. Intente guardar nuevamente.","err");
-    }else if(j){
-      fichaStatus(j.error||"⚠️ No se generaron las variantes porque el CRM no se guardó.","err");
+    if(!j||!j.ok){
+      if(j)fichaStatus(j.error||"⚠️ No se abrió WhatsApp porque el CRM no se guardó.","err");
+      return;
     }
+    if(!esUrl){
+      const texto=fichaWhatsAppText();
+      if(!texto){fichaStatus("⚠️ La ficha tradicional está vacía.","err");return;}
+      fichaStatus("✅ CRM guardado. Abriendo en WhatsApp la ficha tradicional de la cuenta.","ok");
+      fichaOpenWhatsApp(texto);
+      return;
+    }
+    if(!j.linkPublico){
+      fichaStatus("⚠️ Se guardó el CRM, pero todavía no se generó el enlace público. Intente nuevamente.","err");
+      return;
+    }
+    fichaMostrarDatosCliente(j.linkPublico);
+    fichaMostrarVarianteMensajeCliente(fichaVarianteMensajeActual);
+    const mensaje=fichaQ("fichaMensajeClienteView")?.textContent||"";
+    if(!mensaje){fichaStatus("⚠️ No se pudo preparar el mensaje con la URL.","err");return;}
+    fichaStatus(`✅ CRM guardado. Abriendo en WhatsApp la variante ${fichaVarianteMensajeActual+1} con la ficha URL.`,"ok");
+    fichaOpenWhatsApp(mensaje);
   }
 
   async function fichaAsegurarEnlacesCliente(){
@@ -6197,6 +6315,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
     fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
+    fichaAplicarVisibilidadUrl(s.visibilidadUrl||{modo:"plataforma"});
     const rokuBox=fichaQ("fichaRokuBox");
     if(rokuBox) rokuBox.style.display=dispositivo==="tv"?"block":"none";
     fichaQ("fichaCorreo").value=principal.correo||s.correo||"";
@@ -6355,6 +6474,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .ficha-variant-tab.active{background:rgba(37,211,102,.16);border-color:#25d366;color:#179447;box-shadow:0 0 0 2px rgba(37,211,102,.1)}
       .ficha-message-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
       .ficha-message-actions .open-wa{background:#25d366;color:#062b16;border-color:#25d366}
+      .ficha-url-visibility{grid-column:1/-1;border:1px solid rgba(47,155,224,.38);background:rgba(47,155,224,.08);border-radius:15px;padding:12px}
+      .ficha-url-visibility-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}.ficha-url-visibility-head b{font-size:13.5px}.ficha-url-visibility-head small{display:block;margin-top:3px;color:var(--muted);font-size:11px;line-height:1.35;font-weight:600}
+      .ficha-visibility-custom{display:none;flex-wrap:wrap;gap:7px;margin-top:9px}.ficha-visibility-check{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:11px;padding:8px 10px;font-size:12px;font-weight:850;cursor:pointer}.ficha-visibility-check input{accent-color:#2f9be0}.ficha-visibility-check.disabled{opacity:.42;cursor:not-allowed}
+      .ficha-delivery-title{margin:15px 0 8px;font-size:13px;font-weight:950}.ficha-delivery-help{margin:-3px 0 9px;color:var(--muted);font-size:11.5px;line-height:1.4}.ficha-delivery-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.ficha-delivery-actions .traditional{background:#25d366;color:#062b16;border-color:#25d366}.ficha-delivery-actions .url{background:#2a6df4;color:#fff;border-color:#2a6df4}
       .ficha-status{display:none;margin-top:10px;border-radius:13px;padding:10px 12px;font-weight:800;font-size:12.5px;line-height:1.35;border:1px solid var(--line);background:var(--surface);color:var(--txt)}
       .ficha-status.ok{display:block;background:rgba(31,191,134,.14);border-color:rgba(31,191,134,.35);color:var(--good)}
       .ficha-status.err{display:block;background:rgba(232,49,63,.12);border-color:rgba(232,49,63,.35);color:var(--accent)}
@@ -6376,6 +6499,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         .ficha-actions,.ficha-actions.three{grid-template-columns:1fr 1fr}
         .ficha-variant-tabs{grid-template-columns:1fr 1fr}
         .ficha-message-actions{grid-template-columns:1fr}
+        .ficha-delivery-actions{grid-template-columns:1fr}
         .ficha-btn.wa{grid-column:1/-1}
       }
       @media(max-width:370px){.ficha-actions,.ficha-actions.three{grid-template-columns:1fr}}
@@ -6406,6 +6530,22 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
           <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 Perfil 1 · ¿Dónde va a usar este perfil?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
           <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>Perfil 1 · ¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
+          <div class="ficha-url-visibility">
+            <div class="ficha-url-visibility-head"><div><b>👁️ Datos visibles en la ficha URL</b><small>Se configura solo para este servicio. No borra los datos del CRM ni cambia la ficha tradicional de WhatsApp.</small></div></div>
+            <select class="ficha-select" id="fichaVisibilidadUrl">
+              <option value="plataforma">Según plataforma y dispositivo (actual)</option>
+              <option value="todos">Todos los datos guardados</option>
+              <option value="correo_clave">Correo y clave</option>
+              <option value="solo_correo">Solo correo / usuario</option>
+              <option value="solo_pin">Solo PIN</option>
+              <option value="personalizado">Personalizado…</option>
+            </select>
+            <div class="ficha-visibility-custom" id="fichaVisibilidadCustom">
+              <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerCorreo" checked> Correo / usuario</label>
+              <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerClave" checked> Clave / serial</label>
+              <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerPin" checked> PIN</label>
+            </div>
+          </div>
           <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
@@ -6451,11 +6591,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <button class="ficha-btn crm" id="fichaSave" type="button">💾 Guardar CRM</button>
           <button class="ficha-btn" id="fichaCopy" type="button">📋 Copiar</button>
         </div>
-        <div class="ficha-actions" style="grid-template-columns:1fr">
-          <button class="ficha-btn wa" id="fichaWA" type="button">✅ Guardar CRM + mostrar 4 variantes</button>
+        <div class="ficha-delivery-title">¿Cómo desea entregarlo por WhatsApp?</div>
+        <div class="ficha-delivery-help">Las dos opciones guardan primero el CRM. Nada se envía automáticamente: se abrirá únicamente la opción que usted toque.</div>
+        <div class="ficha-delivery-actions">
+          <button class="ficha-btn traditional" id="fichaWATradicional" type="button">💬 Entregar ficha de la cuenta</button>
+          <button class="ficha-btn url" id="fichaWAUrl" type="button">🔗 Entregar ficha URL</button>
         </div>
         <div class="ficha-status" id="fichaStatus"></div>
-        <div class="ficha-note">Se conserva una URL permanente por beneficiario: las nuevas plataformas y renovaciones de la misma persona se agregan a esa URL, aunque tengan fechas distintas. Si la compra es para un tercero, seleccione “Otra persona” para crearle una URL privada separada. WhatsApp no se abre solo; elija una de las cuatro variantes y cópiela. Desde Clientes → Acciones puede recuperar cada acceso.</div>
+        <div class="ficha-note">Se conserva una URL permanente por beneficiario: las nuevas plataformas y renovaciones de la misma persona se agregan a esa URL, aunque tengan fechas distintas. Si la compra es para un tercero, seleccione “Otra persona” para crearle una URL privada separada. Para la entrega URL se utiliza la variante seleccionada; para la entrega tradicional se utiliza la ficha completa de la cuenta. Desde Clientes → Acciones puede recuperar cada acceso.</div>
       </div>`;
     document.body.appendChild(wrap);
     const fichaCerrar=()=>{wrap.style.display="none";document.body.classList.remove("ficha-modal-open");fichaDevolverAlBody();};
@@ -6485,13 +6628,15 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const hidden=fichaQ("fichaTexto");
       if(view && hidden) hidden.value=view.innerText;
     });
-    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
+    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
     fichaQ("fichaDispositivo").addEventListener("change",()=>{
       const rokuBox=fichaQ("fichaRokuBox");
       if(rokuBox) rokuBox.style.display = fichaUsaSelectorDispositivo(fichaGetVal("fichaPlat"))&&fichaGetVal("fichaDispositivo")==="tv" ? "block" : "none";
       fichaRenderPerfilesExtra(); fichaRefreshTemplate();
     });
     fichaQ("fichaEsRoku").addEventListener("change",()=>{ fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
+    fichaQ("fichaVisibilidadUrl").addEventListener("change",()=>{fichaActualizarVisibilidadUrl(false);fichaAvisoDispositivo();});
+    ["fichaVerCorreo","fichaVerClave","fichaVerPin"].forEach(id=>fichaQ(id).addEventListener("change",fichaAvisoDispositivo));
     fichaQ("fichaCopyLink").addEventListener("click",e=>fichaCopiarCampo(fichaLinkActual,e.currentTarget));
     fichaQ("fichaCopyMensaje").addEventListener("click",e=>fichaCopiarCampo(fichaQ("fichaMensajeClienteView")?.textContent||"",e.currentTarget));
     fichaQ("fichaOpenMensaje").addEventListener("click",fichaAbrirVarianteWhatsApp);
@@ -6532,7 +6677,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     };
     fichaQ("fichaSave").onclick=()=>fichaGuardarCRM({button:fichaQ("fichaSave")});
     fichaQ("fichaCopy").onclick=()=>fichaCopy(false);
-    fichaQ("fichaWA").onclick=fichaGuardarYMostrarVariantes;
+    fichaQ("fichaWATradicional").onclick=()=>fichaGuardarYAbrirWhatsApp("tradicional");
+    fichaQ("fichaWAUrl").onclick=()=>fichaGuardarYAbrirWhatsApp("url");
   }
 
   window.abrirEntregaFicha=function(g,opts){
@@ -6551,7 +6697,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono}:null);
+    const serv=(preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,visibilidadUrl:grupo.visibilidadUrl,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono}:null);
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
@@ -6650,8 +6796,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const userRole = ROLE_ALIAS[user];
     if(userRole) return userRole;
     const savedIsGeneric = !saved || ['asesor','user','usuario','staff','vendedor','ventas'].includes(saved);
-    return (!savedIsGeneric && ROLE_ALIAS[saved]) ||
-      (user.includes('magdiel')?'auditor':(user.includes('reloj')||user.includes('libni')||user.includes('daniela'))?'finanzas':'admin');
+    if(!savedIsGeneric && ROLE_ALIAS[saved]) return ROLE_ALIAS[saved];
+    if(user.includes('magdiel')) return 'auditor';
+    // Un usuario nuevo o genérico entra con la vista operativa de menor privilegio,
+    // nunca como administrador por defecto.
+    return 'finanzas';
   }
   function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
   function can(screen){
@@ -6677,6 +6826,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       clienteId:c?.clienteId||'', nombre:c?.nombre||'', telefono:c?.telefono||'', vendedor:c?.vendedor||'', vendedorTelefono:c?.vendedorTelefono||'', nombreNorm:c?.nombreNorm||'',
       plataforma:c?.plataforma, plataformaRaw:c?.plataformaRaw, precio, total:precio, fecha:c?.fecha, fechaRaw:c?.fechaRaw,
       correo:c?.correo||'', clave:c?.clave||c?.pin||'', pin:c?.pin||c?.clave||'', pinPerfil:c?.pinPerfil||'', perfil:c?.perfil||'',
+      visibilidadUrl:c?.visibilidadUrl||{modo:'plataforma'},
       servicios:[{...c, precio}]
     };
   }
@@ -7453,9 +7603,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const TK_NOTICE_RECIPIENTS={
     relojes:{label:'Relojes'},
     magdiel:{label:'Magdiel'},
-    yami:{label:'Yami',telegramChatId:'7511522045'},
-    jimena:{label:'Jimena',telegramChatId:'7844369242'},
-    manuel:{label:'Manuel',telegramChatId:'6848826692'}
+    yami:{label:'Yami'},
+    jimena:{label:'Jimena'},
+    manuel:{label:'Manuel'}
   };
   const TK_NOTICE_ALL=Object.keys(TK_NOTICE_RECIPIENTS);
   function tkRole(){const r=currentRole();return r==='finanzas'?'relojes':(r==='auditor'?'magdiel':'sublicuentas');}
@@ -7465,16 +7615,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   function tkNoticeDelivery(destino){
     const keys=destino==='todos'?TK_NOTICE_ALL:[destino];
-    const recipients=keys.map(k=>({key:k,label:TK_NOTICE_RECIPIENTS[k]?.label||tkRoleLabel(k),telegramChatId:TK_NOTICE_RECIPIENTS[k]?.telegramChatId||''}));
-    const ids=recipients.map(r=>r.telegramChatId).filter(Boolean);
+    const recipients=keys.map(k=>({key:k,label:TK_NOTICE_RECIPIENTS[k]?.label||tkRoleLabel(k)}));
     return {
-      // "both" mantiene compatibilidad con el servidor actual para Relojes y Magdiel.
+      // El servidor resuelve los chat_id mediante variables privadas de Vercel.
       destino:destino==='todos'?'both':destino,
       destinos:keys,
-      destinosLabel:recipients.map(r=>r.label).join(' + '),
-      telegramChatId:ids.length===1?ids[0]:'',
-      telegramChatIds:ids,
-      telegramRecipients:recipients.filter(r=>r.telegramChatId)
+      destinosLabel:recipients.map(r=>r.label).join(' + ')
     };
   }
   function tkDefaultDest(){return tkRole()==='sublicuentas'?'relojes':'sublicuentas';}

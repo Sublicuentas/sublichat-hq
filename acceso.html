@@ -338,21 +338,14 @@
       let campos="";
       const perfilAcceso=String(p.perfil||p.nombre||"").trim();
       const usaPin=p.usaPin===true||!!p.pin;
-      const mostrarPerfil=modo==="codigo"||modo==="perfil"||(modo==="cred"&&usaPin);
+      const mostrarPerfil=!!perfilAcceso;
       if(mostrarPerfil&&perfilAcceso)campos+=infoRow("Perfil de acceso",perfilAcceso);
       if(modo==="serial"){
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
-      }else if(modo==="codigo"){
-        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
-        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
-      }else if(modo==="perfil"){
-        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
-      }else if(modo==="invite"){
-        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
       }else{
         if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
         if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
-        if(p.pin)campos+=infoRow("PIN",p.pin,"#");
+        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
       }
       const nota=perfiles.length>1?notaModo(d,p):"";
       if(perfiles.length>1){
@@ -381,7 +374,7 @@
     if(modo==="pendiente") return `<div class="note"><b>⚙️ Acceso pendiente de configurar</b><br>Su vendedor debe confirmar si esta cuenta será utilizada en TV o celular antes de mostrar los datos correctos.</div>`;
     if(modo==="codigo"&&(plat==="disneyp"||plat==="disneys")) return `<div class="note"><b>📲 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado en Disney+.<br>2. Cuando aparezca <b>Escribir contraseña</b>, toque:<br><b>¿Problemas para iniciar sesión? Enviar un código de acceso único</b><br>3. Solicite el código a su vendedor y escríbalo en Disney+.</div>`;
     if(modo==="codigo") return `<div class="note"><b>📲 Pasos para ingresar en celular</b><br>1. Copie e ingrese el correo asignado.<br>2. Presione <b>Siguiente</b>.<br>3. Presione <b>Iniciar sesión con código</b>.<br>4. Solicite el código a su vendedor cuando aparezca.</div>`;
-    if(modo==="perfil") return `<div class="note">Esta cuenta <b>no requiere correo ni clave</b>. Abra el perfil indicado e ingrese únicamente su PIN.</div>`;
+    if(modo==="perfil") return `<div class="note">📺 La cuenta ya está vinculada al TV. Abra el perfil indicado e ingrese su PIN.</div>`;
     if(modo==="invite") return `<div class="note">📩 La invitación fue enviada a <b>su correo personal</b>. Revise también spam o promociones.</div>`;
     if(plat==="primevideo") return `<div class="note">📱 En celular ingrese con el correo y la clave mostrados. Si Prime Video solicita un <b>código de acceso</b>, pídalo a su vendedor.</div>`;
     return "";
