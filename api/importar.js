@@ -26,7 +26,9 @@ async function requireFirebaseUser(req, res) {
     return null;
   }
   try {
-    return await admin.auth().verifyIdToken(token);
+    const user = await admin.auth().verifyIdToken(token);
+    if (!String(user.usuario || "").trim() || !String(user.role || "").trim()) throw new Error("claims_missing");
+    return user;
   } catch (_) {
     res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
     return null;
@@ -92,6 +94,22 @@ function labelTipo(tipo) {
   return "Respaldo Excel";
 }
 
+function legacyDenied() {
+  return { status: 403, json: { ok: false, error: "No tiene permiso para consultar ese documento." } };
+}
+
+function legacyExcelCanAccess(body, tipo) {
+  const role = secRole(body);
+  const safe = safeTipo(tipo);
+  if (role === "sublicuentas") return true;
+  return role === "magdiel" && safe === "streaming";
+}
+
+function legacyWordCanAccess(body) {
+  const role = secRole(body);
+  return role === "sublicuentas" || role === "relojes";
+}
+
 function normalizeText(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -104,6 +122,7 @@ function rowMatches(row, q) {
 
 async function guardarRespaldo(db, body) {
   const tipo = safeTipo(body.tipo);
+  if (!legacyExcelCanAccess(body, tipo)) return legacyDenied();
   const filename = String(body.filename || "").trim();
   const usuario = String(body.usuario || "sublicuentas").trim();
   const rol = String(body.rol || "admin").trim();
@@ -212,7 +231,7 @@ async function listarRespaldos(db, body) {
   let snap;
   try { snap = await q.orderBy("createdAt", "desc").limit(limit).get(); }
   catch (_) { snap = await q.limit(limit).get(); }
-  const items = snap.docs.map(d => {
+  const items = snap.docs.filter(d => legacyExcelCanAccess(body, (d.data() || {}).tipo)).map(d => {
     const x = d.data() || {};
     return {
       id: d.id,
@@ -239,6 +258,7 @@ async function leerRespaldo(db, body) {
   const doc = await db.collection("respaldos_excel").doc(id).get();
   if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese respaldo Excel" } };
   const meta = doc.data() || {};
+  if (!legacyExcelCanAccess(body, meta.tipo)) return legacyDenied();
   const hojas = Array.isArray(meta.hojas) ? meta.hojas : [];
   const sheetIndex = Number(body.sheetIndex) || Number(hojas[0]?.index) || 1;
   const sheetId = String(sheetIndex).padStart(3, "0");
@@ -316,6 +336,7 @@ async function actualizarRespaldoExcel(db, body) {
   const doc = await ref.get();
   if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese Excel guardado" } };
   const meta = doc.data() || {};
+  if (!legacyExcelCanAccess(body, meta.tipo)) return legacyDenied();
   const hojasMeta = Array.isArray(meta.hojas) ? meta.hojas : [];
   const sheetId = String(sheetIndex).padStart(3, "0");
   const sheetName = hojasMeta.find(h => Number(h.index) === Number(sheetIndex))?.name || `Hoja ${sheetIndex}`;
@@ -352,6 +373,7 @@ function cleanWordRows(rows) {
 }
 
 async function guardarRespaldoWord(db, body) {
+  if (!legacyWordCanAccess(body)) return legacyDenied();
   const filename = String(body.filename || "LISTA RELOJES.docx").trim();
   const usuario = String(body.usuario || "sublicuentas").trim();
   const rol = String(body.rol || "admin").trim();
@@ -424,6 +446,7 @@ async function guardarWordRows(ref, rows, now) {
 }
 
 async function listarRespaldosWord(db, body) {
+  if (!legacyWordCanAccess(body)) return legacyDenied();
   const limit = Math.min(Math.max(Number(body.limit) || 20, 1), 50);
   let snap;
   try { snap = await db.collection("respaldos_word").orderBy("createdAt", "desc").limit(limit).get(); }
@@ -436,6 +459,7 @@ async function listarRespaldosWord(db, body) {
 }
 
 async function leerRespaldoWord(db, body) {
+  if (!legacyWordCanAccess(body)) return legacyDenied();
   const id = String(body.id || "").trim();
   if (!id) return { status: 400, json: { ok: false, error: "Falta id del Word" } };
   const doc = await db.collection("respaldos_word").doc(id).get();
@@ -450,6 +474,7 @@ async function leerRespaldoWord(db, body) {
 }
 
 async function actualizarRespaldoWord(db, body) {
+  if (!legacyWordCanAccess(body)) return legacyDenied();
   const id = String(body.id || "").trim();
   if (!id) return { status: 400, json: { ok: false, error: "Falta id del Word" } };
   const rows = cleanWordRows(body.rows || []);
@@ -468,6 +493,7 @@ async function actualizarRespaldoWord(db, body) {
 
 async function iniciarRespaldoExcel(db, body) {
   const tipo = safeTipo(body.tipo);
+  if (!legacyExcelCanAccess(body, tipo)) return legacyDenied();
   const filename = String(body.filename || "respaldo.xlsx").trim();
   const usuario = String(body.usuario || "sublicuentas").trim();
   const rol = String(body.rol || "admin").trim();
@@ -516,6 +542,7 @@ async function guardarRespaldoExcelChunk(db, body) {
   const ref = db.collection("respaldos_excel").doc(id);
   const doc = await ref.get();
   if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese respaldo iniciado" } };
+  if (!legacyExcelCanAccess(body, (doc.data() || {}).tipo)) return legacyDenied();
   const sheetRef = ref.collection("hojas").doc(String(sheetIndex).padStart(3, "0"));
   await sheetRef.set({ index: sheetIndex, name: sheetName, updatedAt: now, editable: true }, { merge: true });
   await sheetRef.collection("filas").doc(String(chunkIndex).padStart(4, "0")).set({
@@ -539,6 +566,7 @@ async function finalizarRespaldoExcel(db, body) {
   const doc = await ref.get();
   if (!doc.exists) return { status: 404, json: { ok: false, error: "No encontré ese respaldo Excel" } };
   const meta = doc.data() || {};
+  if (!legacyExcelCanAccess(body, meta.tipo)) return legacyDenied();
   await ref.update({ estado: "guardado_editable", editable: true, updatedAt: now, ultimoEditor: usuario, ultimoRol: rol });
   await db.collection("auditoria_eventos").add({
     tipo: "respaldo_excel_guardado_por_partes",
@@ -569,6 +597,10 @@ const CONTROL_REVISIONES_COL = "control_maestro_revisiones";
 const CONTROL_CONFIG_DOC = "principal";
 const CONTROL_CHUNK_SIZE = 450000;
 const CONTROL_MAX_BASE64 = 20 * 1024 * 1024;
+// Una respuesta grande de una función serverless puede cortarse antes de llegar
+// al navegador. Los archivos grandes se sirven bloque por bloque; los pequeños
+// conservan la respuesta completa por compatibilidad con versiones anteriores.
+const CONTROL_INLINE_MAX_BASE64 = 1200000;
 const CONTROL_BACKUPS_DIA = 2;
 
 function controlDateKey(value) {
@@ -824,12 +856,48 @@ async function controlLeerArchivo(db, body) {
   if (!doc) return { status: 404, json: { ok: false, error: "No encontré ese archivo de Control Maestro." } };
   const meta = doc.data() || {};
   if (meta.owner !== "sublicuentas" || meta.estado !== "listo") return { status: 403, json: { ok: false, error: "Ese archivo no está disponible." } };
+
+  const archivo = controlArchivoMeta(doc.id, meta);
+  const totalChunks = Math.max(0, Number(meta.chunks) || 0);
+  const base64Length = Math.max(0, Number(meta.base64Length) || 0);
+  const requestedChunk = Number(body.chunkIndex);
+
+  // Lectura segura de un solo bloque. El id es determinista en todos los
+  // archivos guardados por Control Maestro, así que no se descarga el resto.
+  if (Number.isInteger(requestedChunk) && requestedChunk > 0) {
+    if (totalChunks && requestedChunk > totalChunks) {
+      return { status: 416, json: { ok: false, error: "Ese bloque no existe en el archivo." } };
+    }
+    const chunkDoc = await doc.ref.collection("archivo").doc(String(requestedChunk).padStart(4, "0")).get();
+    if (!chunkDoc.exists) {
+      return { status: 409, json: { ok: false, error: `Falta el bloque ${requestedChunk} del respaldo.` } };
+    }
+    const chunk = String((chunkDoc.data() || {}).base64 || "");
+    if (!chunk) {
+      return { status: 409, json: { ok: false, error: `El bloque ${requestedChunk} está vacío.` } };
+    }
+    return {
+      status: 200,
+      json: { ok: true, archivo, chunked: true, chunkIndex: requestedChunk, totalChunks, base64Length, base64: chunk }
+    };
+  }
+
+  // El navegador pide primero solo esta información y luego baja los bloques
+  // en respuestas pequeñas. Esto evita que Canva y las demás hojas desaparezcan
+  // cuando el Excel completo supera el límite de respuesta del proveedor.
+  if (body.metaOnly || base64Length > CONTROL_INLINE_MAX_BASE64 || totalChunks > Math.ceil(CONTROL_INLINE_MAX_BASE64 / CONTROL_CHUNK_SIZE)) {
+    if (!totalChunks) {
+      return { status: 409, json: { ok: false, error: "El respaldo no informa cuántos bloques contiene." } };
+    }
+    return { status: 200, json: { ok: true, archivo, chunked: true, totalChunks, base64Length } };
+  }
+
   const snap = await doc.ref.collection("archivo").orderBy("index", "asc").limit(100).get();
   const base64 = snap.docs.map((d) => String((d.data() || {}).base64 || "")).join("");
   if (!base64 || (meta.base64Length && base64.length !== Number(meta.base64Length))) {
     return { status: 409, json: { ok: false, error: "El respaldo está incompleto. Use otra versión." } };
   }
-  return { status: 200, json: { ok: true, archivo: controlArchivoMeta(doc.id, meta), base64 } };
+  return { status: 200, json: { ok: true, archivo, chunked: false, totalChunks, base64Length: base64.length, base64 } };
 }
 
 async function controlRestaurarComoPlantilla(db, body) {
@@ -919,15 +987,16 @@ function secDecodeFilas(block) {
 }
 
 function secUploadId() {
-  return Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+  return Date.now().toString(36) + "_" + crypto.randomBytes(8).toString("hex");
 }
 
 
 function secRole(body) {
   const raw = String((body && (body.rol || body.role || body.usuario || body.editor)) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  if (['magdiel','auditor','auditoria'].some(x => raw.includes(x))) return 'magdiel';
-  if (['libni','relojes','reloj','finanzas','cobros'].some(x => raw.includes(x))) return 'relojes';
-  return 'sublicuentas';
+  if (['magdiel','auditor','auditoria'].includes(raw)) return 'magdiel';
+  if (['libni','relojes','reloj','finanzas','cobros'].includes(raw)) return 'relojes';
+  if (['sublicuentas','naara','admin','administrador','owner'].includes(raw)) return 'sublicuentas';
+  return 'sin_permiso';
 }
 function secCanEdit(body, seccion) {
   const r = secRole(body);
@@ -936,8 +1005,11 @@ function secCanEdit(body, seccion) {
   if (r === 'relojes') return seccion === 'flujo_diario';
   return false;
 }
+function secCanRead(body, seccion) {
+  return secCanEdit(body, seccion);
+}
 function secDeny(seccion) {
-  return { status: 403, json: { ok: false, error: 'Su usuario no tiene permiso para editar esta sección: ' + seccion } };
+  return { status: 403, json: { ok: false, error: 'Su usuario no tiene permiso para acceder a esta sección: ' + seccion } };
 }
 
 function secHojaDocId(index) {
@@ -1302,6 +1374,7 @@ async function secFinalizar(db, body) {
 async function secLeer(db, body) {
   const seccion = String(body.seccion || "").trim();
   if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  if (!secCanRead(body, seccion)) return secDeny(seccion);
   const cfg = SECCIONES[seccion];
   const doc = await db.collection(SEC_COL).doc(seccion).get();
   if (!doc.exists) return { status: 200, json: { ok: true, seccion, label: cfg.label, kind: cfg.kind, emoji: cfg.emoji, owner: cfg.owner, hojas: [], totalHojas: 0, totalFilas: 0, filename: "", updatedAt: "", updatedBy: "", vacio: true } };
@@ -1311,6 +1384,7 @@ async function secLeer(db, body) {
 async function secHojaLeer(db, body) {
   const seccion = String(body.seccion || "").trim();
   if (!secOk(seccion)) return { status: 400, json: { ok: false, error: "Sección no válida" } };
+  if (!secCanRead(body, seccion)) return secDeny(seccion);
   const index = Number(body.index) || 1;
   const hojaRef = db.collection(SEC_COL).doc(seccion).collection("hojas").doc(secHojaDocId(index));
   const hd = await hojaRef.get();
@@ -1335,9 +1409,9 @@ async function secHojaLeer(db, body) {
   filas = filas.slice(0, maxRows);
   return { status: 200, json: { ok: true, seccion, index, name: meta.name || ("Hoja " + index), rows: meta.rows || filas.length, cols: meta.cols || 0, filas, recortado, uploadId } };
 }
-async function secEstado(db) {
+async function secEstado(db, body) {
   const out = {};
-  for (const s of Object.keys(SECCIONES)) {
+  for (const s of Object.keys(SECCIONES).filter(seccion => secCanRead(body, seccion))) {
     const cfg = SECCIONES[s];
     const doc = await db.collection(SEC_COL).doc(s).get();
     if (doc.exists) { const m = doc.data() || {}; out[s] = { label: m.label || cfg.label, kind: m.kind || cfg.kind, emoji: m.emoji || cfg.emoji, owner: m.owner || cfg.owner, totalHojas: m.totalHojas || 0, totalFilas: m.totalFilas || 0, filename: m.filename || "", updatedAt: m.updatedAt || "", updatedBy: m.updatedBy || "", vacio: false }; }
@@ -1347,12 +1421,12 @@ async function secEstado(db) {
 }
 
 async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET" || req.method === "HEAD") return res.status(200).json({ ok: true, version: "importar-control-maestro-cuentas-20260805-2", msg: "api/importar activo", acciones: ["control_estado","control_guardar_revision_cuenta","control_guardar_plantilla","control_guardar_respaldo","control_leer_archivo","control_restaurar_plantilla","sec_estado","sec_leer","sec_hoja_iniciar","sec_hoja_bloque","sec_finalizar","sec_hoja_leer","sec_backup_crear","sec_backup_listar","sec_backup_restaurar","sec_backup_diario"] });
-  if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ ok: false, error: "Método no permitido" });
+  }
 
   try {
     const db = getApp().firestore();
@@ -1426,7 +1500,9 @@ async function handler(req, res) {
       return res.status(out.status).json(out.json);
     }
     if (accion === "listar_respaldos_word") {
-      return res.status(200).json(await listarRespaldosWord(db, body));
+      const out = await listarRespaldosWord(db, body);
+      if (out && out.status) return res.status(out.status).json(out.json);
+      return res.status(200).json(out);
     }
     if (accion === "leer_respaldo_word") {
       const out = await leerRespaldoWord(db, body);
@@ -1442,7 +1518,7 @@ async function handler(req, res) {
     if (accion === "sec_finalizar")    { const out = await secFinalizar(db, body);   return res.status(out.status).json(out.json); }
     if (accion === "sec_leer")         { const out = await secLeer(db, body);        return res.status(out.status).json(out.json); }
     if (accion === "sec_hoja_leer")    { const out = await secHojaLeer(db, body);    return res.status(out.status).json(out.json); }
-    if (accion === "sec_estado")       { const out = await secEstado(db);            return res.status(out.status).json(out.json); }
+    if (accion === "sec_estado")       { const out = await secEstado(db, body);      return res.status(out.status).json(out.json); }
     if (accion === "sec_backup_crear")    { const out = await secBackupCrear(db, body);     return res.status(out.status).json(out.json); }
     if (accion === "sec_backup_listar")   { const out = await secBackupListar(db, body);    return res.status(out.status).json(out.json); }
     if (accion === "sec_backup_restaurar"){ const out = await secBackupRestaurar(db, body); return res.status(out.status).json(out.json); }
@@ -1451,7 +1527,7 @@ async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Acción no reconocida" });
   } catch (e) {
     console.error("RESPALDO_EXCEL_ERROR", e);
-    return res.status(500).json({ ok: false, error: String((e && e.message) || e) });
+    return res.status(500).json({ ok: false, error: "No se pudo completar la operación de documentos." });
   }
 }
 
