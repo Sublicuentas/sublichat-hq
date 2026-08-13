@@ -4,13 +4,15 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FIX-FICHA-Y-ACCIONES-20260809-35';
+  const BUILD='CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37';
+  const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
-    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:1500,revealedAccounts:new Set(),expandedAccountKey:'',
-    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:''
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:DEFAULT_ACCOUNT_LIMIT,revealedAccounts:new Set(),expandedAccountKey:'',
+    reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',
+    metaRetryCount:0,metaRetryTimer:0
   };
 
   function loadUiSize(){
@@ -31,7 +33,13 @@
   const norm=(v)=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9@.+\s_-]/g,' ').replace(/\s+/g,' ').trim();
   const phone=(v)=>String(v??'').replace(/\D/g,'').replace(/^504(?=\d{8}$)/,'').slice(-8);
   const email=(v)=>String(v??'').trim().toLowerCase().replace(/\s+/g,'');
-  const excelEmail=(v)=>{const x=email(v);return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)?x:'';};
+  // Varias plataformas usan usuario, número o identificador en vez de correo.
+  // Control Maestro los trata igualmente como "cuenta" para no descartarlos.
+  const excelEmail=(v)=>{
+    const x=email(valueText(v));
+    if(!x||['correo','email','cuenta','usuario','n/a','na','-','—'].includes(x))return '';
+    return x;
+  };
   const fileDate=()=>{
     const d=new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
@@ -72,7 +80,7 @@
   function restoreControlView(view){
     if(!view)return;
     state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
-    state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||1500;
+    state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||DEFAULT_ACCOUNT_LIMIT;
     state.expandedAccountKey=String(view.expandedAccountKey||'');
     const apply=()=>{
       const screen=document.getElementById('screen-control-cuentas');const host=root();if(!host)return;
@@ -190,11 +198,22 @@
       hbomax:'hbomax',hbo:'hbomax',max:'hbomax',prime:'primevideo',primevideo:'primevideo',
       paramount:'paramount',paramountp:'paramount',crunchy:'crunchyroll',crunchyroll:'crunchyroll',
       vix:'vix',viki:'viki',vikirakuten:'viki',universal:'universal',universalp:'universal',
-      spotify:'spotify',youtube:'youtube',youtubepremium:'youtube',canva:'canva',gemini:'gemini',
-      duolingo:'duolingo',chatgpt:'chatgpt',chatgptplus:'chatgpt',
+      spotify:'spotify',youtube:'youtube',youtubepremium:'youtube',deezer:'deezer',
+      canva:'canva',canvapro:'canva',gemini:'gemini',geminipro:'gemini',
+      duolingo:'duolingo',duolingoplus:'duolingo',chatgpt:'chatgpt',chatgptplus:'chatgpt',openai:'chatgpt',
+      appletv:'appletv',apple:'appletv',star:'star',starplus:'star',
+      office:'office',office365:'office',microsoft:'office',microsoft365:'office',
+      windows10:'windows10',win10:'windows10',windows11:'windows11',win11:'windows11',
+      adobeexpress:'adobeexpress',adobe:'adobeexpress',eset:'eset',esetnod32:'eset',nod32:'eset',
       magis:'magis',magistv:'magis',oleada:'oleada',oleadatv:'oleada',iptv:'iptv'
     };
     if(aliases[k])return aliases[k];
+    if(k.startsWith('canva'))return 'canva';
+    if(k.startsWith('office')||k.startsWith('microsoft365'))return 'office';
+    if(k.startsWith('windows10'))return 'windows10';
+    if(k.startsWith('windows11'))return 'windows11';
+    if(k.startsWith('adobeexpress'))return 'adobeexpress';
+    if(k.startsWith('eset')||k.startsWith('nod32'))return 'eset';
     if(k.startsWith('oleada'))return 'oleada';
     if(k.startsWith('iptv'))return 'iptv';
     return k;
@@ -218,11 +237,30 @@
     if(n.includes('prime'))return ['primevideo'];
     if(n.includes('paramount'))return ['paramount'];
     if(n.includes('crunch'))return ['crunchyroll'];
-    if(n.includes('vix')||n.includes('viki')||n.includes('universal'))return ['vix','viki','universal'];
+    const vixFamily=[];
+    if(/\bvix\b/.test(n))vixFamily.push('vix');
+    if(n.includes('viki'))vixFamily.push('viki');
+    if(n.includes('universal'))vixFamily.push('universal');
+    if(vixFamily.length)return vixFamily;
     if(n.includes('spotify'))return ['spotify'];
     if(n.includes('youtube'))return ['youtube'];
+    if(n.includes('deezer'))return ['deezer'];
     if(n.includes('canva'))return ['canva'];
-    if(n.includes('magis'))return ['magis','oleada','iptv'];
+    if(n.includes('gemini'))return ['gemini'];
+    if(n.includes('chatgpt')||n.includes('openai'))return ['chatgpt'];
+    if(n.includes('duolingo'))return ['duolingo'];
+    if(n.includes('apple'))return ['appletv'];
+    if(/\bstar\b/.test(n))return ['star'];
+    if(n.includes('office')||n.includes('microsoft'))return ['office'];
+    if(n.includes('windows 10')||n.includes('win 10'))return ['windows10'];
+    if(n.includes('windows 11')||n.includes('win 11'))return ['windows11'];
+    if(n.includes('adobe'))return ['adobeexpress'];
+    if(n.includes('eset')||n.includes('nod32'))return ['eset'];
+    const tvFamily=[];
+    if(n.includes('magis'))tvFamily.push('magis');
+    if(n.includes('oleada'))tvFamily.push('oleada');
+    if(n.includes('iptv'))tvFamily.push('iptv');
+    if(tvFamily.length)return tvFamily;
     return [];
   }
 
@@ -231,21 +269,32 @@
 
   function findHeader(ws){
     let best=null;
-    const max=Math.min(Math.max(ws.rowCount||20,20),30);
+    const max=Math.min(Math.max(ws.actualRowCount||ws.rowCount||20,20),80);
     for(let r=1;r<=max;r++){
       const map={};
       ws.getRow(r).eachCell({includeEmpty:false},(cell,col)=>{const k=headerKey(cell.value);if(k)(map[k]||(map[k]=[])).push(col);});
-      const score=(map.NOMBRE?3:0)+(map.CELULAR||map.TELEFONO?3:0)+(map.CORREO?2:0)+(map.PERFIL||map.PERFILES?1:0)+(map.EXPIRACION||map.RENOVACION?1:0);
+      const has=(names)=>names.some((name)=>map[name]?.length);
+      const score=(has(['NOMBRE','CLIENTE','NOMBRECLIENTE','NOMBREDELCLIENTE','CLIENTENOMBRE'])?3:0)+
+        (has(['CELULAR','TELEFONO','TELEFONOCLIENTE','TELEFONOWHATSAPP','WHATSAPP','NUMERO','NUMEROTELEFONO','NUMERODETELEFONO'])?3:0)+
+        (has(['CORREO','EMAIL','CORREOELECTRONICO','EMAILCUENTA','EMAILDECUENTA','CORREOCUENTA','CORREODECUENTA','CUENTA','USUARIO'])?4:0)+
+        (has(['CLAVE','CONTRASENA','PASSWORD','CLAVEDECUENTA','CLAVEDELACUENTA'])?2:0)+
+        (has(['PERFIL','PERFILES','NOMBREDEPERFIL','SLOT','CUPO'])?1:0)+
+        (has(['EXPIRACION','RENOVACION','VENCIMIENTO','FECHAVENCIMIENTO','FECHADEVENCIMIENTO','FECHARENOVACION','FECHADERENOVACION'])?1:0)+
+        (has(['PLATAFORMA','SERVICIO','APLICACION','APP','PRODUCTO'])?2:0);
       if(!best||score>best.score)best={row:r,map,score};
     }
-    if(!best||best.score<4)return null;
+    if(!best||best.score<3)return null;
     const m=best.map;
     return {
       row:best.row,map:m,
-      name:firstCol(m,['NOMBRE']),seller:firstCol(m,['VENDEDOR']),phone:firstCol(m,['CELULAR','TELEFONO']),
-      profile:firstCol(m,['PERFIL','PERFILES']),pin:firstCol(m,['PIN']),email:firstCol(m,['CORREO']),password:firstCol(m,['CLAVE']),
-      price:firstCol(m,['PRECIO']),expiry:firstCol(m,['RENOVACION','EXPIRACION']),
-      alert:firstCol(m,['ALERTA']),days:firstCol(m,['DIAS'])
+      name:firstCol(m,['NOMBRE','CLIENTE','NOMBRECLIENTE','NOMBREDELCLIENTE','CLIENTENOMBRE']),seller:firstCol(m,['VENDEDOR','ASESOR']),
+      phone:firstCol(m,['CELULAR','TELEFONO','TELEFONOCLIENTE','TELEFONOWHATSAPP','WHATSAPP','NUMEROTELEFONO','NUMERODETELEFONO','NUMERO']),
+      profile:firstCol(m,['PERFIL','PERFILES','NOMBREDEPERFIL','SLOT','CUPO']),pin:firstCol(m,['PIN','PINPERFIL']),
+      email:firstCol(m,['CORREO','EMAIL','CORREOELECTRONICO','EMAILCUENTA','EMAILDECUENTA','CORREOCUENTA','CORREODECUENTA','CUENTA','USUARIO']),
+      password:firstCol(m,['CLAVE','CONTRASENA','PASSWORD','CLAVEDECUENTA','CLAVEDELACUENTA']),
+      price:firstCol(m,['PRECIO','VALOR','MONTO']),expiry:firstCol(m,['RENOVACION','EXPIRACION','VENCIMIENTO','FECHAVENCIMIENTO','FECHADEVENCIMIENTO','FECHARENOVACION','FECHADERENOVACION']),
+      alert:firstCol(m,['ALERTA','ESTADO']),days:firstCol(m,['DIAS','DIASRESTANTES']),
+      platform:firstCol(m,['PLATAFORMA','SERVICIO','APLICACION','APP','PRODUCTO'])
     };
   }
 
@@ -266,8 +315,9 @@
   const AUDIT_PLATFORM_LABELS={
     netflix:'Netflix',vipnetflix:'VIP Netflix',disney:'Disney+',hbomax:'HBO Max',primevideo:'Prime Video',
     paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
-    spotify:'Spotify',youtube:'YouTube',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
-    magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV',
+    spotify:'Spotify',youtube:'YouTube',deezer:'Deezer',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
+    appletv:'Apple TV',star:'Star+',office:'Office 365',windows10:'Windows 10',windows11:'Windows 11',
+    adobeexpress:'Adobe Express',eset:'ESET',magis:'Magis TV',oleada:'Oleada TV',iptv:'IPTV',
     vixmix:'ViX / Viki / Universal+'
   };
 
@@ -279,7 +329,7 @@
 
   function auditPlatformLabel(v){
     const p=auditFamily(v);
-    return AUDIT_PLATFORM_LABELS[p]||String(v||p||'Sin plataforma').replace(/(^|\s)\S/g,x=>x.toUpperCase());
+    return AUDIT_PLATFORM_LABELS[p]||String(v||p||'Sin plataforma').replace(/[_-]+/g,' ').replace(/(^|\s)\S/g,x=>x.toUpperCase());
   }
 
   function daysSince(v){
@@ -296,7 +346,7 @@
 
   function excelAuditFamily(sheet,row,item,src){
     if(item?.service)return auditFamily(item.service._plat||item.service.plataforma||item.service.plataformaLabel);
-    const allowed=[...new Set((sheet.platforms||[]).map(auditFamily))];
+    const allowed=[...new Set(((row?.platforms?.length?row.platforms:sheet.platforms)||[]).map(auditFamily))];
     const mail=excelEmail(row.accountEmail);
     if(mail){
       const found=new Set();
@@ -333,7 +383,7 @@
     const ensureGroup=(family,mail,key)=>{
       if(!groups.has(key))groups.set(key,{
         key,family,email:mail,platform:auditPlatformLabel(family),rawPlatforms:new Set(),inventoryAccounts:[],accountIds:[],
-        clave:'',capacidad:0,disponibles:0,estado:'',invClients:[],services:[],excelRows:[],excelSheets:new Set()
+        clave:'',capacidad:0,disponibles:0,estado:'',invClients:[],services:[],excelRows:[],excelAccountHeaders:[],excelSheets:new Set()
       });
       return groups.get(key);
     };
@@ -350,7 +400,11 @@
     });
 
     allServices.forEach((s)=>{
-      const key=s._email?`${s._family}|${s._email}`:`${s._family}|__sin_cuenta_clientes`;
+      // Los servicios sin correo ya no se amontonan en una sola "cuenta" por
+      // plataforma. Se agrupan por compra/servicio y cada cuenta real conserva
+      // su propia fila para que ninguna oculte a las demás.
+      const logicalAccount=norm(s.compraId||`${s.clienteId||'cliente'}_${s.servicioIndex??s._auditIndex}`)||String(s._auditIndex);
+      const key=s._email?`${s._family}|${s._email}`:`${s._family}|__sin_cuenta_clientes_${logicalAccount}`;
       const g=ensureGroup(s._family,s._email,key);g.rawPlatforms.add(canonPlatform(s.plataforma||s.plataformaLabel));g.services.push(s);
       if(!g.clave&&s.clave!=null)g.clave=String(s.clave);
     });
@@ -375,6 +429,18 @@
     const itemByRow=new Map((analysis?.items||[]).filter((x)=>x.row).map((x)=>[x.row,x]));
     const allExcelRows=[];
     (analysis?.sheets||[]).forEach((sheet)=>{
+      // Algunas hojas son un inventario de cuentas (correo + clave) sin nombre
+      // de cliente. Antes esas cuentas nunca llegaban al panel. Se registran
+      // como encabezados de cuenta, sin inventar un cliente "Sin nombre".
+      (sheet.rows||[]).filter((r)=>r.directEmail&&!r.name&&!r.tel).forEach((row)=>{
+        const family=excelAuditFamily(sheet,row,null,src);
+        const mail=excelEmail(row.accountEmail);if(!mail)return;
+        const key=`${family}|${mail}`;
+        const g=ensureGroup(family,mail,key);
+        g.rawPlatforms.add(family);g.excelSheets.add(row.sheet);
+        g.excelAccountHeaders.push({sheet:row.sheet,row:row.row,email:mail,password:String(row.accountPassword||'').trim()});
+        if(!g.clave&&row.accountPassword)g.clave=String(row.accountPassword).trim();
+      });
       (sheet.rows||[]).filter((r)=>r.name||r.tel).forEach((row)=>{
         const item=itemByRow.get(row)||null;
         const family=excelAuditFamily(sheet,row,item,src);
@@ -401,7 +467,7 @@
       // igual. Esa es justo la gente que hay que revisar para darla de alta,
       // así que ya no se descarta: toda fila del Excel sin coincidencia en
       // vivo se muestra como "Solo Excel" en vez de desaparecer sin rastro.
-      if(!g.inventoryAccounts.length&&!g.services.length&&!g.excelRows.length)return;
+      if(!g.inventoryAccounts.length&&!g.services.length&&!g.excelRows.length&&!g.excelAccountHeaders.length)return;
       const used=new Set(),usedExcel=new Set(),roster=[];
       const takeExcel=(target)=>{
         const targetName=norm(target?.name),targetPhone=phone(target?.phone),targetProfile=norm(fieldText(target?.profile));
@@ -494,22 +560,45 @@
     const sheets=[];
     const excelRows=[];
     workbook.worksheets.forEach((ws)=>{
-      if(['revision','__sublichat_ids'].includes(norm(ws.name).replace(/[^a-z0-9_]/g,'')))return;
-      const platforms=platformsForSheet(ws.name);if(!platforms.length)return;
+      const sheetKey=norm(ws.name).replace(/[^a-z0-9_]/g,'');
+      if(['revision','__sublichat_ids','resumen','dashboard','portada','instrucciones','configuracion'].includes(sheetKey))return;
       const h=findHeader(ws);if(!h)return;
+      let platforms=platformsForSheet(ws.name);
+      // También acepta hojas futuras cuyo nombre aún no esté en el catálogo,
+      // siempre que tengan una columna de cuenta/correo. Si la hoja incluye
+      // "Plataforma", cada fila usa su propio valor.
+      if(!platforms.length&&!h.platform){
+        const generic=h.email?canonPlatform(ws.name):'';
+        if(!generic)return;
+        platforms=[generic];
+      }
       const rows=[];
-      let currentAccount='',currentPassword='';
-      const end=Math.min(Math.max(ws.rowCount||h.row+1,h.row+1),2200);
-      for(let r=h.row+1;r<=end;r++){
+      const seenPlatforms=new Set(platforms);
+      let currentAccount='',currentPassword='',currentPlatforms=[...platforms];
+      const rowNumbers=[];
+      // eachRow visita todas las filas con contenido, incluso después de la
+      // 2200. Así no se pierden cuentas y tampoco se recorren cientos de miles
+      // de filas vacías que solo traen formato de Excel.
+      ws.eachRow({includeEmpty:false},(row,rowNumber)=>{if(rowNumber>h.row)rowNumbers.push(rowNumber);});
+      for(const r of rowNumbers){
         const row=ws.getRow(r);
         const directEmail=h.email?excelEmail(valueText(row.getCell(h.email).value)):'';
         const directPassword=h.password?String(valueText(row.getCell(h.password).value)||'').trim():'';
         if(directEmail){currentAccount=directEmail;currentPassword=directPassword;}
+        const platformValue=h.platform?String(valueText(row.getCell(h.platform).value)||'').trim():'';
+        if(platformValue){
+          const detected=platformsForSheet(platformValue);
+          const canonical=detected.length?detected:[canonPlatform(platformValue)].filter(Boolean);
+          if(canonical.length)currentPlatforms=canonical;
+        }
+        const rowPlatforms=currentPlatforms.length?[...new Set(currentPlatforms)]:[...platforms];
+        if(!rowPlatforms.length)continue;
+        rowPlatforms.forEach((p)=>seenPlatforms.add(p));
         const name=h.name?String(valueText(row.getCell(h.name).value)||'').trim():'';
         const tel=h.phone?phone(valueText(row.getCell(h.phone).value)):'';
         const profile=h.profile?String(valueText(row.getCell(h.profile).value)||'').trim():'';
         const record={
-          ws,sheet:ws.name,row:r,header:h,platforms,accountEmail:directEmail||currentAccount,directEmail,
+          ws,sheet:ws.name,row:r,header:h,platforms:rowPlatforms,accountEmail:directEmail||currentAccount,directEmail,
           accountPassword:directPassword||currentPassword,
           name,tel,profile,pin:h.pin?String(valueText(row.getCell(h.pin).value)||'').trim():'',
           price:h.price?Number(valueText(row.getCell(h.price).value)||0)||0:0,
@@ -519,7 +608,8 @@
         rows.push(record);
         if(name||tel)excelRows.push(record);
       }
-      sheets.push({ws,header:h,platforms,rows});
+      platforms=[...seenPlatforms];
+      if(rows.length)sheets.push({ws,header:h,platforms,rows});
     });
 
     const inv=buildInventoryMap(src);
@@ -583,18 +673,48 @@
     return {workbook,sheets,items,matched,metrics};
   }
 
+  async function readStoredFile(id,{showProgress=true}={}){
+    if(!id)throw new Error('No se indicó qué archivo debe leerse.');
+    const first=await api({accion:'control_leer_archivo',id,metaOnly:true});
+    if(first.base64)return {base64:first.base64,archivo:first.archivo||null};
+    const total=Math.max(0,Number(first.totalChunks||first.archivo?.chunks)||0);
+    const expectedLength=Math.max(0,Number(first.base64Length)||0);
+    if(!first.chunked||!total)throw new Error('El archivo respondió sin contenido. Actualice la página e intente nuevamente.');
+
+    const parts=new Array(total);
+    const concurrency=4;
+    for(let start=1;start<=total;start+=concurrency){
+      const indexes=[];for(let index=start;index<=Math.min(total,start+concurrency-1);index++)indexes.push(index);
+      const loaded=await Promise.all(indexes.map((chunkIndex)=>api({accion:'control_leer_archivo',id,chunkIndex})));
+      loaded.forEach((result,position)=>{
+        const index=Number(result.chunkIndex)||indexes[position];
+        const chunk=String(result.base64||'');
+        if(!chunk)throw new Error(`El bloque ${index} del Excel llegó vacío.`);
+        parts[index-1]=chunk;
+      });
+      if(showProgress){
+        state.status=`Leyendo el Excel completo… ${Math.min(total,start+concurrency-1)} de ${total} bloques`;
+        state.statusType='';render();
+      }
+    }
+    if(parts.filter(Boolean).length!==total)throw new Error('El Excel no llegó completo. Vuelva a intentar.');
+    const base64=parts.join('');
+    if(expectedLength&&base64.length!==expectedLength)throw new Error('El Excel llegó incompleto. Vuelva a intentar.');
+    return {base64,archivo:first.archivo||null};
+  }
+
   async function loadTemplateBase64(force){
     if(state.templateBase64&&!force)return state.templateBase64;
     const id=state.meta?.plantilla?.id;if(!id)throw new Error('Primero cargue su Excel actual como plantilla.');
-    const j=await api({accion:'control_leer_archivo',id});
-    state.templateBase64=j.base64||'';
+    const file=await readStoredFile(id,{showProgress:true});
+    state.templateBase64=file.base64||'';
     return state.templateBase64;
   }
 
   async function analyze(force){
     if(!window.ExcelJS)throw new Error('No cargó el lector de Excel. Revise la conexión e intente nuevamente.');
     const src=source();
-    if(!src.servicios.length)throw new Error('La base actual de clientes todavía no terminó de cargar. Presione “Actualizar base”.');
+    if(!src.servicios.length&&!src.cuentas.length)throw new Error('La base actual de Clientes y Bodega todavía no terminó de cargar. Presione “Actualizar base”.');
     const raw=await loadTemplateBase64(force);
     const workbook=new ExcelJS.Workbook();
     await workbook.xlsx.load(base64ToBuffer(raw));
@@ -706,7 +826,8 @@
   const AUDIT_PLATFORM_COLORS={
     netflix:'#e50914',vipnetflix:'#c9184a',disney:'#1769d2',hbomax:'#6f42c1',primevideo:'#00a8e1',
     paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
-    spotify:'#1db954',youtube:'#ff0033',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
+    spotify:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
+    appletv:'#555b66',star:'#7d30c9',office:'#d83b01',windows10:'#0078d4',windows11:'#0067c0',adobeexpress:'#e60023',eset:'#008f83',
     magis:'#16a085',oleada:'#1297a6',iptv:'#0f9f82',vixmix:'#9c27b0',sin_plataforma:'#78909c'
   };
 
@@ -869,7 +990,7 @@
   }
 
   function accountResultsHtml(){
-    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||1500));
+    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||DEFAULT_ACCOUNT_LIMIT));
     return `<div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
       <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
       ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}`;
@@ -1028,13 +1149,13 @@
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=1500;state.expandedAccountKey='';render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=1500;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
     const aq=host.querySelector('#cmAccountSearch');
     if(aq)aq.oninput=()=>{
       state.accountQuery=aq.value;
       clearTimeout(accountSearchTimer);
-      accountSearchTimer=setTimeout(()=>{state.accountLimit=5000;updateAccountResults();},180);
+      accountSearchTimer=setTimeout(()=>{state.accountLimit=DEFAULT_ACCOUNT_LIMIT;updateAccountResults();},180);
     };
     bindAccountResults(host);
     host.querySelectorAll('[data-cm-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.cmFilter;render();});
@@ -1345,7 +1466,10 @@
 
   async function refreshMeta(){
     state.loading=true;render();
-    try{state.meta=await api({accion:'control_estado'});state.accountAudit=null;state.status='';state.statusType='';}
+    try{
+      state.meta=await api({accion:'control_estado'});state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
+      if(state.metaRetryTimer){clearTimeout(state.metaRetryTimer);state.metaRetryTimer=0;}
+    }
     catch(e){state.status=e.message||'No se pudo cargar Control Maestro.';state.statusType='error';}
     finally{state.loading=false;render();}
   }
@@ -1483,7 +1607,7 @@
     workbook.worksheets.forEach((ws)=>{ws.conditionalFormattings=[];});
     analysis.sheets.forEach((sheet)=>{
       const h=sheet.header;if(!h.days)return;
-      const start=h.row+1,end=Math.max(start,Math.min(sheet.ws.rowCount||start,2200));
+      const start=h.row+1,end=Math.max(start,...(sheet.rows||[]).map((row)=>Number(row.row)||start));
       const daysLetter=columnLetter(h.days);if(!daysLetter)return;
       const targetColumns=[h.alert,h.days].filter(Boolean);
       targetColumns.forEach((col)=>{
@@ -1526,7 +1650,7 @@
 
   async function downloadStored(id){
     if(!id)return;state.busy=true;setStatus('Preparando descarga…','');
-    try{const j=await api({accion:'control_leer_archivo',id});const buffer=base64ToBuffer(j.base64);saveBuffer(buffer,j.archivo?.filename||'Sublicuentas.xlsx');setStatus('✅ Descarga preparada.','good');}
+    try{const file=await readStoredFile(id,{showProgress:true});const buffer=base64ToBuffer(file.base64);saveBuffer(buffer,file.archivo?.filename||'Sublicuentas.xlsx');setStatus('✅ Descarga preparada.','good');}
     catch(e){setStatus('⚠️ '+(e.message||'No se pudo descargar.'),'error');}
     finally{state.busy=false;render();}
   }
@@ -1671,15 +1795,22 @@
       setTimeout(()=>maybeAutoBackup(),80);
       return;
     }catch(e){
-      if(attempt<5){setTimeout(()=>autoAnalyzeWithRetry(attempt+1),900*(attempt+1));}
+      if(attempt<10){setTimeout(()=>autoAnalyzeWithRetry(attempt+1),Math.min(5000,900*(attempt+1)));}
       else{setStatus('⚠️ '+(e.message||'No se pudo leer el Excel para el cruce histórico.'),'error');render();}
     }
   }
 
   async function boot(){
     if(!isAdmin()||!root())return;
-    if(!state.booted){state.booted=true;await refreshMeta();}
+    if(state.loading)return;
+    if(!state.booted||!state.meta){state.booted=true;await refreshMeta();}
     else{state.accountAudit=null;render();}
+    if(!state.meta&&screenActive()&&state.metaRetryCount<6&&!state.metaRetryTimer){
+      state.metaRetryCount++;
+      const delay=Math.min(6000,700*state.metaRetryCount);
+      state.metaRetryTimer=setTimeout(()=>{state.metaRetryTimer=0;if(screenActive())boot();},delay);
+      return;
+    }
     if(state.meta?.plantilla&&!state.analysis&&!state.busy)autoAnalyzeWithRetry(0);
   }
 
@@ -1692,7 +1823,7 @@
 
   function install(){
     if(state.installed)return;state.installed=true;
-    document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]'))setTimeout(boot,90);},true);
+    document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]')){if(!state.meta&&state.metaRetryCount>=6)state.metaRetryCount=0;setTimeout(boot,90);}},true);
     const screen=document.getElementById('screen-control-cuentas');
     // ⚠️ BUG DEL CONGELAMIENTO: cuando "Pantalla completa" usaba el respaldo
     // en CSS (celulares/navegadores que no soportan la Fullscreen API nativa),

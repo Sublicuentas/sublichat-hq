@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-WOLFTEAM-20260809-36">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1831,6 +1831,27 @@ const CONFIG = {
 // /api/login queda público porque es el endpoint que crea la sesión inicial.
 const sublichatNativeFetch = window.fetch.bind(window);
 let sublichatAuthModulePromise = null;
+let sublichatAuthWaitPromise = null;
+
+async function sublichatCurrentAuthUser(){
+  sublichatAuthModulePromise ||= import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
+  const { getAuth, onAuthStateChanged } = await sublichatAuthModulePromise;
+  const auth=getAuth();
+  if(auth.currentUser)return auth.currentUser;
+  // Al recargar, Firebase puede tardar un instante en restaurar la sesión.
+  // Las APIs privadas esperan ese estado en vez de enviar la primera petición
+  // sin token y dejar Control Maestro incompleto durante toda la sesión.
+  if(!sublichatAuthWaitPromise){
+    sublichatAuthWaitPromise=new Promise((resolve)=>{
+      let settled=false,unsubscribe=()=>{};
+      const finish=(user)=>{if(settled)return;settled=true;clearTimeout(timer);try{unsubscribe();}catch(_){}resolve(user||null);};
+      const timer=setTimeout(()=>finish(auth.currentUser),5000);
+      unsubscribe=onAuthStateChanged(auth,(user)=>finish(user),()=>finish(null));
+    }).finally(()=>{sublichatAuthWaitPromise=null;});
+  }
+  return sublichatAuthWaitPromise;
+}
+
 window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
   const rawUrl = typeof input === "string"
     ? input
@@ -1849,9 +1870,7 @@ window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
   );
   if (!headers.has("Authorization")) {
     try {
-      sublichatAuthModulePromise ||= import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
-      const { getAuth } = await sublichatAuthModulePromise;
-      const user = getAuth().currentUser;
+      const user = await sublichatCurrentAuthUser();
       if (user) headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
     } catch (_) {}
   }
@@ -8880,7 +8899,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-WOLFTEAM-20260809-36"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
