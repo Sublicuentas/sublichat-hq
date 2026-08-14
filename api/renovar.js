@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 23  ·  URL permanente + visibilidad elegible por servicio
+// api/renovar.js  ·  VERSION 24  ·  URL permanente + visibilidad elegible por servicio
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -212,6 +212,15 @@ function normName(v) {
 
 function normPhone(v) {
   return String(v || "").replace(/\D/g, "");
+}
+
+function vendedorTelefonoSeguro(vendedor, candidato, telefonoCliente) {
+  const rol = normPlat(vendedor).replace(/[^a-z0-9]/g, "");
+  if (["relojes", "sublicuentas"].includes(rol)) return "";
+  const limpio = String(candidato || "").trim();
+  const telefonoVendedor = normPhone(limpio);
+  const telefonoTitular = normPhone(telefonoCliente);
+  return telefonoVendedor && telefonoTitular && telefonoVendedor === telefonoTitular ? "" : limpio;
 }
 
 function safeDocId(v) {
@@ -860,7 +869,7 @@ export default async function handler(req, res) {
       const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
       const vendedor = cliente.vendedor || body.vendedor || "";
       const vendedorTelefonoPresente = cliente.vendedorTelefono != null || body.vendedorTelefono != null;
-      const vendedorTelefono = cliente.vendedorTelefono || body.vendedorTelefono || "";
+      const vendedorTelefonoEntrada = cliente.vendedorTelefono || body.vendedorTelefono || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
       const tNorm = normPhone(tel);
 
@@ -969,14 +978,21 @@ export default async function handler(req, res) {
       const beneficiarioActual = datosBeneficiario(servicios[idx], nombreFinal);
       const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
 
+      const vendedorFinal = vendedor || data.vendedor || "";
+      const telefonoFinal = tel || data.telefono || "";
+      const vendedorTelefonoFinal = vendedorTelefonoSeguro(
+        vendedorFinal,
+        vendedorTelefonoPresente ? vendedorTelefonoEntrada : (data.vendedorTelefono || ""),
+        telefonoFinal
+      );
       const update = {
         nombrePerfil: nombreFinal,
         nombre: nombreFinal,
         nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
         telefono: tel || data.telefono || "",
         telefono_norm: tNorm || data.telefono_norm || "",
-        vendedor: vendedor || data.vendedor || "",
-        vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
+        vendedor: vendedorFinal,
+        vendedorTelefono: vendedorTelefonoFinal,
         servicios: serviciosLimpios,
         tokenAcceso: accesos.tokenTitular,
         accesosBeneficiarios: accesos.registro,

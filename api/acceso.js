@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 5 · URL permanente + visibilidad elegible por servicio
+// api/acceso.js · VERSION 6 · URL permanente + visibilidad elegible por servicio
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
@@ -119,6 +119,17 @@ const VENDEDOR_TELS = { yami: "9687724", jimena: "88501036", heber: "32174922", 
 function vendedorTel(v) {
   const n = normPlat(v);
   return VENDEDOR_TELS[n] || "";
+}
+function vendedorTelefonoSeguro(cliente = {}) {
+  const vendedor = cliente.vendedor || "";
+  const rol = normPlat(vendedor).replace(/[^a-z0-9]/g, "");
+  if (["relojes", "sublicuentas"].includes(rol)) return "";
+  const autorizado = vendedorTel(vendedor);
+  if (autorizado) return autorizado;
+  const candidato = String(cliente.vendedorTelefono || "").trim();
+  const telefonoVendedor = candidato.replace(/\D/g, "");
+  const telefonoCliente = String(cliente.telefono || "").replace(/\D/g, "");
+  return telefonoVendedor && telefonoCliente && telefonoVendedor === telefonoCliente ? "" : candidato;
 }
 
 // Condiciones EXACTAS tomadas de FICHA_TEMPLATES en index.html. Si cambia el
@@ -371,7 +382,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     fechaRenovacion,
     terminos: termsFor(plataforma),
     vendedor: cliente.vendedor || "",
-    vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+    vendedorTelefono: vendedorTelefonoSeguro(cliente)
   };
 }
 
@@ -448,7 +459,7 @@ export default async function handler(req, res) {
         totalActivos: activos,
         totalVencidos: publicos.length - activos,
         vendedor: cliente.vendedor || "",
-        vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+        vendedorTelefono: vendedorTelefonoSeguro(cliente)
       });
     }
 
