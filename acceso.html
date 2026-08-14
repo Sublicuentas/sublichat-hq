@@ -232,7 +232,9 @@
   }
 
   function supportData(d){
-    const phone=String(d.vendedorTelefono||"").replace(/\D/g,"");
+    const rol=String(d.vendedor||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    const candidato=["relojes","sublicuentas"].includes(rol)?"":String(d.vendedorTelefono||"");
+    const phone=candidato.replace(/\D/g,"");
     const intl=phone?(phone.startsWith("504")?phone:`504${phone}`):"";
     return {phone,href:intl?`https://wa.me/${intl}`:"#"};
   }

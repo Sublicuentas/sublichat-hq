@@ -4825,7 +4825,7 @@ function gCaminoBombas(){
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-  // VERSION 24 · Cuatro variantes elegibles para la URL y dos entregas
+// VERSION 25 · Cuatro variantes elegibles para la URL y dos entregas
   // independientes: ficha tradicional o ficha URL. Solo se abre la opción que
   // el vendedor toca expresamente.
   // Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
@@ -5916,29 +5916,43 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaVendedorTel(v){
     return FICHA_VENDEDOR_TELS[fichaNorm(v)] || "";
   }
+  function fichaSoloDigitos(v){
+    return String(v||"").replace(/\D/g,"");
+  }
+  function fichaVendedorTelefonoSeguro(vendedor,candidato,telefonoCliente){
+    const rol=fichaNorm(vendedor);
+    // Relojes y Sublicuentas ya quedan identificados por su nombre en la ficha.
+    // Nunca se reutiliza su teléfono del cliente como supuesto número de soporte.
+    if(rol==="relojes"||rol==="sublicuentas") return "";
+    const autorizado=fichaVendedorTel(vendedor);
+    if(autorizado) return autorizado;
+    const limpio=String(candidato||"").trim();
+    const digitos=fichaSoloDigitos(limpio),cliente=fichaSoloDigitos(telefonoCliente);
+    if(digitos&&cliente&&digitos===cliente) return "";
+    return limpio;
+  }
   function fichaVendedorTelefonoActual(){
-    return fichaGetVal("fichaVendedorTelefono")||fichaVendedorTel(fichaVendedorActual());
+    return fichaVendedorTelefonoSeguro(
+      fichaVendedorActual(),
+      fichaGetVal("fichaVendedorTelefono")||fichaVendedorTel(fichaVendedorActual()),
+      fichaGetVal("fichaTelefono")
+    );
   }
   function fichaAplicarTelVendedorDefault(){
     const telEl=fichaQ("fichaVendedorTelefono");
     if(!telEl) return;
-    const vtel=fichaVendedorTel(fichaVendedorActual());
-    const actual=(telEl.value||"").trim();
-    const esOtroDefault=actual && Object.values(FICHA_VENDEDOR_TELS).includes(actual) && actual!==vtel;
-    // Solo autocompleta si el campo está vacío o si lo que había era el número por
-    // default de OTRO vendedor (para que cambiar de vendedor actualice el default).
-    // Nunca pisa un teléfono real que la persona ya haya escrito a mano.
-    if(vtel && (!actual || esOtroDefault)) telEl.value=vtel;
-    else if(!vtel && esOtroDefault) telEl.value="";
+    telEl.value=fichaVendedorTelefonoSeguro(
+      fichaVendedorActual(),
+      telEl.value||fichaVendedorTel(fichaVendedorActual()),
+      fichaGetVal("fichaTelefono")
+    );
   }
 
   function fichaRespaldoCore(){
-    const tel=fichaVendedorTelefonoActual();
     const vendedor=fichaVendedorActual();
-    const lineas=[];
-    if(tel) lineas.push(tel);
-    if(vendedor) lineas.push(fichaVendedorIcono(vendedor)+" Vendedor "+vendedor);
-    return lineas.join("\n");
+    // La ficha tradicional vuelve a su formato anterior: identifica al vendedor
+    // por nombre, sin imprimir ningún teléfono debajo de los datos del cliente.
+    return vendedor ? fichaVendedorIcono(vendedor)+" Vendedor "+vendedor : "";
   }
 
   function fichaRespaldoBlock(){
@@ -6141,7 +6155,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         const listaConfirmada=Array.isArray(j.perfilesGuardados)?j.perfilesGuardados:[];
         const perfilesCoinciden=listaConfirmada.length===perfilesEsperados&&listaConfirmada.every((guardado,index)=>{
           const esperado=payload.servicio.perfiles[index]||{};
-          return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!requiereClaveGuardada||guardado.tieneClave===true)&&(!requierePinGuardado||guardado.tienePin===true);
+          const camposEsperados=fichaCamposEfectivos(esperado);
+          const soloPerfil=camposEsperados.modo==="perfil";
+          const exigeClave=!soloPerfil&&fichaNeedsClave(payload.servicio.plataforma);
+          return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!exigeClave||guardado.tieneClave===true)&&(!requierePinGuardado||guardado.tienePin===true);
         });
         if(j.guardadoEnFirebase!==true||!Number.isInteger(perfilesConfirmados)||perfilesConfirmados!==perfilesEsperados||!perfilesCoinciden){
           const msg=`⚠️ Firebase no confirmó los ${perfilesEsperados} perfiles. No se mostrarán el enlace ni las variantes hasta reemplazar también api/renovar.js y volver a guardar.`;
@@ -6157,7 +6174,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         const msg=`${base}: ${perfilesConfirmados} perfil${perfilesConfirmados===1?"":"es"} confirmado${perfilesConfirmados===1?"":"s"}${nombres?` (${nombres})`:""} · 1 precio · 1 renovación.${advertencias.length?` ⚠️ Bodega: ${advertencias.join("; ")}.`:""}`;
         fichaStatus(msg,advertencias.length?"info":"ok");
         if(!silent) fichaToast(msg);
-        await load({forceServer:true});
+        // El guardado ya fue confirmado por la función de servidor. Una falla al
+        // recargar las listas no debe convertir ese éxito en "No pude conectar".
+        try{ await load({forceServer:true}); }
+        catch(recargaError){ console.warn("CRM guardado; recarga pendiente",recargaError); }
         fichaSincronizarServiciosDesdeData(j.servicioIndex!=null?Number(j.servicioIndex):fichaServicioIndexActual,payload);
         fichaMostrarDatosCliente(j.linkPublico||"");
         try{if(typeof window.sublichatControlSyncLoadedData==="function")window.sublichatControlSyncLoadedData("✅ Ficha editada y actualizada en Control Maestro.");}catch(_){}
@@ -6168,6 +6188,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       }
       return j;
     }catch(e){
+      console.error("FICHA_CRM_ERROR",e);
       fichaStatus("⚠️ No pude conectar con CRM.","err");
       fichaToast("⚠️ No pude conectar con CRM.");
       return null;
@@ -6317,7 +6338,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaNombre").value=(g&&g.nombre)||"";
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
     fichaSetVendedor((g&&g.vendedor)||"");
-    fichaQ("fichaVendedorTelefono").value=(g&&g.vendedorTelefono)||fichaVendedorTel((g&&g.vendedor)||"");
+    fichaQ("fichaVendedorTelefono").value=fichaVendedorTelefonoSeguro(
+      (g&&g.vendedor)||"",
+      (g&&g.vendedorTelefono)||fichaVendedorTel((g&&g.vendedor)||""),
+      (g&&g.telefono)||""
+    );
     const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
     fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
     fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
@@ -6427,7 +6452,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       nombre:actual.nombre||(payload&&payload.cliente&&payload.cliente.nombrePerfil)||(fichaGrupoActual&&fichaGrupoActual.nombre)||"",
       telefono:actual.telefono||(payload&&payload.cliente&&payload.cliente.telefono)||(fichaGrupoActual&&fichaGrupoActual.telefono)||"",
       vendedor:actual.vendedor||(payload&&payload.cliente&&payload.cliente.vendedor)||(fichaGrupoActual&&fichaGrupoActual.vendedor)||"",
-      vendedorTelefono:actual.vendedorTelefono||(payload&&payload.cliente&&payload.cliente.vendedorTelefono)||(fichaGrupoActual&&fichaGrupoActual.vendedorTelefono)||"",
+      vendedorTelefono:fichaVendedorTelefonoSeguro(
+        actual.vendedor||(payload&&payload.cliente&&payload.cliente.vendedor)||(fichaGrupoActual&&fichaGrupoActual.vendedor)||"",
+        actual.vendedorTelefono||(payload&&payload.cliente&&payload.cliente.vendedorTelefono)||(fichaGrupoActual&&fichaGrupoActual.vendedorTelefono)||"",
+        actual.telefono||(payload&&payload.cliente&&payload.cliente.telefono)||(fichaGrupoActual&&fichaGrupoActual.telefono)||""
+      ),
       nombreNorm:actual.nombreNorm||(fichaGrupoActual&&fichaGrupoActual.nombreNorm)||"",
       servicios:lista
     };
@@ -6542,7 +6571,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>Cliente titular</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre de quien compra"></label>
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
           <label class="ficha-field"><span>Vendedor</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
-          <label class="ficha-field"><span>Número del vendedor / soporte</span><input class="ficha-input" id="fichaVendedorTelefono" inputmode="tel" placeholder="Solo el número autorizado"></label>
+          <input type="hidden" id="fichaVendedorTelefono" value="">
           <label class="ficha-field"><span>¿Quién usará este acceso?</span><select class="ficha-select" id="fichaBeneficiarioTipo"><option value="titular">El cliente titular</option><option value="tercero">Otra persona / tercero</option></select></label>
           <label class="ficha-field" id="fichaBeneficiarioNombreBox" style="display:none"><span>Nombre del beneficiario</span><input class="ficha-input" id="fichaBeneficiarioNombre" placeholder="Ej. María López"></label>
           <div class="ficha-field" id="fichaBeneficiarioHelp" style="grid-column:1/-1;background:rgba(47,155,224,.10);border:1px solid rgba(47,155,224,.28);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;color:var(--muted)">🔗 Todas las plataformas de este cliente se reunirán en una sola URL permanente, aunque compre o renueve en fechas distintas.</div>
