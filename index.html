@@ -4825,13 +4825,16 @@ function gCaminoBombas(){
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ relojes:"32126332", yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-// VERSION 26 · Cuatro variantes elegibles para la URL y dos entregas
+// VERSION 27 · Cuatro variantes URL con el mismo acabado visual y sin pie de
+// vendedor. La ficha tradicional conserva por separado el teléfono del
+// cliente y el vendedor; la página /c/{token} conserva su soporte directo.
+//
+// Cuatro variantes elegibles para la URL y dos entregas
   // independientes: ficha tradicional o ficha URL. Solo se abre la opción que
   // el vendedor toca expresamente.
   // Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
-  // blanco entre bloques. Cada plantilla es {cuerpo, despedida} — la despedida
-  // se agrega aparte solo si el vendedor es Relojes o Sublicuentas, así el
-  // texto no depende de contar líneas.
+  // blanco entre bloques. Cada variante termina en su agradecimiento y nunca
+  // agrega teléfono ni nombre del vendedor al mensaje que acompaña la URL.
   const FICHA_MENSAJES_CLIENTE=[
     {
       cuerpo:
@@ -4886,20 +4889,10 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
       despedida: "¡Gracias por elegir Sublicuentas!"
     }
   ];
-  function fichaVendedorTieneDespedida(v){
-    const n=fichaNorm(v);
-    return n==="relojes" || n==="sublicuentas";
-  }
-  function fichaConstruirMensajeCliente({nombre,servicioLabel,link,vendedor,telefono,variante=0}){
+  function fichaConstruirMensajeCliente({nombre,servicioLabel,link,variante=0}){
     const indice=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(variante)||0));
     const t=FICHA_MENSAJES_CLIENTE[indice];
-    let texto=t.cuerpo;
-    if(fichaVendedorTieneDespedida(vendedor)) texto+="\n\n"+t.despedida;
-    const tel=String(telefono||"").trim();
-    const contacto=[];
-    if(tel) contacto.push(`📞 *${tel}*`);
-    if(vendedor) contacto.push(`${fichaVendedorIcono(vendedor)} Vendedor *${vendedor}*`);
-    if(contacto.length) texto+="\n\n"+contacto.join("\n");
+    const texto=t.cuerpo+"\n\n"+t.despedida;
     return texto
       .replace(/\{nombre\}/g, nombre||"Cliente")
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")
@@ -4910,12 +4903,14 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
   // ficha completa, para no perderlos si se cierra WhatsApp sin enviarlos.
   let fichaLinkActual="";
   let fichaVarianteMensajeActual=0;
+  let fichaMensajeClienteActual="";
   function fichaMostrarDatosCliente(linkPublico){
     const nuevoLink=linkPublico ? (/^https?:\/\//i.test(String(linkPublico))?String(linkPublico):(window.location.origin+linkPublico)) : "";
     if(nuevoLink!==fichaLinkActual) fichaVarianteMensajeActual=0;
     fichaLinkActual=nuevoLink;
     const linkBox=fichaQ("fichaClienteBox"), msgBox=fichaQ("fichaMensajeClienteBox");
     if(!fichaLinkActual){
+      fichaMensajeClienteActual="";
       if(linkBox) linkBox.style.display="none";
       if(msgBox) msgBox.style.display="none";
       return;
@@ -4927,12 +4922,13 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
     if(!fichaLinkActual) return;
     fichaVarianteMensajeActual=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(indice)||0));
     const nombre=fichaNombreBeneficiario()||"Cliente";
-    const vendedor=fichaVendedorActual();
     const servicioLabel=fichaPlatformLabel(fichaGetVal("fichaPlat"));
-    const telefono=fichaVendedorTelefonoActual();
-    const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,vendedor,telefono,variante:fichaVarianteMensajeActual});
+    const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,variante:fichaVarianteMensajeActual});
+    fichaMensajeClienteActual=msg;
     const view=fichaQ("fichaMensajeClienteView");
-    if(view) view.textContent=msg;
+    // Las cuatro variantes usan la misma vista visual actualizada. El texto
+    // crudo con asteriscos se conserva aparte para copiarlo a WhatsApp.
+    if(view) view.innerHTML=fichaMarkdownToHtml(msg);
     document.querySelectorAll("[data-ficha-variante]").forEach(btn=>{
       const active=Number(btn.dataset.fichaVariante)===fichaVarianteMensajeActual;
       btn.classList.toggle("active",active);
@@ -6243,7 +6239,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function fichaAbrirVarianteWhatsApp(){
     if(!fichaLinkActual){ fichaToast("Primero guarde el CRM para generar el enlace."); return; }
-    const mensaje=fichaQ("fichaMensajeClienteView")?.textContent||"";
+    const mensaje=fichaMensajeClienteActual;
     if(!mensaje){ fichaToast("Seleccione una variante antes de abrir WhatsApp."); return; }
     fichaOpenWhatsApp(mensaje);
   }
@@ -6269,7 +6265,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     }
     fichaMostrarDatosCliente(j.linkPublico);
     fichaMostrarVarianteMensajeCliente(fichaVarianteMensajeActual);
-    const mensaje=fichaQ("fichaMensajeClienteView")?.textContent||"";
+    const mensaje=fichaMensajeClienteActual;
     if(!mensaje){fichaStatus("⚠️ No se pudo preparar el mensaje con la URL.","err");return;}
     fichaStatus(`✅ CRM guardado. Abriendo en WhatsApp la variante ${fichaVarianteMensajeActual+1} con la ficha URL.`,"ok");
     fichaOpenWhatsApp(mensaje);
@@ -6674,7 +6670,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaVisibilidadUrl").addEventListener("change",()=>{fichaActualizarVisibilidadUrl(false);fichaAvisoDispositivo();});
     ["fichaVerCorreo","fichaVerClave","fichaVerPin"].forEach(id=>fichaQ(id).addEventListener("change",fichaAvisoDispositivo));
     fichaQ("fichaCopyLink").addEventListener("click",e=>fichaCopiarCampo(fichaLinkActual,e.currentTarget));
-    fichaQ("fichaCopyMensaje").addEventListener("click",e=>fichaCopiarCampo(fichaQ("fichaMensajeClienteView")?.textContent||"",e.currentTarget));
+    fichaQ("fichaCopyMensaje").addEventListener("click",e=>fichaCopiarCampo(fichaMensajeClienteActual,e.currentTarget));
     fichaQ("fichaOpenMensaje").addEventListener("click",fichaAbrirVarianteWhatsApp);
     document.querySelectorAll("[data-ficha-variante]").forEach(btn=>btn.addEventListener("click",()=>fichaMostrarVarianteMensajeCliente(Number(btn.dataset.fichaVariante))));
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
@@ -6684,7 +6680,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaOleadaDispositivos").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaRefreshTemplate(); });
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
-    fichaQ("fichaVendedorTelefono").addEventListener("input",()=>{if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();});
+    // El número del vendedor sí se guarda para el soporte dentro de /c/{token},
+    // pero ya no forma parte de ninguna variante de entrega de la URL.
     fichaQ("fichaPrecio").addEventListener("input",()=>{ fichaQ("fichaPrecio").dataset.manual="1"; });
     fichaQ("fichaAddProfile").addEventListener("click",()=>{
       fichaPerfilesExtraActuales.push({
@@ -7725,8 +7722,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(!info) return 'sin información del envío';
     if(info.skipped&&info.reason==='telegram_env_missing') return 'falta configurar el bot en Vercel (variable BOT_TOKEN)';
     if(info.skipped&&info.reason==='sin_destinos') return 'no hay chat_id de Telegram configurado para ese destinatario';
+    const entregados=(Array.isArray(info.deliveredRoles)?info.deliveredRoles:[]).map(tkRoleLabel);
+    const fallidos=(Array.isArray(info.failedRoles)?info.failedRoles:[]).map(tkRoleLabel);
     const results=Array.isArray(info.results)?info.results:[];
     const fallo=results.find(r=>r&&!r.ok);
+    let causa='error desconocido';
+    if(fallo&&fallo.skipped&&fallo.reason==='chat_id_missing') causa='falta configurar su chat de Telegram en Vercel';
+    else if(fallo&&fallo.skipped&&fallo.reason==='telegram_env_missing') causa='falta configurar TELEGRAM_BOT_TOKEN en Vercel';
+    else if(fallo&&fallo.error) causa=fallo.error;
+    const partes=[];
+    if(entregados.length)partes.push('sí llegó a '+entregados.join(' + '));
+    if(fallidos.length)partes.push('falló para '+fallidos.join(' + '));
+    if(partes.length)return partes.join('; ')+'. '+causa;
     if(fallo&&fallo.error) return fallo.error;
     return 'error desconocido';
   }
@@ -7749,12 +7756,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const isNotice=String(t.tipo||'').toLowerCase()==='aviso'||String(t.seccion||'').toLowerCase()==='avisos'||/^AVISO\s*[·:-]/i.test(String(t.titulo||''));
     const de=t.creadoPor||tkRoleLabel(t.creadoPorRol);
     const tgField=tkTelegramField(t);
-    const tgWarn=(tgField.ok===false)?`<div class="tk-tg-warn">📵 No llegó por Telegram (${esc(tgField.label)}): ${esc(tkTelegramMotivo(tgField.info))}</div>`:'';
+    const tgWarn=(tgField.ok===false)?`<div class="tk-tg-warn">📵 ${tgField.info&&tgField.info.partial?'Telegram llegó parcialmente':'No llegó por Telegram'} (${esc(tgField.label)}): ${esc(tkTelegramMotivo(tgField.info))}</div>`:'';
     if(isNotice){
       // Un aviso no es un ticket: solo se muestra el mensaje enviado, sin estado ni botones de acción.
       const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
       const tituloLimpio=esc((t.titulo||'Aviso').replace(/^AVISO\s*[·:-]?\s*/i,'')||'Aviso');
-      return `<div class="tk-card tk-notice-card"><div class="tk-top"><div class="tk-title"><span class="tk-notice-label">📢 AVISO</span> ${tituloLimpio}</div></div><div class="tk-meta">De: ${esc(de)} · Para: ${esc(dest)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${tgWarn}</div>`;
+      const retry=(tgField.ok===false&&tkRole()==='sublicuentas')?`<div class="tk-actions"><button class="tk-btn warn mini" data-tk-retrytg="${esc(t.id||'')}">🔁 Reintentar Telegram</button></div>`:'';
+      return `<div class="tk-card tk-notice-card"><div class="tk-top"><div class="tk-title"><span class="tk-notice-label">📢 AVISO</span> ${tituloLimpio}</div></div><div class="tk-meta">De: ${esc(de)} · Para: ${esc(dest)} · ${esc(tkWhen(t.createdAt))}</div><div class="tk-detail">${esc(t.detalle||'')}</div>${tgWarn}${retry}</div>`;
     }
     const dest=t.destinosLabel||(Array.isArray(t.destinos)?t.destinos.map(tkRoleLabel).join(' + '):'—');
     const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.por||tkRoleLabel(x.porRol))}</b><span>${esc(x.texto||'')}</span><small>${esc(tkWhen(x.at))}</small></div>`).join('');
@@ -7839,7 +7847,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const titulo=(document.getElementById('tkAvisoTitulo')?.value||'').trim(),detalle=(document.getElementById('tkAvisoDetalle')?.value||'').trim(),destino=document.getElementById('tkAvisoDestino')?.value||'todos';
     if(!titulo||!detalle){mostrarToast('Escriba el título y el contenido del aviso.');return;}
     tk.status='Publicando aviso y notificando a Telegram…';tkShowStatus();
-    try{const delivery=tkNoticeDelivery(destino);const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos'},delivery));const enviados=delivery.destinosLabel;tk.status=j.telegramOk===false?'✅ Aviso enviado a '+enviados+' (ya lo ven en su Sublichat). Nota: la alerta de Telegram no salió porque falta configurar el bot en Vercel.':'✅ Aviso enviado a '+enviados+' y alerta de Telegram entregada.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
+    try{const delivery=tkNoticeDelivery(destino);const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos'},delivery));const enviados=delivery.destinosLabel;tk.status=j.telegramOk===false?'✅ Aviso guardado para '+enviados+' en Sublichat. Telegram: '+tkTelegramMotivo(j.telegramInfo):'✅ Aviso enviado a '+enviados+' y alerta de Telegram entregada.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
+    catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
+  }
+  async function tkRetryTelegram(id){
+    if(!id)return;
+    tk.status='Reintentando el aviso por Telegram…';tkShowStatus();
+    try{const j=await tkApi({accion:'reenviar_telegram',id});tk.status=j.telegramOk===false?'⚠️ Telegram todavía no pudo completar el envío: '+tkTelegramMotivo(j.telegramInfo):'✅ Aviso reenviado por Telegram.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}
     catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
   }
   async function tkSend(id){
@@ -7865,6 +7879,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     host.querySelectorAll('[data-tk-send]').forEach(b=>b.onclick=()=>tkSend(b.dataset.tkSend));
     host.querySelectorAll('[data-tk-proceso]').forEach(b=>b.onclick=()=>tkProceso(b.dataset.tkProceso));
     host.querySelectorAll('[data-tk-resolve]').forEach(b=>b.onclick=()=>tkResolve(b.dataset.tkResolve));
+    host.querySelectorAll('[data-tk-retrytg]').forEach(b=>b.onclick=()=>tkRetryTelegram(b.dataset.tkRetrytg));
   }
   function renderTickets(force){
     const host=document.getElementById('rbac-tickets');if(!host)return;
