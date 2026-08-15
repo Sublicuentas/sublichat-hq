@@ -1,9 +1,9 @@
-// api/tickets.js · Sublichat Tickets de Auditoría
+// api/tickets.js · VERSION 2 · avisos parciales + reintento seguro de Telegram
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 // TELEGRAM_BOT_TOKEN y, opcionalmente, TELEGRAM_CHAT_ID_<PERFIL>.
-// Los IDs de respaldo incluidos abajo permiten avisar a todos los vendedores configurados.
+// Todos los chat IDs deben configurarse como variables privadas de Vercel.
 
 const admin = require('firebase-admin');
 
@@ -29,7 +29,9 @@ async function requireFirebaseUser(req, res) {
     return null;
   }
   try {
-    return await admin.auth().verifyIdToken(token);
+    const user = await admin.auth().verifyIdToken(token);
+    if (!String(user.usuario || '').trim() || !String(user.role || '').trim()) throw new Error('claims_missing');
+    return user;
   } catch (_) {
     res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' });
     return null;
@@ -95,16 +97,14 @@ function destinosLabel(destinos) {
   return (destinos || []).map(roleLabel).join(' + ');
 }
 
-// Chat IDs de Telegram por perfil. Se pueden sobreescribir con variables de entorno
-// en Vercel (TELEGRAM_CHAT_ID_MAGDIEL, TELEGRAM_CHAT_ID_RELOJES, TELEGRAM_CHAT_ID_SUBLICUENTAS).
-// Si no hay variable de entorno, se usa el ID fijo de respaldo.
+// Chat IDs de Telegram por perfil. Nunca se incluyen identificadores reales en GitHub.
 const CHAT_IDS = {
-  magdiel: process.env.TELEGRAM_CHAT_ID_MAGDIEL || '8652640043',
-  relojes: process.env.TELEGRAM_CHAT_ID_RELOJES || '411539492',
-  sublicuentas: process.env.TELEGRAM_CHAT_ID_SUBLICUENTAS || '5728675990',
-  yami: process.env.TELEGRAM_CHAT_ID_YAMI || '7511522045',
-  jimena: process.env.TELEGRAM_CHAT_ID_JIMENA || '7844369242',
-  manuel: process.env.TELEGRAM_CHAT_ID_MANUEL || '6848826692'
+  magdiel: process.env.TELEGRAM_CHAT_ID_MAGDIEL || '',
+  relojes: process.env.TELEGRAM_CHAT_ID_RELOJES || '',
+  sublicuentas: process.env.TELEGRAM_CHAT_ID_SUBLICUENTAS || '',
+  yami: process.env.TELEGRAM_CHAT_ID_YAMI || '',
+  jimena: process.env.TELEGRAM_CHAT_ID_JIMENA || '',
+  manuel: process.env.TELEGRAM_CHAT_ID_MANUEL || ''
 };
 
 function telegramHTML(v) {
@@ -124,24 +124,99 @@ async function sendTelegramTo(chatId, text) {
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true })
   });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) return { ok: false, error: j.description || `Telegram HTTP ${r.status}`, chatId };
-  return { ok: true, chatId };
+  if (!r.ok || !j.ok) return { ok: false, error: j.description || `Telegram HTTP ${r.status}` };
+  return { ok: true };
 }
 
 // Envía el mensaje a cada chat correspondiente a los roles en `destinos`.
 // Si no hay destinos (o no matchea ningún perfil conocido), cae a TELEGRAM_CHAT_ID genérico si existe.
 async function sendTelegram(text, destinos) {
-  const roles = Array.isArray(destinos) ? destinos.filter(r => CHAT_IDS[r]) : [];
-  let targets = roles.map(r => CHAT_IDS[r]);
-  if (!targets.length) {
-    const fallback = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_AUDIT_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
-    if (fallback) targets = [fallback];
+  const requested = [...new Set((Array.isArray(destinos) ? destinos : [])
+    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)))];
+  const targets = new Map();
+  const results = [];
+
+  requested.forEach((role) => {
+    const chatId = CHAT_IDS[role];
+    if (!chatId) {
+      results.push({ ok: false, skipped: true, reason: 'chat_id_missing', roles: [role] });
+      return;
+    }
+    const old = targets.get(chatId) || { roles: [] };
+    old.roles.push(role);
+    targets.set(chatId, old);
+  });
+
+  const fallback = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_AUDIT_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
+  if (!targets.size && fallback) targets.set(fallback, { roles: requested.slice(), fallback: true });
+
+  const configuredResults = await Promise.all([...targets.entries()].map(async ([chatId, meta]) => {
+    try {
+      return { ...(await sendTelegramTo(chatId, text)), roles: meta.roles, fallback: meta.fallback === true };
+    } catch (e) {
+      return { ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), roles: meta.roles, fallback: meta.fallback === true };
+    }
+  }));
+  results.push(...configuredResults);
+
+  // Si todos los chats específicos fallaron, intenta el chat general configurado.
+  // Nunca duplica el aviso cuando al menos un destino específico sí lo recibió.
+  if (targets.size && configuredResults.length && !configuredResults.some(r => r.ok) && fallback && !targets.has(fallback)) {
+    try {
+      results.push({ ...(await sendTelegramTo(fallback, text)), roles: requested.slice(), fallback: true });
+    } catch (e) {
+      results.push({ ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), roles: requested.slice(), fallback: true });
+    }
   }
-  targets = [...new Set(targets)]; // evita duplicados si dos roles comparten chat_id
-  if (!targets.length) return { ok: false, skipped: true, reason: 'sin_destinos' };
-  const results = await Promise.all(targets.map(id => sendTelegramTo(id, text)));
-  const allOk = results.every(r => r.ok);
-  return { ok: allOk, results };
+
+  const delivered = new Set();
+  results.filter(r => r.ok).forEach(r => (r.roles || []).forEach(role => delivered.add(role)));
+  const deliveredRoles = requested.filter(role => delivered.has(role));
+  const failedRoles = requested.filter(role => !delivered.has(role));
+  const ok = requested.length ? failedRoles.length === 0 : results.some(r => r.ok);
+  const partial = deliveredRoles.length > 0 && failedRoles.length > 0;
+  if (!results.length) return { ok: false, skipped: true, reason: 'sin_destinos', deliveredRoles, failedRoles };
+  return { ok, partial, results, deliveredRoles, failedRoles };
+}
+
+// Nunca devuelve ni conserva chat_id en respuestas accesibles al navegador.
+// También limpia documentos históricos que todavía puedan contenerlos.
+function safeTelegramInfo(info) {
+  if (!info || typeof info !== 'object') return { ok: false };
+  const safeResult = (raw) => {
+    const value = raw && typeof raw === 'object' ? raw : {};
+    const out = { ok: value.ok === true };
+    if (value.skipped === true) out.skipped = true;
+    if (value.reason) out.reason = clean(value.reason, 80);
+    if (value.error) out.error = clean(value.error, 240);
+    if (value.fallback === true) out.fallback = true;
+    if (Array.isArray(value.roles)) out.roles = value.roles
+      .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+    return out;
+  };
+  const out = safeResult(info);
+  if (info.partial === true) out.partial = true;
+  if (Array.isArray(info.deliveredRoles)) out.deliveredRoles = info.deliveredRoles
+    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+  if (Array.isArray(info.failedRoles)) out.failedRoles = info.failedRoles
+    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+  if (Array.isArray(info.results)) out.results = info.results.slice(0, 20).map(safeResult);
+  return out;
+}
+
+function safeTicketForClient(item) {
+  const out = { ...(item || {}) };
+  ['telegramInfo', 'telegramProcessInfo', 'telegramResolvedInfo', 'telegramReplyInfo'].forEach((key) => {
+    if (out[key]) out[key] = safeTelegramInfo(out[key]);
+  });
+  return out;
+}
+
+function canAccessTicket(ticket, role) {
+  const actor = clean(role, 40).toLowerCase();
+  if (actor === 'sublicuentas') return true;
+  const destinos = Array.isArray(ticket && ticket.destinos) ? ticket.destinos.map(v => clean(v, 40).toLowerCase()) : [];
+  return destinos.includes(actor) || clean(ticket && ticket.creadoPorRol, 40).toLowerCase() === actor;
 }
 
 async function listTickets(db, body) {
@@ -161,7 +236,7 @@ async function listTickets(db, body) {
       return destinos.includes(rol) || String(t.creadoPorRol || '') === rol;
     });
   }
-  return { ok: true, items };
+  return { ok: true, items: items.map(safeTicketForClient) };
 }
 
 // Genera un número de ticket secuencial (#1, #2, #3...) usando un contador en Firestore.
@@ -183,6 +258,20 @@ function estadoLabel(estado) {
   if (e === 'resuelto') return 'Resuelto';
   if (e === 'respondido') return 'Respondido';
   return 'Abierto';
+}
+
+function creationTelegramMessage(item = {}) {
+  const esAviso = String(item.tipo || '').toLowerCase() === 'aviso' || item.seccion === 'avisos';
+  return esAviso ? [
+    `📢 <b>Nuevo aviso de ${telegramHTML(roleLabel(item.creadoPorRol))}</b>`,
+    `<b>Para:</b> ${telegramHTML(item.destinosLabel || destinosLabel(item.destinos))}`,
+    `<b>${telegramHTML(String(item.titulo || '').replace(/^AVISO\s*[·:-]?\s*/i, '') || 'Actualización')}</b>`,
+    telegramHTML(item.detalle)
+  ].join('\n') : [
+    `🎫 <b>${telegramHTML(roleLabel(item.creadoPorRol))}</b> te ha enviado un ticket #${item.numero || '—'}`,
+    `<b>Motivo:</b> ${telegramHTML(item.titulo)}`,
+    `<b>Estado:</b> ${telegramHTML(estadoLabel(item.estado))}`
+  ].join('\n');
 }
 
 async function createTicket(db, body) {
@@ -213,20 +302,32 @@ async function createTicket(db, body) {
     resueltoAt: ''
   };
   const ref = await db.collection('tickets_auditoria').add(item);
-  const esAviso = tipo === 'aviso' || item.seccion === 'avisos';
-  const msg = esAviso ? [
-    `📢 <b>Nuevo aviso de ${telegramHTML(roleLabel(creadoRol))}</b>`,
-    `<b>Para:</b> ${telegramHTML(item.destinosLabel)}`,
-    `<b>${telegramHTML(item.titulo.replace(/^AVISO\s*[·:-]?\s*/i, '') || 'Actualización')}</b>`,
-    telegramHTML(item.detalle)
-  ].join('\n') : [
-    `🎫 <b>${telegramHTML(roleLabel(creadoRol))}</b> te ha enviado un ticket #${numero}`,
-    `<b>Motivo:</b> ${telegramHTML(item.titulo)}`,
-    `<b>Estado:</b> ${telegramHTML(estadoLabel(item.estado))}`
-  ].join('\n');
+  const msg = creationTelegramMessage(item);
   const telegram = await sendTelegram(msg, item.destinos).catch(e => ({ ok: false, error: e.message }));
-  await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo: telegram }, { merge: true });
-  return { ok: true, id: ref.id, numero, telegramOk: !!telegram.ok, telegramInfo: telegram };
+  const telegramInfo = safeTelegramInfo(telegram);
+  await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo }, { merge: true });
+  return { ok: true, id: ref.id, numero, telegramOk: !!telegram.ok, telegramInfo };
+}
+
+async function retryTelegramTicket(db, body) {
+  const id = clean(body.id, 120);
+  if (!id) return { status: 400, json: { ok: false, error: 'Falta id del aviso.' } };
+  const ref = db.collection('tickets_auditoria').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { status: 404, json: { ok: false, error: 'No encontré ese aviso.' } };
+  const old = snap.data() || {};
+  if (clean(body.rol, 40).toLowerCase() !== 'sublicuentas' && !canAccessTicket(old, body.rol)) {
+    return { status: 403, json: { ok: false, error: 'No tiene permiso para reenviar este aviso.' } };
+  }
+  const telegram = await sendTelegram(creationTelegramMessage(old), old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegramInfo = safeTelegramInfo(telegram);
+  await ref.set({
+    telegramOk: !!telegram.ok,
+    telegramInfo,
+    telegramRetriedAt: new Date().toISOString(),
+    telegramRetriedBy: clean(body.usuario || 'Sublichat', 80)
+  }, { merge: true });
+  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 
@@ -237,6 +338,7 @@ async function setProcesoTicket(db, body) {
   const snap = await ref.get();
   if (!snap.exists) return { status: 404, json: { ok: false, error: 'No encontré ese ticket.' } };
   const old = snap.data() || {};
+  if (!canAccessTicket(old, body.rol)) return { status: 403, json: { ok: false, error: 'No tiene permiso para modificar ese ticket.' } };
   if (String(old.estado || 'abierto') === 'resuelto') return { ok: true, id, alreadyResolved: true };
   const now = new Date().toISOString();
   const update = {
@@ -254,8 +356,9 @@ async function setProcesoTicket(db, body) {
     `Lo puso en proceso: ${telegramHTML(update.procesoPor || '—')}`
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
-  await ref.set({ telegramProcessOk: !!telegram.ok, telegramProcessInfo: telegram }, { merge: true });
-  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo: telegram };
+  const telegramInfo = safeTelegramInfo(telegram);
+  await ref.set({ telegramProcessOk: !!telegram.ok, telegramProcessInfo: telegramInfo }, { merge: true });
+  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 async function resolveTicket(db, body) {
@@ -266,6 +369,7 @@ async function resolveTicket(db, body) {
   const snap = await ref.get();
   if (!snap.exists) return { status: 404, json: { ok: false, error: 'No encontré ese ticket.' } };
   const old = snap.data() || {};
+  if (!canAccessTicket(old, body.rol)) return { status: 403, json: { ok: false, error: 'No tiene permiso para modificar ese ticket.' } };
   const now = new Date().toISOString();
   const update = {
     estado: 'resuelto',
@@ -284,8 +388,9 @@ async function resolveTicket(db, body) {
     `<b>Resolución:</b> ${telegramHTML(resolucion)}`
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
-  await ref.set({ telegramResolvedOk: !!telegram.ok, telegramResolvedInfo: telegram }, { merge: true });
-  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo: telegram };
+  const telegramInfo = safeTelegramInfo(telegram);
+  await ref.set({ telegramResolvedOk: !!telegram.ok, telegramResolvedInfo: telegramInfo }, { merge: true });
+  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 async function responderTicket(db, body) {
@@ -296,6 +401,7 @@ async function responderTicket(db, body) {
   const snap = await ref.get();
   if (!snap.exists) return { status: 404, json: { ok: false, error: 'No encontré ese ticket.' } };
   const old = snap.data() || {};
+  if (!canAccessTicket(old, body.rol)) return { status: 403, json: { ok: false, error: 'No tiene permiso para modificar ese ticket.' } };
   const now = new Date().toISOString();
   const entry = {
     texto: respuesta,
@@ -321,22 +427,22 @@ async function responderTicket(db, body) {
     telegramHTML(respuesta)
   ].join('\n');
   const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
-  await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegram }, { merge: true });
-  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo: telegram };
+  const telegramInfo = safeTelegramInfo(telegram);
+  await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegramInfo }, { merge: true });
+  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   try {
     getApp();
     const db = admin.firestore();
-    if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, msg: 'api/tickets activo', version: 'tickets-avisos-vendedores-20260720' });
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST');
+      return res.status(405).json({ ok: false, error: 'Método no permitido.' });
     }
-    if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método no permitido.' });
     const authUser = await requireFirebaseUser(req, res);
     if (!authUser) return;
     const identity = ticketIdentity(authUser);
@@ -347,6 +453,7 @@ module.exports = async function handler(req, res) {
     let out;
     if (accion === 'listar') out = await listTickets(db, body);
     else if (accion === 'crear') out = await createTicket(db, body);
+    else if (accion === 'reenviar_telegram') out = await retryTelegramTicket(db, body);
     else if (accion === 'proceso') out = await setProcesoTicket(db, body);
     else if (accion === 'responder') out = await responderTicket(db, body);
     else if (accion === 'resolver') out = await resolveTicket(db, body);
@@ -354,6 +461,7 @@ module.exports = async function handler(req, res) {
     if (out && out.status) return res.status(out.status).json(out.json);
     return res.status(200).json(out);
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e && e.message ? e.message : String(e) });
+    console.error('TICKETS_ERROR', e);
+    return res.status(500).json({ ok: false, error: 'No se pudo completar la operación de tickets.' });
   }
 };
