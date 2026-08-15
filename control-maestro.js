@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37';
+  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260816-38';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -327,6 +327,16 @@
     return p||'sin_plataforma';
   }
 
+  // No todas las plataformas se controlan con correo + clave. Las cuentas por
+  // invitación (Canva, Gemini, etc.) no deben aparecer como si les faltara una
+  // contraseña, y las licencias de Windows/ESET se identifican por su serial,
+  // no por un correo. Estas reglas solo afectan el diagnóstico interno; no
+  // ocultan ningún dato real que sí esté guardado.
+  const AUDIT_NO_PASSWORD=new Set(['canva','gemini','chatgpt','duolingo','adobeexpress']);
+  const AUDIT_NO_EMAIL=new Set(['windows10','windows11','eset']);
+  function auditRequiresPassword(v){return !AUDIT_NO_PASSWORD.has(auditFamily(v));}
+  function auditRequiresEmail(v){return !AUDIT_NO_EMAIL.has(auditFamily(v));}
+
   function auditPlatformLabel(v){
     const p=auditFamily(v);
     return AUDIT_PLATFORM_LABELS[p]||String(v||p||'Sin plataforma').replace(/[_-]+/g,' ').replace(/(^|\s)\S/g,x=>x.toUpperCase());
@@ -526,11 +536,16 @@
       const duplicateDocs=Object.values(inventoryPlatformCounts).some((n)=>n>1);
       const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length)>g.capacidad;
       const rosterIssues=roster.filter((r)=>r.status!=='ok').length;
-      const revisionKey=g.email?`${g.family}|${g.email}`:'';
+      const requiresPassword=auditRequiresPassword(g.family);
+      const requiresEmail=auditRequiresEmail(g.family);
+      const missingEmail=requiresEmail&&!g.email;
+      // Las licencias sin correo conservan la llave estable creada al agrupar
+      // la cuenta, de modo que también puedan marcarse como revisadas.
+      const revisionKey=g.email?`${g.family}|${g.email}`:(!requiresEmail?g.key:'');
       const revision=revisionKey?revisions.get(revisionKey)||null:null;
-      const missingPassword=!String(g.clave||'').trim();
+      const missingPassword=requiresPassword&&!String(g.clave||'').trim();
       const recordedIncident=revision?.resultado==='incidencia';
-      const internalIssueCount=rosterIssues+Number(missingInventory)+Number(duplicateDocs)+Number(overCapacity)+Number(!g.email)+Number(missingPassword);
+      const internalIssueCount=rosterIssues+Number(missingInventory)+Number(duplicateDocs)+Number(overCapacity)+Number(missingEmail)+Number(missingPassword);
       const issueCount=internalIssueCount+Number(recordedIncident);
       const reviewAge=revision?daysSince(revision.revisadoAt):99999;
       // Una diferencia administrativa corregida no invalida la revisión real del
@@ -543,7 +558,7 @@
       const capacity=g.capacidad||Math.max(occupied,maxExcelProfile);
       accounts.push({
         ...g,rawPlatforms:[...g.rawPlatforms],excelSheets:[...g.excelSheets],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
-        missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0
+        requiresPassword,requiresEmail,missingEmail,missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0
       });
     });
 
@@ -878,7 +893,7 @@
 
   function accountIssuesHtml(a){
     const list=[];
-    if(!a.email)list.push('⛔ Sin correo');
+    if(a.missingEmail)list.push('⛔ Sin correo');
     if(a.missingPassword)list.push('🔑 Sin clave');
     if(a.missingInventory)list.push('📦 Falta en Bodega');
     if(a.duplicateDocs)list.push('📦 Cuenta repetida');
@@ -962,12 +977,13 @@
     const reviewTone=reviewSchedule.tone;
     const inventoryIds=a.accountIds.filter(Boolean);
     const editableAccount=inventoryIds.length===1;
-    const password=a.clave?revealed?esc(a.clave):'••••••••':'Sin clave guardada';
+    const password=a.clave?revealed?esc(a.clave):'••••••••':(a.requiresPassword?'Sin clave guardada':'No usa clave');
+    const identity=a.email||(a.requiresEmail?'CUENTA SIN CORREO':'LICENCIA / SERIAL');
     const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,a,i,j)).join(''):'';
     return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" style="--platform-color:${platformColor(a.family)}">
       <div class="cm-ledger-row">
         <div class="cm-ledger-platform-cell"><span class="cm-ledger-platform">${esc(a.platform)}</span><span class="cm-life-state ${life.tone}">${life.icon} ${esc(life.label)}</span></div>
-        <div class="cm-ledger-identity"><b title="${esc(a.email||'CUENTA SIN CORREO')}">${esc(a.email||'CUENTA SIN CORREO')}</b><small>🔑 ${password}</small></div>
+        <div class="cm-ledger-identity"><b title="${esc(identity)}">${esc(identity)}</b><small>🔑 ${password}</small></div>
         <div class="cm-ledger-clients"><b>${a.roster.length}</b><small>${a.occupied}/${a.capacity||'—'} cupos</small></div>
         <div class="cm-ledger-expiry"><div><span class="expired">${life.expired} vencido${life.expired===1?'':'s'}</span><span class="soon">${life.soon} próximo${life.soon===1?'':'s'}</span><span class="active">${life.active} vigente${life.active===1?'':'s'}</span>${life.noDate?`<span class="nodate">${life.noDate} sin fecha</span>`:''}</div><small>${esc(life.nextText)}</small></div>
         <div class="cm-ledger-control"><span class="cm-control-diff ${a.issueCount?'bad':'ok'}">${a.issueCount?`⚠️ ${a.issueCount} diferencia${a.issueCount===1?'':'s'}`:'✅ Sin diferencias'}</span><span class="cm-review-box ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.rowText)}</small></span></div>
@@ -977,8 +993,8 @@
         <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
-          <div class="cm-credential"><span>Correo de acceso</span><code>${esc(a.email||'—')}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
-          <div class="cm-credential"><span>Clave de la cuenta</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
+          <div class="cm-credential"><span>${a.requiresEmail?'Correo de acceso':'Tipo de acceso'}</span><code>${esc(a.email||(a.requiresEmail?'—':'Licencia / serial'))}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
+          <div class="cm-credential"><span>${a.requiresEmail?'Clave de la cuenta':'Serial / licencia'}</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
         </div>
         <div class="cm-roster-head"><div><b>Clientes que deben estar aquí</b></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
         <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
@@ -1397,17 +1413,29 @@
     const account=state.accountVisible[index];if(!account||state.busy)return;
     const ids=account.accountIds.filter(Boolean);
     if(ids.length!==1)return alert('Esta cuenta está duplicada en Bodega. Ábrala en Bodega y corrija primero el duplicado.');
-    const newEmail=prompt('Correo o usuario de la cuenta:',account.email||'');if(newEmail===null)return;
-    if(!String(newEmail).trim())return alert('El correo no puede quedar vacío.');
-    const newPassword=prompt('Clave de la cuenta:',account.clave||'');if(newPassword===null)return;
+    let newEmail=account.email||'';
+    if(account.requiresEmail){
+      newEmail=prompt('Correo o usuario de la cuenta:',account.email||'');if(newEmail===null)return;
+      if(!String(newEmail).trim())return alert('El correo no puede quedar vacío.');
+    }
+    let newPassword=account.clave||'';
+    if(account.requiresPassword){
+      newPassword=prompt(account.requiresEmail?'Clave de la cuenta:':'Serial / licencia:',account.clave||'');if(newPassword===null)return;
+      if(!String(newPassword).trim())return alert(account.requiresEmail?'La clave no puede quedar vacía.':'El serial no puede quedar vacío.');
+    }
     const capacityRaw=prompt('Capacidad total de clientes/perfiles:',String(account.capacity||1));if(capacityRaw===null)return;
     const capacity=Math.max(1,Math.round(Number(capacityRaw)||0));
     if(capacity<account.invClients.length)return alert(`La capacidad no puede ser menor que los ${account.invClients.length} clientes asignados.`);
-    if(!confirm(`¿Guardar estos cambios?\n\nPlataforma: ${account.platform}\nCorreo: ${String(newEmail).trim()}\nClave: ${newPassword||'Sin clave'}\nCapacidad: ${capacity}\n\nEl nuevo correo y clave también se actualizarán en los servicios ligados.`))return;
+    const identidad=account.requiresEmail?`Correo: ${String(newEmail).trim()}`:'Cuenta por licencia / serial';
+    const secreto=account.requiresPassword?`\n${account.requiresEmail?'Clave':'Serial'}: ${newPassword}`:'';
+    if(!confirm(`¿Guardar estos cambios?\n\nPlataforma: ${account.platform}\n${identidad}${secreto}\nCapacidad: ${capacity}\n\nLos datos modificados también se actualizarán en los servicios ligados.`))return;
     state.busy=true;mutationMessage('Actualizando cuenta y servicios ligados…','');render();
     try{
-      const out=await api({accion:'editarCuenta',docId:ids[0],correo:String(newEmail).trim(),clave:String(newPassword),capacidad:capacity},INVENTORY_API);
-      const newKey=`${account.family}|${email(newEmail)}`;
+      const payload={accion:'editarCuenta',docId:ids[0],capacidad:capacity};
+      if(account.requiresEmail)payload.correo=String(newEmail).trim();
+      if(account.requiresPassword)payload.clave=String(newPassword);
+      const out=await api(payload,INVENTORY_API);
+      const newKey=account.requiresEmail?`${account.family}|${email(newEmail)}`:account.key;
       await reloadControlAfterMutation(`✅ Cuenta actualizada.${out.serviciosActualizados?` ${out.serviciosActualizados} servicio${out.serviciosActualizados===1?'':'s'} sincronizado${out.serviciosActualizados===1?'':'s'}.`:''}`,newKey);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo editar la cuenta.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();}
@@ -1443,7 +1471,7 @@
 
   async function saveAccountReview(accountKey,result){
     const a=accountByKey(accountKey);if(!a||state.busy)return;
-    if(!a.email)return setStatus('Esta cuenta no tiene correo; corríjala primero en Bodega.','error');
+    if(!a.revisionKey)return setStatus('Esta cuenta todavía no tiene una identificación válida para guardar su revisión.','error');
     let nota='';
     if(result==='incidencia'){
       nota=prompt('Escriba qué encontró en la cuenta (por ejemplo: “hay un perfil extra llamado Juan”):','')??'';
@@ -1453,7 +1481,7 @@
     state.accountFeedback={key:a.key,type:'saving',text:result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…'};
     state.status=state.accountFeedback.text;state.statusType='';render();
     try{
-      const saved=await api({accion:'control_guardar_revision_cuenta',accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado:result,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
+      const saved=await api({accion:'control_guardar_revision_cuenta',accountKey:a.revisionKey,accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado:result,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
       if(!saved.revision)throw new Error('Firebase respondió sin confirmar la revisión.');
       mergeAccountRevision(saved.revision);
       const text=result==='incidencia'?'⚠️ Incidencia guardada en Firebase.':'✅ Revisión del proveedor guardada en Firebase. Las diferencias de Excel o Bodega seguirán visibles hasta corregirlas; esta revisión volverá a solicitarse dentro de 15 días.';

@@ -23,7 +23,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260816-38">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -4823,7 +4823,7 @@ function gCaminoBombas(){
     ["oleada","Oleada TV"],["iptv","IPTV"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
-  const FICHA_VENDEDOR_TELS={ relojes:"32126332", yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+  const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", yami:"9687724", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
 // VERSION 27 · Cuatro variantes URL con el mismo acabado visual y sin pie de
 // vendedor. La ficha tradicional conserva por separado el teléfono del
@@ -6354,6 +6354,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaToggleVendedorNuevo();
   }
 
+  function fichaVendedorSesion(){
+    let raw="";
+    for(const key of ["sublichat_user","subli_usuario","usuario","subli_user","active_user"]){
+      try{ raw=localStorage.getItem(key)||""; }catch(_){ raw=""; }
+      if(String(raw).trim()) break;
+    }
+    const usuario=fichaNorm(raw);
+    if(["sublicuentas","naara"].includes(usuario)) return "Sublicuentas";
+    if(["relojes","libni","daniela","finanzas"].includes(usuario)) return "Relojes";
+    return FICHA_VENDEDORES.find(v=>fichaNorm(v)===usuario)||"";
+  }
+
   function fichaPrefillFromService(g, serv){
     const s=serv||{};
     fichaMostrarDatosCliente(""); // limpia el enlace/mensaje del servicio anterior mientras se cargan los datos
@@ -6365,8 +6377,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const fechaISO=(s.fechaRaw?fbAISO(s.fechaRaw):"") || (s.fecha?s.fecha.toISOString().slice(0,10):"");
     fichaQ("fichaNombre").value=(g&&g.nombre)||"";
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
-    fichaSetVendedor((g&&g.vendedor)||"");
-    fichaQ("fichaVendedorTelefono").value=(g&&g.vendedorTelefono)||fichaVendedorTel((g&&g.vendedor)||"");
+    const vendedorFicha=(g&&g.vendedor)||fichaVendedorSesion();
+    fichaSetVendedor(vendedorFicha);
+    fichaQ("fichaVendedorTelefono").value=(g&&g.vendedorTelefono)||fichaVendedorTel(vendedorFicha);
     const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
     fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
     fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
@@ -8970,7 +8983,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-CARGA-COMPLETA-20260813-37"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260816-38"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
