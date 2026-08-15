@@ -1,4 +1,4 @@
-// api/tickets.js · VERSION 2 · avisos parciales + reintento seguro de Telegram
+// api/tickets.js · VERSION 3 · avisos parciales sin ocultar el fallo del destinatario
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -159,15 +159,9 @@ async function sendTelegram(text, destinos) {
   }));
   results.push(...configuredResults);
 
-  // Si todos los chats específicos fallaron, intenta el chat general configurado.
-  // Nunca duplica el aviso cuando al menos un destino específico sí lo recibió.
-  if (targets.size && configuredResults.length && !configuredResults.some(r => r.ok) && fallback && !targets.has(fallback)) {
-    try {
-      results.push({ ...(await sendTelegramTo(fallback, text)), roles: requested.slice(), fallback: true });
-    } catch (e) {
-      results.push({ ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), roles: requested.slice(), fallback: true });
-    }
-  }
+  // Si un chat específico (por ejemplo, Jimena) devuelve error, no lo
+  // sustituimos silenciosamente por el chat general: eso haría parecer que la
+  // persona recibió el aviso cuando en realidad su chat sigue mal configurado.
 
   const delivered = new Set();
   results.filter(r => r.ok).forEach(r => (r.roles || []).forEach(role => delivered.add(role)));

@@ -671,8 +671,11 @@ async function controlGuardarRevisionCuenta(db, body) {
   if (!controlEsAdmin(body)) return controlDenegado();
   const plataforma = String(body.plataforma || "").toLowerCase().trim().slice(0, 80);
   const correo = String(body.correo || "").toLowerCase().trim().slice(0, 220);
-  if (!plataforma || !correo) return { status: 400, json: { ok: false, error: "La cuenta necesita plataforma y correo para guardar su revisión." } };
-  const accountKey = `${plataforma}|${correo}`;
+  const accountKeyEnviado = String(body.accountKey || "").trim().slice(0, 500);
+  if (!plataforma || (!correo && !accountKeyEnviado)) return { status: 400, json: { ok: false, error: "La cuenta necesita plataforma y una identificación válida para guardar su revisión." } };
+  // Para Windows/ESET el identificador estable no es un correo: viene de la
+  // cuenta de Bodega. El endpoint sigue siendo exclusivo del administrador.
+  const accountKey = accountKeyEnviado || `${plataforma}|${correo}`;
   const id = crypto.createHash("sha256").update(accountKey).digest("hex");
   const resultado = body.resultado === "incidencia" ? "incidencia" : "correcta";
   const nota = String(body.nota || "").trim().slice(0, 500);

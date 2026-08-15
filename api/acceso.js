@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 7 · URL permanente + visibilidad elegible por servicio
+// api/acceso.js · VERSION 8 · URL permanente + soporte de vendedor completo
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
@@ -115,7 +115,7 @@ function celularSoloCodigo(plataforma) {
   return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("universal") || p.includes("netflix");
 }
 
-const VENDEDOR_TELS = { relojes: "32126332", yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
+const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
 function vendedorTel(v) {
   const n = normPlat(v);
   return VENDEDOR_TELS[n] || "";
