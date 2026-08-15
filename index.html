@@ -5005,6 +5005,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
 Hola, *_{nombre}_*. Le hacemos entrega oficial de sus credenciales de acceso:
 
+*👤 Perfil / cliente: {perfil}*
 *📧 Correo: {correo}*
 *🔑 Contraseña: {clave}*
 
@@ -5165,6 +5166,7 @@ Aquí tiene los datos para disfrutar de su contenido:
 📲 Compatible con: TV, Celular (iPhone o Android), Smarters Pro y SmartOne.
 
 Ingrese estos datos manualmente en su app:
+*👤 Cliente: {perfil}*
 *📲 Lista: {iptvlista}*
 *👤 Usuario: {correo}*
 *🔒 Contraseña: {clave}*
@@ -5176,7 +5178,7 @@ Ingrese estos datos manualmente en su app:
     canva:
 `*🎨 Acceso Exclusivo: Canva EduPro 🎨*
 
-👤 Usuario: *_{nombre}_*
+👤 Usuario: *_{perfil}_*
 *📧 Correo activado: {correo}*
 *⏳ Próximo pago: {fecha}*
 
@@ -5189,6 +5191,7 @@ Ingrese estos datos manualmente en su app:
     gemini:
 `*🤖 Acceso Exclusivo: Gemini Pro ✨*
 
+*👤 Cliente: {perfil}*
 *📧 Invitación enviada a:*
 *{correo}*
 *⏳ Próximo pago: {fecha}*
@@ -5205,6 +5208,7 @@ Ingrese estos datos manualmente en su app:
 
 Estimad@ *_{nombre}_*, le comparto su acceso:
 
+*👤 Perfil / cliente: {perfil}*
 *📧 Correo: {correo}*
 *📅 Renovación: {renovTexto}*
 
@@ -5234,6 +5238,7 @@ Cliente: *_{perfil}_*
     youtube:
 `*▶️ ENTREGA YOUTUBE PREMIUM ▶️*
 
+*👤 Perfil: {perfil}*
 *📧 Correo: {correo}*{claveLine}
 *📅 Renovación: {fecha}*
 
@@ -5254,6 +5259,7 @@ Cliente: *_{perfil}_*
 `*🎧 CUENTA DEEZER PREMIUM HiFi 🎧*
 ¡Bienvenido a la mejor calidad de sonido! Su suscripción ya está activa. 🎼
 
+*👤 Perfil: {perfil}*
 *📧 Correo: {correo}*{claveLine}
 *📅 Renovación: {fecha}*
 
@@ -5267,6 +5273,7 @@ Cliente: *_{perfil}_*
 `*💻 Acceso Exclusivo: Office 365 💻*
 
 Aquí tiene los datos de su cuenta oficial lista para usar:
+*👤 Cliente: {perfil}*
 *📧 Correo: {correo}*
 *🔑 Contraseña: {clave}*
 *⏳ Vencimiento: {fecha}*
@@ -5290,6 +5297,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 
 ¡Su invitación premium ya fue enviada! Revise su bandeja de correo para aceptar y activar el acceso.
 
+*👤 Cliente: {perfil}*
 *📧 Correo activado: {correo}*
 🎉 Beneficio: 1 mes de funciones Plus activas 📕
 *🔄 Renovable hasta: {fecha}*
@@ -5298,6 +5306,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     viki:
 `*💙 Entrega de su acceso Viki Rakuten 💙*
 
+*👤 Perfil: {perfil}*
 *📧 Correo: {correo}*
 *🔑 Clave: {clave}*
 *📅 Renovación: {fecha}*
@@ -5310,6 +5319,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
     windows10:
 `*🪟 Licencia Windows 10*
 
+*👤 Cliente: {perfil}*
 *🔐 Serial / licencia: {clave}*
 *📅 Vigencia: {fecha}*
 
@@ -5319,6 +5329,7 @@ Conserve este serial en un lugar seguro.
     windows11:
 `*🪟 Licencia Windows 11*
 
+*👤 Cliente: {perfil}*
 *🔐 Serial / licencia: {clave}*
 *📅 Vigencia: {fecha}*
 
@@ -5328,6 +5339,7 @@ Conserve este serial en un lugar seguro.
     eset:
 `*🛡️ Licencia ESET*
 
+*👤 Cliente: {perfil}*
 *🔐 Serial / licencia: {clave}*
 *📅 Vigencia: {fecha}*
 
@@ -5531,20 +5543,31 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaNorm(plat));
   const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaNorm(plat));
 
-  // VERSION 20 · Regla NUEVA confirmada (11-ago-2026): en celular, estas cuentas
-  // se entregan SOLO con correo — el cliente inicia sesión con "código" que pide
-  // a su vendedor. No aplica a Netflix VIP (esa sí lleva clave normal).
+  // VERSION 28 · La ficha tradicional de WhatsApp/respaldo SIEMPRE se arma
+  // con todos los campos reales que usa la plataforma. TV, celular, Roku y la
+  // selección de visibilidad pertenecen únicamente a la ficha pública URL.
+  function fichaCamposRespaldoCompletos(){
+    const plat=fichaGetVal("fichaPlat");
+    if(fichaEsSerial(plat)) return {correo:false,clave:true,pin:false,modo:"serial"};
+    const correo=fichaNeedsCorreo(plat),clave=fichaNeedsClave(plat),pin=fichaNeedsPin(plat);
+    return {correo,clave,pin,modo:clave?"cred":"invite"};
+  }
+
+  // VERSION 20 · Regla de la URL confirmada (11-ago-2026): en celular, la ficha
+  // pública de estas cuentas muestra solo correo para iniciar con código. Esta
+  // regla NO modifica la ficha completa de WhatsApp/respaldo. Netflix VIP no
+  // entra aquí porque siempre usa sus credenciales normales.
   const FICHA_CELULAR_SOLO_CODIGO=new Set(["disneyp","disneys","hbomax","vix","universal","netflix"]);
   const fichaCelularSoloCodigo=plat=>FICHA_CELULAR_SOLO_CODIGO.has(fichaNorm(plat));
 
   // Combina plataforma + dispositivo (TV/Celular) + ¿Roku? para decidir qué
-  // campos se piden en la ficha. Esto es SOLO para la interfaz del CRM (qué
-  // se le pregunta al vendedor); lo que ya guardaba Firebase no cambia de forma.
+  // campos muestra AUTOMÁTICAMENTE la ficha pública URL. Nunca debe utilizarse
+  // para construir ni validar la ficha tradicional de WhatsApp/respaldo.
   //   TV + Roku       -> correo + clave (+pin si la plataforma lo usa)
   //   TV + no Roku     -> nada de correo/clave, solo perfil + pin
   //   Celular + grupo código -> correo + perfil + PIN (sin contraseña)
   //   Celular + resto  -> correo + clave (+pin si la plataforma lo usa), como antes
-  function fichaCamposEfectivos(perfil=null){
+  function fichaCamposUrlAutomaticos(perfil=null){
     const plat=fichaGetVal("fichaPlat");
     const desdePerfil=perfil&&typeof perfil==="object";
     const dispositivo=desdePerfil?String(perfil.dispositivo||"").trim():fichaGetVal("fichaDispositivo");
@@ -5597,7 +5620,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaActualizarVisibilidadUrl(false);
   }
   function fichaCamposUrlEfectivos(perfil=null){
-    const auto=fichaCamposEfectivos(perfil);
+    const auto=fichaCamposUrlAutomaticos(perfil);
     const plat=fichaGetVal("fichaPlat");
     const disponible={correo:fichaNeedsCorreo(plat),clave:fichaNeedsClave(plat),pin:fichaNeedsPin(plat)};
     const v=fichaVisibilidadUrlActual();
@@ -5874,10 +5897,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
     };
     const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
-    const camposEntrega=fichaCamposEfectivos();
+    const camposRespaldo=fichaCamposRespaldoCompletos();
     if(perfiles.length>1){
       const detalle=perfiles.map((p,index)=>{
-        const camposPerfil=fichaCamposEfectivos(p);
+        const camposPerfil=camposRespaldo;
         const tipoAcceso=["oleada","iptv"].includes(fichaNorm(plat))?"👤 Usuario":"📧 Correo";
         const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`];
         if(fichaUsaSelectorDispositivo(plat))acceso.push(p.dispositivo==="tv"?`📺 Instalación: TV${p.esRoku?" (Roku)":" (No Roku)"}`:"📱 Instalación: Celular");
@@ -5890,16 +5913,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const reglas=aplicarVariables(fichaReglasFor(plat));
       return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
-    if(camposEntrega.modo==="codigo"){
-      const pinAccesoLinea=camposEntrega.pin?`\n*📎 PIN de acceso: ${pin||"—"}*`:"";
-      if(["disneyp","disneys"].includes(fichaNorm(plat))){
-        return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*${pinAccesoLinea}\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado en Disney+.\n2️⃣ Cuando aparezca *Escribir contraseña*, toque:\n*¿Problemas para iniciar sesión? Enviar un código de acceso único*\n3️⃣ Solicite el código a su vendedor y escríbalo en Disney+.\n\n🚀 Sublicuentas`;
-      }
-      return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📧 Correo: ${correo}*${pinAccesoLinea}\n*📅 Renovación: ${renovTexto}*\n\n📲 Pasos para ingresar en celular:\n1️⃣ Copie e ingrese el correo asignado.\n2️⃣ Presione *Siguiente*.\n3️⃣ Presione *Iniciar sesión con código*.\n4️⃣ Solicite el código a su vendedor cuando aparezca.\n\n🚀 Sublicuentas`;
-    }
-    if(camposEntrega.modo==="perfil"){
-      return `*${fichaPlatformEmoji(plat)} Entrega de su acceso ${fichaPlatformLabel(plat)}*\n\n👤 Perfil: *_${perfil||nombre||"Cliente"}_*\n*📎 PIN de acceso: ${pin||"—"}*\n*📅 Renovación: ${renovTexto}*\n\n📺 La cuenta ya está vinculada al TV. Abra el perfil asignado e ingrese únicamente su PIN.\n\n🚀 Sublicuentas`;
-    }
+    // Individual o multiperfil: el respaldo no cambia por dispositivo. Las
+    // plantillas completas incluyen correo/usuario, clave o serial y PIN según
+    // las reglas reales de cada plataforma.
     return aplicarVariables(fichaTemplateFor(plat));
   }
 
@@ -5943,6 +5959,28 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function fichaFullPreviewText(){
     return (fichaBuildText()+fichaRespaldoBlock()).trim();
+  }
+
+  // Evita que una fichaTexto antigua e incompleta vuelva a tapar la plantilla
+  // completa al abrir una cuenta ya guardada. Conserva textos personalizados
+  // cuando sí contienen todos los valores estructurados del CRM.
+  function fichaTextoTieneDatosCompletos(txt){
+    const texto=String(txt||"");
+    if(!texto.trim()) return false;
+    const campos=fichaCamposRespaldoCompletos();
+    const perfiles=fichaRecolectarPerfiles();
+    const requeridos=[];
+    perfiles.forEach(p=>{
+      if(String(p.nombre||p.perfil||"").trim()) requeridos.push(String(p.nombre||p.perfil).trim());
+      if(campos.correo&&String(p.correo||"").trim()) requeridos.push(String(p.correo).trim());
+      if(campos.clave&&String(p.clave||"").trim()) requeridos.push(String(p.clave).trim());
+      if(campos.pin&&String(p.pinPerfil||"").trim()) requeridos.push(String(p.pinPerfil).trim());
+    });
+    const fecha=fichaGetVal("fichaFecha");
+    const dia=fichaGetVal("fichaDia");
+    const renovacion=fecha?fichaISOToDMY(fecha):(dia?fichaD2(dia):"");
+    if(renovacion) requeridos.push(renovacion);
+    return requeridos.every(valor=>texto.includes(valor));
   }
 
   const fichaLimpiarTextoCliente=txt=>String(txt||"")
@@ -6125,10 +6163,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     for(let i=0;i<(payload.servicio.perfiles||[]).length;i++){
       const p=payload.servicio.perfiles[i]||{},label=`Perfil ${i+1}`;
       if(fichaUsaSelectorDispositivo(payload.servicio.plataforma)&&!["tv","cel"].includes(String(p.dispositivo||""))){fichaToast(`${label}: seleccione si se instalará en TV o celular.`);return null;}
-      const camposEntrega=fichaCamposEfectivos(p);
-      const entregaSoloPerfil=camposEntrega.modo==="perfil";
-      const requiereCorreoGuardado=!entregaSoloPerfil&&fichaNeedsCorreo(payload.servicio.plataforma);
-      const requiereClaveGuardada=!entregaSoloPerfil&&fichaNeedsClave(payload.servicio.plataforma);
+      const camposRespaldo=fichaCamposRespaldoCompletos();
+      const requiereCorreoGuardado=camposRespaldo.correo;
+      const requiereClaveGuardada=camposRespaldo.clave;
       if(!String(p.nombre||"").trim()){fichaToast(`${label}: escriba el nombre de la persona/perfil.`);return null;}
       if(requiereCorreoGuardado&&!String(p.correo||"").trim()){fichaToast(`${label}: falta el correo o usuario asignado.`);return null;}
       if(requiereClaveGuardada&&!String(p.clave||"").trim()){fichaToast(`${label}: falta la clave, serial o licencia.`);return null;}
@@ -6147,9 +6184,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         const listaConfirmada=Array.isArray(j.perfilesGuardados)?j.perfilesGuardados:[];
         const perfilesCoinciden=listaConfirmada.length===perfilesEsperados&&listaConfirmada.every((guardado,index)=>{
           const esperado=payload.servicio.perfiles[index]||{};
-          const camposEsperados=fichaCamposEfectivos(esperado);
-          const soloPerfil=camposEsperados.modo==="perfil";
-          const exigeClave=!soloPerfil&&fichaNeedsClave(payload.servicio.plataforma);
+          const camposEsperados=fichaCamposRespaldoCompletos();
+          const exigeClave=camposEsperados.clave;
           return String(guardado.perfilId||"")===String(esperado.perfilId||"")&&fichaNorm(guardado.nombre)===fichaNorm(esperado.nombre)&&String(guardado.correo||"").trim().toLowerCase()===String(esperado.correo||"").trim().toLowerCase()&&(!exigeClave||guardado.tieneClave===true)&&(!requierePinGuardado||guardado.tienePin===true);
         });
         if(j.guardadoEnFirebase!==true||!Number.isInteger(perfilesConfirmados)||perfilesConfirmados!==perfilesEsperados||!perfilesCoinciden){
@@ -6361,10 +6397,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const respaldoActual=fichaRespaldoCore();
     if(guardada&&respaldoActual&&!guardada.includes(respaldoActual)) guardada=(guardada+"\n\n"+respaldoActual).trim();
     const multiperfilAntiguaSinReglas=perfiles.length>1&&/COMPRA MULTIPERFIL/i.test(guardada)&&!/(reglas|condiciones|reglas de oro|pasos exactos|garant[ií]a)/i.test(guardada);
-    if(guardada&&!multiperfilAntiguaSinReglas){
+    const guardadaCompleta=fichaTextoTieneDatosCompletos(guardada);
+    if(guardada&&guardadaCompleta&&!multiperfilAntiguaSinReglas){
       const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
       if(txt)txt.value=guardada;
       if(view)view.innerHTML=fichaMarkdownToHtml(guardada);
+    }else if(guardada&&!guardadaCompleta){
+      fichaStatus("✅ Se reconstruyó la ficha de respaldo con todos los datos guardados de la cuenta.","ok");
     }
     fichaMostrarDatosCliente(s.token?`/c/${encodeURIComponent(String(s.token))}`:"");
   }
