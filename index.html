@@ -18,6 +18,7 @@
 <!-- FIX_VISIBLE_LIC_20260608_5 | AULA_CURSOS_PRO_20260608_6 -->
 <!-- FIX_INSERTAR_FILA_SIN_SALTO_20260707 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="/portal-cliente-admin.css?v=20260816-1">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
@@ -6898,12 +6899,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
     finanzas:['inicio','clientes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
+    admin:['inicio','clientes','portal-cliente','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], 'portal-cliente':['🌐','Portal del cliente'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -6933,7 +6934,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
   function can(screen){
-    if(screen==='control-cuentas')return isSublicuentasAccount();
+    if(screen==='control-cuentas'||screen==='portal-cliente')return isSublicuentasAccount();
     return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
   }
   const dateDMY=d=>{
@@ -7224,6 +7225,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
     ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
+    ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
     ensureScreen('tickets','Tickets y Avisos','Mensajería interna y comunicados de actualización entre Relojes, Magdiel y Sublicuentas.','');
     ensureScreen('configuracion','Configuración Admin','Estado operativo de Firebase, bot Telegram, usuarios y webhooks.','');
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
@@ -7238,7 +7240,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount());
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>!['control-cuentas','portal-cliente'].includes(s)||isSublicuentasAccount());
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s)));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
@@ -7992,6 +7994,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function renderRBACAll(){
     updateTopAdvisor(); renderPerfil();
     renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderSoporteConfig(); renderTickets(); renderObjetivos();
+    if(typeof window.sublichatPortalClienteRender==='function')window.sublichatPortalClienteRender();
   }
 
   function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); }
@@ -11686,6 +11689,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   window.addEventListener('pageshow',function(){actualizarSaludoReflexion();setTimeout(enhanceAll,180);});
 })();
 </script>
+<script src="/portal-cliente-admin.js?v=20260816-1"></script>
 </body>
 </html>
 
