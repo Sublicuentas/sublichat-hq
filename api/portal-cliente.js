@@ -9,6 +9,8 @@ const PROMOS_COLLECTION = 'portal_promociones';
 const CONFIG_COLLECTION = 'portal_cliente';
 const CONFIG_DOC = 'configuracion';
 const MAX_PROMO_IMAGE = 620000;
+const MAX_PAYMENT_LOGO = 90000;
+const MAX_PAYMENT_LOGOS_TOTAL = 750000;
 
 const LOGO_KEYS = new Set([
   'tigo', 'atlantida', 'bac', 'ficohsa', 'davivienda', 'banpais', 'tengo', 'occidente', 'custom'
@@ -118,6 +120,17 @@ function normalizeImage(value) {
   throw new Error('La imagen de la promoción no es válida.');
 }
 
+function normalizePaymentLogo(value, index = 0) {
+  const logo = String(value == null ? '' : value).trim();
+  if (!logo) return '';
+  if (/^data:image\/(?:png|webp);base64,/i.test(logo)) {
+    if (logo.length > MAX_PAYMENT_LOGO) throw new Error(`El logo del método ${index + 1} pesa demasiado.`);
+    return logo;
+  }
+  if (/^https:\/\//i.test(logo) && logo.length <= 2200) return logo;
+  throw new Error(`El logo del método ${index + 1} debe ser PNG, WebP o usar una dirección https.`);
+}
+
 function normalizeTarget(raw = {}) {
   const type = ['todos', 'vendedores', 'clientes'].includes(clean(raw.tipo, 20))
     ? clean(raw.tipo, 20) : 'todos';
@@ -157,8 +170,7 @@ function normalizePaymentMethod(raw = {}, index = 0) {
   const cuenta = clean(raw.cuenta, 100);
   if (!nombre || !cuenta) throw new Error(`Complete el nombre y número del método ${index + 1}.`);
   const logoKey = LOGO_KEYS.has(clean(raw.logoKey, 30)) ? clean(raw.logoKey, 30) : 'custom';
-  const logoUrl = clean(raw.logoUrl, 2200);
-  if (logoUrl && !/^https:\/\//i.test(logoUrl)) throw new Error(`El logo del método ${index + 1} debe usar una dirección https.`);
+  const logoUrl = normalizePaymentLogo(raw.logoUrl, index);
   return {
     id: safeId(raw.id) || `pago-${Date.now()}-${index + 1}`,
     nombre,
@@ -322,6 +334,9 @@ module.exports = async function handler(req, res) {
       if (!rawMethods.length) return res.status(400).json({ ok: false, error: 'Agregue al menos un método de pago.' });
       if (rawMethods.length > 30) return res.status(400).json({ ok: false, error: 'El máximo es de 30 métodos de pago.' });
       const methods = rawMethods.map(normalizePaymentMethod);
+      if (methods.reduce((total, method) => total + method.logoUrl.length, 0) > MAX_PAYMENT_LOGOS_TOTAL) {
+        return res.status(400).json({ ok: false, error: 'Los logos juntos pesan demasiado. Use imágenes PNG más pequeñas.' });
+      }
       const now = new Date().toISOString();
       await db.collection(CONFIG_COLLECTION).doc(CONFIG_DOC).set({
         metodos: methods,
