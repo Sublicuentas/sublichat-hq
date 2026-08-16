@@ -115,7 +115,7 @@ function celularSoloCodigo(plataforma) {
   return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("universal") || p.includes("netflix");
 }
 
-const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", yami: "9687724", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
+const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", yami: "96877246", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
 function vendedorTel(v) {
   const n = normPlat(v);
   return VENDEDOR_TELS[n] || "";

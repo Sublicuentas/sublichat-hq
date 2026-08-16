@@ -15,6 +15,7 @@ const MAX_PAYMENT_LOGOS_TOTAL = 750000;
 const LOGO_KEYS = new Set([
   'tigo', 'atlantida', 'bac', 'ficohsa', 'davivienda', 'banpais', 'tengo', 'occidente', 'custom'
 ]);
+const PAYMENT_VENDOR_KEYS = new Set(['relojes', 'sublicuentas', 'libni', 'naara']);
 
 const DEFAULT_PAYMENT_METHODS = [
   { id: 'tigo-money', nombre: 'Tigo Money', titular: 'LIBNI DANIELA VELÁSQUEZ BLANCO', cuenta: '98982678', nota: '+6.5% comisión', logoKey: 'tigo', activo: true },
@@ -74,6 +75,10 @@ function isSublicuentasUser(user) {
   // La identidad sigue la misma regla del RBAC actual: Naara/Sublicuentas es
   // la cuenta propietaria aunque AUTH_USERS_JSON todavía conserve un rol viejo.
   return ['sublicuentas', 'naara'].includes(usuario);
+}
+
+function vendorCanUsePayments(value) {
+  return PAYMENT_VENDOR_KEYS.has(norm(value));
 }
 
 async function requireSublicuentas(req, res) {
@@ -224,6 +229,7 @@ async function publicPortal(db, req, res) {
   if (!clientSnap.exists) return res.status(404).json({ ok: false, error: 'No se encontró el cliente.' });
   const client = clientSnap.data() || {};
   const vendorNorm = norm(client.vendedor_norm || client.vendedor || '');
+  const paymentAccess = vendorCanUsePayments(vendorNorm);
   const today = todayHonduras();
   const promociones = promoSnap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
@@ -243,8 +249,9 @@ async function publicPortal(db, req, res) {
   return res.status(200).json({
     ok: true,
     promociones,
-    metodosPago: config.metodos.filter(item => item.activo !== false),
-    avisoPago: config.avisoPago
+    metodosPago: paymentAccess ? config.metodos.filter(item => item.activo !== false) : [],
+    avisoPago: paymentAccess ? config.avisoPago : '',
+    secciones: { promociones: true, pagos: paymentAccess }
   });
 }
 
