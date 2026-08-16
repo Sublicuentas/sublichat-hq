@@ -10,14 +10,15 @@
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
   const PORTAL_ICONS={
-    cuentas:'/assets/portal-icono-mis-cuentas.jpg?v=20260816-3',
-    promociones:'/assets/portal-icono-promociones.jpg?v=20260816-3',
-    pagos:'/assets/portal-icono-metodos-pago.jpg?v=20260816-3',
-    perfil:'/assets/portal-icono-perfil.jpg?v=20260816-3',
-    correo:'/assets/portal-icono-correo.jpg?v=20260816-3',
-    contrasena:'/assets/portal-icono-contrasena.jpg?v=20260816-3'
+    cuentas:'/assets/portal-icono-mis-cuentas-transparent.png?v=20260816-4',
+    promociones:'/assets/portal-icono-promociones-transparent.png?v=20260816-4',
+    pagos:'/assets/portal-icono-metodos-pago-transparent.png?v=20260816-4',
+    perfil:'/assets/portal-icono-perfil-transparent.png?v=20260816-4',
+    correo:'/assets/portal-icono-correo-transparent.png?v=20260816-4',
+    contrasena:'/assets/portal-icono-contrasena-transparent.png?v=20260816-4'
   };
   const MASCOT_SOURCES=[
+    '/assets/portal-robot-transparent.png?v=20260816-4',
     '/assets/portal-robot.jpg?v=20260816-3',
     '/assets/sublicuentas-mascota-portal.jpg?v=20260816-2',
     '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
@@ -277,10 +278,10 @@
       button.addEventListener('click',()=>copyText(method.cuenta));
       row.append(paymentLogo(method),copy,button);list.append(row);
     });
-    panel.append(list);
     if(state.data.avisoPago){
       panel.append(element('div','portal-payment-warning',`⚠ ${state.data.avisoPago}`));
     }
+    panel.append(list);
   }
 
   function benefits(){

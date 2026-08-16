@@ -7,11 +7,12 @@
     ['tengo','Tengo'],['occidente','Banco de Occidente'],['custom','Iniciales / otro']
   ];
   const MASCOT_SOURCES=[
+    '/assets/portal-robot-transparent.png?v=20260816-4',
     '/assets/sublicuentas-mascota-portal.jpg?v=20260816-2',
     '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
     '/assets/sublicuentas-mascota.jpg?v=20260816-2'
   ];
-  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:''};
+  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:'',modalKeyHandler:null};
 
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -70,9 +71,16 @@
             <div class="pc-admin-toolbar-copy"><b>Métodos de pago</b><span>Edite banco, titular, número y aviso. El cliente podrá copiar los datos.</span></div>
             <button type="button" class="pc-btn" id="pcAgregarPago">＋ Agregar método</button>
           </div>
+          <div class="pc-payment-warning-editor">
+            <div class="pc-payment-warning-copy">
+              <b>⚠ Aviso importante para todos los pagos</b>
+              <span>Este mensaje aparece arriba de los bancos para que el cliente lo lea primero.</span>
+            </div>
+            <input id="pcAvisoPago" maxlength="220" aria-label="Aviso importante para todos los pagos" placeholder="¡No escribir en detalle o asunto!">
+          </div>
           <div class="pc-payment-list" id="pcPaymentList"></div>
-          <div class="pc-payment-footer">
-            <label class="pc-label">Aviso para todos los pagos<input id="pcAvisoPago" maxlength="220" placeholder="No escribir en detalle o asunto"></label>
+          <div class="pc-payment-savebar">
+            <span>Use las flechas para cambiar el orden en que aparecen los métodos.</span>
             <button type="button" class="pc-btn primary" id="pcGuardarPagos">💾 Guardar métodos</button>
           </div>
         </section>
@@ -157,22 +165,43 @@
     return LOGOS.map(([id,label])=>`<option value="${id}" ${id===selected?'selected':''}>${esc(label)}</option>`).join('');
   }
 
+  function safePaymentLogo(value){
+    const source=String(value||'').trim();
+    return /^https:\/\//i.test(source)||/^data:image\/(?:png|webp);base64,/i.test(source)?source:'';
+  }
+
   function paymentRow(method,index){
     const id=idSafe(method.id)||`pago-${Date.now()}-${index}`;
-    return `<div class="pc-payment-row" data-payment-id="${esc(id)}">
-      <span class="pc-payment-order">${index+1}</span>
-      <div class="pc-payment-main">
-        <input data-field="nombre" maxlength="80" value="${esc(method.nombre||'')}" placeholder="Banco o billetera">
-        <div class="pc-payment-mini">
-          <select data-field="logoKey" aria-label="Logo">${logoOptions(method.logoKey||'custom')}</select>
-          <select data-field="activo" aria-label="Visibilidad"><option value="true" ${method.activo!==false?'selected':''}>Visible</option><option value="false" ${method.activo===false?'selected':''}>Oculto</option></select>
+    const logoUrl=safePaymentLogo(method.logoUrl);
+    return `<article class="pc-payment-row" data-payment-id="${esc(id)}" data-logo-url="${esc(logoUrl)}">
+      <div class="pc-payment-row-head">
+        <span class="pc-payment-order">${index+1}</span>
+        <div class="pc-payment-row-title"><b>Método de pago ${index+1}</b><span>Complete los datos tal como debe verlos el cliente.</span></div>
+        <div class="pc-payment-row-actions">
+          <button type="button" class="pc-payment-move" data-payment-move="-1" title="Subir un lugar" aria-label="Subir método">↑</button>
+          <button type="button" class="pc-payment-move" data-payment-move="1" title="Bajar un lugar" aria-label="Bajar método">↓</button>
+          <button type="button" class="pc-payment-delete" title="Eliminar método" aria-label="Eliminar método">×</button>
         </div>
       </div>
-      <input data-field="titular" maxlength="130" value="${esc(method.titular||'')}" placeholder="Titular">
-      <input data-field="cuenta" maxlength="100" value="${esc(method.cuenta||'')}" placeholder="Número o usuario">
-      <input data-field="nota" maxlength="120" value="${esc(method.nota||'')}" placeholder="Nota opcional">
-      <button type="button" class="pc-payment-delete" title="Eliminar método" aria-label="Eliminar método">×</button>
-    </div>`;
+      <div class="pc-payment-fields">
+        <label class="pc-payment-field"><span>Banco o billetera</span><input data-field="nombre" maxlength="80" value="${esc(method.nombre||'')}" placeholder="Ej. Banco Atlántida"></label>
+        <label class="pc-payment-field"><span>Titular</span><input data-field="titular" maxlength="130" value="${esc(method.titular||'')}" placeholder="Nombre del titular"></label>
+        <label class="pc-payment-field"><span>Número o usuario</span><input data-field="cuenta" maxlength="100" value="${esc(method.cuenta||'')}" placeholder="Número de cuenta o teléfono"></label>
+        <label class="pc-payment-field"><span>Nota opcional</span><input data-field="nota" maxlength="120" value="${esc(method.nota||'')}" placeholder="Nota opcional"></label>
+      </div>
+      <div class="pc-payment-options">
+        <label class="pc-payment-field"><span>Logo predeterminado</span><select data-field="logoKey" aria-label="Logo predeterminado">${logoOptions(method.logoKey||'custom')}</select></label>
+        <label class="pc-payment-field"><span>Visibilidad</span><select data-field="activo" aria-label="Visibilidad"><option value="true" ${method.activo!==false?'selected':''}>Visible</option><option value="false" ${method.activo===false?'selected':''}>Oculto</option></select></label>
+        <div class="pc-payment-logo-editor">
+          <div class="pc-payment-logo-preview">${logoUrl?`<img src="${esc(logoUrl)}" alt="Logo de ${esc(method.nombre||'método de pago')}">`:'<span>Logo predeterminado</span>'}</div>
+          <div class="pc-payment-logo-actions">
+            <label class="pc-btn ghost">🖼️ Subir logo PNG<input class="pc-payment-logo-file" type="file" accept="image/png,image/webp,.png,.webp" hidden></label>
+            <button type="button" class="pc-btn ghost pc-payment-logo-remove" ${logoUrl?'':'disabled'}>Quitar logo subido</button>
+            <small>Use un PNG transparente. La imagen se ajusta automáticamente; si no sube una, se usa el logo predeterminado seleccionado.</small>
+          </div>
+        </div>
+      </div>
+    </article>`;
   }
 
   function renderPayments(){
@@ -183,12 +212,51 @@
       if(row)row.remove();
       renumberPayments();
     }));
+    list.querySelectorAll('[data-payment-move]').forEach(button=>button.addEventListener('click',()=>{
+      const row=button.closest('.pc-payment-row');if(!row)return;
+      const direction=Number(button.dataset.paymentMove)||0;
+      if(direction<0&&row.previousElementSibling)list.insertBefore(row,row.previousElementSibling);
+      if(direction>0&&row.nextElementSibling)list.insertBefore(row.nextElementSibling,row);
+      renumberPayments();
+    }));
+    list.querySelectorAll('.pc-payment-logo-file').forEach(input=>input.addEventListener('change',async event=>{
+      const row=event.target.closest('.pc-payment-row');
+      const file=event.target.files&&event.target.files[0];
+      if(!row||!file)return;
+      status('Preparando logo del banco…');
+      try{
+        row.dataset.logoUrl=await resizePaymentLogo(file);
+        renderPaymentLogoPreview(row);
+        status('Logo listo. Presione “Guardar métodos” para publicarlo.','good');
+      }catch(error){status(error.message||'No se pudo preparar el logo.','bad');}
+      finally{event.target.value='';}
+    }));
+    list.querySelectorAll('.pc-payment-logo-remove').forEach(button=>button.addEventListener('click',()=>{
+      const row=button.closest('.pc-payment-row');if(!row)return;
+      row.dataset.logoUrl='';renderPaymentLogoPreview(row);
+      status('Logo subido retirado. Se usará el predeterminado al guardar.');
+    }));
     const warning=document.getElementById('pcAvisoPago');if(warning)warning.value=state.avisoPago||'';
+    renumberPayments();
+  }
+
+  function renderPaymentLogoPreview(row){
+    const preview=row?.querySelector('.pc-payment-logo-preview');if(!preview)return;
+    const source=safePaymentLogo(row.dataset.logoUrl);
+    if(source){
+      const image=document.createElement('img');image.src=source;image.alt='Vista previa del logo';preview.replaceChildren(image);
+    }else preview.innerHTML='<span>Logo predeterminado</span>';
+    const remove=row.querySelector('.pc-payment-logo-remove');if(remove)remove.disabled=!source;
   }
 
   function renumberPayments(){
-    document.querySelectorAll('#pcPaymentList .pc-payment-row').forEach((row,index)=>{
+    const rows=[...document.querySelectorAll('#pcPaymentList .pc-payment-row')];
+    rows.forEach((row,index)=>{
       const el=row.querySelector('.pc-payment-order');if(el)el.textContent=String(index+1);
+      const title=row.querySelector('.pc-payment-row-title b');if(title)title.textContent=`Método de pago ${index+1}`;
+      const moves=row.querySelectorAll('[data-payment-move]');
+      if(moves[0])moves[0].disabled=index===0;
+      if(moves[1])moves[1].disabled=index===rows.length-1;
     });
   }
 
@@ -198,14 +266,14 @@
       return {
         id:row.dataset.paymentId||`pago-${Date.now()}-${index}`,
         nombre:value('nombre'),titular:value('titular'),cuenta:value('cuenta'),nota:value('nota'),
-        logoKey:value('logoKey'),activo:value('activo')!=='false',orden:index
+        logoKey:value('logoKey'),logoUrl:safePaymentLogo(row.dataset.logoUrl),activo:value('activo')!=='false',orden:index
       };
     });
   }
 
   function addPayment(){
     const methods=readPayments();
-    methods.push({id:`pago-${Date.now()}`,nombre:'',titular:'',cuenta:'',nota:'',logoKey:'custom',activo:true});
+    methods.push({id:`pago-${Date.now()}`,nombre:'',titular:'',cuenta:'',nota:'',logoKey:'custom',logoUrl:'',activo:true});
     state.metodosPago=methods;renderPayments();
     const rows=document.querySelectorAll('#pcPaymentList .pc-payment-row');
     rows[rows.length-1]?.querySelector('[data-field="nombre"]')?.focus();
@@ -245,6 +313,7 @@
     state.editingId=id||'';state.editingImage=promo.imagen||'';
     const target=promo.alcance||{tipo:'todos'};
     const modal=document.getElementById('pcPromoModal');if(!modal)return;
+    document.body.classList.add('pc-modal-open');
     modal.hidden=false;
     modal.innerHTML=`<div class="pc-modal-card" role="dialog" aria-modal="true" aria-labelledby="pcPromoTitle">
       <div class="pc-modal-head"><b id="pcPromoTitle">${id?'Editar':'Nueva'} promoción</b><button type="button" class="pc-modal-close" aria-label="Cerrar">×</button></div>
@@ -284,10 +353,11 @@
         </div>
         <label class="pc-target-option"><input type="checkbox" name="activa" ${promo.activa!==false?'checked':''}> Promoción visible</label>
         <div class="pc-status" id="pcModalStatus"></div>
-        <div class="pc-form-actions"><button type="button" class="pc-btn ghost" id="pcPromoCancel">Cancelar</button><button type="submit" class="pc-btn primary" id="pcPromoSave">💾 Guardar promoción</button></div>
       </form>
+      <div class="pc-form-actions"><button type="button" class="pc-btn ghost" id="pcPromoCancel">Cancelar</button><button type="submit" form="pcPromoForm" class="pc-btn primary" id="pcPromoSave">💾 Guardar promoción</button></div>
     </div>`;
     bindPromotionModal(modal);
+    requestAnimationFrame(()=>modal.querySelector('.pc-modal-close')?.focus());
   }
 
   function modalStatus(message,type=''){
@@ -298,6 +368,9 @@
   function closePromotion(){
     const modal=document.getElementById('pcPromoModal');
     if(modal){modal.hidden=true;modal.innerHTML='';}
+    document.body.classList.remove('pc-modal-open');
+    if(state.modalKeyHandler)document.removeEventListener('keydown',state.modalKeyHandler);
+    state.modalKeyHandler=null;
     state.editingId='';state.editingImage='';
   }
 
@@ -312,7 +385,10 @@
   function bindPromotionModal(modal){
     modal.querySelector('.pc-modal-close')?.addEventListener('click',closePromotion);
     modal.querySelector('#pcPromoCancel')?.addEventListener('click',closePromotion);
-    modal.addEventListener('click',event=>{if(event.target===modal)closePromotion();});
+    modal.onclick=event=>{if(event.target===modal)closePromotion();};
+    if(state.modalKeyHandler)document.removeEventListener('keydown',state.modalKeyHandler);
+    state.modalKeyHandler=event=>{if(event.key==='Escape')closePromotion();};
+    document.addEventListener('keydown',state.modalKeyHandler);
     modal.querySelectorAll('input[name="alcanceTipo"]').forEach(input=>input.addEventListener('change',updateTargetPickers));
     updateTargetPickers();
     modal.querySelector('#pcClientSearch')?.addEventListener('input',event=>{
@@ -351,6 +427,29 @@
         }catch(error){URL.revokeObjectURL(url);reject(error);}
       };
       image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No se pudo leer la imagen.'));};
+      image.src=url;
+    });
+  }
+
+  function resizePaymentLogo(file){
+    return new Promise((resolve,reject)=>{
+      if(!file||!['image/png','image/webp'].includes(String(file.type||'').toLowerCase()))return reject(new Error('Seleccione un logo PNG o WebP, preferiblemente sin fondo.'));
+      const image=new Image();const url=URL.createObjectURL(file);
+      image.onload=()=>{
+        try{
+          const max=320,scale=Math.min(1,max/Math.max(image.width,image.height));
+          const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+          const context=canvas.getContext('2d');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);
+          let data=canvas.toDataURL('image/png');
+          if(data.length>80000){
+            let quality=.88;data=canvas.toDataURL('image/webp',quality);
+            while(data.length>85000&&quality>.56){quality-=.08;data=canvas.toDataURL('image/webp',quality);}
+          }
+          if(data.length>90000)return reject(new Error('El logo todavía pesa mucho. Use un PNG más pequeño.'));
+          resolve(data);
+        }catch(error){URL.revokeObjectURL(url);reject(error);}
+      };
+      image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No se pudo leer el logo.'));};
       image.src=url;
     });
   }
