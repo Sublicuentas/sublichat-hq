@@ -10,7 +10,7 @@
   };
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
-  const PAYMENT_VENDOR_KEYS=new Set(['relojes','sublicuentas','libni','naara']);
+  const PAYMENT_VENDOR_KEYS=new Set(['relojes','sublicuentas']);
   const PORTAL_ICONS={
     cuentas:'/assets/portal-icono-mis-cuentas-transparent.png?v=20260816-4',
     promociones:'/assets/portal-icono-promociones-transparent.png?v=20260816-4',
@@ -331,9 +331,11 @@
     const nav=element('nav','portal-categories');nav.role='tablist';nav.setAttribute('aria-label','Categorías de su portal');
     nav.append(
       categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
-      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
-      categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera')
+      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas')
     );
+    if(state.paymentAllowed){
+      nav.append(categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera'));
+    }
     nav.classList.toggle('two-categories',!state.paymentAllowed);
 
     const panels=element('main','portal-panels');
@@ -343,7 +345,8 @@
     promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
-    panels.append(accounts,promos,payments);
+    panels.append(accounts,promos);
+    if(state.paymentAllowed)panels.append(payments);
 
     stage.replaceChildren(brand,intro,nav,panels);
     state.enhanced=true;syncPaymentVisibility();renderPromotions();renderPayments();selectPanel('cuentas',false);

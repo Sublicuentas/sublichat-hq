@@ -40,6 +40,7 @@ body.portal-ready{
   padding:15px 11px 12px;border:1px solid #F2DAD7;border-radius:20px;background:linear-gradient(155deg,#FFF8F7,#FCEDEC);
   color:#15120F;text-align:center;font:inherit;cursor:pointer;box-shadow:0 7px 18px rgba(70,34,27,.05);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease
 }
+.portal-category[hidden]{display:none!important}
 .portal-category:hover,.portal-category.active{transform:translateY(-2px);border-color:#EE9992;box-shadow:0 11px 24px rgba(127,34,25,.10)}
 .portal-category.active:after{content:"";position:absolute;left:20%;right:20%;bottom:-1px;height:4px;border-radius:4px 4px 0 0;background:var(--portal-red)}
 .portal-category-icon{width:62px;height:54px;display:grid;place-items:center;margin-bottom:7px}
