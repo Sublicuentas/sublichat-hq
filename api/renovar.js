@@ -127,8 +127,13 @@ function servicioCoincide(servicio, { plataforma, correo } = {}) {
   return true;
 }
 
-function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo } = {}) {
+function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId } = {}) {
   const lista = Array.isArray(servicios) ? servicios : [];
+  const compraBuscada = String(compraId || "").trim();
+  if (compraBuscada) {
+    const porCompra = lista.findIndex(s => String(s && s.compraId || "").trim() === compraBuscada);
+    if (porCompra !== -1) return porCompra;
+  }
   const tieneCriterio = !!String(plataforma || "").trim() || !!normCorreo(correo);
   if (servicioIndex != null && Number.isInteger(Number(servicioIndex))) {
     const i = Number(servicioIndex);
@@ -140,6 +145,12 @@ function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo } =
   }
   if (lista.length === 1 && (!tieneCriterio || servicioCoincide(lista[0], { plataforma, correo }))) return 0;
   return -1;
+}
+
+function crmUserError(message) {
+  const error = new Error(String(message || "No se pudo completar el cambio."));
+  error.crmUserMessage = error.message;
+  return error;
 }
 
 function servicioNoUsaPinPerfil(plataforma) {
@@ -382,8 +393,8 @@ async function sincronizarEnlacesPublicos(db, { clienteId, servicios = [], regis
 // se entregan SOLO con correo — el cliente inicia sesión con "código", no con clave.
 // No confundir con servicioNoUsaClave/servicioNoUsaPinPerfil, que rigen lo que se
 // GUARDA en el CRM (la clave real sigue guardándose como respaldo interno). Esta
-// regla solo controla qué se muestra en la ficha pública /c/{token} y en el
-// mensaje corto de WhatsApp.
+// regla solo controla qué se muestra en la ficha pública /c/{token}. La ficha
+// tradicional de WhatsApp/respaldo siempre utiliza todos los datos guardados.
 function celularSoloCodigo(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   if (p.includes("netflix") && p.includes("vip")) return false; // Netflix VIP no entra aquí
@@ -543,42 +554,40 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
     if (!cuenta && invSnap.docs.length === 1 && !String(invSnap.docs[0].data()?.plataforma || "").trim()) cuenta = invSnap.docs[0];
     if (!cuenta) return { tocado: false, motivo: `correo no está en inventario para ${familiaBuscada || "esa plataforma"}` };
     const ref = cuenta.ref;
-    const data = cuenta.data();
-    let clientes = Array.isArray(data.clientes) ? [...data.clientes] : [];
-    const cap = Number(data.capacidad) || 0;
+    return await db.runTransaction(async transaction => {
+      const latest = await transaction.get(ref);
+      if (!latest.exists) return { tocado: false, motivo: "cuenta de inventario ya no existe" };
+      const data = latest.data() || {};
+      let clientes = Array.isArray(data.clientes) ? [...data.clientes] : [];
+      const cap = Number(data.capacidad) || 0;
 
-    if (modo === "ocupar") {
-      const idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente));
-      const pinNorm = String(pin || "").trim();
-      if (idxExiste !== -1) {
-        // Ya está: si el PIN cambió, se actualiza en el mismo registro (nunca duplica).
-        if (pinNorm && String(clientes[idxExiste].pin || "") !== pinNorm) {
-          clientes[idxExiste] = { ...clientes[idxExiste], pin: pinNorm };
+      if (modo === "ocupar") {
+        const idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente));
+        const pinNorm = String(pin || "").trim();
+        if (idxExiste !== -1) {
+          if (pinNorm && String(clientes[idxExiste].pin || "") !== pinNorm) {
+            clientes[idxExiste] = { ...clientes[idxExiste], pin: pinNorm };
+          }
+        } else if (cap > 0 && clientes.length >= cap) {
+          return { tocado: false, motivo: "cuenta llena", ocupados: clientes.length, capacidad: cap };
+        } else {
+          const usados = clientes.map(c => Number(c.slot) || 0);
+          let slot = 1; while (usados.includes(slot)) slot++;
+          clientes.push({ nombre: nombreCliente || "—", pin: pinNorm, slot });
         }
-      } else if (cap > 0 && clientes.length >= cap) {
-        return { tocado: false, motivo: "cuenta llena", ocupados: clientes.length, capacidad: cap };
-      } else {
-        const usados = clientes.map(c => Number(c.slot) || 0);
-        let slot = 1; while (usados.includes(slot)) slot++;
-        clientes.push({ nombre: nombreCliente || "—", pin: pinNorm, slot });
+      } else if (modo === "liberar") {
+        const i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente)));
+        if (i !== -1) clientes.splice(i, 1);
+        else if (clientes.length) clientes.pop();
       }
-    } else if (modo === "liberar") {
-      const i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente)));
-      if (i !== -1) clientes.splice(i, 1);
-      else if (clientes.length) clientes.pop();
-    }
 
-    const ocupados = clientes.length;
-    const disponibles = Math.max(0, cap - ocupados);
-    const update = {
-      clientes,
-      ocupados,
-      disponibles,
-      updatedAt: isoNow()
-    };
-    if (data.disp != null) update.disp = disponibles;
-    await ref.update(update);
-    return { tocado: true, plataforma: familiaBuscada, ocupados, disponibles };
+      const ocupados = clientes.length;
+      const disponibles = Math.max(0, cap - ocupados);
+      const update = { clientes, ocupados, disponibles, updatedAt: isoNow() };
+      if (data.disp != null) update.disp = disponibles;
+      transaction.set(ref, update, { merge: true });
+      return { tocado: true, plataforma: familiaBuscada, ocupados, disponibles };
+    });
   } catch (e) {
     return { tocado: false, motivo: e.message };
   }
@@ -807,26 +816,29 @@ export default async function handler(req, res) {
       const exactId = cleanExistingDocId(clienteId);
       if (!exactId) return res.status(200).json({ error: "Falta identificar exactamente al cliente." });
       const docRef = db.collection("clientes").doc(exactId);
-      const doc = await docRef.get();
-      if (!doc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
-      const data = doc.data() || {};
-      const nombreTitular = data.nombrePerfil || data.nombre || "Cliente";
-      const servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
-      if (!servicios.length) return res.status(200).json({ error: "Este cliente todavía no tiene servicios para publicar." });
-
-      const accesos = prepararAccesosBeneficiarios({
-        servicios,
-        registroAnterior: data.accesosBeneficiarios,
-        nombreTitular,
-        tokenTitularAnterior: data.tokenAcceso
+      const enlaceResultado = await db.runTransaction(async transaction => {
+        const doc = await transaction.get(docRef);
+        if (!doc.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
+        const data = doc.data() || {};
+        const nombreTitular = data.nombrePerfil || data.nombre || "Cliente";
+        const servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+        if (!servicios.length) throw crmUserError("Este cliente todavía no tiene servicios para publicar.");
+        const accesos = prepararAccesosBeneficiarios({
+          servicios,
+          registroAnterior: data.accesosBeneficiarios,
+          nombreTitular,
+          tokenTitularAnterior: data.tokenAcceso
+        });
+        const serviciosLimpios = servicios.map(limpiarServicioCRM);
+        transaction.set(docRef, {
+          servicios: serviciosLimpios,
+          tokenAcceso: accesos.tokenTitular,
+          accesosBeneficiarios: accesos.registro,
+          updatedAt: isoNow()
+        }, { merge: true });
+        return { accesos, serviciosLimpios };
       });
-      const serviciosLimpios = servicios.map(limpiarServicioCRM);
-      await docRef.update({
-        servicios: serviciosLimpios,
-        tokenAcceso: accesos.tokenTitular,
-        accesosBeneficiarios: accesos.registro,
-        updatedAt: isoNow()
-      });
+      const { accesos, serviciosLimpios } = enlaceResultado;
       await sincronizarEnlacesPublicos(db, {
         clienteId: docRef.id,
         servicios: serviciosLimpios,
@@ -879,112 +891,122 @@ export default async function handler(req, res) {
       } else {
         doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil });
       }
-      let docRef, data = {}, created = false;
-
+      let docRef;
       if (doc) {
         docRef = doc.ref;
-        data = doc.data() || {};
       } else {
-        created = true;
-        // ✅ El ID del documento nuevo se basa SIEMPRE en el nombre, nunca en
-        // el teléfono (antes "tel-<numero>" hacía que dos clientes distintos
-        // con el mismo teléfono compartido cayeran en el mismo documento).
+        // El ID nuevo se basa en el nombre, nunca en el teléfono. La transacción
+        // vuelve a leer este documento para no pisar una creación simultánea.
         const idBase = safeDocId(nNorm || nombrePerfil);
         docRef = db.collection("clientes").doc(idBase);
-        const existing = await docRef.get();
-        if (existing.exists) {
-          created = false;
-          data = existing.data() || {};
-        }
       }
 
-      let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
-      const pNorm = normPlat(servicio.plataforma);
-      const correoEntrada = Array.isArray(servicio.perfiles) && servicio.perfiles.length
-        ? (servicio.perfiles[0]?.correo ?? servicio.correo ?? "")
-        : (servicio.correo || "");
-      const correoNorm = String(correoEntrada || "").trim().toLowerCase();
+      // Telegram y Sublichat pueden guardar con pocos milisegundos de diferencia.
+      // Por eso toda la lectura, modificación puntual y escritura de servicios[]
+      // ocurre dentro de UNA transacción sobre la versión más reciente de Firebase.
+      const fichaResultado = await db.runTransaction(async transaction => {
+        const latest = await transaction.get(docRef);
+        if (exactId && !latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
+        const data = latest.exists ? (latest.data() || {}) : {};
+        const created = !latest.exists;
+        let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+        const pNorm = normPlat(servicio.plataforma);
+        const correoEntrada = Array.isArray(servicio.perfiles) && servicio.perfiles.length
+          ? (servicio.perfiles[0]?.correo ?? servicio.correo ?? "")
+          : (servicio.correo || "");
+        const correoNorm = String(correoEntrada || "").trim().toLowerCase();
+        const compraIdEntrada = String(servicio.compraId || "").trim();
+        const tieneIndice = body.servicioIndex !== null && body.servicioIndex !== undefined && body.servicioIndex !== "";
+        let idx = compraIdEntrada
+          ? servicios.findIndex(s => String(s?.compraId || "").trim() === compraIdEntrada)
+          : -1;
 
-      // Una ficha abierta desde el CRM trae el índice real del servicio. Se valida
-      // también contra sus datos originales para impedir que un índice viejo edite
-      // otra ficha por accidente. Esto permite tener dos Netflix VIP (incluso con la
-      // misma plataforma) y modificar exactamente el que el usuario seleccionó.
-      const tieneIndice = body.servicioIndex !== null && body.servicioIndex !== undefined && body.servicioIndex !== "";
-      let idx = -1;
-      if (tieneIndice) {
-        const solicitado = Number(body.servicioIndex);
-        if (!Number.isInteger(solicitado) || solicitado < 0 || solicitado >= servicios.length) {
-          return res.status(200).json({ error: "La ficha seleccionada cambió de posición. Recargue el cliente y vuelva a intentarlo." });
-        }
-        const plataformaOriginal = body.plataformaOriginal || servicios[solicitado].plataforma || "";
-        const correoOriginal = body.correoOriginal != null ? body.correoOriginal : (servicios[solicitado].correo || "");
-        if (!servicioCoincide(servicios[solicitado], { plataforma: plataformaOriginal, correo: correoOriginal })) {
-          return res.status(200).json({ error: "La ficha seleccionada ya no coincide con Firebase. Recargue antes de guardar." });
-        }
-        idx = solicitado;
-      } else {
-        // Ficha nueva o cliente antiguo sin índice: misma plataforma + mismo correo.
-        idx = servicios.findIndex(s =>
-          normPlat(s.plataforma) === pNorm &&
-          String(s.correo || "").trim().toLowerCase() === correoNorm
-        );
-        // Sin correo (algunas cuentas IPTV), solo empareja otra ficha también sin correo.
-        if (idx === -1 && !correoNorm) {
+        if (idx === -1 && tieneIndice) {
+          const solicitado = Number(body.servicioIndex);
+          if (!Number.isInteger(solicitado) || solicitado < 0 || solicitado >= servicios.length) {
+            throw crmUserError("La ficha seleccionada cambió de posición. Recargue el cliente y vuelva a intentarlo.");
+          }
+          const compraActual = String(servicios[solicitado]?.compraId || "").trim();
+          if (compraIdEntrada && compraActual && compraActual !== compraIdEntrada) {
+            throw crmUserError("La compra seleccionada cambió en Firebase. Recargue antes de guardar.");
+          }
+          const plataformaOriginal = body.plataformaOriginal || servicios[solicitado].plataforma || "";
+          const correoOriginal = body.correoOriginal != null ? body.correoOriginal : (servicios[solicitado].correo || "");
+          if (!servicioCoincide(servicios[solicitado], { plataforma: plataformaOriginal, correo: correoOriginal })) {
+            throw crmUserError("La ficha seleccionada ya no coincide con Firebase. Recargue antes de guardar.");
+          }
+          idx = solicitado;
+        } else if (idx === -1 && !tieneIndice && !compraIdEntrada) {
+          // Compatibilidad con compras antiguas que todavía no tenían compraId.
           idx = servicios.findIndex(s =>
-            normPlat(s.plataforma) === pNorm && !String(s.correo || "").trim()
+            normPlat(s.plataforma) === pNorm &&
+            String(s.correo || "").trim().toLowerCase() === correoNorm
           );
+          if (idx === -1 && !correoNorm) {
+            idx = servicios.findIndex(s =>
+              normPlat(s.plataforma) === pNorm && !String(s.correo || "").trim()
+            );
+          }
         }
-      }
 
-      const servicioActualizado = idx >= 0;
-      const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
-      const servicioAnterior = idx >= 0 ? { ...servicios[idx] } : null;
-      if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
-        return res.status(200).json({ error: "Falta el nombre de la persona que usará este acceso." });
-      }
-      const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
-      for (let i = 0; i < nuevo.perfiles.length; i++) {
-        const p = nuevo.perfiles[i] || {};
-        if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) return res.status(200).json({ error: `Perfil ${i + 1}: seleccione si se instalará en TV o celular.` });
-        const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && p.dispositivo === "tv" && p.esRoku !== true;
-        if (!String(p.nombre || "").trim()) return res.status(200).json({ error: `Falta el nombre del perfil ${i + 1}.` });
-        if (!entregaSoloPerfil && servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) return res.status(200).json({ error: `Falta el correo o usuario del perfil ${i + 1}.` });
-        if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
-        if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
-      }
+        const servicioActualizado = idx >= 0;
+        const nombreFinal = nombrePerfil || data.nombrePerfil || data.nombre || "—";
+        const servicioAnterior = idx >= 0 ? { ...servicios[idx] } : null;
+        if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
+          throw crmUserError("Falta el nombre de la persona que usará este acceso.");
+        }
+        const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
+        for (let i = 0; i < nuevo.perfiles.length; i++) {
+          const p = nuevo.perfiles[i] || {};
+          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
+          if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+        }
 
-      if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
-      else {
-        idx = servicios.length;
-        servicios.push(aplicarNuevoServicio({}, nuevo));
-      }
+        if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
+        else {
+          idx = servicios.length;
+          servicios.push(aplicarNuevoServicio({}, nuevo));
+        }
 
-      const accesos = prepararAccesosBeneficiarios({
-        servicios,
-        registroAnterior: data.accesosBeneficiarios,
-        nombreTitular: nombreFinal,
-        tokenTitularAnterior: data.tokenAcceso
+        const accesos = prepararAccesosBeneficiarios({
+          servicios,
+          registroAnterior: data.accesosBeneficiarios,
+          nombreTitular: nombreFinal,
+          tokenTitularAnterior: data.tokenAcceso
+        });
+        const serviciosLimpios = servicios.map(limpiarServicioCRM);
+        const beneficiarioActual = datosBeneficiario(serviciosLimpios[idx], nombreFinal);
+        const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
+        const update = {
+          nombrePerfil: nombreFinal,
+          nombre: nombreFinal,
+          nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
+          telefono: tel || data.telefono || "",
+          telefono_norm: tNorm || data.telefono_norm || "",
+          vendedor: vendedor || data.vendedor || "",
+          vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
+          servicios: serviciosLimpios,
+          tokenAcceso: accesos.tokenTitular,
+          accesosBeneficiarios: accesos.registro,
+          updatedAt: isoNow()
+        };
+        if (created) update.createdAt = isoNow();
+        transaction.set(docRef, update, { merge: true });
+        return {
+          created, idx, nombreFinal, serviciosLimpios, accesos,
+          servicioActualizado, servicioAnterior,
+          servicioGuardado: serviciosLimpios[idx], beneficiarioActual, tokenPublico
+        };
       });
-      const serviciosLimpios = servicios.map(limpiarServicioCRM);
-      const beneficiarioActual = datosBeneficiario(servicios[idx], nombreFinal);
-      const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
 
-      const update = {
-        nombrePerfil: nombreFinal,
-        nombre: nombreFinal,
-        nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
-        telefono: tel || data.telefono || "",
-        telefono_norm: tNorm || data.telefono_norm || "",
-        vendedor: vendedor || data.vendedor || "",
-        vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
-        servicios: serviciosLimpios,
-        tokenAcceso: accesos.tokenTitular,
-        accesosBeneficiarios: accesos.registro,
-        updatedAt: isoNow()
-      };
-      if (created) update.createdAt = isoNow();
-
-      await docRef.set(update, { merge: true });
+      const {
+        created, idx, nombreFinal, serviciosLimpios, accesos,
+        servicioActualizado, servicioAnterior, servicioGuardado,
+        beneficiarioActual, tokenPublico
+      } = fichaResultado;
 
       // Crea una URL permanente por beneficiario y conserva, como enlaces
       // puntuales, los tokens antiguos que no fueron elegidos para la fusión.
@@ -1004,24 +1026,24 @@ export default async function handler(req, res) {
       try {
         invResult = await sincronizarInventarioServicio(db, {
           anterior: servicioAnterior,
-          nuevo: servicios[idx],
+          nuevo: servicioGuardado,
           nombreTitular: nombreFinal
         });
       } catch (e) {
         invResult = { tocado: false, motivo: e.message };
       }
 
-      const perfilesGuardados = perfilesOperativos(servicios[idx], nombreFinal);
+      const perfilesGuardados = perfilesOperativos(servicioGuardado, nombreFinal);
 
       return res.status(200).json({
         ok: true,
         accion: acc,
         guardadoEnFirebase: true,
-        schemaVersion: Number(servicios[idx]?.schemaVersion) || 2,
-        compraId: String(servicios[idx]?.compraId || nuevo.compraId || ""),
+        schemaVersion: Number(servicioGuardado?.schemaVersion) || 2,
+        compraId: String(servicioGuardado?.compraId || servicio.compraId || ""),
         created,
         clienteId: docRef.id,
-        totalServicios: servicios.length,
+        totalServicios: serviciosLimpios.length,
         totalPerfiles: perfilesGuardados.length,
         perfilesGuardados: perfilesGuardados.map((p) => ({
           perfilId: p.perfilId,
@@ -1071,178 +1093,199 @@ export default async function handler(req, res) {
     if (snap.docs.length > 1) {
       const conServicio = snap.docs.find(d => {
         const servs = Array.isArray(d.data().servicios) ? d.data().servicios : [];
-        return resolveServicioIndex(servs, { servicioIndex: body.servicioIndex, plataforma, correo }) !== -1;
+        return resolveServicioIndex(servs, {
+          servicioIndex: body.servicioIndex,
+          plataforma,
+          correo,
+          compraId: body.compraId || body.servicio?.compraId
+        }) !== -1;
       });
       if (conServicio) elegido = conServicio;
     }
 
     const docRef = elegido.ref;
-    const data = elegido.data();
-    let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
-    let invResult = null;
-    const nombreTitular = data.nombrePerfil || data.nombre || "";
+    const mutation = await db.runTransaction(async transaction => {
+      const latest = await transaction.get(docRef);
+      if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
+      const data = latest.data() || {};
+      let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+      const nombreTitular = data.nombrePerfil || data.nombre || "";
+      const compraIdBody = String(body.compraId || body.servicio?.compraId || "").trim();
+      let fechaAnterior = null, fechaNueva = null, touchedIndex = null, touchedCompraId = "";
+      let inventarioPlan = null, perfilEliminado = "";
 
-    let fechaAnterior = null, fechaNueva = null, touchedIndex = null;
-
-    if (acc === "renovar") {
-      const { dias, fechaActual, fechaExacta, servicioIndex } = body;
-      if (!plataforma && servicioIndex == null)
-        return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
-      if (!dias && !fechaExacta)
-        return res.status(200).json({ error: "Faltan datos (plataforma o fecha)." });
-
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo });
-      if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
-
-      const s = servicios[idx];
-      // 🔎 DIAGNÓSTICO: de qué fecha REALMENTE está partiendo el servidor
-      // (la que ya está guardada en Firestore para este servicio), para poder
-      // compararla con la que se ve en pantalla.
-      fechaAnterior = s.fechaRenovacion || fechaActual || null;
-      const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
-      if (!parseFechaDMY(nuevaFecha)) return res.status(200).json({ error: "La fecha de renovación no es válida." });
-      fechaNueva = nuevaFecha;
-      touchedIndex = idx;
-      servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
-
-    } else if (acc === "eliminar") {
-      const { servicioIndex } = body;
-      if (!plataforma && servicioIndex == null) return res.status(200).json({ error: "Falta la plataforma a eliminar." });
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo });
-      if (idx === -1) return res.status(200).json({ error: "No encontré esa plataforma en el cliente." });
-
-      const servEliminado = servicios[idx];
-      servicios = servicios.filter((_, i) => i !== idx);
-
-      invResult = await sincronizarInventarioServicio(db, {
-        anterior: servEliminado,
-        nuevo: null,
-        nombreTitular
-      });
-
-    } else if (acc === "eliminar_perfil") {
-      const { servicioIndex, perfilIndex, perfilId } = body;
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma });
-      if (idx === -1) return res.status(200).json({ error: "No encontré esa compra en el cliente." });
-      const anterior = servicios[idx];
-      const perfiles = perfilesOperativos(anterior, nombreTitular);
-      let pidx = Number.isInteger(Number(perfilIndex)) ? Number(perfilIndex) : -1;
-      if (perfilId) pidx = perfiles.findIndex((p) => String(p.perfilId || "") === String(perfilId));
-      if (pidx < 0 || pidx >= perfiles.length) return res.status(200).json({ error: "No encontré ese perfil en la compra." });
-      const eliminado = perfiles[pidx];
-      const restantes = perfiles.filter((_, i) => i !== pidx);
-      if (!restantes.length) {
-        servicios = servicios.filter((_, i) => i !== idx);
-        invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: null, nombreTitular });
-      } else {
-        const actualizado = buildServicio({
-          ...anterior,
-          perfiles: restantes,
-          correo: restantes[0].correo,
-          clave: restantes[0].clave,
-          pinPerfil: restantes[0].pinPerfil,
-          perfil: restantes[0].perfil
-        }, anterior.fichaTexto || "", anterior, nombreTitular);
-        servicios[idx] = aplicarNuevoServicio(anterior, actualizado);
-        invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: servicios[idx], nombreTitular });
+      if (acc === "renovar") {
+        const { dias, fechaActual, fechaExacta, servicioIndex } = body;
+        if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Faltan datos (plataforma o fecha).");
+        if (!dias && !fechaExacta) throw crmUserError("Faltan datos (plataforma o fecha).");
+        const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
+        if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
+        const s = servicios[idx];
+        fechaAnterior = s.fechaRenovacion || fechaActual || null;
+        const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
+        if (!parseFechaDMY(nuevaFecha)) throw crmUserError("La fecha de renovación no es válida.");
+        fechaNueva = nuevaFecha;
         touchedIndex = idx;
+        touchedCompraId = String(s.compraId || compraIdBody || "");
+        servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
+
+      } else if (acc === "eliminar") {
+        const { servicioIndex } = body;
+        if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Falta la plataforma a eliminar.");
+        const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
+        if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
+        const anterior = servicios[idx];
+        touchedIndex = idx;
+        touchedCompraId = String(anterior.compraId || compraIdBody || "");
+        servicios.splice(idx, 1);
+        inventarioPlan = { anterior, nuevo: null, nombreTitular };
+
+      } else if (acc === "eliminar_perfil") {
+        const { servicioIndex, perfilIndex, perfilId } = body;
+        const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, compraId: compraIdBody });
+        if (idx === -1) throw crmUserError("No encontré esa compra en el cliente.");
+        const anterior = servicios[idx];
+        const perfiles = perfilesOperativos(anterior, nombreTitular);
+        let pidx = Number.isInteger(Number(perfilIndex)) ? Number(perfilIndex) : -1;
+        if (perfilId) pidx = perfiles.findIndex((p) => String(p.perfilId || "") === String(perfilId));
+        if (pidx < 0 || pidx >= perfiles.length) throw crmUserError("No encontré ese perfil en la compra.");
+        const eliminado = perfiles[pidx];
+        const restantes = perfiles.filter((_, i) => i !== pidx);
+        touchedIndex = idx;
+        touchedCompraId = String(anterior.compraId || compraIdBody || "");
+        perfilEliminado = eliminado.nombre || eliminado.perfil || "Perfil";
+        if (!restantes.length) {
+          servicios.splice(idx, 1);
+          inventarioPlan = { anterior, nuevo: null, nombreTitular };
+        } else {
+          const actualizado = buildServicio({
+            ...anterior, perfiles: restantes,
+            correo: restantes[0].correo, clave: restantes[0].clave,
+            pinPerfil: restantes[0].pinPerfil, perfil: restantes[0].perfil
+          }, anterior.fichaTexto || "", anterior, nombreTitular);
+          servicios[idx] = aplicarNuevoServicio(anterior, actualizado);
+          inventarioPlan = { anterior, nuevo: servicios[idx], nombreTitular };
+        }
+
+      } else if (acc === "agregar") {
+        const { servicio } = body;
+        if (!servicio || !servicio.plataforma) throw crmUserError("Faltan datos del servicio nuevo.");
+        const nuevo = buildServicio(servicio, "", {}, nombreTitular);
+        for (let i = 0; i < nuevo.perfiles.length; i++) {
+          const p = nuevo.perfiles[i] || {};
+          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) throw crmUserError(`Complete los datos requeridos del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+        }
+        touchedIndex = servicios.length;
+        touchedCompraId = String(nuevo.compraId || "");
+        servicios.push(nuevo);
+        inventarioPlan = { anterior: null, nuevo, nombreTitular };
+
+      } else if (acc === "editar") {
+        const { plataformaOriginal, correoOriginal, servicio, servicioIndex } = body;
+        const buscar = plataformaOriginal || plataforma;
+        if (!buscar && servicioIndex == null && !compraIdBody) throw crmUserError("Faltan datos para editar.");
+        if (!servicio) throw crmUserError("Faltan datos para editar.");
+        const idx = resolveServicioIndex(servicios, {
+          servicioIndex,
+          plataforma: buscar,
+          correo: correoOriginal || correo,
+          compraId: compraIdBody
+        });
+        if (idx === -1) throw crmUserError("No encontré ese servicio.");
+        const anterior = servicios[idx];
+        const nuevo = buildServicio({
+          plataforma: servicio.plataforma || anterior.plataforma,
+          precio: servicio.precio != null ? servicio.precio : anterior.precio,
+          fechaRenovacion: servicio.fechaRenovacion ? servicio.fechaRenovacion : anterior.fechaRenovacion,
+          correo: servicio.correo != null ? servicio.correo : (anterior.correo || ""),
+          clave: servicio.clave != null ? servicio.clave : (anterior.clave || anterior.pin || ""),
+          pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (anterior.pinPerfil || anterior.pin_perfil || anterior.perfilPin || ""),
+          perfil: servicio.perfil != null ? servicio.perfil : (anterior.perfil || nombreTitular),
+          perfiles: Array.isArray(servicio.perfiles) ? servicio.perfiles : undefined,
+          compraId: servicio.compraId || anterior.compraId || "",
+          beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : anterior.beneficiarioTipo,
+          beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
+          dispositivo: servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo,
+          esRoku: servicio.esRoku != null ? servicio.esRoku : anterior.esRoku,
+          visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl
+        }, servicio.fichaTexto || anterior.fichaTexto || "", anterior, nombreTitular);
+        for (let i = 0; i < nuevo.perfiles.length; i++) {
+          const p = nuevo.perfiles[i] || {};
+          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
+          if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+        }
+        servicios[idx] = aplicarNuevoServicio(anterior, nuevo);
+        touchedIndex = idx;
+        touchedCompraId = String(servicios[idx].compraId || compraIdBody || "");
+        inventarioPlan = { anterior, nuevo: servicios[idx], nombreTitular };
+      } else {
+        throw crmUserError("Acción no reconocida.");
       }
-      invResult = { ...(invResult || {}), perfilEliminado: eliminado.nombre || eliminado.perfil || "Perfil" };
 
-    } else if (acc === "agregar") {
-      const { servicio } = body;
-      if (!servicio || !servicio.plataforma) return res.status(200).json({ error: "Faltan datos del servicio nuevo." });
+      const accesos = prepararAccesosBeneficiarios({
+        servicios,
+        registroAnterior: data.accesosBeneficiarios,
+        nombreTitular,
+        tokenTitularAnterior: data.tokenAcceso
+      });
+      const serviciosLimpios = servicios.map(limpiarServicioCRM);
+      transaction.set(docRef, {
+        servicios: serviciosLimpios,
+        tokenAcceso: accesos.tokenTitular,
+        accesosBeneficiarios: accesos.registro,
+        updatedAt: isoNow()
+      }, { merge: true });
+      return {
+        serviciosLimpios, accesos, nombreTitular, inventarioPlan, perfilEliminado,
+        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId
+      };
+    });
 
-      const nuevo = buildServicio(servicio, "", {}, nombreTitular);
-      for (let i = 0; i < nuevo.perfiles.length; i++) {
-        const p = nuevo.perfiles[i] || {};
-        if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) return res.status(200).json({ error: `Perfil ${i + 1}: seleccione si se instalará en TV o celular.` });
-        const entregaSoloPerfil = servicioUsaSelectorDispositivo(nuevo.plataforma) && p.dispositivo === "tv" && p.esRoku !== true;
-        if (!p.nombre || (!entregaSoloPerfil && servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) return res.status(200).json({ error: `Complete los datos requeridos del perfil ${i + 1}.` });
-        if (!entregaSoloPerfil && !servicioNoUsaClave(nuevo.plataforma) && !p.clave) return res.status(200).json({ error: `Falta la clave del perfil ${i + 1}.` });
-        if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) return res.status(200).json({ error: `Falta el PIN individual del perfil ${i + 1}.` });
-      }
-      servicios = [...servicios, nuevo];
-
-      invResult = await sincronizarInventarioServicio(db, { anterior: null, nuevo, nombreTitular });
-
-    } else if (acc === "editar") {
-      const { plataformaOriginal, correoOriginal, servicio, servicioIndex } = body;
-      const buscar = plataformaOriginal || plataforma;
-      if (!buscar && servicioIndex == null) return res.status(200).json({ error: "Faltan datos para editar." });
-      if (!servicio) return res.status(200).json({ error: "Faltan datos para editar." });
-
-      const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma: buscar, correo: correoOriginal || correo });
-      if (idx === -1) return res.status(200).json({ error: "No encontré ese servicio." });
-
-      const anterior = servicios[idx];
-      const nuevo = buildServicio({
-        plataforma: servicio.plataforma || servicios[idx].plataforma,
-        precio: servicio.precio != null ? servicio.precio : servicios[idx].precio,
-        fechaRenovacion: servicio.fechaRenovacion ? servicio.fechaRenovacion : servicios[idx].fechaRenovacion,
-        correo: servicio.correo != null ? servicio.correo : (servicios[idx].correo || ""),
-        clave: servicio.clave != null ? servicio.clave : (servicios[idx].clave || servicios[idx].pin || ""),
-        pinPerfil: servicio.pinPerfil != null ? servicio.pinPerfil : (servicios[idx].pinPerfil || servicios[idx].pin_perfil || servicios[idx].perfilPin || ""),
-        perfil: servicio.perfil != null ? servicio.perfil : (servicios[idx].perfil || nombreTitular),
-        perfiles: Array.isArray(servicio.perfiles) ? servicio.perfiles : undefined,
-        compraId: servicio.compraId || servicios[idx].compraId || "",
-        beneficiarioTipo: servicio.beneficiarioTipo != null ? servicio.beneficiarioTipo : servicios[idx].beneficiarioTipo,
-        beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : servicios[idx].beneficiarioNombre,
-        dispositivo: servicio.dispositivo != null ? servicio.dispositivo : servicios[idx].dispositivo,
-        esRoku: servicio.esRoku != null ? servicio.esRoku : servicios[idx].esRoku,
-        visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : servicios[idx].visibilidadUrl
-      }, servicio.fichaTexto || servicios[idx].fichaTexto || "", anterior, nombreTitular);
-
-      servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
-      invResult = await sincronizarInventarioServicio(db, { anterior, nuevo: servicios[idx], nombreTitular });
-
-    } else {
-      return res.status(200).json({ error: "Acción no reconocida." });
+    let invResult = null;
+    if (mutation.inventarioPlan) {
+      try { invResult = await sincronizarInventarioServicio(db, mutation.inventarioPlan); }
+      catch (e) { invResult = { tocado: false, motivo: e.message }; }
     }
-
-    const accesos = prepararAccesosBeneficiarios({
-      servicios,
-      registroAnterior: data.accesosBeneficiarios,
-      nombreTitular,
-      tokenTitularAnterior: data.tokenAcceso
-    });
-    const serviciosLimpios = servicios.map(limpiarServicioCRM);
-    await docRef.update({
-      servicios: serviciosLimpios,
-      tokenAcceso: accesos.tokenTitular,
-      accesosBeneficiarios: accesos.registro,
-      updatedAt: isoNow()
-    });
+    if (mutation.perfilEliminado) invResult = { ...(invResult || {}), perfilEliminado: mutation.perfilEliminado };
     try {
       await sincronizarEnlacesPublicos(db, {
         clienteId: docRef.id,
-        servicios: serviciosLimpios,
-        registro: accesos.registro
+        servicios: mutation.serviciosLimpios,
+        registro: mutation.accesos.registro
       });
     } catch (e) {
       // El próximo guardado vuelve a intentar el enlace sin revertir la operación.
     }
 
-    // Una respuesta de escritura no basta: vuelve a leer el documento y solo
-    // confirma la renovación si Firebase devuelve la fecha nueva en el mismo índice.
+    // Una respuesta de escritura no basta: vuelve a leer el documento y confirma
+    // por compraId (el índice puede cambiar si otra sesión da una baja al mismo tiempo).
     const persistedDoc = await docRef.get();
     if (!persistedDoc.exists) return res.status(200).json({ error: "Firebase no devolvió la ficha después de guardarla." });
     const persistedData = persistedDoc.data() || {};
     const persistedServices = Array.isArray(persistedData.servicios) ? persistedData.servicios : [];
     let verified = true;
     if (acc === "renovar") {
-      const persisted = touchedIndex == null ? null : persistedServices[touchedIndex];
+      const persisted = mutation.touchedCompraId
+        ? persistedServices.find(s => String(s?.compraId || "") === mutation.touchedCompraId)
+        : (mutation.touchedIndex == null ? null : persistedServices[mutation.touchedIndex]);
       verified = !!persisted &&
         servicioCoincide(persisted, { plataforma, correo }) &&
-        String(persisted.fechaRenovacion || "") === String(fechaNueva || "");
+        String(persisted.fechaRenovacion || "") === String(mutation.fechaNueva || "");
       if (!verified) return res.status(200).json({
         ok: false,
         verified: false,
         error: "Firebase no confirmó la nueva fecha. Recargue e intente nuevamente.",
         clienteId: docRef.id,
-        servicioIndex: touchedIndex,
-        fechaAnterior,
-        fechaNueva
+        servicioIndex: mutation.touchedIndex,
+        compraId: mutation.touchedCompraId,
+        fechaAnterior: mutation.fechaAnterior,
+        fechaNueva: mutation.fechaNueva
       });
     }
 
@@ -1254,12 +1297,14 @@ export default async function handler(req, res) {
       totalServicios: persistedServices.length,
       inventario: invResult,
       clienteId: docRef.id,
-      servicioIndex: touchedIndex,
-      fechaAnterior,
-      fechaNueva,
+      servicioIndex: mutation.touchedIndex,
+      compraId: mutation.touchedCompraId,
+      fechaAnterior: mutation.fechaAnterior,
+      fechaNueva: mutation.fechaNueva,
       serviciosResumen
     });
   } catch (e) {
+    if (e && e.crmUserMessage) return res.status(200).json({ ok: false, error: e.crmUserMessage });
     console.error("RENOVAR_ERROR", e);
     return res.status(500).json({ error: "No se pudo guardar el cambio. Intente nuevamente." });
   }
