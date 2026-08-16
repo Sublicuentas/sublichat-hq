@@ -1908,6 +1908,7 @@ const DEMO = [
 ];
 
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[];
+let clientesLiveUnsubscribe=null, clientesLiveStarted=false;
 const fmt = n => "Lps " + Number(n||0).toLocaleString("es-HN");
 const daysTo = d => Math.round((d - today)/86400000);
 function parseDate(v){
@@ -2004,6 +2005,35 @@ function countUp(el,to,money){
     el.textContent=money?fmt(v):v;if(p<1)requestAnimationFrame(step);})(t0);
 }
 
+function activarClientesEnVivo(db,collection,onSnapshot){
+  if(clientesLiveStarted||typeof onSnapshot!=="function")return;
+  clientesLiveStarted=true;
+  const ref=collection(db,CONFIG.collection);
+  clientesLiveUnsubscribe=onSnapshot(ref,{includeMetadataChanges:true},snap=>{
+    // No permita que una copia vieja del caché reemplace una lectura confirmada.
+    // Los cambios del bot llegan aquí apenas Firebase confirma el servidor.
+    if(snap.metadata&&snap.metadata.fromCache)return;
+    DATA=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+    const src=document.getElementById("srcLabel");
+    if(src)src.textContent=`Firebase en vivo · ${DATA.length} servicios`;
+    render();
+    try{
+      if(typeof window.sublichatControlSyncLoadedData==="function")
+        window.sublichatControlSyncLoadedData("🔄 Cambio recibido desde Firebase/Telegram.");
+    }catch(_){ }
+  },error=>{
+    console.error("clientes en vivo",error);
+    clientesLiveStarted=false;
+    clientesLiveUnsubscribe=null;
+  });
+}
+
+function detenerClientesEnVivo(){
+  try{if(typeof clientesLiveUnsubscribe==="function")clientesLiveUnsubscribe();}catch(_){ }
+  clientesLiveUnsubscribe=null;
+  clientesLiveStarted=false;
+}
+
 async function load(options={}){
   const forceServer=options===true || !!(options&&options.forceServer);
   const requireServer=!!(options&&options.requireServer);
@@ -2012,7 +2042,7 @@ async function load(options={}){
   if(cfg && cfg.projectId){
     try{
       const { initializeApp, getApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-      const { getFirestore, collection, getDocs, getDocsFromServer } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const { getFirestore, collection, getDocs, getDocsFromServer, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const app = getApps().length ? getApp() : initializeApp(cfg);
       const db=getFirestore(app);
       const readCollection=async(name)=>{
@@ -2037,6 +2067,7 @@ async function load(options={}){
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       DATA=nextData;INVENTARIO=nextInventory;
       document.getElementById("srcLabel").textContent=`Firebase · ${DATA.length} servicios`;
+      activarClientesEnVivo(db,collection,onSnapshot);
       window._invError=invError?((invError&&invError.code)||(invError&&invError.message)||"error"):"";
       if(invError)console.error("inv",invError);
 
@@ -3961,7 +3992,7 @@ async function renovarServicio(dias, fechaExacta){
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json().catch(()=>({}));
       if(j.ok&&j.verified===true){
         aplicarRenovacionLocal(g,s,j);
@@ -4064,7 +4095,7 @@ async function eliminarServicio(s){
   $cobro("cgHint").textContent="Eliminando…";
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({accion:"eliminar",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null)})});
+      body:JSON.stringify({accion:"eliminar",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||""})});
     const j=await r.json();
     if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}`); cerrarCobro(); await load({forceServer:true}); }
     else $cobro("cgHint").textContent="⚠️ "+(j.error||"Error");
@@ -4079,7 +4110,7 @@ async function eliminarServicio(s){
 // botón "no hacía nada" sin ninguna pista de por qué. Ahora se captura el
 // error, se avisa con un toast, y se busca "servModal" fresco cada vez en vez
 // de guardarlo una sola vez al cargar la página.
-let servModo="agregar", servEditandoPlat=null, servEditandoCorreo=null, servEditandoIndex=null;
+let servModo="agregar", servEditandoPlat=null, servEditandoCorreo=null, servEditandoIndex=null, servEditandoCompraId="";
 function abrirServForm(modo, serv){
   try{
     servModo=modo;
@@ -4093,6 +4124,7 @@ function abrirServForm(modo, serv){
       servEditandoPlat=serv.plataformaRaw||serv.plataforma;
       servEditandoCorreo=serv.correo||"";
       servEditandoIndex=(serv.srvIndex!=null?serv.srvIndex:null);
+      servEditandoCompraId=String(serv.compraId||"");
       // seleccionar la plataforma actual si está en la lista
       const raw=(serv.plataformaRaw||"").toLowerCase();
       if(raw && PLATS_DISPONIBLES.some(([v])=>v===raw)) $cobro("servPlat").value=raw;
@@ -4106,6 +4138,7 @@ function abrirServForm(modo, serv){
       servEditandoPlat=null;
       servEditandoCorreo=null;
       servEditandoIndex=null;
+      servEditandoCompraId="";
       $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servNombrePerfil").value=g?.nombre||""; $cobro("servCorreo").value=""; $cobro("servPin").value=""; $cobro("servPinPerfil").value="";
     }
     servActualizarCampos();
@@ -4150,7 +4183,7 @@ $cobro("servSave")?.addEventListener("click",async()=>{
   $cobro("servHint").textContent="Guardando…";
   const payload=servModo==="agregar"
     ? {accion:"agregar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",servicio}
-    : {accion:"editar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,correoOriginal:servEditandoCorreo||"",servicioIndex:servEditandoIndex,servicio};
+    : {accion:"editar",clienteId:g.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataformaOriginal:servEditandoPlat,correoOriginal:servEditandoCorreo||"",servicioIndex:servEditandoIndex,compraId:servEditandoCompraId,servicio:{...servicio,compraId:servEditandoCompraId||servicio.compraId||""}};
   try{
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const j=await r.json();
@@ -4491,6 +4524,7 @@ lUser.addEventListener("keydown",e=>{if(e.key==="Enter")lPass.focus();});
 
 // salir
 document.getElementById("logoutBtn").addEventListener("click",async()=>{
+  detenerClientesEnVivo();
   try{
     const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
     await signOut(getAuth());
@@ -7311,7 +7345,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const old=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     try{
       const user=currentUser()||'sublichat';
-      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
+      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),compraId:c.compraId||'',dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
       const j=await r.json().catch(()=>({}));
       if(!j.ok||j.verified!==true) throw new Error(j.error||(j.ok?'Firebase no confirmó la fecha.':'No se pudo renovar.'));
       const grupo=groupFromService(c);
