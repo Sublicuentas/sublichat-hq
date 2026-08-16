@@ -143,11 +143,7 @@ const TERMS = {
   chatgpt: ["Acceso únicamente para el correo indicado", "No modificar datos internos", "Garantía vigente durante su tiempo adquirido"],
   duolingo: ["Cada persona debe aceptar la invitación enviada a su correo para activar las funciones Plus.", "La garantía permanece vigente durante el periodo adquirido."],
   oleada: ["No compartir usuario ni clave.", "Garantía vigente durante su tiempo adquirido."],
-  iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."],
-  viki: ["No cambie el correo ni la contraseña de la cuenta.", "Acceso para un dispositivo a la vez.", "Garantía vigente durante el periodo contratado."],
-  windows10: ["Licencia digital para Windows 10.", "Conserve este serial en un lugar seguro.", "La activación está sujeta a la edición indicada en su compra."],
-  windows11: ["Licencia digital para Windows 11.", "Conserve este serial en un lugar seguro.", "La activación está sujeta a la edición indicada en su compra."],
-  eset: ["Licencia digital ESET.", "No comparta el serial con terceros.", "Garantía vigente durante el periodo contratado."]
+  iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."]
 };
 function termsFor(plataforma) {
   const p = canonPlat(plataforma);
