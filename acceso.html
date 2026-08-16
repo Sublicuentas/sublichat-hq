@@ -8,7 +8,7 @@
 <title>Su acceso — Sublicuentas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-5">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-6">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -510,7 +510,9 @@
     const contenido=multiple
       ?`<div class="multi-list">${servicios.map((s,i)=>filaServicioMultiple(s,i,servicios.length,i===primerAbierto)).join("")}</div>${soporte}`
       :servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length,i===servicios.length-1?soporte:"")).join("");
-    document.getElementById('stage').innerHTML=`
+    const stageEl=document.getElementById('stage');
+    stageEl.dataset.portalVendedor=String(d.vendedor||"");
+    stageEl.innerHTML=`
       <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Entrega en vivo":"Renovación pendiente"}</span>${etiquetaConteo?`<span class="multi-count">${etiquetaConteo}</span>`:""}</div>
       <h1 class="h1">¡Acceso entregado <span>con éxito!</span></h1>
       <div class="hello">Hola, ${esc(d.titular||"Cliente")}</div>
@@ -554,7 +556,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260816-5"></script>
+<script src="/portal-cliente-publico.js?v=20260816-6"></script>
 
 </body>
 </html>

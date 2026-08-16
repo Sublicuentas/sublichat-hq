@@ -5,10 +5,12 @@
     data:null,
     error:false,
     enhanced:false,
-    activePanel:'cuentas'
+    activePanel:'cuentas',
+    paymentAllowed:false
   };
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
+  const PAYMENT_VENDOR_KEYS=new Set(['relojes','sublicuentas','libni','naara']);
   const PORTAL_ICONS={
     cuentas:'/assets/portal-icono-mis-cuentas-transparent.png?v=20260816-4',
     promociones:'/assets/portal-icono-promociones-transparent.png?v=20260816-4',
@@ -49,6 +51,25 @@
   function safeImage(value){
     const src=String(value||'').trim();
     return /^https:\/\//i.test(src)||src.startsWith('data:image/')?src:'';
+  }
+
+  function normalizeVendor(value){
+    return String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+  }
+
+  function paymentsVisible(){
+    return state.paymentAllowed&&state.data?.secciones?.pagos!==false;
+  }
+
+  function syncPaymentVisibility(){
+    const visible=paymentsVisible();
+    const button=document.querySelector('[data-portal-panel="pagos"]');
+    const panel=document.getElementById('portal-panel-pagos');
+    const nav=document.querySelector('.portal-categories');
+    if(button)button.hidden=!visible;
+    if(panel&&!visible)panel.hidden=true;
+    if(nav)nav.classList.toggle('two-categories',!visible);
+    if(!visible&&state.activePanel==='pagos')selectPanel('cuentas',false);
   }
 
   function loadMascot(image){
@@ -165,6 +186,7 @@
   }
 
   function selectPanel(panel,scrollToPanel=true){
+    if(panel==='pagos'&&!paymentsVisible())panel='cuentas';
     state.activePanel=panel;
     document.querySelectorAll('[data-portal-panel]').forEach(button=>{
       const selected=button.dataset.portalPanel===panel;
@@ -295,6 +317,7 @@
 
     const introNodes=['.live-row','.h1','.hello','.sub'].map(selector=>stage.querySelector(`:scope > ${selector}`)).filter(Boolean);
     const count=serviceCount(accessList);
+    state.paymentAllowed=PAYMENT_VENDOR_KEYS.has(normalizeVendor(stage.dataset.portalVendedor));
     stage.dataset.portalEnhanced='1';stage.classList.add('portal-enhanced');document.body.classList.add('portal-ready');
 
     const brand=element('header','portal-brand');
@@ -311,6 +334,7 @@
       categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
       categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera')
     );
+    nav.classList.toggle('two-categories',!state.paymentAllowed);
 
     const panels=element('main','portal-panels');
     const accounts=element('section','portal-panel portal-account-panel');accounts.id='portal-panel-cuentas';accounts.dataset.panel='cuentas';accounts.role='tabpanel';
@@ -322,7 +346,7 @@
     panels.append(accounts,promos,payments);
 
     stage.replaceChildren(brand,intro,nav,panels);
-    state.enhanced=true;renderPromotions();renderPayments();selectPanel('cuentas',false);
+    state.enhanced=true;syncPaymentVisibility();renderPromotions();renderPayments();selectPanel('cuentas',false);
   }
 
   async function loadPortal(){
@@ -333,8 +357,9 @@
       const data=await response.json();
       if(!response.ok||!data.ok)throw new Error(data.error||'No se pudo cargar el portal.');
       state.data=data;
+      if(data.secciones&&typeof data.secciones==='object')state.paymentAllowed=data.secciones.pagos===true;
     }catch(_){state.error=true;}
-    renderPromotions();renderPayments();
+    syncPaymentVisibility();renderPromotions();renderPayments();
   }
 
   const stage=document.getElementById('stage');
