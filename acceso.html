@@ -8,7 +8,7 @@
 <title>Su acceso — Sublicuentas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-1">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-2">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -503,8 +503,9 @@
     const multiple=servicios.length>1;
     const perfilesUnicos=!multiple?perfilesDelServicio(primero).length:0;
     const etiquetaConteo=multiple?`${servicios.length} ACCESO${servicios.length===1?"":"S"}`:(perfilesUnicos>1?`${perfilesUnicos} PERFILES`:"");
-    const primerActivo=servicios.findIndex(s=>estadoServicio(s).kind!=="expired");
-    const primerAbierto=primerActivo>=0?primerActivo:0;
+    // En las fichas con varios accesos, todos inician cerrados para que el
+    // cliente vea primero la lista completa y elija cuál desea consultar.
+    const primerAbierto=-1;
     const contenido=multiple
       ?`<div class="multi-list">${servicios.map((s,i)=>filaServicioMultiple(s,i,servicios.length,i===primerAbierto)).join("")}</div>${soporte}`
       :servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length,i===servicios.length-1?soporte:"")).join("");
@@ -552,7 +553,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260816-1"></script>
+<script src="/portal-cliente-publico.js?v=20260816-2"></script>
 
 </body>
 </html>

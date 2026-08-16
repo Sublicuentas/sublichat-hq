@@ -6,6 +6,11 @@
     ['ficohsa','Ficohsa'],['davivienda','Davivienda'],['banpais','Logo amarillo · cuenta de cheques'],
     ['tengo','Tengo'],['occidente','Banco de Occidente'],['custom','Iniciales / otro']
   ];
+  const MASCOT_SOURCES=[
+    '/assets/sublicuentas-mascota-portal.jpg?v=20260816-2',
+    '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
+    '/assets/sublicuentas-mascota.jpg?v=20260816-2'
+  ];
   const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:''};
 
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
@@ -14,6 +19,17 @@
   const idSafe=value=>String(value||'').replace(/[^a-zA-Z0-9_-]/g,'');
   const host=()=>document.getElementById('rbac-portal-cliente');
   const screenActive=()=>document.getElementById('screen-portal-cliente')?.classList.contains('active');
+
+  function loadMascot(image){
+    if(!image)return;
+    let sourceIndex=0;
+    const nextSource=()=>{
+      if(sourceIndex<MASCOT_SOURCES.length){image.src=MASCOT_SOURCES[sourceIndex++];return;}
+      image.hidden=true;image.parentElement?.classList.add('mascot-fallback');
+    };
+    image.addEventListener('error',nextSource);
+    nextSource();
+  }
 
   async function api(payload){
     const response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
@@ -36,7 +52,7 @@
             <b>Contenido exclusivo de las URL de acceso</b>
             <span>Lo que guarde aquí aparecerá en Promociones y Métodos de pago. No modifica cuentas, fichas, renovaciones ni condiciones.</span>
           </div>
-          <div class="pc-admin-mascot-wrap"><img class="pc-admin-mascot" src="/assets/sublicuentas-mascota-portal.jpg" alt="Mascota Sublicuentas"></div>
+          <div class="pc-admin-mascot-wrap"><img class="pc-admin-mascot" alt="Mascota Sublicuentas" loading="eager" decoding="async"></div>
         </section>
         <div class="pc-admin-tabs" role="tablist" aria-label="Secciones del Portal del cliente">
           <button type="button" class="pc-admin-tab active" data-pc-tab="promociones">🏷️ Promociones</button>
@@ -63,6 +79,7 @@
         <div class="pc-status" id="pcStatus" aria-live="polite"></div>
         <div class="pc-modal" id="pcPromoModal" hidden></div>
       </div>`;
+    loadMascot(root.querySelector('.pc-admin-mascot'));
     bindShell(root);
   }
 

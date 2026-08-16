@@ -9,6 +9,11 @@
   };
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
+  const MASCOT_SOURCES=[
+    '/assets/sublicuentas-mascota-portal.jpg?v=20260816-2',
+    '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
+    '/assets/sublicuentas-mascota.jpg?v=20260816-2'
+  ];
 
   function tokenFromLocation(){
     const params=new URLSearchParams(window.location.search);
@@ -34,6 +39,31 @@
   function safeImage(value){
     const src=String(value||'').trim();
     return /^https:\/\//i.test(src)||src.startsWith('data:image/')?src:'';
+  }
+
+  function loadMascot(image){
+    if(!image)return;
+    let sourceIndex=0;
+    const nextSource=()=>{
+      if(sourceIndex<MASCOT_SOURCES.length){
+        image.src=MASCOT_SOURCES[sourceIndex++];
+        return;
+      }
+      image.hidden=true;
+      image.parentElement?.classList.add('mascot-fallback');
+    };
+    image.addEventListener('error',nextSource);
+    nextSource();
+  }
+
+  function collapseAccounts(accessList){
+    accessList.querySelectorAll('.multi-service').forEach(item=>{
+      item.classList.remove('open');
+      const trigger=item.querySelector('.multi-trigger');
+      const details=item.querySelector('.multi-details');
+      if(trigger)trigger.setAttribute('aria-expanded','false');
+      if(details)details.hidden=true;
+    });
   }
 
   function showToast(message){
@@ -241,6 +271,7 @@
     const title=stage.querySelector(':scope > .h1');
     const accessList=stage.querySelector(':scope > .access-list');
     if(!title||!accessList)return;
+    collapseAccounts(accessList);
 
     const introNodes=['.live-row','.h1','.hello','.sub'].map(selector=>stage.querySelector(`:scope > ${selector}`)).filter(Boolean);
     const count=serviceCount(accessList);
@@ -249,7 +280,8 @@
     const brand=element('header','portal-brand');
     const logo=element('img','portal-logo');logo.src='/assets/sublicuentas-logo.png';logo.alt='Sublicuentas';
     const mascotWrap=element('div','portal-mascot-wrap');
-    const mascot=element('img','portal-mascot');mascot.src='/assets/sublicuentas-mascota-portal.jpg';mascot.alt='Mascota Sublicuentas';
+    const mascot=element('img','portal-mascot');mascot.alt='Mascota Sublicuentas';mascot.loading='eager';mascot.decoding='async';
+    loadMascot(mascot);
     mascotWrap.append(mascot);brand.append(logo,mascotWrap);
 
     const intro=element('section','portal-existing-intro');intro.append(...introNodes);
