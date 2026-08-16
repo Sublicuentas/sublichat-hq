@@ -15,7 +15,7 @@ const MAX_PAYMENT_LOGOS_TOTAL = 750000;
 const LOGO_KEYS = new Set([
   'tigo', 'atlantida', 'bac', 'ficohsa', 'davivienda', 'banpais', 'tengo', 'occidente', 'custom'
 ]);
-const PAYMENT_VENDOR_KEYS = new Set(['relojes', 'sublicuentas', 'libni', 'naara']);
+const PAYMENT_VENDOR_KEYS = new Set(['relojes', 'sublicuentas']);
 
 const DEFAULT_PAYMENT_METHODS = [
   { id: 'tigo-money', nombre: 'Tigo Money', titular: 'LIBNI DANIELA VELÁSQUEZ BLANCO', cuenta: '98982678', nota: '+6.5% comisión', logoKey: 'tigo', activo: true },
