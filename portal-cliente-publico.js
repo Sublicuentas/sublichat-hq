@@ -9,7 +9,16 @@
   };
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
+  const PORTAL_ICONS={
+    cuentas:'/assets/portal-icono-mis-cuentas.jpg?v=20260816-3',
+    promociones:'/assets/portal-icono-promociones.jpg?v=20260816-3',
+    pagos:'/assets/portal-icono-metodos-pago.jpg?v=20260816-3',
+    perfil:'/assets/portal-icono-perfil.jpg?v=20260816-3',
+    correo:'/assets/portal-icono-correo.jpg?v=20260816-3',
+    contrasena:'/assets/portal-icono-contrasena.jpg?v=20260816-3'
+  };
   const MASCOT_SOURCES=[
+    '/assets/portal-robot.jpg?v=20260816-3',
     '/assets/sublicuentas-mascota-portal.jpg?v=20260816-2',
     '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
     '/assets/sublicuentas-mascota.jpg?v=20260816-2'
@@ -66,6 +75,26 @@
     });
   }
 
+  function accessIconFor(label){
+    const key=String(label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(key.includes('perfil'))return PORTAL_ICONS.perfil;
+    if(key.includes('correo'))return PORTAL_ICONS.correo;
+    if(key.includes('clave')||key.includes('contrasena')||key.includes('pin')||key.includes('serial')||key.includes('licencia'))return PORTAL_ICONS.contrasena;
+    return '';
+  }
+
+  function applyAccessIcons(accessList){
+    accessList.querySelectorAll('.field').forEach(field=>{
+      const icon=field.querySelector('.field-icon');
+      const label=field.querySelector('.field-label')?.textContent||'';
+      const source=accessIconFor(label);
+      if(!icon||!source)return;
+      const image=element('img','portal-field-icon-image');
+      image.src=source;image.alt='';image.loading='lazy';image.decoding='async';
+      icon.replaceChildren(image);icon.classList.add('has-portal-image');
+    });
+  }
+
   function showToast(message){
     const toast=document.getElementById('toast');
     if(!toast)return;
@@ -107,14 +136,17 @@
     }
   }
 
-  function categoryButton(panel,icon,title,subtitle){
+  function categoryButton(panel,iconSource,title,subtitle){
     const button=element('button','portal-category');
     button.type='button';button.role='tab';button.dataset.portalPanel=panel;
     button.setAttribute('aria-controls',`portal-panel-${panel}`);
     button.setAttribute('aria-selected',panel===state.activePanel?'true':'false');
     button.classList.toggle('active',panel===state.activePanel);
+    const icon=element('span','portal-category-icon');
+    const iconImage=element('img','portal-category-icon-image');
+    iconImage.src=iconSource;iconImage.alt='';iconImage.loading='eager';iconImage.decoding='async';icon.append(iconImage);
     button.append(
-      element('span','portal-category-icon',icon),
+      icon,
       element('b','',title),
       element('small','',subtitle),
       element('span','portal-category-arrow','›')
@@ -123,9 +155,10 @@
     return button;
   }
 
-  function panelTitle(icon,title,highlight){
+  function panelTitle(iconSource,title,highlight){
     const heading=element('h2','portal-panel-title');
-    heading.append(document.createTextNode(`${icon} ${title}`));
+    const icon=element('img','portal-panel-title-icon');icon.src=iconSource;icon.alt='';icon.loading='lazy';icon.decoding='async';
+    heading.append(icon,document.createTextNode(title));
     if(highlight)heading.append(element('span','',` ${highlight}`));
     return heading;
   }
@@ -272,6 +305,7 @@
     const accessList=stage.querySelector(':scope > .access-list');
     if(!title||!accessList)return;
     collapseAccounts(accessList);
+    applyAccessIcons(accessList);
 
     const introNodes=['.live-row','.h1','.hello','.sub'].map(selector=>stage.querySelector(`:scope > ${selector}`)).filter(Boolean);
     const count=serviceCount(accessList);
@@ -287,18 +321,18 @@
     const intro=element('section','portal-existing-intro');intro.append(...introNodes);
     const nav=element('nav','portal-categories');nav.role='tablist';nav.setAttribute('aria-label','Categorías de su portal');
     nav.append(
-      categoryButton('cuentas','▣','Mis cuentas','Administre sus accesos aquí'),
-      categoryButton('promociones','%','Promociones','Descubra nuestras ofertas exclusivas'),
-      categoryButton('pagos','💳','Métodos de pago','Copie la forma de pago que prefiera')
+      categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
+      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
+      categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera')
     );
 
     const panels=element('main','portal-panels');
     const accounts=element('section','portal-panel portal-account-panel');accounts.id='portal-panel-cuentas';accounts.dataset.panel='cuentas';accounts.role='tabpanel';
-    accounts.append(panelTitle('▰','Mis cuentas activas',`(${count} acceso${count===1?'':'s'})`),accessList);
+    accounts.append(panelTitle(PORTAL_ICONS.cuentas,'Mis cuentas activas',`(${count} acceso${count===1?'':'s'})`),accessList);
     const promos=element('section','portal-panel');promos.id='portal-panel-promociones';promos.dataset.panel='promociones';promos.role='tabpanel';promos.hidden=true;
-    promos.append(panelTitle('🏷️','Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
+    promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
-    payments.append(panelTitle('💳','Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
+    payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
     panels.append(accounts,promos,payments);
 
     stage.replaceChildren(brand,intro,nav,panels,benefits());
