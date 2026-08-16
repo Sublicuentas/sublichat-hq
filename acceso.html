@@ -8,7 +8,7 @@
 <title>Su acceso — Sublicuentas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-4">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260816-5">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -333,6 +333,7 @@
 
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
+    const etiquetaAcceso=platKey(d.plataforma).includes("oleada")?"Usuario":"Correo";
     const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
@@ -344,7 +345,7 @@
       if(modo==="serial"){
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
       }else{
-        if(p.correo)campos+=fieldRow("Correo",p.correo,`${prefix}-correo`);
+        if(p.correo)campos+=fieldRow(etiquetaAcceso,p.correo,`${prefix}-${etiquetaAcceso==="Usuario"?"usuario":"correo"}`);
         if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
         if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
       }
@@ -553,7 +554,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260816-4"></script>
+<script src="/portal-cliente-publico.js?v=20260816-5"></script>
 
 </body>
 </html>

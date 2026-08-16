@@ -78,7 +78,7 @@
 
   function accessIconFor(label){
     const key=String(label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if(key.includes('perfil'))return PORTAL_ICONS.perfil;
+    if(key.includes('perfil')||key.includes('usuario'))return PORTAL_ICONS.perfil;
     if(key.includes('correo'))return PORTAL_ICONS.correo;
     if(key.includes('clave')||key.includes('contrasena')||key.includes('pin')||key.includes('serial')||key.includes('licencia'))return PORTAL_ICONS.contrasena;
     return '';
@@ -284,21 +284,6 @@
     panel.append(list);
   }
 
-  function benefits(){
-    const footer=element('footer','portal-benefits');
-    [
-      ['🛡️','PIN de seguridad','Protegemos su información'],
-      ['⚡','Entrega confiable','Accesos rápidos y seguros'],
-      ['🎧','Soporte garantizado','Estamos para ayudarle'],
-      ['🔄','Renovaciones fáciles','Gestione y renueve sus servicios']
-    ].forEach(([icon,title,text])=>{
-      const item=element('div','portal-benefit');
-      const copy=element('div');copy.append(element('b','',title),element('small','',text));
-      item.append(element('span','portal-benefit-icon',icon),copy);footer.append(item);
-    });
-    return footer;
-  }
-
   function enhance(){
     const stage=document.getElementById('stage');
     if(!stage||stage.dataset.portalEnhanced==='1')return;
@@ -336,7 +321,7 @@
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
     panels.append(accounts,promos,payments);
 
-    stage.replaceChildren(brand,intro,nav,panels,benefits());
+    stage.replaceChildren(brand,intro,nav,panels);
     state.enhanced=true;renderPromotions();renderPayments();selectPanel('cuentas',false);
   }
 
