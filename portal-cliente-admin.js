@@ -12,7 +12,7 @@
     '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
     '/assets/sublicuentas-mascota.jpg?v=20260816-2'
   ];
-  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:'',modalKeyHandler:null};
+  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:'',editingImageFit:'cover',editingImageZoom:100,editingImageX:50,editingImageY:50,modalKeyHandler:null};
 
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -197,6 +197,22 @@
     image.style.setProperty('--logo-y',`${adjustment.y}%`);
   }
 
+  function promotionImageAdjustment(source={}){
+    return {
+      fit:source.imagenModo==='contain'?'contain':'cover',
+      zoom:clampLogoValue(source.imagenZoom,100,250,100),
+      x:clampLogoValue(source.imagenX,0,100,50),
+      y:clampLogoValue(source.imagenY,0,100,50)
+    };
+  }
+
+  function promotionImageOutput(key,value){
+    if(key==='zoom')return `${value}%`;
+    if(value===50)return 'Centro';
+    if(key==='x')return `${value<50?'Izq.':'Der.'} ${Math.abs(value-50)}`;
+    return `${value<50?'Arriba':'Abajo'} ${Math.abs(value-50)}`;
+  }
+
   function paymentRow(method,index){
     const id=idSafe(method.id)||`pago-${Date.now()}-${index}`;
     const logoUrl=safePaymentLogo(method.logoUrl);
@@ -373,7 +389,10 @@
       ctaTexto:'Solicitar promoción',ctaMensaje:'',fechaInicio:'',fechaFin:'',activa:true,orden:0,
       alcance:{tipo:'todos',vendedores:[],clientes:[]}
     };
+    const imageAdjustment=promotionImageAdjustment(promo);
     state.editingId=id||'';state.editingImage=promo.imagen||'';
+    state.editingImageFit=imageAdjustment.fit;state.editingImageZoom=imageAdjustment.zoom;
+    state.editingImageX=imageAdjustment.x;state.editingImageY=imageAdjustment.y;
     const target=promo.alcance||{tipo:'todos'};
     const modal=document.getElementById('pcPromoModal');if(!modal)return;
     if(document.body&&modal.parentElement!==document.body)document.body.appendChild(modal);
@@ -396,11 +415,18 @@
           <label class="pc-label wide">Mensaje de WhatsApp<input name="ctaMensaje" maxlength="300" value="${esc(promo.ctaMensaje||'')}" placeholder="Hola, deseo información sobre esta promoción."></label>
         </div>
         <div class="pc-image-box">
-          <div class="pc-image-preview" id="pcPromoImagePreview">${promo.imagen?`<img src="${esc(promo.imagen)}" alt="Vista previa">`:'%'}</div>
+          <div class="pc-image-preview" id="pcPromoImagePreview">%</div>
           <div class="pc-image-actions">
             <label class="pc-btn ghost">🖼️ Elegir imagen<input id="pcPromoImageFile" type="file" accept="image/*" hidden></label>
             <button type="button" class="pc-btn ghost" id="pcPromoImageRemove">Quitar imagen</button>
-            <small>La imagen se optimiza antes de guardarse. Las cuentas y fichas no se alteran.</small>
+            <div class="pc-image-adjust" id="pcPromoImageAdjust" ${promo.imagen?'':'hidden'}>
+              <label class="pc-image-fit"><span>Encuadre</span><select data-promo-image-adjust="fit"><option value="cover" ${imageAdjustment.fit==='cover'?'selected':''}>Llenar el cuadro</option><option value="contain" ${imageAdjustment.fit==='contain'?'selected':''}>Mostrar imagen completa</option></select></label>
+              <label class="pc-image-control"><span>Tamaño <output data-promo-image-output="zoom">${promotionImageOutput('zoom',imageAdjustment.zoom)}</output></span><input type="range" data-promo-image-adjust="zoom" min="100" max="250" step="1" value="${imageAdjustment.zoom}"></label>
+              <label class="pc-image-control"><span>Horizontal <output data-promo-image-output="x">${promotionImageOutput('x',imageAdjustment.x)}</output></span><input type="range" data-promo-image-adjust="x" min="0" max="100" step="1" value="${imageAdjustment.x}"></label>
+              <label class="pc-image-control"><span>Vertical <output data-promo-image-output="y">${promotionImageOutput('y',imageAdjustment.y)}</output></span><input type="range" data-promo-image-adjust="y" min="0" max="100" step="1" value="${imageAdjustment.y}"></label>
+              <button type="button" class="pc-btn ghost" id="pcPromoImageReset">Centrar</button>
+            </div>
+            <small>Puede llenar el cuadro o mostrar la imagen completa, y después ajustar su tamaño y posición. Las cuentas y fichas no se alteran.</small>
           </div>
         </div>
         <div class="pc-target-box">
@@ -435,7 +461,37 @@
     document.body.classList.remove('pc-modal-open');
     if(state.modalKeyHandler)document.removeEventListener('keydown',state.modalKeyHandler);
     state.modalKeyHandler=null;
-    state.editingId='';state.editingImage='';
+    state.editingId='';state.editingImage='';state.editingImageFit='cover';state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;
+  }
+
+  function syncPromotionImageAdjustment(modal=document){
+    const adjustment=promotionImageAdjustment({
+      imagenModo:state.editingImageFit,imagenZoom:state.editingImageZoom,
+      imagenX:state.editingImageX,imagenY:state.editingImageY
+    });
+    state.editingImageFit=adjustment.fit;state.editingImageZoom=adjustment.zoom;
+    state.editingImageX=adjustment.x;state.editingImageY=adjustment.y;
+    const image=modal.querySelector?.('#pcPromoImagePreview img');
+    if(image){
+      image.style.setProperty('--promo-fit',adjustment.fit);
+      image.style.setProperty('--promo-zoom',String(adjustment.zoom/100));
+      image.style.setProperty('--promo-x',`${adjustment.x}%`);
+      image.style.setProperty('--promo-y',`${adjustment.y}%`);
+    }
+    ['fit','zoom','x','y'].forEach(key=>{
+      const input=modal.querySelector?.(`[data-promo-image-adjust="${key}"]`);
+      if(input)input.value=String(adjustment[key]);
+      const output=modal.querySelector?.(`[data-promo-image-output="${key}"]`);
+      if(output)output.textContent=promotionImageOutput(key,adjustment[key]);
+    });
+  }
+
+  function renderPromotionImagePreview(modal=document){
+    const preview=modal.querySelector?.('#pcPromoImagePreview');if(!preview)return;
+    const controls=modal.querySelector?.('#pcPromoImageAdjust');
+    if(!state.editingImage){preview.textContent='%';if(controls)controls.hidden=true;return;}
+    const image=document.createElement('img');image.src=state.editingImage;image.alt='Vista previa de la promoción';
+    preview.replaceChildren(image);if(controls)controls.hidden=false;syncPromotionImageAdjustment(modal);
   }
 
   function updateTargetPickers(){
@@ -460,18 +516,32 @@
       modal.querySelectorAll('#pcClientOptions .pc-check').forEach(label=>label.hidden=query&&!String(label.dataset.search||'').includes(query));
     });
     modal.querySelector('#pcPromoImageRemove')?.addEventListener('click',()=>{
-      state.editingImage='';const preview=document.getElementById('pcPromoImagePreview');if(preview)preview.textContent='%';
+      state.editingImage='';state.editingImageFit='cover';state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;
+      renderPromotionImagePreview(modal);
+    });
+    modal.querySelectorAll('[data-promo-image-adjust]').forEach(input=>input.addEventListener('input',()=>{
+      const key=input.dataset.promoImageAdjust;
+      if(key==='fit')state.editingImageFit=input.value==='contain'?'contain':'cover';
+      if(key==='zoom')state.editingImageZoom=clampLogoValue(input.value,100,250,100);
+      if(key==='x')state.editingImageX=clampLogoValue(input.value,0,100,50);
+      if(key==='y')state.editingImageY=clampLogoValue(input.value,0,100,50);
+      syncPromotionImageAdjustment(modal);
+    }));
+    modal.querySelector('#pcPromoImageReset')?.addEventListener('click',()=>{
+      state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;syncPromotionImageAdjustment(modal);
     });
     modal.querySelector('#pcPromoImageFile')?.addEventListener('change',async event=>{
       const file=event.target.files&&event.target.files[0];if(!file)return;
       modalStatus('Optimizando imagen…');
       try{
         state.editingImage=await resizeImage(file);
-        const preview=document.getElementById('pcPromoImagePreview');
-        if(preview)preview.innerHTML=`<img src="${esc(state.editingImage)}" alt="Vista previa">`;
+        state.editingImageFit='cover';state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;
+        renderPromotionImagePreview(modal);
         modalStatus('Imagen lista.','good');
       }catch(error){modalStatus(error.message||'No se pudo preparar la imagen.','bad');}
+      finally{event.target.value='';}
     });
+    renderPromotionImagePreview(modal);
     modal.querySelector('#pcPromoForm')?.addEventListener('submit',savePromotion);
   }
 
@@ -527,7 +597,8 @@
     const clientes=[...form.querySelectorAll('#pcClientPicker input:checked')].map(input=>input.value);
     const promotion={
       titulo:value('titulo'),descripcion:value('descripcion'),etiqueta:value('etiqueta'),precio:value('precio'),precioAnterior:value('precioAnterior'),
-      imagen:state.editingImage,color:value('color'),ctaTexto:value('ctaTexto'),ctaMensaje:value('ctaMensaje'),
+      imagen:state.editingImage,imagenModo:state.editingImageFit,imagenZoom:state.editingImageZoom,imagenX:state.editingImageX,imagenY:state.editingImageY,
+      color:value('color'),ctaTexto:value('ctaTexto'),ctaMensaje:value('ctaMensaje'),
       fechaInicio:value('fechaInicio'),fechaFin:value('fechaFin'),orden:Number(value('orden'))||0,activa:!!form.elements.activa?.checked,
       alcance:{tipo:type,vendedores,clientes}
     };

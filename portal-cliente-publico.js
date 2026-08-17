@@ -234,6 +234,10 @@
       const imageSrc=safeImage(promo.imagen);
       if(imageSrc){
         const image=element('img');image.src=imageSrc;image.alt=String(promo.titulo||'Promoción');image.loading='lazy';
+        image.style.setProperty('--promo-fit',promo.imagenModo==='contain'?'contain':'cover');
+        image.style.setProperty('--promo-zoom',String(clampLogoValue(promo.imagenZoom,100,250,100)/100));
+        image.style.setProperty('--promo-x',`${clampLogoValue(promo.imagenX,0,100,50)}%`);
+        image.style.setProperty('--promo-y',`${clampLogoValue(promo.imagenY,0,100,50)}%`);
         visual.append(image);
       }else visual.textContent='%';
       const body=element('div','portal-promo-body');

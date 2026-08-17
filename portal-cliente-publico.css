@@ -58,7 +58,7 @@ body.portal-ready{
 .portal-promo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .portal-promo-card{position:relative;min-width:0;overflow:hidden;border:1px solid var(--portal-line);border-radius:20px;background:#fff;box-shadow:0 9px 24px rgba(39,25,19,.06)}
 .portal-promo-image{height:145px;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,color-mix(in srgb,var(--promo-color,#E2231A) 13%,#fff),#fff);color:var(--promo-color,#E2231A);font-family:'Anton',sans-serif;font-size:56px}
-.portal-promo-image img{width:100%;height:100%;object-fit:cover}
+.portal-promo-image img{display:block;width:100%;height:100%;object-fit:var(--promo-fit,cover);object-position:var(--promo-x,50%) var(--promo-y,50%);transform:scale(var(--promo-zoom,1));transform-origin:center}
 .portal-promo-body{padding:14px}
 .portal-promo-tag{display:inline-flex;max-width:100%;padding:5px 8px;border-radius:999px;background:color-mix(in srgb,var(--promo-color,#E2231A) 12%,#fff);color:var(--promo-color,#E2231A);font-size:8.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
 .portal-promo-card h3{margin:9px 0 5px;font-size:16px;line-height:1.2}
