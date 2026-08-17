@@ -136,6 +136,11 @@ function normalizePaymentLogo(value, index = 0) {
   throw new Error(`El logo del método ${index + 1} debe ser PNG, WebP o usar una dirección https.`);
 }
 
+function clampInteger(value, min, max, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+}
+
 function normalizeTarget(raw = {}) {
   const type = ['todos', 'vendedores', 'clientes'].includes(clean(raw.tipo, 20))
     ? clean(raw.tipo, 20) : 'todos';
@@ -184,6 +189,9 @@ function normalizePaymentMethod(raw = {}, index = 0) {
     nota: clean(raw.nota, 120),
     logoKey,
     logoUrl,
+    logoZoom: clampInteger(raw.logoZoom, 60, 250, 100),
+    logoX: clampInteger(raw.logoX, -50, 50, 0),
+    logoY: clampInteger(raw.logoY, -50, 50, 0),
     activo: raw.activo !== false,
     orden: index
   };
