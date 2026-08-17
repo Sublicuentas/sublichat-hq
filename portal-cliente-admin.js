@@ -87,6 +87,8 @@
         <div class="pc-status" id="pcStatus" aria-live="polite"></div>
         <div class="pc-modal" id="pcPromoModal" hidden></div>
       </div>`;
+    const promoModal=root.querySelector('#pcPromoModal');
+    if(promoModal&&document.body&&promoModal.parentElement!==document.body)document.body.appendChild(promoModal);
     loadMascot(root.querySelector('.pc-admin-mascot'));
     bindShell(root);
   }
@@ -313,6 +315,7 @@
     state.editingId=id||'';state.editingImage=promo.imagen||'';
     const target=promo.alcance||{tipo:'todos'};
     const modal=document.getElementById('pcPromoModal');if(!modal)return;
+    if(document.body&&modal.parentElement!==document.body)document.body.appendChild(modal);
     document.body.classList.add('pc-modal-open');
     modal.hidden=false;
     modal.innerHTML=`<div class="pc-modal-card" role="dialog" aria-modal="true" aria-labelledby="pcPromoTitle">
