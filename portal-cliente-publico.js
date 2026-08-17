@@ -53,6 +53,11 @@
     return /^https:\/\//i.test(src)||src.startsWith('data:image/')?src:'';
   }
 
+  function clampLogoValue(value,min,max,fallback){
+    const number=Number(value);
+    return Number.isFinite(number)?Math.max(min,Math.min(max,Math.round(number))):fallback;
+  }
+
   function normalizeVendor(value){
     return String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
   }
@@ -170,8 +175,7 @@
     button.append(
       icon,
       element('b','',title),
-      element('small','',subtitle),
-      element('span','portal-category-arrow','›')
+      element('small','',subtitle)
     );
     button.addEventListener('click',()=>selectPanel(panel));
     return button;
@@ -263,7 +267,11 @@
     const custom=safeImage(method.logoUrl);
     const key=String(method.logoKey||'');
     if(custom){
-      const image=element('img');image.src=custom;image.alt=String(method.nombre||'Método de pago');image.loading='lazy';logo.append(image);
+      const image=element('img');image.src=custom;image.alt=String(method.nombre||'Método de pago');image.loading='lazy';
+      image.style.setProperty('--logo-zoom',String(clampLogoValue(method.logoZoom,60,250,100)/100));
+      image.style.setProperty('--logo-x',`${clampLogoValue(method.logoX,-50,50,0)}%`);
+      image.style.setProperty('--logo-y',`${clampLogoValue(method.logoY,-50,50,0)}%`);
+      logo.append(image);
     }else if(LOGO_KEYS.has(key)){
       logo.classList.add('sprite',`logo-${key}`);logo.setAttribute('aria-label',String(method.nombre||'Método de pago'));
     }else{

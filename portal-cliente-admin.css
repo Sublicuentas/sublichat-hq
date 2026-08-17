@@ -71,11 +71,18 @@
 .pc-payment-field{min-width:0;display:grid;gap:6px}
 .pc-payment-field>span{color:var(--txt2);font-size:10.5px;font-weight:900}
 .pc-payment-logo-editor{min-width:0;display:grid;grid-template-columns:108px minmax(0,1fr);gap:10px;align-items:center;padding:9px;border:1px dashed var(--line2);border-radius:13px;background:var(--surface)}
-.pc-payment-logo-preview{width:108px;height:66px;display:grid;place-items:center;overflow:hidden;border-radius:10px;background:var(--card);color:var(--txt2);font-size:9px;font-weight:900;text-align:center}
-.pc-payment-logo-preview img{display:block;width:100%;height:100%;object-fit:contain}
+.pc-payment-logo-preview{width:108px;height:108px;display:grid;place-items:center;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--txt2);font-size:9px;font-weight:900;text-align:center}
+.pc-payment-logo-preview img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;transform:translate(var(--logo-x,0%),var(--logo-y,0%)) scale(var(--logo-zoom,1));transform-origin:center}
 .pc-payment-logo-actions{min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .pc-payment-logo-actions .pc-btn{min-height:36px;padding:0 9px;font-size:9.5px}
 .pc-payment-logo-actions small{grid-column:1/-1;color:var(--txt2);font-size:9px;line-height:1.35}
+.pc-payment-logo-adjust{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:7px;align-items:end;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--card)}
+.pc-payment-logo-adjust[hidden]{display:none!important}
+.pc-logo-control{min-width:0;display:grid;gap:4px}
+.pc-logo-control>span{display:flex;justify-content:space-between;gap:6px;color:var(--txt2);font-size:8.5px;font-weight:900}
+.pc-logo-control output{color:var(--pc-red);font-size:8.5px}
+.pc-admin .pc-logo-control input[type="range"]{height:18px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;accent-color:var(--pc-red);cursor:pointer}
+.pc-payment-logo-adjust .pc-payment-logo-reset{min-height:32px;padding:0 9px;font-size:8.5px}
 .pc-admin input,.pc-admin textarea,.pc-admin select,
 .pc-modal input,.pc-modal textarea,.pc-modal select{width:100%;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--txt);outline:none}
 .pc-admin input,.pc-admin select,.pc-modal input,.pc-modal select{height:42px;padding:0 11px}
@@ -140,9 +147,11 @@ body.pc-modal-open{overflow:hidden!important}
   .pc-payment-row{padding:11px}
   .pc-payment-row-title span{display:none}
   .pc-payment-logo-editor{grid-column:auto;grid-template-columns:82px minmax(0,1fr)}
-  .pc-payment-logo-preview{width:82px;height:62px}
+  .pc-payment-logo-preview{width:82px;height:82px}
   .pc-payment-logo-actions{grid-template-columns:1fr}
   .pc-payment-logo-actions small{grid-column:auto}
+  .pc-payment-logo-adjust{grid-column:auto;grid-template-columns:1fr}
+  .pc-payment-logo-adjust .pc-payment-logo-reset{width:100%}
   .pc-payment-savebar{align-items:stretch;flex-direction:column}.pc-payment-savebar .pc-btn{width:100%}
   .pc-modal{padding:8px}
   .pc-modal-card{width:100%;height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);border-radius:18px}

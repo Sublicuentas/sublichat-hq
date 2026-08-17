@@ -172,10 +172,36 @@
     return /^https:\/\//i.test(source)||/^data:image\/(?:png|webp);base64,/i.test(source)?source:'';
   }
 
+  function clampLogoValue(value,min,max,fallback){
+    const number=Number(value);
+    return Number.isFinite(number)?Math.max(min,Math.min(max,Math.round(number))):fallback;
+  }
+
+  function paymentLogoAdjustment(source={}){
+    return {
+      zoom:clampLogoValue(source.logoZoom,60,250,100),
+      x:clampLogoValue(source.logoX,-50,50,0),
+      y:clampLogoValue(source.logoY,-50,50,0)
+    };
+  }
+
+  function logoOutput(key,value){
+    if(key==='zoom')return `${value}%`;
+    return `${value>0?'+':''}${value}`;
+  }
+
+  function applyLogoAdjustment(image,adjustment){
+    if(!image)return;
+    image.style.setProperty('--logo-zoom',String(adjustment.zoom/100));
+    image.style.setProperty('--logo-x',`${adjustment.x}%`);
+    image.style.setProperty('--logo-y',`${adjustment.y}%`);
+  }
+
   function paymentRow(method,index){
     const id=idSafe(method.id)||`pago-${Date.now()}-${index}`;
     const logoUrl=safePaymentLogo(method.logoUrl);
-    return `<article class="pc-payment-row" data-payment-id="${esc(id)}" data-logo-url="${esc(logoUrl)}">
+    const adjustment=paymentLogoAdjustment(method);
+    return `<article class="pc-payment-row" data-payment-id="${esc(id)}" data-logo-url="${esc(logoUrl)}" data-logo-zoom="${adjustment.zoom}" data-logo-x="${adjustment.x}" data-logo-y="${adjustment.y}">
       <div class="pc-payment-row-head">
         <span class="pc-payment-order">${index+1}</span>
         <div class="pc-payment-row-title"><b>Método de pago ${index+1}</b><span>Complete los datos tal como debe verlos el cliente.</span></div>
@@ -195,11 +221,17 @@
         <label class="pc-payment-field"><span>Logo predeterminado</span><select data-field="logoKey" aria-label="Logo predeterminado">${logoOptions(method.logoKey||'custom')}</select></label>
         <label class="pc-payment-field"><span>Visibilidad</span><select data-field="activo" aria-label="Visibilidad"><option value="true" ${method.activo!==false?'selected':''}>Visible</option><option value="false" ${method.activo===false?'selected':''}>Oculto</option></select></label>
         <div class="pc-payment-logo-editor">
-          <div class="pc-payment-logo-preview">${logoUrl?`<img src="${esc(logoUrl)}" alt="Logo de ${esc(method.nombre||'método de pago')}">`:'<span>Logo predeterminado</span>'}</div>
+          <div class="pc-payment-logo-preview">${logoUrl?`<img src="${esc(logoUrl)}" alt="Logo de ${esc(method.nombre||'método de pago')}" style="--logo-zoom:${adjustment.zoom/100};--logo-x:${adjustment.x}%;--logo-y:${adjustment.y}%">`:'<span>Logo predeterminado</span>'}</div>
           <div class="pc-payment-logo-actions">
             <label class="pc-btn ghost">🖼️ Subir logo PNG<input class="pc-payment-logo-file" type="file" accept="image/png,image/webp,.png,.webp" hidden></label>
             <button type="button" class="pc-btn ghost pc-payment-logo-remove" ${logoUrl?'':'disabled'}>Quitar logo subido</button>
-            <small>Use un PNG transparente. La imagen se ajusta automáticamente; si no sube una, se usa el logo predeterminado seleccionado.</small>
+            <div class="pc-payment-logo-adjust" ${logoUrl?'':'hidden'}>
+              <label class="pc-logo-control"><span>Tamaño <output data-logo-output="zoom">${logoOutput('zoom',adjustment.zoom)}</output></span><input type="range" data-logo-adjust="zoom" min="60" max="250" step="1" value="${adjustment.zoom}"></label>
+              <label class="pc-logo-control"><span>Horizontal <output data-logo-output="x">${logoOutput('x',adjustment.x)}</output></span><input type="range" data-logo-adjust="x" min="-50" max="50" step="1" value="${adjustment.x}"></label>
+              <label class="pc-logo-control"><span>Vertical <output data-logo-output="y">${logoOutput('y',adjustment.y)}</output></span><input type="range" data-logo-adjust="y" min="-50" max="50" step="1" value="${adjustment.y}"></label>
+              <button type="button" class="pc-btn ghost pc-payment-logo-reset">Centrar</button>
+            </div>
+            <small>Suba el logo y ajuste su tamaño y posición dentro del cuadro. Si no sube uno, se usa el predeterminado seleccionado.</small>
           </div>
         </div>
       </div>
@@ -228,6 +260,7 @@
       status('Preparando logo del banco…');
       try{
         row.dataset.logoUrl=await resizePaymentLogo(file);
+        row.dataset.logoZoom='100';row.dataset.logoX='0';row.dataset.logoY='0';
         renderPaymentLogoPreview(row);
         status('Logo listo. Presione “Guardar métodos” para publicarlo.','good');
       }catch(error){status(error.message||'No se pudo preparar el logo.','bad');}
@@ -235,8 +268,20 @@
     }));
     list.querySelectorAll('.pc-payment-logo-remove').forEach(button=>button.addEventListener('click',()=>{
       const row=button.closest('.pc-payment-row');if(!row)return;
-      row.dataset.logoUrl='';renderPaymentLogoPreview(row);
+      row.dataset.logoUrl='';row.dataset.logoZoom='100';row.dataset.logoX='0';row.dataset.logoY='0';renderPaymentLogoPreview(row);
       status('Logo subido retirado. Se usará el predeterminado al guardar.');
+    }));
+    list.querySelectorAll('[data-logo-adjust]').forEach(input=>input.addEventListener('input',()=>{
+      const row=input.closest('.pc-payment-row');if(!row)return;
+      const key=input.dataset.logoAdjust;
+      if(key==='zoom')row.dataset.logoZoom=String(clampLogoValue(input.value,60,250,100));
+      if(key==='x')row.dataset.logoX=String(clampLogoValue(input.value,-50,50,0));
+      if(key==='y')row.dataset.logoY=String(clampLogoValue(input.value,-50,50,0));
+      syncPaymentLogoAdjustment(row);
+    }));
+    list.querySelectorAll('.pc-payment-logo-reset').forEach(button=>button.addEventListener('click',()=>{
+      const row=button.closest('.pc-payment-row');if(!row)return;
+      row.dataset.logoZoom='100';row.dataset.logoX='0';row.dataset.logoY='0';syncPaymentLogoAdjustment(row);
     }));
     const warning=document.getElementById('pcAvisoPago');if(warning)warning.value=state.avisoPago||'';
     renumberPayments();
@@ -249,6 +294,19 @@
       const image=document.createElement('img');image.src=source;image.alt='Vista previa del logo';preview.replaceChildren(image);
     }else preview.innerHTML='<span>Logo predeterminado</span>';
     const remove=row.querySelector('.pc-payment-logo-remove');if(remove)remove.disabled=!source;
+    const controls=row.querySelector('.pc-payment-logo-adjust');if(controls)controls.hidden=!source;
+    syncPaymentLogoAdjustment(row);
+  }
+
+  function syncPaymentLogoAdjustment(row){
+    if(!row)return;
+    const adjustment=paymentLogoAdjustment({logoZoom:row.dataset.logoZoom,logoX:row.dataset.logoX,logoY:row.dataset.logoY});
+    row.dataset.logoZoom=String(adjustment.zoom);row.dataset.logoX=String(adjustment.x);row.dataset.logoY=String(adjustment.y);
+    applyLogoAdjustment(row.querySelector('.pc-payment-logo-preview img'),adjustment);
+    ['zoom','x','y'].forEach(key=>{
+      const input=row.querySelector(`[data-logo-adjust="${key}"]`);if(input)input.value=String(adjustment[key]);
+      const output=row.querySelector(`[data-logo-output="${key}"]`);if(output)output.textContent=logoOutput(key,adjustment[key]);
+    });
   }
 
   function renumberPayments(){
@@ -265,10 +323,13 @@
   function readPayments(){
     return [...document.querySelectorAll('#pcPaymentList .pc-payment-row')].map((row,index)=>{
       const value=field=>row.querySelector(`[data-field="${field}"]`)?.value||'';
+      const adjustment=paymentLogoAdjustment({logoZoom:row.dataset.logoZoom,logoX:row.dataset.logoX,logoY:row.dataset.logoY});
       return {
         id:row.dataset.paymentId||`pago-${Date.now()}-${index}`,
         nombre:value('nombre'),titular:value('titular'),cuenta:value('cuenta'),nota:value('nota'),
-        logoKey:value('logoKey'),logoUrl:safePaymentLogo(row.dataset.logoUrl),activo:value('activo')!=='false',orden:index
+        logoKey:value('logoKey'),logoUrl:safePaymentLogo(row.dataset.logoUrl),
+        logoZoom:adjustment.zoom,logoX:adjustment.x,logoY:adjustment.y,
+        activo:value('activo')!=='false',orden:index
       };
     });
   }

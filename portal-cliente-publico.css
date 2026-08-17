@@ -36,8 +36,8 @@ body.portal-ready{
 .portal-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;padding:22px 30px 20px}
 .portal-categories.two-categories{grid-template-columns:repeat(2,minmax(0,1fr))}
 .portal-category{
-  position:relative;min-width:0;min-height:142px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-  padding:15px 11px 12px;border:1px solid #F2DAD7;border-radius:20px;background:linear-gradient(155deg,#FFF8F7,#FCEDEC);
+  position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:15px 11px 14px;border:1px solid #F2DAD7;border-radius:20px;background:linear-gradient(155deg,#FFF8F7,#FCEDEC);
   color:#15120F;text-align:center;font:inherit;cursor:pointer;box-shadow:0 7px 18px rgba(70,34,27,.05);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease
 }
 .portal-category[hidden]{display:none!important}
@@ -46,8 +46,7 @@ body.portal-ready{
 .portal-category-icon{width:62px;height:54px;display:grid;place-items:center;margin-bottom:7px}
 .portal-category-icon-image{display:block;width:100%;height:100%;object-fit:contain;object-position:center;filter:drop-shadow(0 7px 9px rgba(45,20,18,.18))}
 .portal-category b{display:block;font-size:13px;line-height:1.2}
-.portal-category small{display:block;min-height:30px;margin-top:4px;color:#746B64;font-size:9.5px;line-height:1.35}
-.portal-category-arrow{width:26px;height:26px;display:grid;place-items:center;margin-top:auto;border-radius:50%;background:var(--portal-red);color:#fff;font-size:18px;line-height:1}
+.portal-category small{display:block;margin-top:4px;color:#746B64;font-size:9.5px;line-height:1.35}
 .portal-panels{padding:0 30px}
 .portal-panel[hidden]{display:none!important}
 .portal-panel-title{display:flex;align-items:center;gap:9px;margin:2px 0 13px;color:#17130F;font-size:16px;font-weight:900}
@@ -77,10 +76,11 @@ body.portal-ready{
   display:grid;grid-template-columns:88px minmax(0,1fr) auto;align-items:center;gap:12px;min-width:0;
   padding:10px;border:1px solid var(--portal-line);border-radius:17px;background:#fff;box-shadow:0 7px 18px rgba(39,25,19,.045)
 }
-.portal-payment-logo{position:relative;width:88px;height:55px;overflow:hidden;display:grid;place-items:center;border-radius:13px;background:#F3F0EB;color:#29231F;font-size:11px;font-weight:900;text-align:center}
-.portal-payment-logo.sprite{background-image:url('/assets/metodos-pago-sprite.jpg');background-repeat:no-repeat;background-size:420px 420px;background-position-x:-20px;color:transparent}
-.portal-payment-logo.logo-tigo{background-position-y:-76px}.portal-payment-logo.logo-atlantida{background-position-y:-113px}.portal-payment-logo.logo-bac{background-position-y:-149px}.portal-payment-logo.logo-ficohsa{background-position-y:-185px}.portal-payment-logo.logo-davivienda{background-position-y:-221px}.portal-payment-logo.logo-banpais{background-position-y:-258px}.portal-payment-logo.logo-tengo{background-position-y:-296px}.portal-payment-logo.logo-occidente{background-position-y:-332px}
-.portal-payment-logo img{width:100%;height:100%;object-fit:contain}
+.portal-payment-logo{position:relative;width:88px;height:88px;overflow:hidden;display:grid;place-items:center;border:1px solid #ECE5DC;border-radius:15px;background:#F8F5F0;color:#29231F;font-size:11px;font-weight:900;text-align:center}
+.portal-payment-logo.sprite{color:transparent}
+.portal-payment-logo.sprite:before{content:"";position:absolute;left:0;top:50%;width:100%;height:34px;transform:translateY(-50%);border-radius:9px;background-image:url('/assets/metodos-pago-sprite.jpg');background-repeat:no-repeat;background-size:420px 420px;background-position-x:-20px}
+.portal-payment-logo.sprite.logo-tigo:before{background-position-y:-87px}.portal-payment-logo.sprite.logo-atlantida:before{background-position-y:-124px}.portal-payment-logo.sprite.logo-bac:before{background-position-y:-160px}.portal-payment-logo.sprite.logo-ficohsa:before{background-position-y:-196px}.portal-payment-logo.sprite.logo-davivienda:before{background-position-y:-232px}.portal-payment-logo.sprite.logo-banpais:before{background-position-y:-269px}.portal-payment-logo.sprite.logo-tengo:before{background-position-y:-305px}.portal-payment-logo.sprite.logo-occidente:before{background-position-y:-341px}
+.portal-payment-logo img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;transform:translate(var(--logo-x,0%),var(--logo-y,0%)) scale(var(--logo-zoom,1));transform-origin:center}
 .portal-payment-copy{min-width:0}
 .portal-payment-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:900}
 .portal-payment-holder{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:#766D65;font-size:9.5px;font-weight:700;text-transform:uppercase}
@@ -101,21 +101,20 @@ body.portal-ready{
   .portal-existing-intro .live-row{min-height:38px;margin-bottom:15px;padding:0 13px}
   .portal-existing-intro .h1{font-size:34px}
   .portal-categories{gap:7px;padding:18px 12px}
-  .portal-category{min-height:128px;padding:12px 6px 9px;border-radius:16px}
+  .portal-category{padding:12px 6px 13px;border-radius:16px}
   .portal-category-icon{width:48px;height:44px;margin-bottom:6px}
   .portal-category b{font-size:10.5px}
-  .portal-category small{min-height:28px;font-size:7.5px}
-  .portal-category-arrow{width:23px;height:23px;font-size:15px}
+  .portal-category small{font-size:7.5px}
   .portal-panels{padding:0 12px}
   .portal-promo-grid{grid-template-columns:1fr}
   .portal-promo-image{height:168px}
   .portal-payment{grid-template-columns:72px minmax(0,1fr) 38px;gap:9px;padding:8px}
-  .portal-payment-logo{width:72px;height:52px}
-  .portal-payment-logo.sprite{background-size:420px 420px;background-position-x:-27px}
+  .portal-payment-logo{width:72px;height:72px}
+  .portal-payment-logo.sprite:before{background-position-x:-27px}
   .portal-payment-name{font-size:11.5px}.portal-payment-holder{font-size:8px}.portal-payment-account{font-size:12px}.portal-payment-button{width:38px;height:38px}
 }
 @media(max-width:370px){
   .portal-brand{min-height:126px}.portal-mascot-wrap{width:124px;height:148px}.portal-logo{width:62%}
-  .portal-category{min-height:120px}.portal-category b{font-size:9.5px}.portal-category small{font-size:7px}
-  .portal-payment{grid-template-columns:62px minmax(0,1fr) 34px}.portal-payment-logo{width:62px;height:48px}.portal-payment-button{width:34px;height:34px}
+  .portal-category b{font-size:9.5px}.portal-category small{font-size:7px}
+  .portal-payment{grid-template-columns:62px minmax(0,1fr) 34px}.portal-payment-logo{width:62px;height:62px}.portal-payment-button{width:34px;height:34px}
 }
