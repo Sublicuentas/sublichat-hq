@@ -6511,7 +6511,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
 
   function fichaActualizarModoNuevoServicio(){
-    const aviso=fichaQ("fichaNuevoServicioAviso"),save=fichaQ("fichaSave"),add=fichaQ("fichaAddService");
+    const aviso=fichaQ("fichaNuevoServicioAviso"),save=fichaQ("fichaSave");
+    const botonesAgregar=[fichaQ("fichaAddService"),fichaQ("fichaAddServiceBottom")].filter(Boolean);
     if(aviso){
       if(fichaForzarNuevoServicioActual){
         const nombre=fichaGetVal("fichaNombre")||(fichaGrupoActual&&fichaGrupoActual.nombre)||"Cliente";
@@ -6524,10 +6525,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       }
     }
     if(save)save.textContent=fichaForzarNuevoServicioActual?"💾 Agregar cuenta":"💾 Guardar CRM";
-    if(add){
+    botonesAgregar.forEach(add=>{
       add.disabled=fichaForzarNuevoServicioActual;
-      add.textContent=fichaForzarNuevoServicioActual?"✓ Formulario de nueva cuenta abierto":"➕ Agregar otra cuenta al mismo cliente";
-    }
+      add.textContent=fichaForzarNuevoServicioActual?"✓ Otra cuenta abierta":(add.id==="fichaAddServiceBottom"?"➕ Agregar otra cuenta":"➕ Agregar otra cuenta al mismo cliente");
+    });
   }
 
   function fichaPrepararNuevaCuentaMismoCliente({confirmar=false}={}){
@@ -6662,6 +6663,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .ficha-preview i{font-style:italic}
       .ficha-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
       .ficha-actions.three{grid-template-columns:1fr 1fr 1fr}
+      .ficha-actions.four{grid-template-columns:repeat(4,minmax(0,1fr))}
       .ficha-btn{border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:14px;padding:12px;font-weight:800;cursor:pointer}
       .ficha-btn.crm{background:rgba(47,155,224,.16);border-color:rgba(47,155,224,.44)}
       .ficha-btn.wa{background:#25d366;color:#062b16;border-color:#25d366}
@@ -6694,13 +6696,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         .ficha-grid,.ficha-profile-extra-grid{grid-template-columns:1fr}.ficha-field{margin-bottom:8px}
         .ficha-input,.ficha-select,.ficha-text{padding:11px 12px}
         .ficha-preview{min-height:155px;max-height:220px}
-        .ficha-actions,.ficha-actions.three{grid-template-columns:1fr 1fr}
+        .ficha-actions,.ficha-actions.three,.ficha-actions.four{grid-template-columns:1fr 1fr}
         .ficha-variant-tabs{grid-template-columns:1fr 1fr}
         .ficha-message-actions{grid-template-columns:1fr}
         .ficha-delivery-actions{grid-template-columns:1fr}
         .ficha-btn.wa{grid-column:1/-1}
       }
-      @media(max-width:370px){.ficha-actions,.ficha-actions.three{grid-template-columns:1fr}}
+      @media(max-width:370px){.ficha-actions,.ficha-actions.three,.ficha-actions.four{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
     const wrap=document.createElement("div");
@@ -6786,8 +6788,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
             <button class="ficha-btn open-wa" id="fichaOpenMensaje" type="button">💬 Abrir WhatsApp</button>
           </div>
         </label>
-        <div class="ficha-actions three">
+        <div class="ficha-actions four">
           <button class="ficha-btn" id="fichaRegen" type="button">🆕 Ficha nueva</button>
+          <button class="ficha-btn" id="fichaAddServiceBottom" type="button">➕ Agregar otra cuenta</button>
           <button class="ficha-btn crm" id="fichaSave" type="button">💾 Guardar CRM</button>
           <button class="ficha-btn" id="fichaCopy" type="button">📋 Copiar</button>
         </div>
@@ -6852,6 +6855,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     // pero ya no forma parte de ninguna variante de entrega de la URL.
     fichaQ("fichaPrecio").addEventListener("input",()=>{ fichaQ("fichaPrecio").dataset.manual="1"; });
     fichaQ("fichaAddService").addEventListener("click",()=>fichaPrepararNuevaCuentaMismoCliente({confirmar:true}));
+    fichaQ("fichaAddServiceBottom").addEventListener("click",()=>fichaPrepararNuevaCuentaMismoCliente({confirmar:true}));
     fichaQ("fichaAddProfile").addEventListener("click",()=>{
       fichaPerfilesExtraActuales.push({
         perfilId:fichaNuevoId("perfil"),nombre:"",perfil:"",correo:fichaGetVal("fichaCorreo"),
