@@ -871,6 +871,10 @@ export default async function handler(req, res) {
       // ese documento. El nombre queda solo como compatibilidad para fichas nuevas.
       const exactId = cleanExistingDocId(clienteId);
       if (clienteId && !exactId) return res.status(200).json({ error: "El identificador del cliente no es válido." });
+      const forzarNuevoServicio = body.forzarNuevoServicio === true;
+      if (forzarNuevoServicio && !exactId) {
+        return res.status(200).json({ error: "Seleccione un cliente existente antes de agregarle otra cuenta." });
+      }
       let doc = null;
       if (exactId) {
         const exactDoc = await db.collection("clientes").doc(exactId).get();
@@ -922,7 +926,7 @@ export default async function handler(req, res) {
           return res.status(200).json({ error: "La ficha seleccionada ya no coincide con Firebase. Recargue antes de guardar." });
         }
         idx = solicitado;
-      } else {
+      } else if (!forzarNuevoServicio) {
         // Ficha nueva o cliente antiguo sin índice: misma plataforma + mismo correo.
         idx = servicios.findIndex(s =>
           normPlat(s.plataforma) === pNorm &&
