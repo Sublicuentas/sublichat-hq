@@ -593,7 +593,7 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
   }
 }
 
-async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
+async function findCliente(db, { clienteNorm, telefono, nombrePerfil, vendedorNorm } = {}) {
   // ✅ FIX: ya NO se busca/empareja por teléfono. El teléfono que llega en la
   // ficha muchas veces es el número de contacto del vendedor (autocompletado
   // por el panel, o simplemente el mismo número que cada asesor escribe por
@@ -602,11 +602,32 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil }) {
   // vendedor cayeran en el MISMO documento de Firestore y se pisaran el
   // nombre entre ellos. El teléfono se sigue guardando (para mostrarlo en el
   // bot), pero el nombre es la única llave real de identidad del cliente.
+  //
+  // 🚨 FIX URGENTE (ago-2026): el nombre por sí solo tampoco alcanza. Esto
+  // tomaba el PRIMER documento con ese nombre_norm sin importar el vendedor:
+  // dos vendedores distintos con un cliente del mismo nombre (ej. "Karina
+  // Castillo" de Geissel Y de Relojes, cada una con sus propios servicios)
+  // terminaban fusionados en el MISMO documento — se perdía a cuál vendedor
+  // pertenecía cada servicio y el campo `vendedor` quedaba pisado con el
+  // último que guardó. Ahora, si se conoce el vendedor que está pidiendo el
+  // cliente, solo se reutiliza un documento existente que sea DE ESE MISMO
+  // vendedor. Si hay alguien con ese nombre pero es de otro vendedor, se
+  // trata como "no encontrado" (arriba se crea un documento nuevo y
+  // separado) en vez de fusionarlo.
   const n = clienteNorm || normName(nombrePerfil);
+  const vNorm = String(vendedorNorm || "").trim();
 
   if (n) {
-    const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(1).get();
-    if (!snap.empty) return snap.docs[0];
+    const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(10).get();
+    if (!snap.empty) {
+      if (vNorm) {
+        return snap.docs.find(d => normName(d.data()?.vendedor || "") === vNorm) || null;
+      }
+      // Sin vendedor para comparar (llamadas que todavía no lo mandan):
+      // se mantiene el comportamiento previo como último recurso, tomando
+      // la primera coincidencia por nombre.
+      return snap.docs[0];
+    }
   }
 
   return null;
@@ -889,16 +910,22 @@ export default async function handler(req, res) {
         if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
         doc = exactDoc;
       } else {
-        doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil });
+        doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil, vendedorNorm: normName(vendedor) });
       }
       let docRef;
       if (doc) {
         docRef = doc.ref;
       } else {
-        // El ID nuevo se basa en el nombre, nunca en el teléfono. La transacción
-        // vuelve a leer este documento para no pisar una creación simultánea.
-        const idBase = safeDocId(nNorm || nombrePerfil);
+        // El ID nuevo se basa en el nombre Y el vendedor, nunca en el teléfono.
+        // 🚨 FIX URGENTE: antes era solo el nombre (safeDocId(nNorm)), así que
+        // dos vendedores con un cliente del mismo nombre generaban EL MISMO ID
+        // y el segundo en guardar pisaba/fusionaba al primero sin que
+        // findCliente tuviera que "encontrar" nada — colisionaban directo por
+        // ID. Ahora el vendedor forma parte del ID, así que quedan separados.
+        const vendedorNormParaId = normName(vendedor) || "sinvendedor";
+        const idBase = safeDocId(`${nNorm || nombrePerfil}-${vendedorNormParaId}`);
         docRef = db.collection("clientes").doc(idBase);
+        // La transacción vuelve a leer este documento para no pisar una creación simultánea.
       }
 
       // Telegram y Sublichat pueden guardar con pocos milisegundos de diferencia.
@@ -1071,10 +1098,25 @@ export default async function handler(req, res) {
       if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
       snap = { empty: false, docs: [exactDoc] };
     } else {
-      if (clienteNorm) snap = await query.where("nombre_norm", "==", clienteNorm).limit(5).get();
-      if ((!snap || snap.empty) && telefono) snap = await query.where("telefono", "==", telefono).limit(5).get();
+      // 🚨 FIX URGENTE (ago-2026): mismo problema que en ficha_upsert/findCliente
+      // (ver comentario arriba) pero acá, aunque el nombre SÍ encontraba
+      // resultado, nunca se filtraba por vendedor — se quedaba con cualquier
+      // ficha homónima de OTRO vendedor y de ahí seguía a la desambiguación
+      // por servicio, que tampoco mira el vendedor. Si el llamado trae
+      // vendedor, ahora se descartan de entrada las coincidencias que no son
+      // de ese mismo vendedor.
+      const vendedorNormBody = normName(body.vendedor || "");
+      const filtrarPorVendedor = (s) => {
+        if (!s || s.empty || !vendedorNormBody) return s;
+        const propios = s.docs.filter(d => normName(d.data()?.vendedor || "") === vendedorNormBody);
+        return { empty: propios.length === 0, docs: propios };
+      };
+      if (clienteNorm) snap = filtrarPorVendedor(await query.where("nombre_norm", "==", clienteNorm).limit(5).get());
+      if ((!snap || snap.empty) && telefono) snap = filtrarPorVendedor(await query.where("telefono", "==", telefono).limit(5).get());
       if (!snap || snap.empty) {
-        const doc = await findCliente(db, { clienteNorm, telefono });
+        // Si el llamado trae vendedor, se usa para no toparse con el cliente
+        // homónimo de otro vendedor (ver findCliente).
+        const doc = await findCliente(db, { clienteNorm, telefono, vendedorNorm: vendedorNormBody });
         if (doc) snap = { empty: false, docs: [doc] };
       }
     }
@@ -1113,6 +1155,7 @@ export default async function handler(req, res) {
       const compraIdBody = String(body.compraId || body.servicio?.compraId || "").trim();
       let fechaAnterior = null, fechaNueva = null, touchedIndex = null, touchedCompraId = "";
       let inventarioPlan = null, perfilEliminado = "";
+      let eliminarClienteCompleto = false; // ✅ "No renovó": si era su último servicio, se borra el documento entero.
 
       if (acc === "renovar") {
         const { dias, fechaActual, fechaExacta, servicioIndex } = body;
@@ -1139,6 +1182,23 @@ export default async function handler(req, res) {
         touchedCompraId = String(anterior.compraId || compraIdBody || "");
         servicios.splice(idx, 1);
         inventarioPlan = { anterior, nuevo: null, nombreTitular };
+
+      } else if (acc === "no_renovo") {
+        // ✅ NUEVO: botón "❌ No renovó" en Clientes. A diferencia de "eliminar"
+        // (que solo quita el servicio y deja la ficha vacía huérfana), esta
+        // acción borra el documento del cliente por completo cuando ese era
+        // su último servicio activo — que es lo que pidió el dueño del
+        // negocio: liberar tanto el cupo de inventario como el registro.
+        const { servicioIndex } = body;
+        if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Falta la plataforma que no renovó.");
+        const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
+        if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
+        const anterior = servicios[idx];
+        touchedIndex = idx;
+        touchedCompraId = String(anterior.compraId || compraIdBody || "");
+        servicios.splice(idx, 1);
+        inventarioPlan = { anterior, nuevo: null, nombreTitular };
+        eliminarClienteCompleto = servicios.length === 0;
 
       } else if (acc === "eliminar_perfil") {
         const { servicioIndex, perfilIndex, perfilId } = body;
@@ -1235,15 +1295,19 @@ export default async function handler(req, res) {
         tokenTitularAnterior: data.tokenAcceso
       });
       const serviciosLimpios = servicios.map(limpiarServicioCRM);
-      transaction.set(docRef, {
-        servicios: serviciosLimpios,
-        tokenAcceso: accesos.tokenTitular,
-        accesosBeneficiarios: accesos.registro,
-        updatedAt: isoNow()
-      }, { merge: true });
+      if (eliminarClienteCompleto) {
+        transaction.delete(docRef);
+      } else {
+        transaction.set(docRef, {
+          servicios: serviciosLimpios,
+          tokenAcceso: accesos.tokenTitular,
+          accesosBeneficiarios: accesos.registro,
+          updatedAt: isoNow()
+        }, { merge: true });
+      }
       return {
         serviciosLimpios, accesos, nombreTitular, inventarioPlan, perfilEliminado,
-        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId
+        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto
       };
     });
 
@@ -1261,6 +1325,57 @@ export default async function handler(req, res) {
       });
     } catch (e) {
       // El próximo guardado vuelve a intentar el enlace sin revertir la operación.
+    }
+
+    if (acc === "no_renovo") {
+      // Auditoría — api/renovar.js no dejaba rastro de "eliminar"/"editar"/etc.
+      // hoy; esta acción sí queda registrada, tanto si solo se quitó un
+      // servicio como si se borró el cliente entero.
+      try {
+        await db.collection("auditoria_eventos").add({
+          tipo: "cliente_no_renovo",
+          clienteId: docRef.id,
+          cliente: String(mutation.nombreTitular || ""),
+          plataforma: String(mutation.inventarioPlan?.anterior?.plataforma || plataforma || ""),
+          correo: String(mutation.inventarioPlan?.anterior?.correo || correo || ""),
+          clienteEliminado: !!mutation.eliminarClienteCompleto,
+          totalServiciosRestantes: mutation.serviciosLimpios.length,
+          inventario: invResult,
+          usuario: String(authUser.usuario || authUser.uid || "sublicuentas"),
+          rol: String(authUser.role || ""),
+          createdAt: isoNow()
+        });
+      } catch (e) {
+        // La auditoría nunca debe tumbar una baja ya confirmada en Firestore.
+      }
+
+      if (mutation.eliminarClienteCompleto) {
+        // El cliente ya no existe: desactiva enlaces públicos viejos que
+        // apuntaban a él (portal-cliente.js igual los rechaza si el cliente
+        // no existe, esto solo evita dejarlos marcados "activo" para siempre).
+        try {
+          const enlacesSnap = await db.collection("enlaces").where("clienteId", "==", docRef.id).get();
+          if (!enlacesSnap.empty) {
+            const batch = db.batch();
+            enlacesSnap.docs.forEach((d) => batch.set(d.ref, { activo: false, updatedAt: isoNow() }, { merge: true }));
+            await batch.commit();
+          }
+        } catch (e) {
+          // No bloquea la baja ya confirmada.
+        }
+
+        return res.status(200).json({
+          ok: true,
+          verified: true,
+          accion: acc,
+          clienteEliminado: true,
+          totalServicios: 0,
+          inventario: invResult,
+          clienteId: docRef.id,
+          servicioIndex: mutation.touchedIndex,
+          compraId: mutation.touchedCompraId
+        });
+      }
     }
 
     // Una respuesta de escritura no basta: vuelve a leer el documento y confirma
