@@ -597,43 +597,28 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
 }
 
 async function findCliente(db, { clienteNorm, telefono, nombrePerfil, vendedorNorm } = {}) {
-  // ✅ FIX: ya NO se busca/empareja por teléfono. El teléfono que llega en la
-  // ficha muchas veces es el número de contacto del vendedor (autocompletado
-  // por el panel, o simplemente el mismo número que cada asesor escribe por
-  // costumbre) — NO identifica a un cliente en particular. Usarlo para
-  // encontrar/crear el documento hacía que distintos clientes del mismo
-  // vendedor cayeran en el MISMO documento de Firestore y se pisaran el
-  // nombre entre ellos. El teléfono se sigue guardando (para mostrarlo en el
-  // bot), pero el nombre es la única llave real de identidad del cliente.
+  // LEGACY ONLY. Nunca se usa para decidir dónde CREAR una ficha nueva.
+  // La identidad real es el ID del documento (clienteId). Nombre, teléfono y
+  // vendedor son atributos editables y por definición NO pueden ser una llave.
   //
-  // 🚨 FIX URGENTE (ago-2026): el nombre por sí solo tampoco alcanza. Esto
-  // tomaba el PRIMER documento con ese nombre_norm sin importar el vendedor:
-  // dos vendedores distintos con un cliente del mismo nombre (ej. "Karina
-  // Castillo" de Geissel Y de Relojes, cada una con sus propios servicios)
-  // terminaban fusionados en el MISMO documento — se perdía a cuál vendedor
-  // pertenecía cada servicio y el campo `vendedor` quedaba pisado con el
-  // último que guardó. Ahora, si se conoce el vendedor que está pidiendo el
-  // cliente, solo se reutiliza un documento existente que sea DE ESE MISMO
-  // vendedor. Si hay alguien con ese nombre pero es de otro vendedor, se
-  // trata como "no encontrado" (arriba se crea un documento nuevo y
-  // separado) en vez de fusionarlo.
+  // Para llamadas antiguas que todavía no mandan clienteId, solo devolvemos
+  // una ficha cuando la combinación disponible produce UNA ÚNICA coincidencia.
+  // Si hay 0 o >1 candidatos, devolvemos null para impedir una fusión silenciosa.
   const n = clienteNorm || normName(nombrePerfil);
-  const vNorm = String(vendedorNorm || "").trim();
+  const vNorm = normName(vendedorNorm || "");
+  const tNorm = normPhone(telefono || "");
+  if (!n) return null;
 
-  if (n) {
-    const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(10).get();
-    if (!snap.empty) {
-      if (vNorm) {
-        return snap.docs.find(d => normName(d.data()?.vendedor || "") === vNorm) || null;
-      }
-      // Sin vendedor para comparar (llamadas que todavía no lo mandan):
-      // se mantiene el comportamiento previo como último recurso, tomando
-      // la primera coincidencia por nombre.
-      return snap.docs[0];
-    }
-  }
+  const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(25).get();
+  if (snap.empty) return null;
 
-  return null;
+  let candidatos = snap.docs.slice();
+  if (vNorm) candidatos = candidatos.filter(d => normName(d.data()?.vendedor || "") === vNorm);
+  // El teléfono se usa solo como DESAMBIGUADOR cuando viene presente; nunca
+  // como llave de creación. Esto permite distinguir homónimos del mismo vendedor.
+  if (tNorm) candidatos = candidatos.filter(d => normPhone(d.data()?.telefono || "") === tNorm);
+
+  return candidatos.length === 1 ? candidatos[0] : null;
 }
 
 const VISIBILIDAD_URL_MODOS = new Set(["plataforma", "todos", "correo_clave", "solo_correo", "solo_pin", "personalizado"]);
@@ -915,23 +900,15 @@ export default async function handler(req, res) {
         const exactDoc = await db.collection("clientes").doc(exactId).get();
         if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
         doc = exactDoc;
-      } else {
-        doc = await findCliente(db, { clienteNorm: nNorm, nombrePerfil, vendedorNorm: normName(vendedor) });
       }
       let docRef;
       if (doc) {
         docRef = doc.ref;
       } else {
-        // El ID nuevo se basa en el nombre Y el vendedor, nunca en el teléfono.
-        // 🚨 FIX URGENTE: antes era solo el nombre (safeDocId(nNorm)), así que
-        // dos vendedores con un cliente del mismo nombre generaban EL MISMO ID
-        // y el segundo en guardar pisaba/fusionaba al primero sin que
-        // findCliente tuviera que "encontrar" nada — colisionaban directo por
-        // ID. Ahora el vendedor forma parte del ID, así que quedan separados.
-        const vendedorNormParaId = normName(vendedor) || "sinvendedor";
-        const idBase = safeDocId(`${nNorm || nombrePerfil}-${vendedorNormParaId}`);
-        docRef = db.collection("clientes").doc(idBase);
-        // La transacción vuelve a leer este documento para no pisar una creación simultánea.
+        // REGLA DE IDENTIDAD: una ficha NUEVA siempre recibe un ID aleatorio de
+        // Firestore. Jamás se deriva el documento del nombre/teléfono/vendedor.
+        // Para agregar otra cuenta al mismo cliente, la UI debe enviar clienteId.
+        docRef = db.collection("clientes").doc();
       }
 
       // Telegram y Sublichat pueden guardar con pocos milisegundos de diferencia.
@@ -1014,6 +991,7 @@ export default async function handler(req, res) {
         const beneficiarioActual = datosBeneficiario(serviciosLimpios[idx], nombreFinal);
         const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
         const update = {
+          clienteUid: data.clienteUid || docRef.id,
           nombrePerfil: nombreFinal,
           nombre: nombreFinal,
           nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
@@ -1040,6 +1018,23 @@ export default async function handler(req, res) {
         servicioActualizado, servicioAnterior, servicioGuardado,
         beneficiarioActual, tokenPublico
       } = fichaResultado;
+
+      // Rastro forense de identidad para futuras auditorías. La creación nunca
+      // fusiona por nombre/teléfono/vendedor; este evento permite reconstruir
+      // quién escribió cada ficha y compra si vuelve a aparecer una anomalía.
+      try {
+        await db.collection("auditoria_eventos").add({
+          tipo: "crm_ficha_upsert",
+          clienteId: docRef.id,
+          compraId: String(servicioGuardado?.compraId || ""),
+          creado: !!created,
+          nombre: nombreFinal || "",
+          telefono: tel || "",
+          vendedor: vendedor || "",
+          servicioActualizado: !!servicioActualizado,
+          createdAt: isoNow()
+        });
+      } catch (_) {}
 
       // Crea una URL permanente por beneficiario y conserva, como enlaces
       // puntuales, los tokens antiguos que no fueron elegidos para la fusión.
