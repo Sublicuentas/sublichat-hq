@@ -70,18 +70,18 @@ function uniqueStrings(values, maxItems = 500, maxLen = 160) {
   return out;
 }
 
-function isSublicuentasUser(user) {
+function editorKind(user) {
   const usuario = norm(user && (user.usuario || user.name || ''));
-  // La identidad sigue la misma regla del RBAC actual: Naara/Sublicuentas es
-  // la cuenta propietaria aunque AUTH_USERS_JSON todavía conserve un rol viejo.
-  return ['sublicuentas', 'naara'].includes(usuario);
+  if (['sublicuentas', 'naara'].includes(usuario)) return 'admin';
+  if (['relojes', 'libni'].includes(usuario)) return 'relojes';
+  return '';
 }
 
 function vendorCanUsePayments(value) {
   return PAYMENT_VENDOR_KEYS.has(norm(value));
 }
 
-async function requireSublicuentas(req, res) {
+async function requirePortalEditor(req, res) {
   const auth = clean(req.headers.authorization || '', 4000);
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) {
@@ -90,11 +90,12 @@ async function requireSublicuentas(req, res) {
   }
   try {
     const user = await admin.auth().verifyIdToken(token);
-    if (!isSublicuentasUser(user)) {
-      res.status(403).json({ ok: false, error: 'Este módulo es exclusivo del usuario Sublicuentas.' });
+    const kind = editorKind(user);
+    if (!kind) {
+      res.status(403).json({ ok: false, error: 'Este módulo no está disponible para este usuario.' });
       return null;
     }
-    return user;
+    return { user, kind, usuario: norm(user.usuario || user.name || '') };
   } catch (_) {
     res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' });
     return null;
@@ -270,16 +271,14 @@ async function publicPortal(db, req, res) {
   });
 }
 
-async function loadAdmin(db) {
+async function loadAdmin(db, editor) {
   const [promoSnap, configSnap, clientsSnap] = await Promise.all([
     db.collection(PROMOS_COLLECTION).limit(100).get(),
     db.collection(CONFIG_COLLECTION).doc(CONFIG_DOC).get(),
     db.collection('clientes').limit(5000).get()
   ]);
-  const promociones = promoSnap.docs
-    .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
-  const clientes = clientsSnap.docs.map(doc => {
+  const restricted = editor && editor.kind === 'relojes';
+  const allClients = clientsSnap.docs.map(doc => {
     const data = doc.data() || {};
     return {
       id: doc.id,
@@ -288,7 +287,14 @@ async function loadAdmin(db) {
       vendedor: clean(data.vendedor, 80),
       vendedorNorm: norm(data.vendedor_norm || data.vendedor || '')
     };
-  }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  });
+  const clientes = allClients
+    .filter(client => !restricted || client.vendedorNorm === 'relojes')
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  let promociones = promoSnap.docs
+    .map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+  if (restricted) promociones = promociones.filter(promo => norm(promo.ownerVendor || '') === 'relojes');
+  promociones.sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
   const vendorMap = new Map();
   clientes.forEach(client => {
     if (client.vendedorNorm && !vendorMap.has(client.vendedorNorm)) {
@@ -299,11 +305,20 @@ async function loadAdmin(db) {
   return {
     ok: true,
     promociones,
-    metodosPago: config.metodos,
-    avisoPago: config.avisoPago,
+    metodosPago: restricted ? [] : config.metodos,
+    avisoPago: restricted ? '' : config.avisoPago,
     clientes,
-    vendedores: [...vendorMap.entries()].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    vendedores: [...vendorMap.entries()].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+    permisos: { promociones: true, metodosPago: !restricted, soloClientesPropios: restricted, vendedor: restricted ? 'relojes' : '' }
   };
+}
+
+async function relojesClientIds(db) {
+  const snap = await db.collection('clientes').limit(5000).get();
+  return new Set(snap.docs.filter(doc => {
+    const d = doc.data() || {};
+    return norm(d.vendedor_norm || d.vendedor || '') === 'relojes';
+  }).map(doc => doc.id));
 }
 
 module.exports = async function handler(req, res) {
@@ -322,21 +337,33 @@ module.exports = async function handler(req, res) {
     const db = getApp().firestore();
     if (req.method === 'GET') return publicPortal(db, req, res);
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método no permitido.' });
-    const user = await requireSublicuentas(req, res);
-    if (!user) return;
+    const editor = await requirePortalEditor(req, res);
+    if (!editor) return;
+    const user = editor.user;
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const action = clean(body.accion || 'cargar', 40).toLowerCase();
-    if (action === 'cargar') return res.status(200).json(await loadAdmin(db));
+    if (action === 'cargar') return res.status(200).json(await loadAdmin(db, editor));
 
     if (action === 'guardar_promocion') {
       const id = safeId(body.id);
       const ref = id ? db.collection(PROMOS_COLLECTION).doc(id) : db.collection(PROMOS_COLLECTION).doc();
       const previousSnap = id ? await ref.get() : null;
       const previous = previousSnap && previousSnap.exists ? previousSnap.data() || {} : {};
+      if (editor.kind === 'relojes' && id && norm(previous.ownerVendor || '') !== 'relojes') {
+        return res.status(403).json({ ok: false, error: 'Relojes solo puede editar sus propias promociones.' });
+      }
+      let rawPromotion = body.promocion || {};
+      if (editor.kind === 'relojes') {
+        const allowed = await relojesClientIds(db);
+        const requested = uniqueStrings(rawPromotion?.alcance?.clientes, 1500).filter(clientId => allowed.has(clientId));
+        if (!requested.length) return res.status(400).json({ ok: false, error: 'Seleccione al menos un cliente de Relojes.' });
+        rawPromotion = { ...rawPromotion, alcance: { tipo: 'clientes', vendedores: [], clientes: requested } };
+      }
       const now = new Date().toISOString();
-      const promotion = normalizePromotion(body.promocion || {}, previous);
+      const promotion = normalizePromotion(rawPromotion, previous);
       await ref.set({
         ...promotion,
+        ownerVendor: editor.kind === 'relojes' ? 'relojes' : clean(previous.ownerVendor || '', 80),
         createdAt: previous.createdAt || now,
         updatedAt: now,
         updatedBy: clean(user.usuario || user.uid || 'sublicuentas', 80)
@@ -347,11 +374,18 @@ module.exports = async function handler(req, res) {
     if (action === 'eliminar_promocion') {
       const id = safeId(body.id);
       if (!id) return res.status(400).json({ ok: false, error: 'Promoción inválida.' });
+      if (editor.kind === 'relojes') {
+        const snap = await db.collection(PROMOS_COLLECTION).doc(id).get();
+        if (!snap.exists || norm((snap.data() || {}).ownerVendor || '') !== 'relojes') {
+          return res.status(403).json({ ok: false, error: 'Relojes solo puede eliminar sus propias promociones.' });
+        }
+      }
       await db.collection(PROMOS_COLLECTION).doc(id).delete();
       return res.status(200).json({ ok: true, eliminada: id });
     }
 
     if (action === 'guardar_metodos') {
+      if (editor.kind !== 'admin') return res.status(403).json({ ok: false, error: 'Métodos de pago es exclusivo de Sublicuentas.' });
       const rawMethods = Array.isArray(body.metodosPago) ? body.metodosPago : [];
       if (!rawMethods.length) return res.status(400).json({ ok: false, error: 'Agregue al menos un método de pago.' });
       if (rawMethods.length > 30) return res.status(400).json({ ok: false, error: 'El máximo es de 30 métodos de pago.' });
