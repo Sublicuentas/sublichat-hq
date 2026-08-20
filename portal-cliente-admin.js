@@ -402,6 +402,7 @@
     }
     return `<div class="pc-picker" id="pcClientPicker">
       <input class="pc-picker-search" id="pcClientSearch" placeholder="Buscar cliente, teléfono o vendedor">
+      <small class="pc-search-count" id="pcClientSearchCount">${state.clientes.length} clientes</small>
       <div id="pcClientOptions">${state.clientes.map(item=>`<label class="pc-check" data-search="${esc(`${item.nombre} ${item.telefono} ${item.vendedor}`.toLowerCase())}"><input type="checkbox" value="${esc(item.id)}" ${values.has(item.id)?'checked':''}><span>${esc(item.nombre)}</span><small>${esc(item.vendedor||'—')}</small></label>`).join('')||'<div class="pc-empty">No hay clientes.</div>'}</div>
     </div>`;
   }
@@ -409,7 +410,7 @@
   function openPromotion(id){
     const promo=state.promociones.find(item=>item.id===id)||{
       titulo:'',descripcion:'',etiqueta:'PROMOCIÓN',precio:'',precioAnterior:'',imagen:'',color:'#E2231A',
-      ctaTexto:'Solicitar promoción',ctaMensaje:'',fechaInicio:'',fechaFin:'',activa:true,orden:0,
+      tituloEstilo:'clasico',ctaTexto:'Solicitar promoción',ctaMensaje:'',fechaInicio:'',fechaFin:'',activa:true,orden:0,
       alcance:{tipo:'todos',vendedores:[],clientes:[]}
     };
     const imageAdjustment=promotionImageAdjustment(promo);
@@ -426,6 +427,15 @@
       <form class="pc-form" id="pcPromoForm">
         <div class="pc-form-grid">
           <label class="pc-label wide">Título<input name="titulo" maxlength="100" required value="${esc(promo.titulo||'')}" placeholder="Ej. Disney + HBO Max"></label>
+          <label class="pc-label wide">Estilo del título
+            <select name="tituloEstilo">
+              <option value="clasico" ${String(promo.tituloEstilo||'clasico')==='clasico'?'selected':''}>Clásico · limpio</option>
+              <option value="degradado" ${promo.tituloEstilo==='degradado'?'selected':''}>Degradado · multicolor animado</option>
+              <option value="brillo" ${promo.tituloEstilo==='brillo'?'selected':''}>Brillo · destello suave</option>
+              <option value="deslizante" ${promo.tituloEstilo==='deslizante'?'selected':''}>Deslizante · movimiento horizontal</option>
+            </select>
+            <small class="pc-field-help">Degradado funciona bien para promociones normales; Deslizante úselo para ofertas especiales.</small>
+          </label>
           <label class="pc-label wide">Descripción<textarea name="descripcion" maxlength="500" placeholder="Explique brevemente la oferta">${esc(promo.descripcion||'')}</textarea></label>
           <label class="pc-label">Etiqueta<input name="etiqueta" maxlength="40" value="${esc(promo.etiqueta||'PROMOCIÓN')}"></label>
           <label class="pc-label">Color principal<input name="color" type="color" value="${esc(promo.color||'#E2231A')}"></label>
@@ -536,10 +546,14 @@
       const normSearch=value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
       const raw=String(event.target.value||'');
       const query=normSearch(raw),digits=raw.replace(/\D/g,'');
+      let visible=0;
       modal.querySelectorAll('#pcClientOptions .pc-check').forEach(label=>{
         const hay=normSearch(label.dataset.search||''),hayDigits=String(label.dataset.search||'').replace(/\D/g,'');
-        label.hidden=!!query&&!hay.includes(query)&&!(digits&&hayDigits.includes(digits));
+        const hide=!!query&&!hay.includes(query)&&!(digits&&hayDigits.includes(digits));
+        label.hidden=hide;if(!hide)visible++;
       });
+      const counter=modal.querySelector('#pcClientSearchCount');
+      if(counter)counter.textContent=query||digits?`${visible} de ${state.clientes.length} clientes`:`${state.clientes.length} clientes`;
     });
     modal.querySelector('#pcPromoImageRemove')?.addEventListener('click',()=>{
       state.editingImage='';state.editingImageFit='cover';state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;
@@ -624,7 +638,7 @@
     const promotion={
       titulo:value('titulo'),descripcion:value('descripcion'),etiqueta:value('etiqueta'),precio:value('precio'),precioAnterior:value('precioAnterior'),
       imagen:state.editingImage,imagenModo:state.editingImageFit,imagenZoom:state.editingImageZoom,imagenX:state.editingImageX,imagenY:state.editingImageY,
-      color:value('color'),ctaTexto:value('ctaTexto'),ctaMensaje:value('ctaMensaje'),
+      color:value('color'),tituloEstilo:value('tituloEstilo')||'clasico',ctaTexto:value('ctaTexto'),ctaMensaje:value('ctaMensaje'),
       fechaInicio:value('fechaInicio'),fechaFin:value('fechaFin'),orden:Number(value('orden'))||0,activa:!!form.elements.activa?.checked,
       alcance:{tipo:type,vendedores,clientes}
     };
