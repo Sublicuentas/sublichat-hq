@@ -170,6 +170,7 @@ function normalizePromotion(raw = {}, previous = {}) {
     imagenX: clampInteger(raw.imagenX != null ? raw.imagenX : previous.imagenX, 0, 100, 50),
     imagenY: clampInteger(raw.imagenY != null ? raw.imagenY : previous.imagenY, 0, 100, 50),
     color: /^#[0-9a-fA-F]{6}$/.test(clean(raw.color, 7)) ? clean(raw.color, 7) : '#E2231A',
+    tituloEstilo: ['clasico', 'degradado', 'brillo', 'deslizante'].includes(clean(raw.tituloEstilo != null ? raw.tituloEstilo : previous.tituloEstilo, 20)) ? clean(raw.tituloEstilo != null ? raw.tituloEstilo : previous.tituloEstilo, 20) : 'clasico',
     ctaTexto: clean(raw.ctaTexto, 50) || 'Solicitar promoción',
     ctaMensaje: clean(raw.ctaMensaje, 300) || `Hola, deseo información sobre la promoción ${titulo}.`,
     fechaInicio: normalizeDate(raw.fechaInicio),
@@ -258,6 +259,7 @@ async function publicPortal(db, req, res) {
       imagenZoom: clampInteger(promo.imagenZoom, 100, 250, 100),
       imagenX: clampInteger(promo.imagenX, 0, 100, 50), imagenY: clampInteger(promo.imagenY, 0, 100, 50),
       color: /^#[0-9a-fA-F]{6}$/.test(String(promo.color || '')) ? promo.color : '#E2231A',
+      tituloEstilo: ['clasico', 'degradado', 'brillo', 'deslizante'].includes(clean(promo.tituloEstilo, 20)) ? clean(promo.tituloEstilo, 20) : 'clasico',
       ctaTexto: clean(promo.ctaTexto, 50), ctaMensaje: clean(promo.ctaMensaje, 300),
       fechaFin: normalizeDate(promo.fechaFin)
     }));
