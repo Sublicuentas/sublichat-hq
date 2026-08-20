@@ -132,7 +132,10 @@ function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, co
   const compraBuscada = String(compraId || "").trim();
   if (compraBuscada) {
     const porCompra = lista.findIndex(s => String(s && s.compraId || "").trim() === compraBuscada);
-    if (porCompra !== -1) return porCompra;
+    // compraId es la identidad autoritativa. Si llegó en la solicitud y ya no
+    // existe, JAMÁS caemos al índice: hacerlo podría modificar otra compra que
+    // ocupó la posición anterior después de una eliminación/reordenamiento.
+    return porCompra;
   }
   const tieneCriterio = !!String(plataforma || "").trim() || !!normCorreo(correo);
   if (servicioIndex != null && Number.isInteger(Number(servicioIndex))) {
@@ -724,6 +727,9 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
 
 function limpiarServicioCRM(servicio = {}) {
   const s = { ...servicio };
+  // Toda compra, incluso las fichas antiguas de un solo perfil, recibe una ID
+  // permanente. servicioIndex queda únicamente como compatibilidad visual.
+  if (!String(s.compraId || "").trim()) s.compraId = recordId("compra");
   s.visibilidadUrl = normalizarVisibilidadUrl(s.visibilidadUrl);
   const tieneClave = s.clave != null && String(s.clave) !== "";
 
