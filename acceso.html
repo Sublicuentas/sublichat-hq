@@ -354,7 +354,7 @@
         const panelId=`detalle-perfil-${serviceIndex}-${profileIndex}`;
         const nombre=String(p.nombre||p.perfil||"Asignado").trim()||"Asignado";
         const destino=resumenDestinoPerfil(p,modo);
-        const abierto=profileIndex===0;
+        const abierto=false;
         return `<section class="profile-accordion${abierto?" open":""}" data-profile-index="${profileIndex}">
           <button class="profile-trigger" type="button" aria-expanded="${abierto?"true":"false"}" aria-controls="${panelId}" aria-label="Abrir perfil ${profileIndex+1}: ${esc(nombre)}, ${esc(destino.label)}">
             <span class="profile-trigger-copy"><span class="profile-trigger-index">Perfil ${profileIndex+1}</span><span class="profile-trigger-name">${esc(nombre)}</span><span class="profile-trigger-device"><span aria-hidden="true">${destino.icon}</span>${esc(destino.label)}</span></span>
@@ -556,7 +556,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260820-1"></script>
+<script src="/portal-cliente-publico.js?v=20260820-2"></script>
 
 </body>
 </html>

@@ -176,3 +176,6 @@ body.pc-modal-open{overflow:hidden!important}
 }
 \n/* Promotion audience search */\n.pc-client-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:8px}\n.pc-client-search-count{padding:7px 9px;border-radius:999px;background:var(--surface);color:var(--txt2);font-size:9px;font-weight:900;white-space:nowrap}\n.pc-client-no-results{margin-top:8px}\n.pc-field-help{display:block;margin-top:5px;color:var(--txt2);font-size:9px;line-height:1.35}\n@media(max-width:560px){.pc-client-search-row{grid-template-columns:1fr}.pc-client-search-count{justify-self:start}}\n
 .pc-field-help,.pc-search-count{display:block;margin-top:6px;font-size:12px;color:#667085}.pc-search-count{padding:0 2px 6px}.pc-label select{width:100%;min-height:42px;border:1px solid #d9dee7;border-radius:10px;padding:0 12px;background:#fff;color:#172033}
+
+/* El buscador de promociones debe ocultar realmente los clientes no coincidentes. */
+#pcClientOptions .pc-check[hidden]{display:none!important;}

@@ -18,7 +18,7 @@
 <!-- FIX_VISIBLE_LIC_20260608_5 | AULA_CURSOS_PRO_20260608_6 -->
 <!-- FIX_INSERTAR_FILA_SIN_SALTO_20260707 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="/portal-cliente-admin.css?v=20260820-1">
+<link rel="stylesheet" href="/portal-cliente-admin.css?v=20260820-2">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
@@ -1881,7 +1881,7 @@ window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
 const PLAT_LABELS = {
   netflix:"Netflix", netflixpremium:"Netflix Premium", "netflix premium":"Netflix Premium", vipnetflix:"⭐ Netflix Premium VIP", "vip netflix":"⭐ Netflix Premium VIP", vip:"⭐ Netflix Premium VIP",
   disneyp:"Disney Premium", disneypremium:"Disney Premium",
-  disneys:"Disney Standard", disneystandard:"Disney Standard", disney:"Disney+",
+  disneys:"Disney Premium sin ESPN", disneystandard:"Disney Premium sin ESPN", disney:"Disney+",
   hbomax:"HBO Max", hbo:"HBO Max", max:"HBO Max",
   primevideo:"Prime Video", prime:"Prime Video",
   paramount:"Paramount+", paramountp:"Paramount+",
@@ -2312,7 +2312,7 @@ document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListe
 
 /* ===== INVENTARIO: agregar plataforma/correo nuevo (misma lógica del bot) ===== */
 const INV_PLAT_CANON=[
-  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
+  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["crunchyroll","Crunchyroll"],["universal","Universal+"],
   ["vix","ViX"],["paramount","Paramount+"],["star","Star+"],["appletv","Apple TV"],["viki","Viki Rakuten"],
   ["spotify","Spotify"],["youtube","YouTube"],["deezer","Deezer"],["duolingo","Duolingo"],
@@ -4100,7 +4100,7 @@ if(rManual && fechaInput){
 
 /* ===== GESTIONAR SERVICIOS (agregar / editar / eliminar) ===== */
 const PLATS_DISPONIBLES=[
-  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Standard"],
+  ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["paramount","Paramount+"],["crunchyroll","Crunchyroll"],
   ["vix","ViX"],["viki","Viki Rakuten"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
   ["deezer","Deezer"],["duolingo","Duolingo"],["oleada","Oleada TV"],["iptv","IPTV"],["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],
@@ -4890,7 +4890,7 @@ function gCaminoBombas(){
 (function(){
   const FICHA_PLATS=[
     ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax","HBO Max"],
-    ["disneyp","Disney Premium"],["disneys","Disney Standard sin ESPN"],["primevideo","Prime Video"],
+    ["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],["primevideo","Prime Video"],
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
@@ -5111,7 +5111,7 @@ Le hacemos entrega oficial de sus credenciales de acceso:
 
 🚀 El equipo de Sublicuentas`,
     disneys:
-`*🍿🏰 Entrega de su acceso Disney Standard sin ESPN 🏰🍿*
+`*🍿🏰 Entrega de su acceso Disney Premium sin ESPN 🏰🍿*
 
 👤 Perfil: *_{perfil}_*
 *📧 Correo: {correo}*{claveLine}{pinLine}
@@ -5803,7 +5803,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     // Los códigos internos también pasan por esta función al volver a editar.
     // "disneys" contiene la palabra "disney" y antes caía por error en
     // Disney Premium. Resolver primero los códigos/etiquetas exactos impide
-    // que una compra Standard sin ESPN cambie de plan al guardarla.
+    // que una compra Premium sin ESPN cambie de plan al guardarla.
     if(n==="disneys" || n==="disneystandard" || n==="disneystandardsinespn") return "disneys";
     if(n==="disneyp" || n==="disneypremium") return "disneyp";
     if((n.includes("disney") || n.includes("disneyp")) && (n.includes("standard") || n.includes("sinespn"))) return "disneys";
