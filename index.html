@@ -2258,13 +2258,47 @@ function renderTable(){
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
     const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button></div></td></tr>`;
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button><button type="button" class="danger" data-client-action="no-renovo" data-client-index="${i}">❌ No renovó</button></div></td></tr>`;
   }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
   document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
   document.querySelectorAll("[data-client-menu]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const panel=document.querySelector(`[data-client-menu-panel="${btn.dataset.clientMenu}"]`),open=panel&&panel.classList.contains("show");document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));if(panel&&!open)panel.classList.add("show");}));
-  document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));const action=btn.dataset.clientAction;if(action==="add-account"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g,{newService:true});}else if(action==="edit"||action==="crm"||action==="access"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g,action==="access"?{focusAccess:true}:undefined);}else abrirCobro(g);}));
+  document.querySelectorAll("[data-client-action]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientIndex];if(!g)return;document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show"));const action=btn.dataset.clientAction;if(action==="add-account"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g,{newService:true});}else if(action==="edit"||action==="crm"||action==="access"){if(window.abrirEntregaFicha)window.abrirEntregaFicha(g,action==="access"?{focusAccess:true}:undefined);}else if(action==="no-renovo"){noRenovoCliente(g);}else abrirCobro(g);}));
   if(!window._clientesMenuCloseBound){window._clientesMenuCloseBound=true;document.addEventListener("click",()=>document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show")));}
+}
+// ❌ "No renovó": da de baja UNA plataforma del cliente y libera su cupo en
+// Bodega. Si esa era la única plataforma que tenía, el cliente se elimina
+// por completo (lo hace el backend en una sola operación, ver api/renovar.js
+// acción "no_renovo"). Si tenía más de una plataforma, se le pregunta cuál
+// no renovó y las demás quedan intactas.
+async function noRenovoCliente(g){
+  if(!g)return;
+  const servicios=g.servicios||[];
+  if(!servicios.length){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene servicios.");return;}
+  let s=servicios[0];
+  if(servicios.length>1){
+    const lista=servicios.map((x,i)=>`${i+1}. ${x.plataforma}`).join("\n");
+    const resp=prompt(`${g.nombre} tiene ${servicios.length} servicios. ¿Cuál NO renovó? Escribí el número:\n\n${lista}`,"1");
+    if(resp==null)return;
+    const n=parseInt(resp,10);
+    if(!Number.isInteger(n)||n<1||n>servicios.length){if(typeof mostrarToast==="function")mostrarToast("⚠️ Número inválido.");return;}
+    s=servicios[n-1];
+  }
+  const esUnico=servicios.length===1;
+  const advertencia=esUnico
+    ? `Esto va a ELIMINAR por completo a ${g.nombre} (era su único servicio) y va a liberar el cupo en Bodega.\n\nServicio: ${s.plataforma}\n\nEsta acción no se puede deshacer.`
+    : `Esto va a dar de baja "${s.plataforma}" de ${g.nombre} y va a liberar el cupo en Bodega. El cliente sigue existiendo con sus otros servicios.\n\nEsta acción no se puede deshacer.`;
+  if(!confirm(`❌ No renovó\n\n${advertencia}`))return;
+  try{
+    const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({accion:"no_renovo",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||""})});
+    const j=await r.json();
+    if(j.ok){
+      const ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:"";
+      if(typeof mostrarToast==="function")mostrarToast(j.clienteEliminado?`❌ ${g.nombre} eliminado (no renovó)${ex}`:`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}`);
+      await load({forceServer:true});
+    }else if(typeof mostrarToast==="function")mostrarToast("⚠️ "+(j.error||"No se pudo dar de baja."));
+  }catch(e){if(typeof mostrarToast==="function")mostrarToast("⚠️ No pude conectar.");}
 }
 ["q","fPlat","fVend","fEstado","fCantidad"].forEach(id=>{const el=document.getElementById(id);el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
 document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll("[data-client-status]").forEach(x=>x.classList.toggle("active",x===btn));document.getElementById("fEstado").value=btn.dataset.clientStatus||"";renderTable();}));
@@ -11549,6 +11583,8 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 #screen-clientes .client-actions-menu.show{display:grid!important}
 #screen-clientes .client-actions-menu button{width:100%;padding:10px 11px;border:0;border-radius:9px;background:transparent;color:var(--txt);text-align:left;font-size:12px;font-weight:800;cursor:pointer}
 #screen-clientes .client-actions-menu button:hover{background:var(--client-soft);color:var(--client-blue)}
+#screen-clientes .client-actions-menu button.danger{color:var(--danger)!important}
+#screen-clientes .client-actions-menu button.danger:hover{background:rgba(255,63,110,.12)!important;color:var(--danger)!important}
 @media(max-width:980px){
  #screen-clientes .clientes-crm-card>h2{padding-right:0!important;margin-bottom:80px!important}
  #screen-clientes #clientesNuevaFicha{left:26px!important;right:auto!important;top:91px!important}
