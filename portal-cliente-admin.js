@@ -12,7 +12,7 @@
     '/assets/sublicuentas-mascota-portal.png?v=20260816-2',
     '/assets/sublicuentas-mascota.jpg?v=20260816-2'
   ];
-  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],editingId:'',editingImage:'',editingImageFit:'cover',editingImageZoom:100,editingImageX:50,editingImageY:50,modalKeyHandler:null};
+  const state={loaded:false,loading:false,tab:'promociones',promociones:[],metodosPago:[],avisoPago:'',clientes:[],vendedores:[],permisos:{promociones:true,metodosPago:true,soloClientesPropios:false,vendedor:''},editingId:'',editingImage:'',editingImageFit:'cover',editingImageZoom:100,editingImageX:50,editingImageY:50,modalKeyHandler:null};
 
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -93,6 +93,26 @@
     bindShell(root);
   }
 
+  function applyPermissions(){
+    const root=host();if(!root)return;
+    const restricted=!!state.permisos?.soloClientesPropios;
+    const pagosTab=root.querySelector('[data-pc-tab="pagos"]');
+    const pagosPanel=root.querySelector('[data-pc-panel="pagos"]');
+    if(pagosTab)pagosTab.hidden=!state.permisos?.metodosPago;
+    if(pagosPanel&& !state.permisos?.metodosPago)pagosPanel.hidden=true;
+    const heroTitle=root.querySelector('.pc-admin-hero-copy b');
+    const heroText=root.querySelector('.pc-admin-hero-copy span');
+    const toolbarCopy=root.querySelector('[data-pc-panel="promociones"] .pc-admin-toolbar-copy span');
+    if(restricted){
+      if(heroTitle)heroTitle.textContent='Promociones para clientes de Relojes';
+      if(heroText)heroText.textContent='Cree y administre promociones únicamente para clientes asignados a Relojes.';
+      if(toolbarCopy)toolbarCopy.textContent='Seleccione uno o varios clientes de Relojes que recibirán cada promoción.';
+      state.tab='promociones';
+      root.querySelectorAll('[data-pc-tab]').forEach(item=>item.classList.toggle('active',item.dataset.pcTab==='promociones'));
+      root.querySelectorAll('[data-pc-panel]').forEach(panel=>panel.hidden=panel.dataset.pcPanel!=='promociones');
+    }
+  }
+
   function status(message,type=''){
     const el=document.getElementById('pcStatus');
     if(!el)return;
@@ -122,8 +142,10 @@
       state.avisoPago=data.avisoPago||'¡No escribir en detalle o asunto!';
       state.clientes=Array.isArray(data.clientes)?data.clientes:[];
       state.vendedores=Array.isArray(data.vendedores)?data.vendedores:[];
+      state.permisos=data.permisos&&typeof data.permisos==='object'?data.permisos:{promociones:true,metodosPago:true,soloClientesPropios:false,vendedor:''};
       state.loaded=true;
-      renderPromotions();renderPayments();status('Portal del cliente actualizado.','good');
+      applyPermissions();renderPromotions();if(state.permisos.metodosPago)renderPayments();
+      status(state.permisos.soloClientesPropios?'Promociones de Relojes actualizadas.':'Portal del cliente actualizado.','good');
     }catch(error){
       status(error.message||'No se pudo cargar el portal.','bad');
       const list=document.getElementById('pcPromoList');
@@ -359,6 +381,7 @@
   }
 
   async function savePayments(){
+    if(!state.permisos.metodosPago){status('Métodos de pago es exclusivo de Sublicuentas.','bad');return;}
     const button=document.getElementById('pcGuardarPagos');
     const methods=readPayments();
     if(!methods.length){status('Agregue al menos un método de pago.','bad');return;}
@@ -430,14 +453,12 @@
           </div>
         </div>
         <div class="pc-target-box">
-          <b>¿Quién verá esta promoción?</b>
-          <div class="pc-target-options">
-            <label class="pc-target-option"><input type="radio" name="alcanceTipo" value="todos" ${target.tipo==='todos'||!target.tipo?'checked':''}> Todos los clientes</label>
-            <label class="pc-target-option"><input type="radio" name="alcanceTipo" value="vendedores" ${target.tipo==='vendedores'?'checked':''}> Por vendedor</label>
-            <label class="pc-target-option"><input type="radio" name="alcanceTipo" value="clientes" ${target.tipo==='clientes'?'checked':''}> Clientes específicos</label>
-          </div>
+          <b>${state.permisos.soloClientesPropios?'¿Qué clientes de Relojes verán esta promoción?':'¿Quién verá esta promoción?'}</b>
+          ${state.permisos.soloClientesPropios
+            ? `<input type="hidden" name="alcanceTipo" value="clientes"><div class="pc-target-options"><span class="pc-target-option">👥 Solo clientes asignados a Relojes</span></div>`
+            : `<div class="pc-target-options"><label class="pc-target-option"><input type="radio" name="alcanceTipo" value="todos" ${target.tipo==='todos'||!target.tipo?'checked':''}> Todos los clientes</label><label class="pc-target-option"><input type="radio" name="alcanceTipo" value="vendedores" ${target.tipo==='vendedores'?'checked':''}> Por vendedor</label><label class="pc-target-option"><input type="radio" name="alcanceTipo" value="clientes" ${target.tipo==='clientes'?'checked':''}> Clientes específicos</label></div>`}
           <div class="pc-pickers">
-            ${pickerHtml('vendedores',target.vendedores||[])}
+            ${state.permisos.soloClientesPropios?'':pickerHtml('vendedores',target.vendedores||[])}
             ${pickerHtml('clientes',target.clientes||[])}
           </div>
         </div>
@@ -512,8 +533,13 @@
     modal.querySelectorAll('input[name="alcanceTipo"]').forEach(input=>input.addEventListener('change',updateTargetPickers));
     updateTargetPickers();
     modal.querySelector('#pcClientSearch')?.addEventListener('input',event=>{
-      const query=String(event.target.value||'').trim().toLowerCase();
-      modal.querySelectorAll('#pcClientOptions .pc-check').forEach(label=>label.hidden=query&&!String(label.dataset.search||'').includes(query));
+      const normSearch=value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+      const raw=String(event.target.value||'');
+      const query=normSearch(raw),digits=raw.replace(/\D/g,'');
+      modal.querySelectorAll('#pcClientOptions .pc-check').forEach(label=>{
+        const hay=normSearch(label.dataset.search||''),hayDigits=String(label.dataset.search||'').replace(/\D/g,'');
+        label.hidden=!!query&&!hay.includes(query)&&!(digits&&hayDigits.includes(digits));
+      });
     });
     modal.querySelector('#pcPromoImageRemove')?.addEventListener('click',()=>{
       state.editingImage='';state.editingImageFit='cover';state.editingImageZoom=100;state.editingImageX=50;state.editingImageY=50;
@@ -592,7 +618,7 @@
     event.preventDefault();
     const form=event.currentTarget,button=document.getElementById('pcPromoSave');
     const value=name=>form.elements[name]?.value||'';
-    const type=value('alcanceTipo')||'todos';
+    const type=state.permisos.soloClientesPropios?'clientes':(value('alcanceTipo')||'todos');
     const vendedores=[...form.querySelectorAll('#pcVendorPicker input:checked')].map(input=>input.value);
     const clientes=[...form.querySelectorAll('#pcClientPicker input:checked')].map(input=>input.value);
     const promotion={

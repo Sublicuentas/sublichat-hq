@@ -2224,16 +2224,23 @@ function abrirWhatsAppCliente(g){
   const num=tel.startsWith("504")?tel:"504"+tel;
   window.open("https://wa.me/"+num,"_blank","noopener");
 }
+function clienteSearchNorm(v){return String(v??"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
 function renderTable(){
   const MAX_ROWS=parseInt(document.getElementById("fCantidad").value,10)||100;
-  const q=document.getElementById("q").value.toLowerCase();
+  const qRaw=document.getElementById("q").value||"";
+  const q=clienteSearchNorm(qRaw);
+  const qDigits=String(qRaw).replace(/\D/g,"");
   const fp=document.getElementById("fPlat").value, fv=document.getElementById("fVend").value, fe=document.getElementById("fEstado").value;
   document.querySelectorAll("[data-client-status]").forEach(btn=>btn.classList.toggle("active",(btn.dataset.clientStatus||"")===fe));
   // 1) aplicar filtros sobre cada servicio
   const filtrados=DATA.map(c=>({...c,st:statusOf(c.fecha)}))
     .filter(c=>{
-      const perfiles=(c.perfiles||[]).flatMap(p=>[p.nombre,p.perfil,p.correo,p.pinPerfil]).join(" ").toLowerCase();
-      return (!q||c.nombre.toLowerCase().includes(q)||perfiles.includes(q))&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe);
+      const perfiles=clienteSearchNorm((c.perfiles||[]).flatMap(p=>[p.nombre,p.perfil,p.correo,p.pinPerfil]).join(" "));
+      const principal=clienteSearchNorm([c.nombre,c.telefono,c.vendedor,c.plataforma,c.correo].join(" "));
+      const phoneDigits=String(c.telefono||"").replace(/\D/g,"");
+      const matchesText=!q||principal.includes(q)||perfiles.includes(q);
+      const matchesPhone=!!qDigits&&phoneDigits.includes(qDigits);
+      return (matchesText||matchesPhone)&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe);
     });
   // 2) agrupar por documento real de Firestore. No mezclar fichas duplicadas con el mismo nombre.
   const grupos={};
@@ -7023,7 +7030,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
-    finanzas:['inicio','clientes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
+    finanzas:['inicio','clientes','portal-cliente','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
     admin:['inicio','clientes','portal-cliente','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
@@ -7058,8 +7065,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return 'finanzas';
   }
   function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
+  function isRelojesAccount(){return ['relojes','libni'].includes(norm(currentUser()));}
+  function canPortalCliente(){return isSublicuentasAccount()||isRelojesAccount();}
   function can(screen){
-    if(screen==='control-cuentas'||screen==='portal-cliente')return isSublicuentasAccount();
+    if(screen==='control-cuentas')return isSublicuentasAccount();
+    if(screen==='portal-cliente')return canPortalCliente();
     return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
   }
   const dateDMY=d=>{
@@ -7365,8 +7375,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>!['control-cuentas','portal-cliente'].includes(s)||isSublicuentasAccount());
-    nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s)));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente());
+    nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
     const objBtn=document.getElementById('objetivosOpenBtn');
