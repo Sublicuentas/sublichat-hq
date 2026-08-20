@@ -54,8 +54,8 @@ function normPlat(v) {
 }
 
 // Convierte también etiquetas antiguas al código real. Así el nombre público
-// no depende de si Firestore guardó "disneys", "Disney Standard" o la etiqueta
-// completa "Disney Standard sin ESPN".
+// no depende de si Firestore guardó "disneys", "Disney Premium sin ESPN" o la etiqueta
+// completa "Disney Premium sin ESPN".
 function canonPlat(v) {
   const p = normPlat(v);
   const aliases = {
@@ -154,7 +154,7 @@ function termsFor(plataforma) {
 
 const PLAT_LABELS = {
   netflix: "Netflix Premium", vipnetflix: "⭐ Netflix Premium VIP", hbomax: "HBO Max",
-  disneyp: "Disney Premium", disneys: "Disney Standard sin ESPN", primevideo: "Prime Video",
+  disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN", primevideo: "Prime Video",
   crunchyroll: "Crunchyroll", universal: "Universal+", vix: "ViX+", paramount: "Paramount+",
   spotify: "Spotify Premium", deezer: "Deezer Premium HiFi", youtube: "YouTube Premium",
   canva: "Canva", gemini: "Gemini", chatgpt: "ChatGPT", duolingo: "Duolingo",
