@@ -1,11 +1,84 @@
-// api/chat.js  ·  VERSION 4  (Gemini 2.5 + clave y pin separados)
+// api/chat.js  ·  VERSION 6  (Gemini 2.5 + auth + rate limit)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
 // 3) Listo. El frontend ya le manda la pregunta + el contexto de tus clientes.
+//
+// ✅ v6: antes este endpoint no exigía sesión — cualquiera con la URL podía
+// gastar la cuota de Gemini. Ahora exige el mismo token de Firebase (sesión
+// del login) que usan finanzas.js / inventario.js / tickets.js, y limita
+// cuántas preguntas puede hacer un mismo usuario por hora.
+
+import admin from "firebase-admin";
+
+function getApp() {
+  if (admin.apps.length) return admin.app();
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+  privateKey = privateKey.replace(/\\n/g, "\n");
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Faltan variables FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL o FIREBASE_PRIVATE_KEY.");
+  }
+  return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+}
+
+async function requireFirebaseUser(req, res) {
+  const auth = String(req.headers.authorization || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ error: "Sesión requerida." });
+    return null;
+  }
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (_) {
+    res.status(401).json({ error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
+// Límite por usuario (no por IP): sobrevive a cualquier cantidad de
+// instancias serverless porque queda en Firestore, no en memoria.
+const CHAT_MAX_POR_HORA = 60;
+async function checkChatLimit(db, uid) {
+  const ref = db.collection("chat_rate_limit").doc(String(uid || "anon"));
+  const now = Date.now();
+  const HORA_MS = 60 * 60 * 1000;
+  let bloqueado = false, retryAfterSeconds = 0;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const d = snap.exists ? (snap.data() || {}) : {};
+    const ventanaVencida = !d.desde || (now - d.desde) > HORA_MS;
+    const conteo = ventanaVencida ? 1 : Number(d.conteo || 0) + 1;
+    const desde = ventanaVencida ? now : d.desde;
+    if (conteo > CHAT_MAX_POR_HORA) {
+      bloqueado = true;
+      retryAfterSeconds = Math.ceil((desde + HORA_MS - now) / 1000);
+      return;
+    }
+    tx.set(ref, { conteo, desde, updatedAt: now }, { merge: true });
+  });
+  return { blocked: bloqueado, retryAfterSeconds };
+}
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 5, msg: "chat v5 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 6, msg: "chat v6 activo. Usá POST." });
+
+  let db;
+  try {
+    db = getApp().firestore();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+
+  const authUser = await requireFirebaseUser(req, res);
+  if (!authUser) return; // requireFirebaseUser ya mandó la respuesta 401
+
+  const limite = await checkChatLimit(db, authUser.uid);
+  if (limite.blocked) {
+    return res.status(429).json({ error: "Alcanzaste el límite de preguntas por hora. Probá de nuevo más tarde.", retryAfterSeconds: limite.retryAfterSeconds });
+  }
 
   const { pregunta, hoy, clientes } = req.body || {};
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
