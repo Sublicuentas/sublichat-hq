@@ -241,9 +241,13 @@
         visual.append(image);
       }else visual.textContent='%';
       const body=element('div','portal-promo-body');
+      const titleStyle=['clasico','degradado','brillo','deslizante'].includes(String(promo.tituloEstilo||''))?String(promo.tituloEstilo):'clasico';
+      const titleWrap=element('div',`portal-promo-title-wrap is-${titleStyle}`);
+      const title=element('h3','portal-promo-title',promo.titulo||'Promoción');
+      if(titleStyle==='deslizante'){const track=element('div','portal-promo-title-track');track.append(title);titleWrap.append(track);}else titleWrap.append(title);
       body.append(
         element('span','portal-promo-tag',promo.etiqueta||'PROMOCIÓN'),
-        element('h3','',promo.titulo||'Promoción'),
+        titleWrap,
         element('p','',promo.descripcion||'Consulte los detalles de esta oferta con su vendedor.')
       );
       if(promo.precio||promo.precioAnterior){

@@ -174,3 +174,4 @@ body.pc-modal-open{overflow:hidden!important}
   .pc-target-options{grid-template-columns:1fr}
   .pc-form-actions{padding:10px 12px}.pc-form-actions .pc-btn{min-width:0;flex:1;padding:0 9px;font-size:11px}
 }
+\n/* Promotion audience search */\n.pc-client-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:8px}\n.pc-client-search-count{padding:7px 9px;border-radius:999px;background:var(--surface);color:var(--txt2);font-size:9px;font-weight:900;white-space:nowrap}\n.pc-client-no-results{margin-top:8px}\n.pc-field-help{display:block;margin-top:5px;color:var(--txt2);font-size:9px;line-height:1.35}\n@media(max-width:560px){.pc-client-search-row{grid-template-columns:1fr}.pc-client-search-count{justify-self:start}}\n
