@@ -1,4 +1,4 @@
-// api/chat.js  ·  VERSION 7  (Gemini 2.5 + auth + rate limit)
+// api/chat.js  ·  VERSION 8  (Gemini 2.5 + auth + rate limit)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
@@ -65,8 +65,8 @@ async function checkChatLimit(db, uid) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(200).json({
     ok: true,
-    version: 7,
-    msg: "chat v7 activo. Use POST.",
+    version: 8,
+    msg: "chat v8 activo. Use POST. Use ?test=1 para probar Gemini.",
     geminiConfigured: Boolean((process.env.GEMINI_API_KEY || "").trim()),
     defaultModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     rewriteModel: process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite"
@@ -91,6 +91,104 @@ export default async function handler(req, res) {
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
 
   const API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+
+  // Diagnóstico real: /api/chat?test=1
+  if (req.method === "GET" && String(req.query?.test || "") === "1") {
+    if (!API_KEY) {
+      return res.status(500).json({
+        ok: false,
+        test: true,
+        geminiConfigured: false,
+        error: "GEMINI_API_KEY no está configurada."
+      });
+    }
+
+    const model = process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const startedAt = Date.now();
+
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": API_KEY
+        },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [{ text: "Responda únicamente: OK" }]
+          }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 20,
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        })
+      });
+
+      let data = {};
+      try { data = await r.json(); } catch (_) {}
+
+      const latencyMs = Date.now() - startedAt;
+      const text = (data?.candidates?.[0]?.content?.parts || [])
+        .map(p => p?.text || "")
+        .join("")
+        .trim();
+
+      if (!r.ok || data?.error) {
+        return res.status(r.status || 502).json({
+          ok: false,
+          test: true,
+          provider: "gemini",
+          model,
+          status: r.status || null,
+          latencyMs,
+          errorCode: data?.error?.code || null,
+          errorStatus: data?.error?.status || null,
+          error: data?.error?.message || `Gemini HTTP ${r.status}`
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        test: true,
+        provider: "gemini",
+        model,
+        status: r.status,
+        latencyMs,
+        response: text || "(sin texto)"
+      });
+    } catch (e) {
+      const latencyMs = Date.now() - startedAt;
+      if (e && e.name === "AbortError") {
+        return res.status(504).json({
+          ok: false,
+          test: true,
+          provider: "gemini",
+          model,
+          status: 504,
+          latencyMs,
+          error: "Timeout: Gemini no respondió dentro de 15 segundos."
+        });
+      }
+      return res.status(500).json({
+        ok: false,
+        test: true,
+        provider: "gemini",
+        model,
+        status: 500,
+        latencyMs,
+        error: e?.message || "Error desconocido al probar Gemini."
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   if (!API_KEY) return res.status(500).json({ error: "Falta GEMINI_API_KEY en Vercel" });
 
   // Contexto: le damos a Gemini los datos reales para que NO invente.
