@@ -1,4 +1,4 @@
-// api/chat.js  ·  VERSION 6  (Gemini 2.5 + auth + rate limit)
+// api/chat.js  ·  VERSION 7  (Gemini 2.5 + auth + rate limit)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
@@ -63,7 +63,14 @@ async function checkChatLimit(db, uid) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(200).json({ ok: true, version: 6, msg: "chat v6 activo. Usá POST." });
+  if (req.method !== "POST") return res.status(200).json({
+    ok: true,
+    version: 7,
+    msg: "chat v7 activo. Use POST.",
+    geminiConfigured: Boolean((process.env.GEMINI_API_KEY || "").trim()),
+    defaultModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    rewriteModel: process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite"
+  });
 
   let db;
   try {
@@ -80,7 +87,7 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: "Alcanzaste el límite de preguntas por hora. Probá de nuevo más tarde.", retryAfterSeconds: limite.retryAfterSeconds });
   }
 
-  const { pregunta, hoy, clientes } = req.body || {};
+  const { pregunta, hoy, clientes, mode } = req.body || {};
   if (!pregunta) return res.status(400).json({ error: "Falta la pregunta" });
 
   const API_KEY = (process.env.GEMINI_API_KEY || "").trim();
@@ -108,21 +115,45 @@ DATOS DE LA CARTERA (JSON):
 ${JSON.stringify(clientes || [])}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: pregunta }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }
-      })
-    });
-    const data = await r.json();
+    const isRewrite = String(mode || "").toLowerCase() === "rewrite";
+    const model = isRewrite
+      ? (process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite")
+      : (process.env.GEMINI_MODEL || "gemini-2.5-flash");
 
-    // Si Gemini devuelve un error, lo mostramos en vez de quedarnos callados
-    if (data.error) {
-      return res.status(200).json({ respuesta: "Gemini: " + (data.error.message || "error desconocido") });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), isRewrite ? 12000 : 20000);
+
+    let r;
+    try {
+      r = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": API_KEY
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: pregunta }] }],
+          generationConfig: {
+            temperature: isRewrite ? 0.85 : 0.4,
+            maxOutputTokens: isRewrite ? 600 : 2048,
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        })
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    let data = {};
+    try { data = await r.json(); } catch (_) {}
+
+    if (!r.ok || data.error) {
+      const detail = data?.error?.message || `Gemini HTTP ${r.status}`;
+      console.error("[api/chat] Gemini error:", { model, status: r.status, detail });
+      return res.status(502).json({ error: detail, provider: "gemini", model });
     }
     const cand = data?.candidates?.[0];
     const respuesta =
@@ -130,7 +161,10 @@ ${JSON.stringify(clientes || [])}`;
       (cand?.finishReason ? "Gemini cortó la respuesta (" + cand.finishReason + ")." : "No obtuve respuesta de Gemini.");
     return res.status(200).json({ respuesta });
   } catch (e) {
-    console.error(e);
+    console.error("[api/chat]", e);
+    if (e && e.name === "AbortError") {
+      return res.status(504).json({ error: "Gemini tardó demasiado en responder. Intente nuevamente.", provider: "gemini" });
+    }
     return res.status(500).json({ error: "Error al contactar Gemini: " + (e.message || "") });
   }
 }
