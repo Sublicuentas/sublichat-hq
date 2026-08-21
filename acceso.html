@@ -6,10 +6,10 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Su acceso — Sublicuentas</title>
-<meta name="sublicuentas-access-ui-version" content="20260820-inter-premium-v2">
+<meta name="sublicuentas-access-ui-version" content="20260820-inter-premium-v3-all">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260820-4">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260820-5">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -203,6 +203,28 @@
     font-family:'JetBrains Mono','Courier New',monospace !important;
     font-weight:700 !important;
     letter-spacing:.12em !important;
+  }
+
+
+  /* CORRECCIÓN FINAL · CREDENCIALES EN INTER */
+  .field-value,
+  .credential-pin .field-value,
+  .field[data-credential="pin"] .field-value,
+  .field[data-credential="correo"] .field-value,
+  .field[data-credential="clave"] .field-value,
+  .field[data-credential="usuario"] .field-value,
+  .field[data-credential="dato"] .field-value{
+    font-family:'Inter',Arial,sans-serif !important;
+    font-weight:600 !important;
+    letter-spacing:.012em !important;
+    line-height:1.48 !important;
+    font-variant-ligatures:none !important;
+    font-feature-settings:"liga" 0,"calt" 0 !important;
+  }
+  .credential-pin .field-value,
+  .field[data-credential="pin"] .field-value{
+    font-weight:700 !important;
+    letter-spacing:.09em !important;
   }
 
 </style>
