@@ -7,8 +7,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Su acceso — Sublicuentas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260820-1">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260817-10">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -21,7 +21,7 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
-  body{ background:var(--bg); min-height:100vh; padding:10px; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); }
+  body{ background:var(--bg); min-height:100vh; padding:10px; font-family:'Inter',Arial,sans-serif; color:var(--ink); }
   .stage{ width:min(590px,100%); margin:0 auto; padding:30px 32px 34px; background:#fff; border:1px solid rgba(236,229,214,.82); border-radius:28px; box-shadow:0 18px 48px rgba(30,20,10,.07); }
   .live-row{ display:flex; align-items:center; gap:9px; margin-bottom:14px; }
   .live-dot{ width:11px;height:11px;border-radius:50%; background:var(--red); box-shadow:0 0 0 6px var(--red-soft); position:relative; }
@@ -46,7 +46,7 @@
   .multi-platform,.multi-access-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .multi-platform{ flex:0 1 auto; }
   .multi-separator{ flex:0 0 auto; color:var(--muted2); }
-  .multi-access-name{ flex:1 1 auto; color:var(--muted); font-family:'Plus Jakarta Sans',sans-serif; font-size:.78em; font-weight:700; }
+  .multi-access-name{ flex:1 1 auto; color:var(--muted); font-family:'Inter',Arial,sans-serif; font-size:.78em; font-weight:700; }
   .multi-meta{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:7px; }
   .multi-date{ color:var(--muted); font-size:10.5px; font-weight:700; white-space:nowrap; }
   .multi-date b{ color:var(--ink); }
@@ -83,7 +83,7 @@
   .plat-logo{ display:block; width:100%; height:100%; object-fit:contain; }
   .plat-fallback{ line-height:1; letter-spacing:-.04em; padding:7px; }
   .plat-name{ display:flex; align-items:center; gap:6px; min-width:0; font-family:'Anton',sans-serif; font-weight:400; font-size:var(--plat-name-size,18px); line-height:1.05; white-space:nowrap; }
-  .plat-star{ flex:0 0 auto; font-family:'Plus Jakarta Sans',sans-serif; font-size:.9em; }
+  .plat-star{ flex:0 0 auto; font-family:'Inter',Arial,sans-serif; font-size:.9em; }
   .plat-title{ display:block; white-space:nowrap; }
   .plat-holder{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .plat-holder::before{content:'◎'; color:#4d4941; font-weight:800;}
@@ -104,7 +104,10 @@
   .field-static{ min-width:0; flex:1; }
   .info-field{ background:#FFFEFC; }
   .field-label{ display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:3px; }
-  .field-value{ display:block; font-family:'JetBrains Mono',monospace; font-size:14.5px; font-weight:500; word-break:break-all; }
+  .field-value{ display:block; font-family:'JetBrains Mono','Courier New',monospace; font-size:14.5px; font-weight:600; letter-spacing:.018em; line-height:1.5; font-variant-ligatures:none; font-feature-settings:"liga" 0,"calt" 0; word-break:break-all; }
+  .info-field .field-value{font-family:'Inter',Arial,sans-serif;font-weight:650;letter-spacing:0;word-break:normal;}
+  .info-field .field-label + .field-value{color:#171717;}
+  .field[data-credential="pin"] .field-value,.credential-pin .field-value{font-family:'JetBrains Mono','Courier New',monospace;letter-spacing:.14em;font-weight:700;font-variant-ligatures:none;}
   .field-copy-hint{ display:none; }
   .copy-btn{ flex:0 0 auto; min-width:67px; height:42px; padding:0 10px; border-radius:12px; background:var(--black); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; font-size:10.5px; font-weight:800; }
   .copy-btn-icon{ font-size:15px; line-height:1; }
@@ -299,7 +302,7 @@
   function fieldRow(label, value, id){
     const key=String(label||"").toLowerCase();
     const icon=key.includes("correo")?"✉":key.includes("clave")?"🔒":key.includes("pin")?"#":key.includes("serial")||key.includes("licencia")?"🔐":"👤";
-    return `<div class="field">
+    return `<div class="field" data-credential="${key.includes("pin")?"pin":key.includes("clave")?"clave":key.includes("correo")?"correo":key.includes("usuario")?"usuario":"dato"}">
       <span class="field-icon" aria-hidden="true">${icon}</span>
       <button type="button" class="field-text copy-target" data-copy="${id}" aria-label="Copiar ${esc(label)}">
         <span class="field-label">${esc(label)}</span><span class="field-value" id="${id}">${esc(value)}</span><span class="field-copy-hint">Toque para copiar</span>
@@ -309,7 +312,7 @@
   }
 
   function infoRow(label,value,icon="👤"){
-    return `<div class="field info-field">
+    return `<div class="field info-field${String(label||"").toLowerCase()==="pin"?" credential-pin":""}">
       <span class="field-icon" aria-hidden="true">${esc(icon)}</span>
       <div class="field-static"><span class="field-label">${esc(label)}</span><span class="field-value">${esc(value)}</span></div>
     </div>`;
@@ -556,7 +559,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260820-2"></script>
+<script src="/portal-cliente-publico.js?v=20260817-10"></script>
 
 </body>
 </html>
