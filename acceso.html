@@ -8,7 +8,7 @@
 <title>Su acceso — Sublicuentas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260817-10">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260820-3">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -48,7 +48,7 @@
   .multi-separator{ flex:0 0 auto; color:var(--muted2); }
   .multi-access-name{ flex:1 1 auto; color:var(--muted); font-family:'Inter',Arial,sans-serif; font-size:.78em; font-weight:700; }
   .multi-meta{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:7px; }
-  .multi-date{ color:var(--muted); font-size:10.5px; font-weight:700; white-space:nowrap; }
+  .access-open-hint{color:var(--red);font-size:10px;font-weight:800;white-space:nowrap;} .multi-date{ color:var(--muted); font-size:10.5px; font-weight:700; white-space:nowrap; }
   .multi-date b{ color:var(--ink); }
   .multi-meta .pill{ padding:4px 8px; font-size:9.5px; }
   .multi-chevron{ width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:#F6F2EA; color:var(--ink); font-size:18px; line-height:1; transition:transform .18s ease, background .18s ease; }
@@ -104,10 +104,7 @@
   .field-static{ min-width:0; flex:1; }
   .info-field{ background:#FFFEFC; }
   .field-label{ display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:3px; }
-  .field-value{ display:block; font-family:'JetBrains Mono','Courier New',monospace; font-size:14.5px; font-weight:600; letter-spacing:.018em; line-height:1.5; font-variant-ligatures:none; font-feature-settings:"liga" 0,"calt" 0; word-break:break-all; }
-  .info-field .field-value{font-family:'Inter',Arial,sans-serif;font-weight:650;letter-spacing:0;word-break:normal;}
-  .info-field .field-label + .field-value{color:#171717;}
-  .field[data-credential="pin"] .field-value,.credential-pin .field-value{font-family:'JetBrains Mono','Courier New',monospace;letter-spacing:.14em;font-weight:700;font-variant-ligatures:none;}
+  .field-value{ display:block; font-family:'JetBrains Mono','Courier New',monospace; font-size:14px; font-weight:600; line-height:1.5; letter-spacing:.01em; font-variant-ligatures:none; font-feature-settings:'liga' 0,'calt' 0; word-break:break-all; }
   .field-copy-hint{ display:none; }
   .copy-btn{ flex:0 0 auto; min-width:67px; height:42px; padding:0 10px; border-radius:12px; background:var(--black); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; font-size:10.5px; font-weight:800; }
   .copy-btn-icon{ font-size:15px; line-height:1; }
@@ -302,7 +299,7 @@
   function fieldRow(label, value, id){
     const key=String(label||"").toLowerCase();
     const icon=key.includes("correo")?"✉":key.includes("clave")?"🔒":key.includes("pin")?"#":key.includes("serial")||key.includes("licencia")?"🔐":"👤";
-    return `<div class="field" data-credential="${key.includes("pin")?"pin":key.includes("clave")?"clave":key.includes("correo")?"correo":key.includes("usuario")?"usuario":"dato"}">
+    return `<div class="field">
       <span class="field-icon" aria-hidden="true">${icon}</span>
       <button type="button" class="field-text copy-target" data-copy="${id}" aria-label="Copiar ${esc(label)}">
         <span class="field-label">${esc(label)}</span><span class="field-value" id="${id}">${esc(value)}</span><span class="field-copy-hint">Toque para copiar</span>
@@ -312,7 +309,7 @@
   }
 
   function infoRow(label,value,icon="👤"){
-    return `<div class="field info-field${String(label||"").toLowerCase()==="pin"?" credential-pin":""}">
+    return `<div class="field info-field">
       <span class="field-icon" aria-hidden="true">${esc(icon)}</span>
       <div class="field-static"><span class="field-label">${esc(label)}</span><span class="field-value">${esc(value)}</span></div>
     </div>`;
@@ -439,7 +436,7 @@
         ${platLogo(d.plataforma,nombrePlataforma(d))}
         <span class="multi-summary">
           <span class="multi-name">${estrella}<span class="multi-platform">${esc(nombrePlataforma(d))}</span><span class="multi-separator">-</span><span class="multi-access-name">${esc(nombreAcceso(d))}</span></span>
-          <span class="multi-meta"><span class="pill ${estado.kind}"><i></i>${estado.label}</span><span class="multi-date">📅 ${estado.dateLabel}: <b>${esc(d.fechaRenovacion||"—")}</b></span></span>
+          <span class="multi-meta"><span class="pill ${estado.kind}"><i></i>${estado.label}</span><span class="multi-date">📅 ${estado.dateLabel}: <b>${esc(d.fechaRenovacion||"—")}</b></span><span class="access-open-hint">Ver acceso</span></span>
         </span>
         <span class="multi-chevron" aria-hidden="true">⌄</span>
       </button>
@@ -510,9 +507,7 @@
     // En las fichas con varios accesos, todos inician cerrados para que el
     // cliente vea primero la lista completa y elija cuál desea consultar.
     const primerAbierto=-1;
-    const contenido=multiple
-      ?`<div class="multi-list">${servicios.map((s,i)=>filaServicioMultiple(s,i,servicios.length,i===primerAbierto)).join("")}</div>${soporte}`
-      :servicios.map((s,i)=>tarjetaServicio(s,i,servicios.length,i===servicios.length-1?soporte:"")).join("");
+    const contenido=`<div class="multi-list${multiple?"":" single-access-list"}">${servicios.map((s,i)=>filaServicioMultiple(s,i,servicios.length,false)).join("")}</div>${soporte}`;
     const stageEl=document.getElementById('stage');
     stageEl.dataset.portalVendedor=String(d.vendedor||"");
     stageEl.innerHTML=`
@@ -522,7 +517,7 @@
       <div class="sub">Guarde esta información para consultarla cuando la necesite. ${emoji}</div>
       <div class="access-list">${contenido}</div>
     `;
-    if(multiple)activarAccesosMultiples();
+    activarAccesosMultiples();
     activarPerfilesMultiples();
     document.querySelectorAll('.copy-target').forEach(btn=>{
       btn.addEventListener('click',()=>{
