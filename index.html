@@ -1445,6 +1445,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 })();
 </script>
 
+<link rel="stylesheet" href="/catalogo-relojes-admin.css?v=20260820-1">
 </head>
 <body>
 <!-- INTRO SUBLIROBOT -->
@@ -7030,13 +7031,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
-    finanzas:['inicio','clientes','portal-cliente','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','portal-cliente','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
+    finanzas:['inicio','clientes','portal-cliente','catalogo-relojes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
+    admin:['inicio','clientes','portal-cliente','catalogo-relojes','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], 'portal-cliente':['🌐','Portal del cliente'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -7070,6 +7071,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function can(screen){
     if(screen==='control-cuentas')return isSublicuentasAccount();
     if(screen==='portal-cliente')return canPortalCliente();
+    if(screen==='catalogo-relojes')return canPortalCliente();
     return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
   }
   const dateDMY=d=>{
@@ -7361,6 +7363,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
     ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
     ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
+    ensureScreen('catalogo-relojes','Catálogo Relojes','Administre productos, precios, promociones públicas, disponibilidad y apariencia del catálogo desde Sublichat.','');
     ensureScreen('tickets','Tickets y Avisos','Mensajería interna y comunicados de actualización entre Relojes, Magdiel y Sublicuentas.','');
     ensureScreen('configuracion','Configuración Admin','Estado operativo de Firebase, bot Telegram, usuarios y webhooks.','');
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
@@ -7375,7 +7378,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente());
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
@@ -7392,6 +7395,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     window.scrollTo({top:0,behavior:'smooth'});
     renderRBACAll();
     if(screen==='tickets') tkLoad();
+    if(screen==='catalogo-relojes'&&window.SublichatCatalogoRelojes)window.SublichatCatalogoRelojes.open();
   }
 
 
@@ -11827,6 +11831,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 })();
 </script>
 <script src="/portal-cliente-admin.js?v=20260820-1"></script>
+<script src="/catalogo-relojes-admin.js?v=20260820-1"></script>
 </body>
 </html>
 
