@@ -8824,7 +8824,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     h.cols=cols;
     state.selectedRow=h.filas.length-1;
     state.selectedCell={r:state.selectedRow,c:0};
-    state.visible=Math.max(state.visible,h.filas.length);
+    state.visible=Math.max(state.visible,state.selectedRow+80,ROW_PAGE);
     markDirty();
     render();
     setTimeout(()=>scrollDocsToRow(state.selectedRow,keep.scrollLeft),60);
@@ -11808,6 +11808,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     var stored=heights();
     function fitOne(row){
       if(!row||row.dataset.flowFit==='1')return;row.dataset.flowFit='1';
+      addRowHandle(table,row);
       var saved=Number(stored[rowKey(table,row)]||0);
       if(saved)setRowHeight(row,saved,false,true);else fitRow(row,false);
     }
@@ -11873,7 +11874,6 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
         handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
       });
     });
-    table.querySelectorAll('tbody tr').forEach(function(row){addRowHandle(table,row);});
     var toolbar=root.querySelector('.docs-toolbar.edit-tools');
     if(toolbar&&!toolbar.querySelector('.flow-size-controls')){var controls=document.createElement('span');controls.className='flow-size-controls';controls.innerHTML='<button type="button" class="docs-btn" data-flow-size="-">↔ − Ancho</button><button type="button" class="docs-btn" data-flow-size="+">↔ + Ancho</button><button type="button" class="docs-btn" data-flow-height="-">↕ − Alto</button><button type="button" class="docs-btn flow-fit-btn" data-flow-fit>✓ Ajustar fila al texto</button><button type="button" class="docs-btn" data-flow-height="+">↕ + Alto</button>';toolbar.insertBefore(controls,toolbar.firstChild);controls.querySelector('[data-flow-size="-"]').onclick=function(){resizeSelectedColumn(root,table,-18);};controls.querySelector('[data-flow-size="+"]').onclick=function(){resizeSelectedColumn(root,table,18);};controls.querySelector('[data-flow-height="-"]').onclick=function(){adjustSelected(root,-18);};controls.querySelector('[data-flow-height="+"]').onclick=function(){adjustSelected(root,18);};controls.querySelector('[data-flow-fit]').onclick=function(){fitSelected(root);};
       if(!root.querySelector('.flow-drag-hint')){var hint=document.createElement('div');hint.className='flow-drag-hint';hint.textContent='💡 También puede arrastrar directo: mantenga presionada la rayita azul en el borde derecho de una columna o abajo de una fila.';toolbar.insertAdjacentElement('afterend',hint);}
