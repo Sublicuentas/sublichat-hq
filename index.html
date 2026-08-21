@@ -4297,11 +4297,24 @@ VERSIÓN ACTUAL QUE NO DEBE REPETIR:
 ${actual}
 Devuelva SOLO el nuevo mensaje, sin explicación. Variación: ${Date.now()}.`;
 
-    const r=await fetch(CONFIG.chatEndpoint,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({pregunta:prompt,hoy:today.toISOString().slice(0,10),clientes:[]})
-    });
+    const iaController=new AbortController();
+    const iaTimeout=setTimeout(()=>iaController.abort(),18000);
+    let r;
+    try{
+      r=await fetch(CONFIG.chatEndpoint,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        signal:iaController.signal,
+        body:JSON.stringify({
+          pregunta:prompt,
+          hoy:today.toISOString().slice(0,10),
+          clientes:[],
+          mode:"rewrite"
+        })
+      });
+    }finally{
+      clearTimeout(iaTimeout);
+    }
     let j={};
     try{j=await r.json();}catch(_){}
     if(!r.ok)throw new Error(j.error||("HTTP "+r.status));
@@ -4320,10 +4333,13 @@ Devuelva SOLO el nuevo mensaje, sin explicación. Variación: ${Date.now()}.`;
     mostrarToast("✨ Mensaje IA actualizado.");
   }catch(e){
     console.error("[Mensaje IA]",e);
-    // Fallback útil: no dejar el botón aparentemente muerto si Gemini/Vercel falla.
     const fallback=generarMensajeCobro(cobroActual);
     cobroSetMensaje(fallback,generarMensajeCobro.tema);
-    mostrarToast("🎨 IA no respondió; se aplicó otro estilo automáticamente.");
+    if(e && e.name==="AbortError"){
+      mostrarToast("⏱️ Gemini tardó demasiado; se aplicó otro estilo automáticamente.");
+    }else{
+      mostrarToast("🎨 IA no respondió; se aplicó otro estilo automáticamente.");
+    }
   }finally{
     btn.disabled=false;btn.classList.remove("ia-load");btn.textContent=orig;
   }
