@@ -1,4 +1,4 @@
-// api/chat.js  ·  VERSION 9  (Gemini 2.5 + auth + rate limit)
+// api/chat.js  ·  VERSION 10  (Gemini 2.5 + auth + rate limit)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const model = process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite";
+    const model = process.env.GEMINI_REWRITE_MODEL || "gemini-3.5-flash-lite";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -166,11 +166,11 @@ export default async function handler(req, res) {
   // GET normal: solo muestra configuración/version.
   if (req.method !== "POST") return res.status(200).json({
     ok: true,
-    version: 9,
-    msg: "chat v9 activo. Use POST. Use ?test=1 para probar Gemini.",
+    version: 10,
+    msg: "chat v10 activo. Use POST. Use ?test=1 para probar Gemini.",
     geminiConfigured: Boolean(API_KEY),
-    defaultModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-    rewriteModel: process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite"
+    defaultModel: process.env.GEMINI_MODEL || "gemini-3.5-flash",
+    rewriteModel: process.env.GEMINI_REWRITE_MODEL || "gemini-3.5-flash-lite"
   });
 
   let db;
@@ -217,8 +217,8 @@ ${JSON.stringify(clientes || [])}`;
   try {
     const isRewrite = String(mode || "").toLowerCase() === "rewrite";
     const model = isRewrite
-      ? (process.env.GEMINI_REWRITE_MODEL || "gemini-2.5-flash-lite")
-      : (process.env.GEMINI_MODEL || "gemini-2.5-flash");
+      ? (process.env.GEMINI_REWRITE_MODEL || "gemini-3.5-flash-lite")
+      : (process.env.GEMINI_MODEL || "gemini-3.5-flash");
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const controller = new AbortController();
