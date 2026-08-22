@@ -1606,12 +1606,13 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <section class="screen" id="screen-clientes">
     <div class="card clientes-crm-card">
       <h2><span class="ico clientes-title-icon"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c.4-4.1 2.5-6.2 6-6.2s5.6 2.1 6 6.2M14 14c3.8-.8 6.3 1 7 5"/></svg></span><span>Clientes <small id="clientesTitleCount">0</small><em>Cartera y renovaciones</em></span></h2>
-      <div class="clientes-controlbar"><div class="search">⌕ <input id="q" type="text" placeholder="Buscar cliente…"></div><div class="clientes-tabs" aria-label="Filtrar por renovación"><button type="button" class="active" data-client-status="">Todos</button><button type="button" data-client-status="due">Hoy</button><button type="button" data-client-status="soon">Próximos</button><button type="button" data-client-status="exp">Vencidos</button></div></div>
+      <div class="clientes-controlbar"><div class="search">⌕ <input id="q" type="text" placeholder="Buscar cliente…"></div><div class="clientes-tabs" aria-label="Filtrar por renovación"><button type="button" class="active" data-client-status="vigente">Vigentes</button><button type="button" data-client-status="due">Hoy</button><button type="button" data-client-status="soon">Próximos</button><button type="button" data-client-status="exp">Vencidos</button></div></div>
       <div class="toolbar clientes-filters">
         <select id="fPlat"><option value="">Plataformas</option></select>
         <select id="fVend"><option value="">Socios</option></select>
         <select id="fEstado" aria-label="Estado de renovación">
-          <option value="">Estados</option>
+          <option value="vigente" selected>Vigentes</option>
+          <option value="">Todos los registros</option>
           <option value="due">Renueva hoy</option><option value="soon">Próx. 7 días</option>
           <option value="ok">Al día</option><option value="exp">Vencidos</option>
         </select>
@@ -2007,6 +2008,29 @@ function countUp(el,to,money){
     el.textContent=money?fmt(v):v;if(p<1)requestAnimationFrame(step);})(t0);
 }
 
+// Métrica canónica de cartera: un cliente se identifica por su documento real de
+// Firestore (clienteId). Solo se usa nombre/teléfono como compatibilidad para
+// registros antiguos. "Vigente" significa que conserva al menos un servicio
+// con fecha de renovación de hoy o futura. Todas las pantallas usan esta regla.
+function clienteClaveCanonica(c={}){
+  if(c.clienteId)return `id:${c.clienteId}`;
+  const tel=String(c.telefono||"").replace(/\D/g,"");
+  const nom=String(c.nombreNorm||c.nombre||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+  return `legacy:${nom}|${tel}`;
+}
+function servicioEstaVigente(c={}){
+  return !!(c.fecha instanceof Date&&!isNaN(c.fecha)) && daysTo(c.fecha)>=0;
+}
+function resumenCarteraVigente(lista=DATA){
+  const vigentes=lista.filter(servicioEstaVigente);
+  return {
+    clientes:new Set(vigentes.map(clienteClaveCanonica)).size,
+    servicios:vigentes.length,
+    registrosClientes:new Set(lista.map(clienteClaveCanonica)).size,
+    registrosServicios:lista.length
+  };
+}
+
 function activarClientesEnVivo(db,collection,onSnapshot){
   if(clientesLiveStarted||typeof onSnapshot!=="function")return;
   clientesLiveStarted=true;
@@ -2125,7 +2149,8 @@ function render(){
   const hoy=DATA.filter(c=>c.fecha&&daysTo(c.fecha)===0);
   const sem=DATA.filter(c=>c.fecha&&daysTo(c.fecha)>0&&daysTo(c.fecha)<=7);
   if($("kCartera"))countUp($("kCartera"),tot,true);
-  if($("kClientes"))$("kClientes").textContent=`${new Set(DATA.map(c=>c.nombre)).size} clientes · ${DATA.length} servicios`;
+  const carteraVigente=resumenCarteraVigente(DATA);
+  if($("kClientes"))$("kClientes").textContent=`${carteraVigente.clientes} clientes vigentes · ${carteraVigente.servicios} servicios vigentes`;
   if($("kHoy"))countUp($("kHoy"),hoy.length,false);
   if($("kHoyMonto"))$("kHoyMonto").textContent=fmt(hoy.reduce((s,c)=>s+c.precio,0));
   if($("kSemana"))countUp($("kSemana"),sem.length,false);
@@ -2150,8 +2175,8 @@ function render(){
   if(dEl){if(prev>0){const pct=Math.round((mes-prev)/prev*100);dEl.textContent=(pct>=0?"+":"")+pct+"%";dEl.style.color=pct>=0?"var(--good)":"var(--accent)";}else{dEl.textContent="—";dEl.style.color="var(--muted)";}}
 
   // Barra de stats de Inicio en modo web (oculta en celular, ver CSS)
-  if($("iwsClientes"))$("iwsClientes").textContent=String(new Set(DATA.map(c=>c.nombre)).size);
-  if($("iwsServicios"))$("iwsServicios").textContent=String(DATA.length);
+  if($("iwsClientes"))$("iwsClientes").textContent=String(carteraVigente.clientes);
+  if($("iwsServicios"))$("iwsServicios").textContent=String(carteraVigente.servicios);
   if($("iwsCartera"))$("iwsCartera").textContent=fmt(tot);
   const iwsD=$("iwsDelta");
   if(iwsD){ if(prev>0){ const pct=Math.round((mes-prev)/prev*100); iwsD.textContent=(pct>=0?"+":"")+pct+"%"; iwsD.style.color=pct>=0?"var(--good)":"var(--accent)"; } else { iwsD.textContent="—"; iwsD.style.color="var(--muted)"; } }
@@ -2241,12 +2266,13 @@ function renderTable(){
       const phoneDigits=String(c.telefono||"").replace(/\D/g,"");
       const matchesText=!q||principal.includes(q)||perfiles.includes(q);
       const matchesPhone=!!qDigits&&phoneDigits.includes(qDigits);
-      return (matchesText||matchesPhone)&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&(!fe||c.st.k===fe);
+      const matchesEstado=!fe || (fe==="vigente" ? servicioEstaVigente(c) : c.st.k===fe);
+      return (matchesText||matchesPhone)&&(!fp||c.plataforma===fp)&&(!fv||c.vendedor===fv)&&matchesEstado;
     });
   // 2) agrupar por documento real de Firestore. No mezclar fichas duplicadas con el mismo nombre.
   const grupos={};
   filtrados.forEach(c=>{
-    const key=c.clienteId?`id:${c.clienteId}`:(c.nombre+"|"+(c.telefono||""));
+    const key=clienteClaveCanonica(c);
     if(!grupos[key]) grupos[key]={clienteId:c.clienteId||"",nombre:c.nombre,telefono:c.telefono||"",vendedor:c.vendedor||"",vendedorTelefono:c.vendedorTelefono||"",nombreNorm:c.nombreNorm||"",servicios:[]};
     grupos[key].servicios.push(c);
   });
