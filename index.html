@@ -1625,6 +1625,13 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         </select>
       </div>
       <div class="count" id="count"></div>
+      <div class="cartera-audit-box" id="carteraAuditBox" style="margin:14px 0 18px;padding:16px;border:1px solid #dce7ef;border-radius:20px;background:linear-gradient(135deg,#f8fcff,#fff);box-shadow:0 8px 24px rgba(17,67,104,.06)">
+        <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+          <div><b style="font-size:18px;color:#123b61">🧾 Auditoría de cartera</b><div style="font-size:13px;color:#6d8294;margin-top:3px">Recalcula Firebase y concilia clientes, servicios, fechas y posibles duplicados.</div></div>
+          <button type="button" id="runCarteraAudit" style="border:0;border-radius:14px;padding:11px 16px;background:#16a9df;color:white;font-weight:800;cursor:pointer">Auditar ahora</button>
+        </div>
+        <div id="carteraAuditResult" style="display:none;margin-top:14px"></div>
+      </div>
       <div class="tbl-wrap clientes-table-wrap"><table>
         <thead><tr><th>Cliente</th><th>Plataforma</th><th>Renovación</th><th>Estado</th><th style="text-align:right">Precio</th><th class="client-renew-head">Renovar</th><th class="client-wa-head">WhatsApp</th><th class="client-actions-head">Acciones</th></tr></thead>
         <tbody id="tbody"></tbody>
@@ -2251,6 +2258,68 @@ function abrirWhatsAppCliente(g){
   window.open("https://wa.me/"+num,"_blank","noopener");
 }
 function clienteSearchNorm(v){return String(v??"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
+
+function ejecutarAuditoriaCartera(){
+  const groups=new Map();
+  DATA.forEach(c=>{
+    const key=clienteClaveCanonica(c);
+    if(!groups.has(key))groups.set(key,{key,clienteId:c.clienteId||'',nombre:c.nombre||'(Sin nombre)',telefono:c.telefono||'',servicios:[]});
+    groups.get(key).servicios.push(c);
+  });
+  let vigentes=0,vencidos=0,sinFecha=0,servVig=0,servVenc=0,servSinFecha=0;
+  const detalle={vigentes:[],vencidos:[],sinFecha:[]};
+  groups.forEach(g=>{
+    let gv=0,ge=0,gi=0;
+    g.servicios.forEach(c=>{
+      if(c.fecha instanceof Date&&!isNaN(c.fecha)){
+        if(daysTo(c.fecha)>=0){gv++;servVig++;}else{ge++;servVenc++;}
+      }else{gi++;servSinFecha++;}
+    });
+    const row={...g,vigentes:gv,vencidos:ge,sinFecha:gi,total:g.servicios.length};
+    if(gv>0){vigentes++;detalle.vigentes.push(row);}
+    else if(ge>0){vencidos++;detalle.vencidos.push(row);}
+    else{sinFecha++;detalle.sinFecha.push(row);}
+  });
+  const normName=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  const byPhone=new Map(),byName=new Map();
+  groups.forEach(g=>{
+    const ph=String(g.telefono||'').replace(/\D/g,'');
+    const nm=normName(g.nombre);
+    if(ph.length>=8){if(!byPhone.has(ph))byPhone.set(ph,[]);byPhone.get(ph).push(g);}
+    if(nm){if(!byName.has(nm))byName.set(nm,[]);byName.get(nm).push(g);}
+  });
+  const dupPhone=[...byPhone.entries()].filter(([,a])=>a.length>1);
+  const dupName=[...byName.entries()].filter(([,a])=>a.length>1);
+  const totalClientes=groups.size,totalServicios=DATA.length;
+  const conciliaClientes=(vigentes+vencidos+sinFecha)===totalClientes;
+  const conciliaServicios=(servVig+servVenc+servSinFecha)===totalServicios;
+  const audit={fecha:new Date(),totalClientes,vigentes,vencidos,sinFecha,totalServicios,servVig,servVenc,servSinFecha,dupPhone,dupName,detalle,conciliaClientes,conciliaServicios};
+  window._ultimaAuditoriaCartera=audit;
+  const box=document.getElementById('carteraAuditResult');
+  if(box){
+    const pill=(n,t)=>`<div style="padding:10px 12px;border:1px solid #e0e8ee;border-radius:14px;background:white"><b style="display:block;font-size:22px;color:#123b61">${n}</b><span style="font-size:12px;color:#6d8294">${t}</span></div>`;
+    box.style.display='block';
+    box.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px">${pill(totalClientes,'Clientes totales')}${pill(vigentes,'Clientes vigentes')}${pill(vencidos,'Clientes vencidos')}${pill(sinFecha,'Clientes sin fecha')}${pill(totalServicios,'Servicios totales')}${pill(servVig,'Servicios vigentes')}${pill(servVenc,'Servicios vencidos')}${pill(servSinFecha,'Servicios sin fecha')}</div>
+      <div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:${conciliaClientes&&conciliaServicios?'#eaf9f0':'#fff2e8'};color:#24465f;font-size:13px"><b>${conciliaClientes&&conciliaServicios?'✓ Conciliación correcta':'⚠ Conciliación con diferencias'}</b> · Clientes: ${vigentes}+${vencidos}+${sinFecha}=${totalClientes} · Servicios: ${servVig}+${servVenc}+${servSinFecha}=${totalServicios}</div>
+      <div style="margin-top:8px;font-size:13px;color:#5d7385"><b>Posibles duplicados:</b> ${dupPhone.length} teléfonos repetidos · ${dupName.length} nombres repetidos. <span style="opacity:.8">Son alertas para revisar, no se fusionan automáticamente.</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" onclick="descargarAuditoriaCarteraCSV()" style="border:1px solid #cfdce5;background:white;border-radius:12px;padding:9px 12px;font-weight:750;cursor:pointer">⬇ Descargar CSV</button><button type="button" onclick="mostrarDetalleAuditoria('vencidos')" style="border:1px solid #cfdce5;background:white;border-radius:12px;padding:9px 12px;font-weight:750;cursor:pointer">Ver ${vencidos} vencidos</button><button type="button" onclick="mostrarDetalleAuditoria('sinFecha')" style="border:1px solid #cfdce5;background:white;border-radius:12px;padding:9px 12px;font-weight:750;cursor:pointer">Ver ${sinFecha} sin fecha</button></div><div id="carteraAuditDetail" style="margin-top:10px"></div>`;
+  }
+  return audit;
+}
+function mostrarDetalleAuditoria(tipo){
+  const a=window._ultimaAuditoriaCartera;if(!a)return;
+  const rows=(a.detalle[tipo]||[]).slice(0,200),el=document.getElementById('carteraAuditDetail');if(!el)return;
+  el.innerHTML=`<div style="max-height:300px;overflow:auto;border:1px solid #e1e8ed;border-radius:12px;background:white">${rows.length?rows.map(g=>`<div style="padding:9px 11px;border-bottom:1px solid #eef2f5;font-size:13px"><b>${clienteEsc(g.nombre)}</b> · ${clienteEsc(g.telefono||'sin teléfono')} <span style="color:#718493">— ${g.total} servicio(s), ${g.sinFecha} sin fecha</span></div>`).join(''):'<div style="padding:12px">Sin registros.</div>'}</div>`;
+}
+function descargarAuditoriaCarteraCSV(){
+  const a=window._ultimaAuditoriaCartera||ejecutarAuditoriaCartera();
+  const lines=[['estado_cliente','cliente_id','nombre','telefono','servicios','servicios_vigentes','servicios_vencidos','servicios_sin_fecha']];
+  ['vigentes','vencidos','sinFecha'].forEach(tipo=>(a.detalle[tipo]||[]).forEach(g=>lines.push([tipo,g.clienteId,g.nombre,g.telefono,g.total,g.vigentes,g.vencidos,g.sinFecha])));
+  const csv=lines.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),x=document.createElement('a');x.href=url;x.download='auditoria-cartera-'+new Date().toISOString().slice(0,10)+'.csv';x.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+window.ejecutarAuditoriaCartera=ejecutarAuditoriaCartera;window.mostrarDetalleAuditoria=mostrarDetalleAuditoria;window.descargarAuditoriaCarteraCSV=descargarAuditoriaCarteraCSV;
+
 function renderTable(){
   const MAX_ROWS=parseInt(document.getElementById("fCantidad").value,10)||100;
   const qRaw=document.getElementById("q").value||"";
@@ -2336,6 +2405,7 @@ async function noRenovoCliente(g){
 }
 ["q","fPlat","fVend","fEstado","fCantidad"].forEach(id=>{const el=document.getElementById(id);el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
 document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll("[data-client-status]").forEach(x=>x.classList.toggle("active",x===btn));document.getElementById("fEstado").value=btn.dataset.clientStatus||"";renderTable();}));
+const auditBtn=document.getElementById("runCarteraAudit");if(auditBtn)auditBtn.addEventListener("click",async()=>{auditBtn.disabled=true;const old=auditBtn.textContent;auditBtn.textContent="Auditando Firebase…";try{await load({forceServer:true,requireServer:true});ejecutarAuditoriaCartera();if(typeof mostrarToast==="function")mostrarToast("✓ Auditoría completada con datos del servidor");}catch(e){console.error(e);if(typeof mostrarToast==="function")mostrarToast("⚠ No se pudo confirmar Firebase: "+(e.message||e));}finally{auditBtn.disabled=false;auditBtn.textContent=old;}});
 
 /* ===== INVENTARIO: agregar plataforma/correo nuevo (misma lógica del bot) ===== */
 const INV_PLAT_CANON=[
