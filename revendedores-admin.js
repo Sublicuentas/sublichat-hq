@@ -32,7 +32,7 @@ function shell(){
   h.innerHTML=`
     <div class="cr-admin">
       <div class="cr-hero">
-        <div><b>🤝 Revendedores</b><span>Precios, vendedores y clientes de toda la red — conectado al Panel de Socios.</span></div>
+        <div><b>🤝 Catálogo Socios</b><span>Precios, vendedores y clientes de toda la red — conectado al Panel de Socios.</span></div>
       </div>
       <div class="cr-tabs">
         <button class="cr-tab on" data-rtab="precios">Precios</button>
@@ -73,15 +73,29 @@ function renderPrecios(){
     if(!grupos[k]){ grupos[k]=[]; orden.push(k); }
     grupos[k].push(p);
   });
+  const vacio=!state.precios.length;
   b.innerHTML=`
-    <div class="cr-tools"><span></span><button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button></div>
+    <div class="cr-tools">${vacio?'<span></span>':''}<button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button></div>
+    ${vacio?`<div class="cr-empty">Catálogo vacío.<br><br>
+      <button class="cr-btn red" id="revImportarInicial">📥 Importar catálogo inicial</button><br><br>
+      <small>Trae los precios que ya estaban cargados en el Panel de Socios (Netflix, Disney, HBO, etc.) para poder editarlos desde acá. Es seguro tocarlo aunque ya lo hayas usado antes — no duplica.</small>
+    </div>`:''}
     ${orden.map(cat=>`
       <div class="cr-section">${esc(cat)}</div>
       <div class="cr-grid">${grupos[cat].map(precioCard).join('')}</div>
-    `).join('')||'<div class="cr-empty">Catálogo vacío. Agregá el primer ítem.</div>'}`;
+    `).join('')}`;
   $('#revAddPrecio').onclick=nuevoPrecio;
+  if(vacio) $('#revImportarInicial').onclick=importarPreciosIniciales;
   b.querySelectorAll('[data-save-precio]').forEach(x=>x.onclick=()=>guardarPrecio(x.dataset.savePrecio));
   b.querySelectorAll('[data-del-precio]').forEach(x=>x.onclick=()=>eliminarPrecio(x.dataset.delPrecio));
+}
+async function importarPreciosIniciales(){
+  const btn=$('#revImportarInicial'); if(btn){ btn.disabled=true; btn.textContent='Importando…'; }
+  try{
+    const d=await api('POST','precios/importar-inicial');
+    status(`✅ Catálogo importado: ${d.creados} nuevos, ${d.actualizados} actualizados.`,'good');
+    await loadPrecios(true);
+  }catch(e){ status(e.message,'bad'); if(btn){ btn.disabled=false; btn.textContent='📥 Importar catálogo inicial'; } }
 }
 function precioCard(p){
   const id=p.id;

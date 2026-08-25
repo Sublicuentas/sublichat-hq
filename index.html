@@ -7193,12 +7193,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
   const ROLE_NAV={
     finanzas:['inicio','clientes','portal-cliente','catalogo-relojes','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','portal-cliente','catalogo-relojes','agenda','objetivos','importar','tickets','inventario','control-cuentas','revendedores','egresos','pelis','partidos','chat','perfil','configuracion'],
+    admin:['inicio','clientes','portal-cliente','catalogo-relojes','revendedores','agenda','objetivos','importar','tickets','inventario','control-cuentas','egresos','pelis','partidos','chat','perfil','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], revendedores:['🤝','Revendedores'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -7524,7 +7524,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
     ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
-    ensureScreen('revendedores','Revendedores','Precios, vendedores y clientes de toda la red de socios — conectado al Panel de Socios.','');
+    ensureScreen('revendedores','Catálogo Socios','Precios, vendedores y clientes de toda la red de socios — conectado al Panel de Socios.','');
     ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
     ensureScreen('catalogo-relojes','Catálogo Relojes','Administre productos, precios, promociones públicas, disponibilidad y apariencia del catálogo desde Sublichat.','');
     ensureScreen('tickets','Tickets y Avisos','Mensajería interna y comunicados de actualización entre Relojes, Magdiel y Sublicuentas.','');
