@@ -103,6 +103,9 @@ async function reenviar(pathSegments, queryParams, method, body, token) {
 
 export default async function handler(req, res) {
   try {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     getApp();
     const user = await requireFirebaseUser(req, res);
     if (!user) return; // requireFirebaseUser ya respondió
@@ -133,6 +136,16 @@ export default async function handler(req, res) {
     if (status === 401) {
       token = await getRevAdminToken(true);
       ({ status, data } = await reenviar(pathSegments, extras, method, req.body, token));
+    }
+
+    // En toda mutación de precios, comprobar contra Render que el dato ya es
+    // legible antes de confirmar "Guardado" a Sublichat.
+    if (status >= 200 && status < 300 && primerSegmento === "precios" && method !== "GET") {
+      const verificacion = await reenviar(["precios"], [], "GET", undefined, token);
+      if (verificacion.status < 200 || verificacion.status >= 300) {
+        return res.status(502).json({ ok: false, error: "Se guardó el cambio, pero no se pudo confirmar la sincronización con el Panel de Socios." });
+      }
+      data = { ...data, sincronizado: true };
     }
 
     return res.status(status).json(data);
