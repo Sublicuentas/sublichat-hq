@@ -17,8 +17,8 @@ const host=()=>document.getElementById('rbac-revendedores');
 const money=v=>v==null?'—':`Lps. ${Number(v).toLocaleString('es-HN')}`;
 
 async function api(method,ruta,body,params){
-  const qs=new URLSearchParams({ruta,...(params||{})});
-  const opts={method,headers:{'Content-Type':'application/json'}};
+  const qs=new URLSearchParams({ruta,...(params||{}),_ts:String(Date.now())});
+  const opts={method,cache:'no-store',headers:{'Content-Type':'application/json','Cache-Control':'no-cache'}};
   if(body!==undefined) opts.body=JSON.stringify(body);
   const r=await fetch(API+'?'+qs.toString(),opts);
   const t=await r.text();
@@ -129,8 +129,8 @@ async function guardarPrecio(id){
   const datos=leerFormPrecio(id);
   if(!datos.nombre){ status('Ponele un nombre al ítem.','bad'); return; }
   try{
-    await api('PUT','precios/'+id,datos);
-    status('✅ Guardado.','good');
+    const d=await api('PUT','precios/'+id,datos);
+    status(d.sincronizado?'✅ Guardado y sincronizado con el Panel de Socios.':'✅ Guardado.','good');
     await loadPrecios(true);
   }catch(e){ status(e.message,'bad'); }
 }
