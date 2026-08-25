@@ -67,33 +67,90 @@ async function loadPrecios(force){
 function renderPrecios(){
   const b=$('#revBody'); if(!state.precios) return loadPrecios();
   const grupos={};
-  state.precios.forEach(p=>{(grupos[p.categoria||'otros']=grupos[p.categoria||'otros']||[]).push(p);});
-  b.innerHTML=Object.entries(grupos).map(([cat,items])=>`
-    <div class="cr-section">${esc(cat)}</div>
-    <div class="cr-grid">${items.map(precioCard).join('')}</div>
-  `).join('')||'<div class="cr-empty">No hay plataformas.</div>';
+  const orden=[];
+  state.precios.forEach(p=>{
+    const k=p.categoria||'Sin categoría';
+    if(!grupos[k]){ grupos[k]=[]; orden.push(k); }
+    grupos[k].push(p);
+  });
+  b.innerHTML=`
+    <div class="cr-tools"><span></span><button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button></div>
+    ${orden.map(cat=>`
+      <div class="cr-section">${esc(cat)}</div>
+      <div class="cr-grid">${grupos[cat].map(precioCard).join('')}</div>
+    `).join('')||'<div class="cr-empty">Catálogo vacío. Agregá el primer ítem.</div>'}`;
+  $('#revAddPrecio').onclick=nuevoPrecio;
   b.querySelectorAll('[data-save-precio]').forEach(x=>x.onclick=()=>guardarPrecio(x.dataset.savePrecio));
+  b.querySelectorAll('[data-del-precio]').forEach(x=>x.onclick=()=>eliminarPrecio(x.dataset.delPrecio));
 }
 function precioCard(p){
-  const id=p.plataforma;
+  const id=p.id;
+  const titulo=p.nombre+(p.variante?' · '+p.variante:'');
   return `<article class="cr-card">
-    <div class="cr-row"><h3>${esc(p.nombre)}</h3><span class="cr-badge ${p.configurado?'':'paused'}">${p.configurado?'Configurado':'Sin precio'}</span></div>
-    <label class="cr-field">Precio (Lps.)<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Ej. 130"></label>
+    <div class="cr-row"><h3>${esc(titulo)}</h3><span class="cr-badge ${p.precio!=null?'':'paused'}">${p.precio!=null?'Con precio':'Por comisión'}</span></div>
+    <label class="cr-field">Nombre<input id="pxNombre-${esc(id)}" value="${esc(p.nombre||'')}"></label>
+    <label class="cr-field">Variante (opcional)<input id="pxVariante-${esc(id)}" value="${esc(p.variante||'')}" placeholder="Ej. 3 dispositivos"></label>
+    <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
+    <label class="cr-field">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Ej. 130"></label>
+    <label class="cr-field">Detalle (se muestra al socio)<textarea id="pxDetalle-${esc(id)}" rows="3">${esc(p.detalle||'')}</textarea></label>
     <label class="cr-check"><input type="checkbox" id="pxActivo-${esc(id)}" ${p.activo!==false?'checked':''}> Visible para los socios</label>
-    <label class="cr-field">Nota (opcional)<input id="pxNota-${esc(id)}" value="${esc(p.nota||'')}" placeholder="Ej. incluye garantía 24h"></label>
-    <button class="cr-btn red" data-save-precio="${esc(id)}">💾 Guardar</button>
+    <div class="cr-row">
+      <button class="cr-btn danger" data-del-precio="${esc(id)}">Eliminar</button>
+      <button class="cr-btn red" data-save-precio="${esc(id)}">💾 Guardar</button>
+    </div>
   </article>`;
 }
-async function guardarPrecio(plataforma){
-  const precio=Number($('#pxPrecio-'+plataforma)?.value);
-  if(!Number.isFinite(precio)||precio<=0){ status('Poné un precio válido primero.','bad'); return; }
-  const activo=$('#pxActivo-'+plataforma)?.checked!==false;
-  const nota=$('#pxNota-'+plataforma)?.value||'';
+function leerFormPrecio(id){
+  const precioRaw=$('#pxPrecio-'+id)?.value;
+  return {
+    nombre:$('#pxNombre-'+id)?.value.trim()||'',
+    variante:$('#pxVariante-'+id)?.value.trim()||'',
+    categoria:$('#pxCategoria-'+id)?.value.trim()||'',
+    detalle:$('#pxDetalle-'+id)?.value.trim()||'',
+    precio:precioRaw===''||precioRaw==null?null:Number(precioRaw),
+    activo:$('#pxActivo-'+id)?.checked!==false,
+  };
+}
+async function guardarPrecio(id){
+  const datos=leerFormPrecio(id);
+  if(!datos.nombre){ status('Ponele un nombre al ítem.','bad'); return; }
   try{
-    await api('PUT','precios/'+plataforma,{precio,activo,nota});
-    status('✅ Precio guardado.','good');
+    await api('PUT','precios/'+id,datos);
+    status('✅ Guardado.','good');
     await loadPrecios(true);
   }catch(e){ status(e.message,'bad'); }
+}
+async function eliminarPrecio(id){
+  if(!confirm('¿Eliminar este ítem del catálogo? Ya no lo verán los socios.')) return;
+  try{ await api('DELETE','precios/'+id); await loadPrecios(true); }
+  catch(e){ status(e.message,'bad'); }
+}
+function nuevoPrecio(){
+  const m=modal(`<h2>Nuevo ítem del catálogo</h2>
+    <div class="cr-form">
+      <label class="cr-field wide">Categoría<input id="npCategoria" placeholder="Ej. 📺 Streaming"></label>
+      <label class="cr-field wide">Nombre<input id="npNombre" placeholder="Ej. Netflix"></label>
+      <label class="cr-field wide">Variante (opcional)<input id="npVariante" placeholder="Ej. 3 dispositivos"></label>
+      <label class="cr-field wide">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
+      <label class="cr-field wide">Detalle (se muestra al socio)<textarea id="npDetalle" rows="3"></textarea></label>
+    </div>
+    <div class="cr-actions"><button class="cr-btn ghost" id="npCancel">Cancelar</button><button class="cr-btn red" id="npOk">Crear</button></div>`);
+  $('#npCancel').onclick=()=>m.remove();
+  $('#npOk').onclick=async()=>{
+    const categoria=$('#npCategoria').value.trim(), nombre=$('#npNombre').value.trim();
+    if(!categoria||!nombre){ alert('Completá al menos categoría y nombre.'); return; }
+    const precioRaw=$('#npPrecio').value;
+    try{
+      await api('POST','precios',{
+        categoria, nombre,
+        variante:$('#npVariante').value.trim(),
+        detalle:$('#npDetalle').value.trim(),
+        precio:precioRaw===''?null:Number(precioRaw),
+        activo:true,
+      });
+      m.remove(); await loadPrecios(true);
+    }catch(e){ alert(e.message); }
+  };
 }
 
 /* ═══════════ VENDEDORES ═══════════ */
@@ -115,18 +172,29 @@ function renderVendedores(){
   b.querySelectorAll('[data-edit-vend]').forEach(x=>x.onclick=()=>editarVendedor(x.dataset.editVend));
   b.querySelectorAll('[data-pin-vend]').forEach(x=>x.onclick=()=>resetPinVendedor(x.dataset.pinVend));
   b.querySelectorAll('[data-del-vend]').forEach(x=>x.onclick=()=>eliminarVendedor(x.dataset.delVend,x.dataset.nombre));
+  b.querySelectorAll('[data-toggle-vend]').forEach(x=>x.onclick=()=>toggleActivoVendedor(x.dataset.toggleVend,x.dataset.activo==='1'));
 }
 function vendedorCard(r){
+  const activo=r.activo!==false;
   return `<article class="cr-card">
-    <div class="cr-row"><h3>${esc(r.nombre)}</h3><span class="cr-badge ${r.activo!==false?'':'paused'}">${r.activo!==false?'Activo':'Inactivo'}</span></div>
+    <div class="cr-row"><h3>${esc(r.nombre)}</h3><span class="cr-badge ${activo?'':'paused'}">${activo?'Activo':'Inactivo — no puede entrar'}</span></div>
     <small>Usuario: ${esc(r.nombre_norm||r.id)} · TG: ${esc(r.telegramId||'—')}</small>
     <div class="cr-row"><small>${r.clientes||0} clientes · ${r.vencidos||0} vencidos</small></div>
     <div class="cr-row">
       <button class="cr-btn ghost" data-edit-vend="${esc(r.id)}">Editar</button>
       <button class="cr-btn ghost" data-pin-vend="${esc(r.id)}">🔐 Nuevo PIN</button>
+    </div>
+    <div class="cr-row">
+      <button class="cr-btn ${activo?'danger':'red'}" data-toggle-vend="${esc(r.id)}" data-activo="${activo?'1':'0'}">${activo?'🔒 Desactivar acceso':'🔓 Reactivar acceso'}</button>
       <button class="cr-btn danger" data-del-vend="${esc(r.id)}" data-nombre="${esc(r.nombre)}">Eliminar</button>
     </div>
   </article>`;
+}
+async function toggleActivoVendedor(id,estabaActivo){
+  const accion=estabaActivo?'desactivar':'reactivar';
+  if(!confirm(estabaActivo?'¿Desactivar a este vendedor? No va a poder entrar al panel hasta que lo reactivés.':'¿Reactivar a este vendedor?')) return;
+  try{ await api('PATCH','revendedores/'+id,{activo:!estabaActivo}); status(estabaActivo?'🔒 Acceso desactivado.':'🔓 Acceso reactivado.','good'); await loadVendedores(true); }
+  catch(e){ alert(e.message); }
 }
 function nuevoVendedor(){
   const m=modal(`<h2>Nuevo vendedor</h2>
