@@ -10,7 +10,7 @@
    la página) para no repetir estilos. */
 
 const API='/api/revendedores-admin';
-const state={tab:'precios',precios:null,vendedores:null,clientes:null,clienteQ:'',clienteSel:null,loading:false};
+const state={tab:'precios',precios:null,vendedores:null,clientes:null,recompensas:null,clienteQ:'',clienteSel:null,loading:false};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
@@ -38,6 +38,7 @@ function shell(){
         <button class="cr-tab on" data-rtab="precios">Precios</button>
         <button class="cr-tab" data-rtab="vendedores">Vendedores</button>
         <button class="cr-tab" data-rtab="clientes">Clientes</button>
+        <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
       </div>
       <div id="revBody"></div>
     </div>`;
@@ -54,7 +55,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PRECIOS ═══════════ */
@@ -369,6 +370,20 @@ async function eliminarServicio(clienteId,idx){
   catch(e){ alert(e.message); }
 }
 
+/* ═══════════ RECOMPENSAS ═══════════ */
+async function loadRecompensas(force){
+  if(state.recompensas&&!force)return renderRecompensas();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando recompensas…</div>';
+  try{const d=await api('GET','recompensas');state.recompensas=d.recompensas||[];renderRecompensas()}catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+function renderRecompensas(){
+  const b=$('#revBody');if(!state.recompensas)return loadRecompensas();
+  b.innerHTML=`<div class="cr-tools"><span>Solicitudes de premios de los socios</span><button class="cr-btn ghost" id="rewardReload">Actualizar</button></div><div class="cr-grid">${state.recompensas.map(r=>`<article class="cr-card"><div class="cr-row"><h3>🎁 ${esc(r.recompensa||'Recompensa')}</h3><span class="cr-badge ${r.estado==='entregada'?'':r.estado==='rechazada'?'paused':''}">${esc(r.estado||'pendiente')}</span></div><small>Socio: ${esc(r.socio||r.socio_norm||'—')} · Nivel ${esc(r.nivel||'—')} · ${Number(r.ventas)||0} ventas</small><div class="cr-row"><button class="cr-btn danger" data-reward-status="rechazada" data-reward-id="${esc(r.id)}">Rechazar</button><button class="cr-btn red" data-reward-status="entregada" data-reward-id="${esc(r.id)}">✓ Marcar entregada</button></div></article>`).join('')||'<div class="cr-empty">No hay solicitudes de recompensa.</div>'}</div>`;
+  $('#rewardReload').onclick=()=>loadRecompensas(true);
+  b.querySelectorAll('[data-reward-id]').forEach(x=>x.onclick=()=>setRewardStatus(x.dataset.rewardId,x.dataset.rewardStatus));
+}
+async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+id,{estado});await loadRecompensas(true)}catch(e){alert(e.message)}}
+
 /* ═══════════ util modal ═══════════ */
 function modal(innerHtml){
   const overlay=document.createElement('div');
@@ -385,7 +400,7 @@ function init(){
   const screen=document.getElementById('screen-revendedores');
   if(screen?.classList.contains('active')) loadPrecios();
 }
-window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; render(); }};
+window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; render(); }};
 document.addEventListener('DOMContentLoaded',init);
 new MutationObserver(()=>{
   const s=document.getElementById('screen-revendedores');
