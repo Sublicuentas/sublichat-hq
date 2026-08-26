@@ -4,6 +4,8 @@
   const state={
     data:null,
     error:false,
+    sorteosData:null,
+    sorteosError:false,
     enhanced:false,
     activePanel:'cuentas',
     paymentAllowed:false
@@ -15,6 +17,7 @@
     cuentas:'/assets/portal-icono-mis-cuentas-transparent.png?v=20260816-4',
     promociones:'/assets/portal-icono-promociones-transparent.png?v=20260816-4',
     pagos:'/assets/portal-icono-metodos-pago-transparent.png?v=20260816-4',
+    sorteos:'emoji:🎁',
     perfil:'/assets/portal-icono-perfil-transparent.png?v=20260816-4',
     correo:'/assets/portal-icono-correo-transparent.png?v=20260816-4',
     contrasena:'/assets/portal-icono-contrasena-transparent.png?v=20260816-4'
@@ -73,7 +76,7 @@
     const nav=document.querySelector('.portal-categories');
     if(button)button.hidden=!visible;
     if(panel&&!visible)panel.hidden=true;
-    if(nav)nav.classList.toggle('two-categories',!visible);
+    if(nav){nav.classList.remove('two-categories');nav.classList.toggle('four-categories',visible);}
     if(!visible&&state.activePanel==='pagos')selectPanel('cuentas',false);
   }
 
@@ -170,8 +173,12 @@
     button.setAttribute('aria-selected',panel===state.activePanel?'true':'false');
     button.classList.toggle('active',panel===state.activePanel);
     const icon=element('span','portal-category-icon');
-    const iconImage=element('img','portal-category-icon-image');
-    iconImage.src=iconSource;iconImage.alt='';iconImage.loading='eager';iconImage.decoding='async';icon.append(iconImage);
+    if(String(iconSource||'').startsWith('emoji:')){
+      icon.classList.add('is-emoji');icon.textContent=String(iconSource).slice(6);
+    }else{
+      const iconImage=element('img','portal-category-icon-image');
+      iconImage.src=iconSource;iconImage.alt='';iconImage.loading='eager';iconImage.decoding='async';icon.append(iconImage);
+    }
     button.append(
       icon,
       element('b','',title),
@@ -183,7 +190,9 @@
 
   function panelTitle(iconSource,title,highlight){
     const heading=element('h2','portal-panel-title');
-    const icon=element('img','portal-panel-title-icon');icon.src=iconSource;icon.alt='';icon.loading='lazy';icon.decoding='async';
+    let icon;
+    if(String(iconSource||'').startsWith('emoji:')){icon=element('span','portal-panel-title-icon is-emoji',String(iconSource).slice(6));}
+    else{icon=element('img','portal-panel-title-icon');icon.src=iconSource;icon.alt='';icon.loading='lazy';icon.decoding='async';}
     heading.append(icon,document.createTextNode(title));
     if(highlight)heading.append(element('span','',` ${highlight}`));
     return heading;
@@ -322,6 +331,157 @@
     panel.append(list);
   }
 
+  function raffleDate(value){
+    if(!value)return 'Fecha por confirmar';
+    const date=new Date(value);
+    return Number.isNaN(date.getTime())?'Fecha por confirmar':date.toLocaleString('es-HN',{dateStyle:'medium',timeStyle:'short'});
+  }
+
+  function raffleCategory(value){
+    return {general:'Todos participan',compras:'Compras nuevas',renovaciones:'Renovaciones',oro:'Club Oro'}[value]||'Sorteo especial';
+  }
+
+  function rafflePrizeIcon(type){
+    return {perfil:'📺',descuento_porcentaje:'％',descuento_fijo:'🏷️',cine:'🎬',recarga:'📱',dias_extra:'🗓️',personalizado:'✨'}[type]||'🎁';
+  }
+
+  function raffleStatus(draw){
+    if(draw.estado==='finalizado')return 'Resultado publicado';
+    if(draw.estado==='cerrado')return 'Participación cerrada';
+    return `Cierra ${raffleDate(draw.fechaFin)}`;
+  }
+
+  function renderGoldSummary(panel){
+    const customer=state.sorteosData?.cliente||{};
+    const cycles=Math.max(0,Number(customer.ciclos)||0);
+    const isGold=customer.nivel==='oro';
+    const summary=element('section',`portal-loyalty ${isGold?'is-gold':''}`);
+    const badge=element('span','portal-loyalty-badge',isGold?'★':'♡');
+    const copy=element('div','portal-loyalty-copy');
+    copy.append(
+      element('small','',isGold?'BENEFICIO ACTIVO':'SU CAMINO A CLUB ORO'),
+      element('b','',isGold?'Cliente Oro':'Cliente frecuente'),
+      element('span','',isGold?'Recibe boletos extra en los sorteos participantes.':`${Math.min(cycles,6)} de 6 ciclos completados`)
+    );
+    const progress=element('div','portal-loyalty-progress');
+    const bar=element('i');bar.style.width=`${isGold?100:Math.min(100,(cycles/6)*100)}%`;progress.append(bar);
+    summary.append(badge,copy,progress);panel.append(summary);
+  }
+
+  function renderTicketCodes(draw,body){
+    const tickets=Array.isArray(draw.boletos)?draw.boletos:[];
+    const ticketArea=element('div','portal-raffle-tickets');
+    const heading=element('div','portal-raffle-ticket-head');
+    heading.append(element('b','',`Mis boletos (${tickets.length})`),element('small','',tickets.length?'Cada número participa de forma individual.':'Compra o renueva para recibir números.'));
+    ticketArea.append(heading);
+    if(tickets.length){
+      const codes=element('div','portal-ticket-codes');
+      tickets.slice(0,8).forEach(ticket=>codes.append(element('span','',ticket.codigo||'Boleto')));
+      if(tickets.length>8)codes.append(element('span','more',`+${tickets.length-8} más`));
+      ticketArea.append(codes);
+    }
+    body.append(ticketArea);
+  }
+
+  function renderPrizeChoices(draw,body){
+    const prizes=Array.isArray(draw.premios)?draw.premios:[];
+    if(!prizes.length)return;
+    const section=element('div','portal-raffle-prizes');
+    section.append(element('small','portal-raffle-label','SI GANAS, PODRÁS ELEGIR UNO'));
+    const grid=element('div','portal-raffle-prize-grid');
+    prizes.forEach(prize=>{
+      const item=element('div','portal-raffle-prize');item.style.setProperty('--raffle-prize-color',safeColor(prize.color));
+      item.append(element('span','',rafflePrizeIcon(prize.tipo)),element('b','',prize.nombre||'Premio digital'));
+      if(prize.descripcion)item.append(element('small','',prize.descripcion));
+      grid.append(item);
+    });
+    section.append(grid);body.append(section);
+  }
+
+  function renderWinner(draw,body){
+    if(!draw.ganador)return;
+    const winner=element('section',`portal-raffle-winner ${draw.ganadorActual?'is-mine':''}`);
+    winner.append(element('span','portal-raffle-crown','🏆'));
+    const copy=element('div','portal-raffle-winner-copy');
+    if(draw.ganadorActual){
+      copy.append(element('small','','¡ESTE PREMIO ES TUYO!'),element('b','','¡Felicidades, ganaste!'));
+      if(draw.eleccion){
+        copy.append(element('span','',`Elegiste: ${draw.eleccion.premioNombre||'Premio digital'}`));
+        const reward=draw.eleccion.codigo||draw.eleccion.cupon||'';
+        if(reward){
+          const code=element('button','portal-raffle-code',reward);code.type='button';code.title='Tocar para copiar';code.addEventListener('click',()=>copyText(reward));copy.append(code);
+        }
+        if(draw.eleccion.instrucciones)copy.append(element('p','',draw.eleccion.instrucciones));
+        copy.append(element('em','',draw.eleccion.estado==='entregado'?'Premio entregado':'Elección confirmada'));
+      }else{
+        copy.append(element('span','','Escoge la opción digital que más te guste.'));
+        const choose=element('button','portal-choose-prize','Elegir mi premio');choose.type='button';choose.addEventListener('click',()=>openPrizeChooser(draw));copy.append(choose);
+      }
+    }else{
+      copy.append(element('small','','GANADOR DEL SORTEO'),element('b','',`${draw.ganador.nombre||'Cliente'} ${draw.ganador.telefono||''}`),element('span','',draw.ganador.codigo||''));
+    }
+    winner.append(copy);body.append(winner);
+  }
+
+  function raffleCard(draw){
+    const card=element('article','portal-raffle-card');card.style.setProperty('--raffle-color',safeColor(draw.color));
+    const header=element('header','portal-raffle-head');
+    const labels=element('div');labels.append(element('span','portal-raffle-tag',raffleCategory(draw.categoria)),element('small','portal-raffle-state',raffleStatus(draw)));
+    const count=element('div','portal-raffle-count');count.append(element('b','',String(Number(draw.totalBoletos)||0)),element('small','',Number(draw.totalBoletos)===1?'boleto':'boletos'));
+    header.append(labels,count);
+    const body=element('div','portal-raffle-body');
+    body.append(element('h3','',draw.titulo||'Sorteo especial'),element('p','',draw.descripcion||'Participa automáticamente con tus compras y renovaciones.'));
+    renderTicketCodes(draw,body);renderPrizeChoices(draw,body);renderWinner(draw,body);
+    if(draw.estado==='cerrado'&&!draw.ganador)body.append(element('div','portal-raffle-wait','🎡 La participación cerró. Muy pronto giraremos la ruleta.'));
+    card.append(header,body);return card;
+  }
+
+  function renderRaffles(){
+    const panel=document.getElementById('portal-panel-sorteos');if(!panel)return;
+    panel.querySelectorAll('.portal-loyalty,.portal-raffle-list,.portal-empty').forEach(node=>node.remove());
+    if(!state.sorteosData){
+      panel.append(emptyState(state.sorteosError?'Sorteos no disponibles':'Cargando sus boletos…',state.sorteosError?' Intente nuevamente más tarde.':' Estamos buscando sus números.'));
+      return;
+    }
+    renderGoldSummary(panel);
+    const draws=Array.isArray(state.sorteosData.sorteos)?state.sorteosData.sorteos:[];
+    if(!draws.length){panel.append(emptyState('No hay sorteos activos',' Cuando publiquemos el próximo, sus boletos aparecerán aquí automáticamente.'));return;}
+    const list=element('div','portal-raffle-list');draws.forEach(draw=>list.append(raffleCard(draw)));panel.append(list);
+  }
+
+  function closePrizeChooser(){document.getElementById('portalPrizeChooser')?.remove();}
+
+  function openPrizeChooser(draw){
+    closePrizeChooser();
+    const modal=element('div','portal-prize-modal');modal.id='portalPrizeChooser';
+    const sheet=element('section','portal-prize-sheet');
+    const top=element('header');
+    const heading=element('div');heading.append(element('small','','PREMIO DEL GANADOR'),element('h3','','Elegir mi premio'));
+    const close=element('button','portal-prize-close','×');close.type='button';close.setAttribute('aria-label','Cerrar');close.addEventListener('click',closePrizeChooser);top.append(heading,close);
+    sheet.append(top,element('p','portal-prize-intro','Elige una opción. Después de confirmarla, no podrá cambiarse.'));
+    const choices=element('div','portal-prize-choices');let selected='';
+    const confirmButton=element('button','portal-prize-confirm','Confirmar mi premio');confirmButton.type='button';confirmButton.disabled=true;
+    (draw.premios||[]).forEach(prize=>{
+      const button=element('button','portal-prize-option');button.type='button';button.dataset.prizeId=prize.id;
+      button.append(element('span','',rafflePrizeIcon(prize.tipo)),element('b','',prize.nombre||'Premio digital'),element('small','',prize.descripcion||'Premio disponible para elegir'));
+      button.addEventListener('click',()=>{
+        selected=prize.id;choices.querySelectorAll('.portal-prize-option').forEach(item=>item.classList.toggle('selected',item===button));confirmButton.disabled=false;
+      });choices.append(button);
+    });
+    const statusLine=element('div','portal-prize-status','');
+    confirmButton.addEventListener('click',async()=>{
+      const prize=(draw.premios||[]).find(item=>item.id===selected);if(!prize)return;
+      if(!window.confirm(`¿Confirmas “${prize.nombre}” como tu premio? Esta elección no se puede cambiar.`))return;
+      confirmButton.disabled=true;statusLine.textContent='Confirmando tu premio…';
+      try{
+        const response=await fetch('/api/sorteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'elegir_premio',token:tokenFromLocation(),sorteoId:draw.id,premioId:selected})});
+        const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'No se pudo guardar la elección.');
+        closePrizeChooser();showToast('¡Premio elegido correctamente!');await loadRaffles(true);selectPanel('sorteos',false);
+      }catch(error){statusLine.textContent=error.message||'No se pudo confirmar.';confirmButton.disabled=false;}
+    });
+    sheet.append(choices,statusLine,confirmButton);modal.append(sheet);modal.addEventListener('click',event=>{if(event.target===modal)closePrizeChooser();});document.body.append(modal);
+  }
+
   function enhance(){
     const stage=document.getElementById('stage');
     if(!stage||stage.dataset.portalEnhanced==='1')return;
@@ -347,25 +507,28 @@
     const nav=element('nav','portal-categories');nav.role='tablist';nav.setAttribute('aria-label','Categorías de su portal');
     nav.append(
       categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
-      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas')
+      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
+      categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Vea sus boletos y elija si gana')
     );
     if(state.paymentAllowed){
       nav.append(categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera'));
     }
-    nav.classList.toggle('two-categories',!state.paymentAllowed);
+    nav.classList.toggle('four-categories',state.paymentAllowed);
 
     const panels=element('main','portal-panels');
     const accounts=element('section','portal-panel portal-account-panel');accounts.id='portal-panel-cuentas';accounts.dataset.panel='cuentas';accounts.role='tabpanel';
     accounts.append(panelTitle(PORTAL_ICONS.cuentas,'Mis cuentas activas',`(${count} acceso${count===1?'':'s'})`),accessList);
     const promos=element('section','portal-panel');promos.id='portal-panel-promociones';promos.dataset.panel='promociones';promos.role='tabpanel';promos.hidden=true;
     promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
+    const raffles=element('section','portal-panel');raffles.id='portal-panel-sorteos';raffles.dataset.panel='sorteos';raffles.role='tabpanel';raffles.hidden=true;
+    raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Sus compras, renovaciones y beneficios Oro se convierten en boletos.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
-    panels.append(accounts,promos);
+    panels.append(accounts,promos,raffles);
     if(state.paymentAllowed)panels.append(payments);
 
     stage.replaceChildren(brand,intro,nav,panels);
-    state.enhanced=true;syncPaymentVisibility();renderPromotions();renderPayments();selectPanel('cuentas',false);
+    state.enhanced=true;syncPaymentVisibility();renderPromotions();renderPayments();renderRaffles();selectPanel('cuentas',false);
   }
 
   async function loadPortal(){
@@ -381,6 +544,19 @@
     syncPaymentVisibility();renderPromotions();renderPayments();
   }
 
+  async function loadRaffles(force=false){
+    const token=tokenFromLocation();
+    if(!token){state.sorteosError=true;renderRaffles();return;}
+    if(force){state.sorteosData=null;state.sorteosError=false;renderRaffles();}
+    try{
+      const response=await fetch(`/api/sorteos?token=${encodeURIComponent(token)}&_=${Date.now()}`,{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok||!data.ok)throw new Error(data.error||'No se pudieron cargar los sorteos.');
+      state.sorteosData=data;state.sorteosError=false;
+    }catch(_){state.sorteosError=true;}
+    renderRaffles();
+  }
+
   const stage=document.getElementById('stage');
   if(stage){
     const observer=new MutationObserver(()=>{
@@ -391,4 +567,5 @@
     enhance();
   }
   loadPortal();
+  loadRaffles();
 })();

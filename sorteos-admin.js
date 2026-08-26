@@ -1,0 +1,343 @@
+(function sublichatSorteosAdmin(){
+  'use strict';
+
+  const API='/api/sorteos';
+  const state={
+    loaded:false,loading:false,tab:'sorteos',sorteos:[],premios:[],entregas:[],participantes:[],
+    permisos:{alcance:'todos'}
+  };
+  const TIPO_PREMIO={
+    perfil:['📺','Perfil de streaming'],descuento_porcentaje:['％','Descuento de renovación'],
+    descuento_fijo:['🏷️','Descuento fijo'],cine:['🎬','Boleto de cine'],recarga:['📱','Recarga telefónica'],
+    dias_extra:['🗓️','Días extra de servicio'],personalizado:['✨','Premio digital personalizado']
+  };
+  const CATEGORIAS={general:'Todos los clientes',compras:'Compras nuevas',renovaciones:'Renovaciones',oro:'Club Oro'};
+  const ESTADOS={borrador:'Borrador',activo:'Activo',cerrado:'Participación cerrada',finalizado:'Finalizado'};
+  const ALCANCES={sublicuentas:'Sublicuentas',relojes:'Relojes',ambos:'Ambos negocios'};
+  const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[char]));
+  const host=()=>document.getElementById('rbac-sorteos');
+  const byId=id=>document.getElementById(id);
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+  function dateObject(value){
+    if(!value)return null;
+    if(value instanceof Date)return value;
+    if(typeof value?.toDate==='function')return value.toDate();
+    if(Number.isFinite(Number(value?._seconds)))return new Date(Number(value._seconds)*1000);
+    if(Number.isFinite(Number(value?.seconds)))return new Date(Number(value.seconds)*1000);
+    const parsed=new Date(value);return Number.isNaN(parsed.getTime())?null:parsed;
+  }
+  function dateText(value){
+    const date=dateObject(value);return date?date.toLocaleString('es-HN',{dateStyle:'medium',timeStyle:'short'}):'—';
+  }
+  function localInput(value){
+    const date=dateObject(value);if(!date)return '';
+    const shifted=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+    return shifted.toISOString().slice(0,16);
+  }
+  function defaultLocal(days=0){
+    const date=new Date(Date.now()+days*86400000);date.setMinutes(Math.ceil(date.getMinutes()/5)*5,0,0);
+    return localInput(date);
+  }
+  function prizeLabel(prize){
+    const type=TIPO_PREMIO[prize?.tipo]||TIPO_PREMIO.personalizado;
+    if(prize?.tipo==='descuento_porcentaje'&&prize.valor)return `${prize.valor}% de descuento`;
+    if(prize?.tipo==='descuento_fijo'&&prize.valor)return `L ${Number(prize.valor).toLocaleString('es-HN')} de descuento`;
+    if(prize?.tipo==='dias_extra'&&prize.valor)return `${prize.valor} días extra`;
+    if(prize?.tipo==='perfil'&&prize.valor)return `${prize.valor} mes${Number(prize.valor)===1?'':'es'} de ${prize.plataforma||'streaming'}`;
+    return type[1];
+  }
+  function stockText(prize){
+    if(prize.entregaModo==='codigo')return `${Number(prize.codigosDisponibles)||0} código(s)`;
+    if(prize.entregaModo==='cupon')return 'Cupón automático';
+    const free=Math.max(0,(Number(prize.stock)||0)-(Number(prize.reservados)||0)-(Number(prize.entregados)||0));
+    return `${free} disponible${free===1?'':'s'}`;
+  }
+  async function api(payload){
+    const response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+    const text=await response.text();let data={};
+    try{data=text?JSON.parse(text):{};}catch(_){data={ok:false,error:text||'Respuesta inválida.'};}
+    if(!response.ok||!data.ok)throw new Error(data.error||`Error HTTP ${response.status}`);
+    return data;
+  }
+  function status(message,type=''){
+    const element=byId('srStatus');if(!element)return;
+    element.textContent=message||'';element.className=`sr-status${type?` ${type}`:''}`;
+  }
+  function closeModal(){const modal=byId('srModal');if(modal){modal.hidden=true;modal.innerHTML='';}}
+
+  function shell(){
+    const root=host();if(!root||root.dataset.sorteosReady==='1')return;
+    root.dataset.sorteosReady='1';
+    root.innerHTML=`
+      <div class="sr-admin">
+        <section class="sr-hero">
+          <div class="sr-hero-gift" aria-hidden="true"><span>🎁</span><i>★</i></div>
+          <div class="sr-hero-copy"><small>FIDELIDAD QUE SE SIENTE</small><h3>Sorteos y premios</h3><p>Cada compra y renovación puede convertirse en una oportunidad real de ganar.</p></div>
+          <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
+            <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+          </div>
+        </section>
+        <section class="sr-metrics" id="srMetrics"></section>
+        <nav class="sr-tabs" aria-label="Administración de sorteos">
+          <button type="button" class="sr-tab on" data-sr-tab="sorteos">🎟️ Sorteos</button>
+          <button type="button" class="sr-tab" data-sr-tab="premios">🎁 Premios digitales</button>
+          <button type="button" class="sr-tab" data-sr-tab="ganadores">🏆 Ganadores</button>
+        </nav>
+        <section id="srBody"><div class="sr-empty">Cargando sorteos…</div></section>
+        <div class="sr-status" id="srStatus" aria-live="polite"></div>
+      </div>
+      <div class="sr-modal" id="srModal" hidden></div>`;
+    const modal=root.querySelector('#srModal');
+    if(modal&&document.body&&modal.parentElement!==document.body)document.body.appendChild(modal);
+    root.querySelectorAll('[data-sr-tab]').forEach(button=>button.addEventListener('click',()=>{
+      state.tab=button.dataset.srTab;
+      root.querySelectorAll('[data-sr-tab]').forEach(item=>item.classList.toggle('on',item===button));
+      render();status('');
+    }));
+  }
+
+  async function load(force=false){
+    if(state.loading||(state.loaded&&!force))return;
+    state.loading=true;status('Actualizando sorteos…');
+    try{
+      const data=await api({accion:'cargar'});
+      state.sorteos=Array.isArray(data.sorteos)?data.sorteos:[];
+      state.premios=Array.isArray(data.premios)?data.premios:[];
+      state.entregas=Array.isArray(data.entregas)?data.entregas:[];
+      state.participantes=Array.isArray(data.participantes)?data.participantes:[];
+      state.permisos=data.permisos||{alcance:'todos'};state.loaded=true;
+      render();status(state.permisos.alcance==='relojes'?'Mostrando únicamente sorteos y premios de Relojes.':'Sorteos actualizados.','good');
+    }catch(error){
+      const body=byId('srBody');if(body)body.innerHTML=`<div class="sr-empty"><b>No se pudo cargar el módulo.</b><br>${esc(error.message)}</div>`;
+      status(error.message,'bad');
+    }finally{state.loading=false;}
+  }
+
+  function renderMetrics(){
+    const target=byId('srMetrics');if(!target)return;
+    const active=state.sorteos.filter(item=>item.estado==='activo').length;
+    const tickets=state.sorteos.reduce((sum,item)=>sum+Number(item.totalBoletos||0),0);
+    const pending=state.sorteos.filter(item=>item.ganador&&!state.entregas.some(delivery=>String(delivery.sorteoId)===String(item.id))) .length+
+      state.entregas.filter(item=>!['entregado','listo'].includes(item.estado)).length;
+    target.innerHTML=`
+      <article><span class="sr-metric-icon red">🎟️</span><div><b>${tickets.toLocaleString('es-HN')}</b><small>boletos emitidos</small></div></article>
+      <article><span class="sr-metric-icon blue">◉</span><div><b>${active}</b><small>sorteos activos</small></div></article>
+      <article><span class="sr-metric-icon gold">🎁</span><div><b>${state.premios.filter(item=>item.activo!==false).length}</b><small>premios disponibles</small></div></article>
+      <article><span class="sr-metric-icon green">✓</span><div><b>${pending}</b><small>elecciones pendientes</small></div></article>`;
+  }
+  function render(){
+    renderMetrics();
+    if(state.tab==='premios')renderPrizes();
+    else if(state.tab==='ganadores')renderWinners();
+    else renderDraws();
+  }
+
+  function drawPrizeNames(draw){
+    return (draw.premioIds||[]).map(id=>state.premios.find(item=>item.id===id)?.nombre).filter(Boolean);
+  }
+  function drawCard(draw){
+    const winner=draw.ganador;
+    const prizes=drawPrizeNames(draw);
+    const canEdit=!winner&&['borrador','activo'].includes(draw.estado);
+    const canClose=!winner&&draw.estado==='activo';
+    const canSpin=!winner&&draw.estado==='cerrado';
+    return `<article class="sr-draw-card" style="--sr-accent:${esc(draw.color||'#E2231A')}">
+      <header><div><span class="sr-state ${esc(draw.estado||'borrador')}">${esc(ESTADOS[draw.estado]||draw.estado)}</span><span class="sr-scope">${esc(ALCANCES[draw.alcance]||draw.alcance)}</span></div><b class="sr-ticket-total">${Number(draw.totalBoletos)||0} <small>boletos</small></b></header>
+      <h4>${esc(draw.titulo||'Sorteo')}</h4><p>${esc(draw.descripcion||'Los clientes participan automáticamente con sus compras y renovaciones.')}</p>
+      <div class="sr-draw-meta"><span>◎ ${esc(CATEGORIAS[draw.categoria]||draw.categoria)}</span><span>⌛ ${dateText(draw.fechaFin)}</span></div>
+      <div class="sr-prize-pills">${prizes.map(name=>`<span>🎁 ${esc(name)}</span>`).join('')||'<span>Sin premios visibles</span>'}</div>
+      ${winner?`<div class="sr-winner-mini"><span>🏆</span><div><small>GANADOR</small><b>${esc(winner.clienteNombre||'Cliente')}</b><em>${esc(winner.codigo||'')}</em></div></div>`:''}
+      <footer>
+        <button type="button" class="sr-btn ghost" data-sr-tickets="${esc(draw.id)}">Ver boletos</button>
+        ${canEdit?`<button type="button" class="sr-btn ghost" data-sr-edit-draw="${esc(draw.id)}">Editar</button>`:''}
+        ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
+        ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
+      </footer>
+    </article>`;
+  }
+  function renderDraws(){
+    const body=byId('srBody');if(!body)return;
+    body.innerHTML=`<div class="sr-toolbar"><div><b>Campañas de premios</b><span>El ganador elige uno de 2 a 5 premios digitales.</span></div><button type="button" class="sr-btn primary" id="srNewDraw">＋ Nuevo sorteo</button></div>
+      <div class="sr-draw-grid">${state.sorteos.map(drawCard).join('')||'<div class="sr-empty"><b>Todavía no hay sorteos.</b><br>Cree primero dos premios y después publique su primera campaña.</div>'}</div>`;
+    byId('srNewDraw')?.addEventListener('click',()=>openDraw(''));
+    body.querySelectorAll('[data-sr-edit-draw]').forEach(button=>button.addEventListener('click',()=>openDraw(button.dataset.srEditDraw)));
+    body.querySelectorAll('[data-sr-close]').forEach(button=>button.addEventListener('click',()=>closeDraw(button.dataset.srClose)));
+    body.querySelectorAll('[data-sr-spin]').forEach(button=>button.addEventListener('click',()=>openWheel(button.dataset.srSpin)));
+    body.querySelectorAll('[data-sr-tickets]').forEach(button=>button.addEventListener('click',()=>openTickets(button.dataset.srTickets)));
+  }
+
+  function prizeCard(prize){
+    const type=TIPO_PREMIO[prize.tipo]||TIPO_PREMIO.personalizado;
+    return `<article class="sr-prize-card" style="--sr-prize:${esc(prize.color||'#E2231A')}">
+      <div class="sr-prize-icon">${type[0]}</div><div class="sr-prize-copy"><div><span class="sr-state ${prize.activo!==false?'activo':'borrador'}">${prize.activo!==false?'Disponible':'Oculto'}</span><span class="sr-scope">${esc(prize.ownerVendor==='relojes'?'Relojes':'Sublicuentas')}</span></div>
+      <h4>${esc(prize.nombre)}</h4><p>${esc(prize.descripcion||prizeLabel(prize))}</p><small>${esc(stockText(prize))} · ${esc(type[1])}</small></div>
+      <button type="button" class="sr-btn ghost" data-sr-edit-prize="${esc(prize.id)}">Editar</button>
+    </article>`;
+  }
+  function renderPrizes(){
+    const body=byId('srBody');if(!body)return;
+    body.innerHTML=`<div class="sr-toolbar"><div><b>Catálogo de premios digitales</b><span>Perfiles, descuentos, cine, recargas, días extra o una opción personalizada.</span></div><button type="button" class="sr-btn primary" id="srNewPrize">＋ Nuevo premio</button></div>
+      <div class="sr-prize-grid">${state.premios.map(prizeCard).join('')||'<div class="sr-empty"><b>No hay premios todavía.</b><br>Agregue al menos dos para habilitar “Elegir mi premio”.</div>'}</div>`;
+    byId('srNewPrize')?.addEventListener('click',()=>openPrize(''));
+    body.querySelectorAll('[data-sr-edit-prize]').forEach(button=>button.addEventListener('click',()=>openPrize(button.dataset.srEditPrize)));
+  }
+
+  function deliveryFor(draw){return state.entregas.find(item=>String(item.sorteoId||'')===String(draw.id||''));}
+  function renderWinners(){
+    const body=byId('srBody');if(!body)return;
+    const draws=state.sorteos.filter(item=>item.ganador);
+    body.innerHTML=`<div class="sr-toolbar"><div><b>Ganadores y entregas</b><span>El cliente elige su premio desde su URL; aquí se completa la entrega manual.</span></div><button type="button" class="sr-btn ghost" id="srRefresh">↻ Actualizar</button></div>
+      <div class="sr-winner-list">${draws.map(draw=>{
+        const winner=draw.ganador||{},delivery=deliveryFor(draw);
+        const stateLabel=!delivery?'Esperando elección':(delivery.estado==='entregado'?'Entregado':delivery.estado==='listo'?'Código listo':'Preparar entrega');
+        return `<article class="sr-winner-row"><span class="sr-winner-crown">🏆</span><div class="sr-winner-person"><small>${esc(draw.titulo)}</small><b>${esc(winner.clienteNombre||'Cliente')}</b><span>${esc(winner.telefono||'Sin teléfono')} · ${esc(winner.codigo||'')}</span></div><div class="sr-winner-choice"><small>PREMIO ELEGIDO</small><b>${esc(delivery?.premioNombre||'Aún no ha elegido')}</b><span class="sr-delivery-state ${esc(delivery?.estado||'espera')}">${esc(stateLabel)}</span></div>${delivery&&delivery.estado!=='entregado'?`<button type="button" class="sr-btn primary" data-sr-deliver="${esc(delivery.id)}">Marcar entregado</button>`:''}</article>`;
+      }).join('')||'<div class="sr-empty"><b>Aún no hay ganadores.</b><br>Cuando gire una ruleta, el resultado aparecerá aquí.</div>'}</div>`;
+    byId('srRefresh')?.addEventListener('click',()=>load(true));
+    body.querySelectorAll('[data-sr-deliver]').forEach(button=>button.addEventListener('click',()=>markDelivered(button.dataset.srDeliver)));
+  }
+
+  function typeOptions(selected){return Object.entries(TIPO_PREMIO).map(([value,item])=>`<option value="${value}" ${value===selected?'selected':''}>${item[0]} ${esc(item[1])}</option>`).join('');}
+  function openPrize(id){
+    const current=state.premios.find(item=>item.id===id);
+    const prize=current?{...current}:{nombre:'',descripcion:'',tipo:'perfil',valor:1,unidad:'mes',plataforma:'',entregaModo:'manual',instrucciones:'',stock:1,activo:true,color:'#E2231A',ownerVendor:state.permisos.alcance==='relojes'?'relojes':'sublicuentas'};
+    const modal=byId('srModal');if(!modal)return;modal.hidden=false;
+    modal.innerHTML=`<form class="sr-sheet" id="srPrizeForm"><div class="sr-modal-head"><div><small>PREMIO DIGITAL</small><h3>${current?'Editar premio':'Nuevo premio'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
+      <div class="sr-form">
+        <label class="sr-field wide">Nombre del premio<input id="srPrizeName" maxlength="120" required value="${esc(prize.nombre)}" placeholder="Ej. 1 mes de Netflix"></label>
+        <label class="sr-field">Tipo<select id="srPrizeType">${typeOptions(prize.tipo)}</select></label>
+        ${state.permisos.alcance==='todos'?`<label class="sr-field">Lo administra<select id="srPrizeOwner"><option value="sublicuentas" ${prize.ownerVendor!=='relojes'?'selected':''}>Sublicuentas</option><option value="relojes" ${prize.ownerVendor==='relojes'?'selected':''}>Relojes</option></select></label>`:''}
+        <label class="sr-field">Valor<input id="srPrizeValue" type="number" min="0" step="1" value="${Number(prize.valor)||0}"></label>
+        <label class="sr-field">Unidad<input id="srPrizeUnit" maxlength="40" value="${esc(prize.unidad||'')}" placeholder="mes, %, Lps., días"></label>
+        <label class="sr-field wide">Plataforma o proveedor<input id="srPrizePlatform" maxlength="100" value="${esc(prize.plataforma||'')}" placeholder="Netflix, Cinemark, Tigo…"></label>
+        <label class="sr-field wide">Descripción<textarea id="srPrizeDesc" maxlength="500" placeholder="Qué recibirá el ganador">${esc(prize.descripcion||'')}</textarea></label>
+        <label class="sr-field">Forma de entrega<select id="srPrizeDelivery"><option value="manual" ${prize.entregaModo==='manual'?'selected':''}>Preparación manual</option><option value="codigo" ${prize.entregaModo==='codigo'?'selected':''}>Código / QR digital</option><option value="cupon" ${prize.entregaModo==='cupon'?'selected':''}>Cupón automático</option></select></label>
+        <label class="sr-field">Existencias manuales<input id="srPrizeStock" type="number" min="0" max="9999" value="${Number(prize.stock)||0}"></label>
+        <label class="sr-field wide">Nuevos códigos digitales · uno por línea<textarea id="srPrizeCodes" placeholder="CINE-ABC-123&#10;CINE-XYZ-456"></textarea><small>${current&&prize.entregaModo==='codigo'?`Ya hay ${Number(prize.codigosDisponibles)||0} código(s) guardados. Los nuevos se agregarán sin mostrarlos aquí.`:'Para boletos de cine u otros códigos virtuales.'}</small></label>
+        <label class="sr-field wide">Instrucciones para el ganador<textarea id="srPrizeInstructions" maxlength="500" placeholder="Cómo usar o reclamar el premio">${esc(prize.instrucciones||'')}</textarea></label>
+        <label class="sr-field color">Color<input id="srPrizeColor" type="color" value="${esc(prize.color||'#E2231A')}"></label>
+        <label class="sr-switch"><input id="srPrizeActive" type="checkbox" ${prize.activo!==false?'checked':''}><span></span> Premio disponible</label>
+      </div><div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srPrizeCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar premio</button></div></form>`;
+    modal.querySelector('.sr-close').onclick=closeModal;byId('srPrizeCancel').onclick=closeModal;
+    byId('srPrizeType').addEventListener('change',event=>{
+      const presets={perfil:['1','mes','manual'],descuento_porcentaje:['10','%','cupon'],descuento_fijo:['50','Lps.','cupon'],cine:['1','boleto','codigo'],recarga:['100','Lps.','manual'],dias_extra:['7','días','manual'],personalizado:['1','','manual']};
+      const item=presets[event.target.value];if(!item)return;
+      byId('srPrizeValue').value=item[0];byId('srPrizeUnit').value=item[1];byId('srPrizeDelivery').value=item[2];
+    });
+    byId('srPrizeForm').addEventListener('submit',async event=>{
+      event.preventDefault();const button=event.submitter||event.currentTarget.querySelector('[type="submit"]');if(button)button.disabled=true;status('Guardando premio…');
+      const payload={
+        nombre:byId('srPrizeName').value.trim(),tipo:byId('srPrizeType').value,valor:Number(byId('srPrizeValue').value)||0,
+        unidad:byId('srPrizeUnit').value.trim(),plataforma:byId('srPrizePlatform').value.trim(),descripcion:byId('srPrizeDesc').value.trim(),
+        entregaModo:byId('srPrizeDelivery').value,stock:Number(byId('srPrizeStock').value)||0,
+        codigos:byId('srPrizeCodes').value.split(/\r?\n/).map(item=>item.trim()).filter(Boolean),
+        instrucciones:byId('srPrizeInstructions').value.trim(),color:byId('srPrizeColor').value,activo:byId('srPrizeActive').checked,
+        ownerVendor:byId('srPrizeOwner')?.value||'relojes'
+      };
+      try{await api({accion:'guardar_premio',id:current?.id||'',premio:payload});closeModal();await load(true);state.tab='premios';render();status('Premio guardado y disponible para futuros sorteos.','good');}
+      catch(error){status(error.message,'bad');if(button)button.disabled=false;}
+    });
+  }
+
+  function scopeOptions(selected){
+    if(state.permisos.alcance==='relojes')return '<option value="relojes">Relojes</option>';
+    return Object.entries(ALCANCES).map(([value,label])=>`<option value="${value}" ${value===selected?'selected':''}>${label}</option>`).join('');
+  }
+  function openDraw(id){
+    const current=state.sorteos.find(item=>item.id===id);
+    if(!current&&state.premios.filter(item=>item.activo!==false).length<2){state.tab='premios';syncTab();render();status('Cree al menos dos premios antes de publicar un sorteo.','bad');return;}
+    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30},color:'#E2231A'};
+    const rules={compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30,...(draw.reglas||{})};
+    const modal=byId('srModal');if(!modal)return;modal.hidden=false;
+    modal.innerHTML=`<form class="sr-sheet wide" id="srDrawForm"><div class="sr-modal-head"><div><small>CAMPAÑA DE FIDELIDAD</small><h3>${current?'Editar sorteo':'Nuevo sorteo'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
+      <div class="sr-form">
+        <label class="sr-field wide">Nombre del sorteo<input id="srDrawTitle" maxlength="140" required value="${esc(draw.titulo)}" placeholder="Ej. Gran sorteo de septiembre"></label>
+        <label class="sr-field wide">Mensaje para los clientes<textarea id="srDrawDesc" maxlength="600" placeholder="Renueva a tiempo y gana más oportunidades…">${esc(draw.descripcion||'')}</textarea></label>
+        <label class="sr-field">Categoría<select id="srDrawCategory">${Object.entries(CATEGORIAS).map(([value,label])=>`<option value="${value}" ${value===draw.categoria?'selected':''}>${esc(label)}</option>`).join('')}</select></label>
+        <label class="sr-field">Clientes de<select id="srDrawScope">${scopeOptions(draw.alcance)}</select></label>
+        <label class="sr-field">Inicio<input id="srDrawStart" type="datetime-local" required value="${esc(localInput(draw.fechaInicio)||draw.fechaInicio||defaultLocal())}"></label>
+        <label class="sr-field">Cierre<input id="srDrawEnd" type="datetime-local" required value="${esc(localInput(draw.fechaFin)||draw.fechaFin||defaultLocal(7))}"></label>
+        <label class="sr-field">Publicación<select id="srDrawState"><option value="activo" ${draw.estado==='activo'?'selected':''}>Publicar ahora</option><option value="borrador" ${draw.estado==='borrador'?'selected':''}>Guardar borrador</option></select></label>
+        <label class="sr-field color">Color<input id="srDrawColor" type="color" value="${esc(draw.color||'#E2231A')}"></label>
+        <div class="sr-form-section"><b>Boletos automáticos</b><span>La misma compra o renovación nunca se cuenta dos veces.</span></div>
+        <label class="sr-field">Compra nueva<input id="srRuleBuy" type="number" min="0" max="20" value="${Number(rules.compra)}"></label>
+        <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" min="0" max="20" value="${Number(rules.renovacion)}"></label>
+        <label class="sr-field">Bono Cliente Oro<input id="srRuleGold" type="number" min="0" max="20" value="${Number(rules.oro)}"></label>
+        <label class="sr-field">Ciclos para ser Oro<input id="srRuleCycles" type="number" min="1" max="60" value="${Number(rules.ciclosOro)}"></label>
+        <label class="sr-field">Máximo por cliente<input id="srRuleLimit" type="number" min="1" max="200" value="${Number(rules.limitePorCliente)}"></label>
+        <div></div>
+        <div class="sr-form-section"><b>Elegir mi premio</b><span>Seleccione de 2 a 5 opciones para que el ganador escoja una.</span></div>
+        <div class="sr-prize-picker wide">${state.premios.filter(item=>item.activo!==false||(draw.premioIds||[]).includes(item.id)).map(prize=>`<label><input type="checkbox" data-sr-prize-choice value="${esc(prize.id)}" ${(draw.premioIds||[]).includes(prize.id)?'checked':''}><span class="sr-picker-icon">${(TIPO_PREMIO[prize.tipo]||TIPO_PREMIO.personalizado)[0]}</span><b>${esc(prize.nombre)}</b><small>${esc(stockText(prize))}</small></label>`).join('')}</div>
+      </div><div class="sr-modal-actions"><span id="srDrawHint">Elija entre 2 y 5 premios.</span><button type="button" class="sr-btn ghost" id="srDrawCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar sorteo</button></div></form>`;
+    modal.querySelector('.sr-close').onclick=closeModal;byId('srDrawCancel').onclick=closeModal;
+    const choices=[...modal.querySelectorAll('[data-sr-prize-choice]')];
+    choices.forEach(choice=>choice.addEventListener('change',()=>{
+      const selected=choices.filter(item=>item.checked);
+      if(selected.length>5){choice.checked=false;status('Puede ofrecer un máximo de cinco premios.','bad');}
+      byId('srDrawHint').textContent=`${choices.filter(item=>item.checked).length} premio(s) seleccionado(s)`;
+    }));
+    byId('srDrawForm').addEventListener('submit',async event=>{
+      event.preventDefault();const selected=choices.filter(item=>item.checked).map(item=>item.value);
+      if(selected.length<2||selected.length>5){status('Seleccione entre 2 y 5 premios para el ganador.','bad');return;}
+      const button=event.submitter||event.currentTarget.querySelector('[type="submit"]');if(button)button.disabled=true;status('Guardando sorteo…');
+      const startValue=byId('srDrawStart').value,endValue=byId('srDrawEnd').value;
+      const payload={titulo:byId('srDrawTitle').value.trim(),descripcion:byId('srDrawDesc').value.trim(),categoria:byId('srDrawCategory').value,
+        alcance:byId('srDrawScope').value,estado:byId('srDrawState').value,fechaInicio:startValue?new Date(startValue).toISOString():'',fechaFin:endValue?new Date(endValue).toISOString():'',
+        color:byId('srDrawColor').value,premioIds:selected,reglas:{compra:Number(byId('srRuleBuy').value),renovacion:Number(byId('srRuleRenew').value),
+          oro:Number(byId('srRuleGold').value),ciclosOro:Number(byId('srRuleCycles').value),limitePorCliente:Number(byId('srRuleLimit').value)}};
+      try{await api({accion:'guardar_sorteo',id:current?.id||'',sorteo:payload});closeModal();await load(true);state.tab='sorteos';render();status('Sorteo guardado. Los próximos eventos válidos generarán boletos automáticamente.','good');}
+      catch(error){status(error.message,'bad');if(button)button.disabled=false;}
+    });
+  }
+
+  function syncTab(){
+    host()?.querySelectorAll('[data-sr-tab]').forEach(item=>item.classList.toggle('on',item.dataset.srTab===state.tab));
+  }
+  async function closeDraw(id){
+    const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
+    if(!confirm(`¿Cerrar la participación de “${draw.titulo}”? Después podrá girar la ruleta.`))return;
+    status('Cerrando participación…');
+    try{await api({accion:'cerrar_sorteo',id});await load(true);status('Participación cerrada. La ruleta ya está lista.','good');}
+    catch(error){status(error.message,'bad');}
+  }
+  function openWheel(id){
+    const draw=state.sorteos.find(item=>item.id===id),modal=byId('srModal');if(!draw||!modal)return;
+    modal.hidden=false;modal.innerHTML=`<div class="sr-sheet sr-wheel-sheet"><div class="sr-modal-head"><div><small>SORTEO AUDITABLE</small><h3>${esc(draw.titulo)}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
+      <p class="sr-wheel-note">Participan ${Number(draw.totalBoletos)||0} boletos. La selección aleatoria se realiza una sola vez y queda guardada.</p>
+      <div class="sr-wheel-stage"><span class="sr-wheel-pointer">▼</span><div class="sr-wheel" id="srWheel"><div><b>🎟️</b><span>${Number(draw.totalBoletos)||0}<small>boletos</small></span></div></div></div>
+      <div class="sr-wheel-result" id="srWheelResult"><span>Todo listo para conocer al ganador.</span></div>
+      <div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srWheelCancel">Cancelar</button><button type="button" class="sr-btn primary pulse" id="srWheelGo">🎡 Girar ahora</button></div></div>`;
+    modal.querySelector('.sr-close').onclick=closeModal;byId('srWheelCancel').onclick=closeModal;
+    byId('srWheelGo').onclick=async event=>{
+      event.currentTarget.disabled=true;byId('srWheelCancel').disabled=true;byId('srWheel').classList.add('spinning');
+      byId('srWheelResult').innerHTML='<span>Mezclando todos los boletos…</span>';status('Realizando sorteo seguro…');
+      try{
+        const [data]=await Promise.all([api({accion:'girar_ruleta',id}),sleep(2600)]);const winner=data.ganador||{};
+        byId('srWheel').classList.remove('spinning');byId('srWheel').classList.add('done');
+        byId('srWheelResult').innerHTML=`<small>🏆 GANADOR</small><b>${esc(winner.clienteNombre||'Cliente')}</b><strong>${esc(winner.codigo||'')}</strong><span>Ahora podrá entrar a su URL y tocar “Elegir mi premio”.</span>`;
+        event.currentTarget.hidden=true;byId('srWheelCancel').disabled=false;byId('srWheelCancel').textContent='Cerrar';await load(true);status('Ganador guardado correctamente.','good');
+      }catch(error){byId('srWheel').classList.remove('spinning');event.currentTarget.disabled=false;byId('srWheelCancel').disabled=false;byId('srWheelResult').innerHTML=`<span>${esc(error.message)}</span>`;status(error.message,'bad');}
+    };
+  }
+  function openTickets(id){
+    const draw=state.sorteos.find(item=>item.id===id),tickets=state.participantes.filter(item=>String(item.sorteoId)===String(id)),modal=byId('srModal');if(!draw||!modal)return;
+    modal.hidden=false;modal.innerHTML=`<div class="sr-sheet wide"><div class="sr-modal-head"><div><small>BOLETOS PARTICIPANTES</small><h3>${esc(draw.titulo)}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
+      <div class="sr-ticket-list">${tickets.map(ticket=>`<article><b>${esc(ticket.codigo)}</b><span>${esc(ticket.clienteNombre||'Cliente')}</span><small>${esc(ticket.tipo==='renovacion'?'Renovación':ticket.tipo==='oro'?'Bono Oro':'Compra nueva')}</small></article>`).join('')||'<div class="sr-empty">No hay boletos emitidos todavía.</div>'}</div>
+      ${Number(draw.totalBoletos)>tickets.length?`<p class="sr-list-note">Mostrando los boletos recientes disponibles en esta vista. Total registrado: ${Number(draw.totalBoletos)}.</p>`:''}<div class="sr-modal-actions"><button type="button" class="sr-btn primary" id="srTicketClose">Cerrar</button></div></div>`;
+    modal.querySelector('.sr-close').onclick=closeModal;byId('srTicketClose').onclick=closeModal;
+  }
+  async function markDelivered(id){
+    if(!confirm('¿Confirma que el premio ya fue entregado al cliente?'))return;
+    status('Registrando entrega…');
+    try{await api({accion:'marcar_entregado',id});await load(true);state.tab='ganadores';render();status('Premio marcado como entregado.','good');}
+    catch(error){status(error.message,'bad');}
+  }
+
+  function init(){shell();if(document.getElementById('screen-sorteos')?.classList.contains('active'))load();}
+  window.SublichatSorteos={open:()=>{shell();load();},reload:()=>load(true)};
+  document.addEventListener('DOMContentLoaded',init);
+  new MutationObserver(()=>{if(document.getElementById('screen-sorteos')?.classList.contains('active')){shell();load();}})
+    .observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class']});
+})();

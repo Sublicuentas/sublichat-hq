@@ -1,0 +1,521 @@
+import admin from "firebase-admin";
+import { randomInt, randomBytes } from "node:crypto";
+import {
+  reglasSorteo, sorteoClean, sorteoNorm, sorteoSafeId
+} from "./sorteos-lib.js";
+
+const PREMIOS_COLLECTION = "premios_digitales";
+const SORTEOS_COLLECTION = "sorteos";
+const BOLETOS_COLLECTION = "sorteo_boletos";
+const ENTREGAS_COLLECTION = "premios_entregas";
+const TIPOS_PREMIO = new Set([
+  "perfil", "descuento_porcentaje", "descuento_fijo", "cine",
+  "recarga", "dias_extra", "personalizado"
+]);
+const ESTADOS_SORTEO = new Set(["borrador", "activo", "cerrado", "finalizado"]);
+const CATEGORIAS = new Set(["general", "compras", "renovaciones", "oro"]);
+const ALCANCES = new Set(["sublicuentas", "relojes", "ambos"]);
+
+function getApp() {
+  if (admin.apps.length) return admin.app();
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+  privateKey = privateKey.replace(/\\n/g, "\n");
+  if (!projectId || !clientEmail || !privateKey) throw new Error("Faltan variables de Firebase.");
+  return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+}
+
+function setHeaders(res) {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "private, no-store, max-age=0, must-revalidate");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+function editorKind(user) {
+  const usuario = sorteoNorm(user && (user.usuario || user.name || ""));
+  if (["sublicuentas", "naara"].includes(usuario)) return "admin";
+  if (["relojes", "libni"].includes(usuario)) return "relojes";
+  return "";
+}
+
+async function requireEditor(req, res) {
+  const auth = sorteoClean(req.headers.authorization || "", 4000);
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) { res.status(401).json({ ok: false, error: "Sesión requerida." }); return null; }
+  try {
+    const user = await admin.auth().verifyIdToken(token);
+    const kind = editorKind(user);
+    if (!kind) { res.status(403).json({ ok: false, error: "Sorteos está disponible únicamente para Sublicuentas y Relojes." }); return null; }
+    return { user, kind, actor: sorteoNorm(user.usuario || user.name || kind) };
+  } catch (_) {
+    res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });
+    return null;
+  }
+}
+
+function iso(value) {
+  const raw = sorteoClean(value, 40);
+  if (!raw) return "";
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function color(value, fallback = "#E2231A") {
+  const text = sorteoClean(value, 7);
+  return /^#[0-9a-f]{6}$/i.test(text) ? text : fallback;
+}
+
+function uniqueIds(values, max = 8) {
+  return [...new Set((Array.isArray(values) ? values : []).map(sorteoSafeId).filter(Boolean))].slice(0, max);
+}
+
+function normalizeCodes(value) {
+  const source = Array.isArray(value) ? value : String(value || "").split(/\r?\n/);
+  return [...new Set(source.map(item => sorteoClean(item, 300)).filter(Boolean))].slice(0, 500);
+}
+
+function normalizePrize(raw = {}, previous = {}) {
+  const tipo = TIPOS_PREMIO.has(sorteoNorm(raw.tipo)) ? sorteoNorm(raw.tipo) : "personalizado";
+  const nombre = sorteoClean(raw.nombre, 120);
+  if (!nombre) throw new Error("Escriba el nombre del premio.");
+  const stock = Math.max(0, Math.min(9999, Math.round(Number(raw.stock != null ? raw.stock : previous.stock) || 0)));
+  const codigosNuevos = normalizeCodes(raw.codigos);
+  const codigosAnteriores = Array.isArray(previous.codigosDisponibles) ? previous.codigosDisponibles.map(item => sorteoClean(item, 300)).filter(Boolean) : [];
+  const codigosDisponibles = raw.reemplazarCodigos === true ? codigosNuevos : [...new Set([...codigosAnteriores, ...codigosNuevos])];
+  const entregaModo = ["manual", "codigo", "cupon"].includes(sorteoNorm(raw.entregaModo))
+    ? sorteoNorm(raw.entregaModo) : (tipo.startsWith("descuento") ? "cupon" : (tipo === "cine" ? "codigo" : "manual"));
+  const activo = raw.activo !== false;
+  const reservados = Math.max(0, Number(previous.reservados) || 0);
+  const entregados = Math.max(0, Number(previous.entregados) || 0);
+  if (activo && entregaModo === "codigo" && !codigosDisponibles.length) throw new Error("Agregue al menos un código digital o deje el premio oculto.");
+  if (activo && entregaModo === "manual" && stock - reservados - entregados <= 0) throw new Error("Agregue existencias o deje el premio oculto.");
+  return {
+    nombre,
+    descripcion: sorteoClean(raw.descripcion, 500),
+    tipo,
+    valor: Math.max(0, Number(raw.valor) || 0),
+    unidad: sorteoClean(raw.unidad, 40),
+    plataforma: sorteoClean(raw.plataforma, 100),
+    entregaModo,
+    instrucciones: sorteoClean(raw.instrucciones, 500),
+    stock: entregaModo === "codigo" ? codigosDisponibles.length : stock,
+    reservados,
+    entregados,
+    codigosDisponibles,
+    activo,
+    color: color(raw.color, previous.color || "#E2231A")
+  };
+}
+
+function normalizeDraw(raw = {}, previous = {}, editor = {}) {
+  const titulo = sorteoClean(raw.titulo, 140);
+  if (!titulo) throw new Error("Escriba el nombre del sorteo.");
+  const premioIds = uniqueIds(raw.premioIds, 5);
+  if (premioIds.length < 2) throw new Error("Seleccione al menos dos premios para que el ganador pueda elegir.");
+  const categoria = CATEGORIAS.has(sorteoNorm(raw.categoria)) ? sorteoNorm(raw.categoria) : "general";
+  let alcance = ALCANCES.has(sorteoNorm(raw.alcance)) ? sorteoNorm(raw.alcance) : "sublicuentas";
+  if (editor.kind === "relojes") alcance = "relojes";
+  const estado = ESTADOS_SORTEO.has(sorteoNorm(raw.estado)) ? sorteoNorm(raw.estado) : "borrador";
+  const fechaInicio = iso(raw.fechaInicio) || new Date().toISOString();
+  const fechaFin = iso(raw.fechaFin);
+  if (!fechaFin) throw new Error("Seleccione la fecha final del sorteo.");
+  if (new Date(fechaFin).getTime() <= new Date(fechaInicio).getTime()) throw new Error("La fecha final debe ser posterior al inicio.");
+  return {
+    titulo,
+    descripcion: sorteoClean(raw.descripcion, 600),
+    categoria,
+    alcance,
+    estado,
+    fechaInicio,
+    fechaFin,
+    premioModo: "elegir",
+    premioIds,
+    reglas: reglasSorteo(raw.reglas || previous.reglas || {}),
+    totalBoletos: Math.max(0, Number(previous.totalBoletos) || 0),
+    ultimoNumero: Math.max(0, Number(previous.ultimoNumero) || 0),
+    ganador: previous.ganador || null,
+    color: color(raw.color, previous.color || "#E2231A")
+  };
+}
+
+function publicPrize(doc) {
+  const data = doc.data ? doc.data() || {} : doc || {};
+  return {
+    id: doc.id || data.id || "",
+    nombre: sorteoClean(data.nombre, 120),
+    descripcion: sorteoClean(data.descripcion, 500),
+    tipo: sorteoNorm(data.tipo),
+    valor: Number(data.valor) || 0,
+    unidad: sorteoClean(data.unidad, 40),
+    plataforma: sorteoClean(data.plataforma, 100),
+    color: color(data.color)
+  };
+}
+
+function prizeAvailable(data = {}) {
+  if (data.activo === false) return false;
+  const mode = sorteoNorm(data.entregaModo);
+  if (mode === "codigo") return Array.isArray(data.codigosDisponibles) && data.codigosDisponibles.length > 0;
+  if (mode === "manual") return (Number(data.stock) || 0) - (Number(data.reservados) || 0) - (Number(data.entregados) || 0) > 0;
+  return true;
+}
+
+function adminPrize(doc) {
+  const data = doc.data() || {};
+  return {
+    ...publicPrize(doc),
+    entregaModo: sorteoNorm(data.entregaModo),
+    instrucciones: sorteoClean(data.instrucciones, 500),
+    stock: Number(data.stock) || 0,
+    reservados: Number(data.reservados) || 0,
+    entregados: Number(data.entregados) || 0,
+    codigosDisponibles: Array.isArray(data.codigosDisponibles) ? data.codigosDisponibles.length : 0,
+    activo: data.activo !== false,
+    ownerVendor: sorteoNorm(data.ownerVendor),
+    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : sorteoClean(data.updatedAt, 50)
+  };
+}
+
+function drawVisibleToEditor(draw, editor) {
+  if (editor.kind === "admin") return true;
+  return sorteoNorm(draw.alcance) === "relojes";
+}
+
+function prizeVisibleToEditor(prize, editor) {
+  if (editor.kind === "admin") return true;
+  return sorteoNorm(prize.ownerVendor) === "relojes";
+}
+
+async function adminLoad(db, editor) {
+  const [drawSnap, prizeSnap, ticketSnap, deliverySnap] = await Promise.all([
+    db.collection(SORTEOS_COLLECTION).limit(150).get(),
+    db.collection(PREMIOS_COLLECTION).limit(300).get(),
+    db.collection(BOLETOS_COLLECTION).orderBy("createdAt", "desc").limit(2000).get(),
+    db.collection(ENTREGAS_COLLECTION).limit(1000).get()
+  ]);
+  const sorteos = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(draw => drawVisibleToEditor(draw, editor));
+  const allowed = new Set(sorteos.map(draw => draw.id));
+  const boletos = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(ticket => allowed.has(String(ticket.sorteoId || "")));
+  const countByDraw = {};
+  boletos.forEach(ticket => { countByDraw[ticket.sorteoId] = (countByDraw[ticket.sorteoId] || 0) + 1; });
+  sorteos.forEach(draw => { draw.totalBoletos = Math.max(Number(draw.totalBoletos) || 0, countByDraw[draw.id] || 0); });
+  sorteos.sort((a, b) => String(b.createdAt || b.fechaInicio || "").localeCompare(String(a.createdAt || a.fechaInicio || "")));
+  const premios = prizeSnap.docs.filter(doc => prizeVisibleToEditor(doc.data() || {}, editor)).map(adminPrize)
+    .sort((a, b) => Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre, "es"));
+  const entregas = deliverySnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(item => allowed.has(String(item.sorteoId || "")))
+    .map(item => ({ ...item, codigo: item.codigo ? "••••••••" : "" }));
+  const participantes = boletos.slice(0, 500).map(ticket => ({
+    id: ticket.id, sorteoId: ticket.sorteoId, codigo: ticket.codigo,
+    clientId: ticket.clientId, clienteNombre: ticket.clienteNombre,
+    telefono: ticket.telefono, tipo: ticket.tipo, createdAt: ticket.createdAt
+  }));
+  return { ok: true, sorteos, premios, entregas, participantes, permisos: { alcance: editor.kind === "relojes" ? "relojes" : "todos" } };
+}
+
+async function resolvePublicClient(db, token) {
+  const safeToken = sorteoClean(token, 90);
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(safeToken)) throw Object.assign(new Error("Enlace inválido."), { status: 400 });
+  const pointer = await db.collection("enlaces").doc(safeToken).get();
+  if (!pointer.exists || (pointer.data() || {}).activo === false) throw Object.assign(new Error("Este enlace ya no está disponible."), { status: 404 });
+  const clientId = sorteoSafeId((pointer.data() || {}).clienteId);
+  const clientSnap = clientId ? await db.collection("clientes").doc(clientId).get() : null;
+  if (!clientSnap || !clientSnap.exists) throw Object.assign(new Error("No se encontró el cliente."), { status: 404 });
+  return { token: safeToken, clientId, cliente: clientSnap.data() || {} };
+}
+
+function scopeMatches(draw, vendor) {
+  const scope = sorteoNorm(draw.alcance);
+  const rawVendor = sorteoNorm(vendor);
+  const normalized = ["relojes", "reloj", "libni"].includes(rawVendor)
+    ? "relojes"
+    : (["sublicuentas", "sublicuenta", "naara"].includes(rawVendor) ? "sublicuentas" : rawVendor);
+  return scope === "ambos" ? ["sublicuentas", "relojes"].includes(normalized) : scope === normalized;
+}
+
+function maskedWinner(winner = {}) {
+  if (!winner || !winner.clientId) return null;
+  const phone = String(winner.telefono || "").replace(/\D/g, "");
+  const first = sorteoClean(winner.clienteNombre, 100).split(" ")[0] || "Cliente";
+  return { nombre: first, telefono: phone ? `****${phone.slice(-4)}` : "", codigo: sorteoClean(winner.codigo, 80) };
+}
+
+async function publicLoad(db, token) {
+  const { clientId, cliente } = await resolvePublicClient(db, token);
+  const [drawSnap, ticketSnap, prizeSnap, deliveriesSnap] = await Promise.all([
+    db.collection(SORTEOS_COLLECTION).limit(150).get(),
+    db.collection(BOLETOS_COLLECTION).where("clientId", "==", clientId).limit(1000).get(),
+    db.collection(PREMIOS_COLLECTION).limit(300).get(),
+    db.collection(ENTREGAS_COLLECTION).where("clientId", "==", clientId).limit(100).get()
+  ]);
+  const vendor = sorteoNorm(cliente.vendedor_norm || cliente.vendedor || "");
+  const now = Date.now();
+  const draws = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(draw => scopeMatches(draw, vendor) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
+  const drawIds = new Set(draws.map(draw => draw.id));
+  const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(ticket => drawIds.has(String(ticket.sorteoId || "")));
+  const premiosMap = new Map(prizeSnap.docs.filter(doc => prizeAvailable(doc.data() || {})).map(doc => [doc.id, publicPrize(doc)]));
+  const entregas = deliveriesSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+  const entregasMap = new Map(entregas.map(item => [String(item.sorteoId || ""), item]));
+  const resultado = draws.map(draw => {
+    const propios = tickets.filter(ticket => String(ticket.sorteoId || "") === draw.id);
+    const winnerSelf = String(draw.ganador?.clientId || "") === clientId;
+    const entrega = winnerSelf ? entregasMap.get(draw.id) || null : null;
+    return {
+      id: draw.id,
+      titulo: sorteoClean(draw.titulo, 140), descripcion: sorteoClean(draw.descripcion, 600),
+      categoria: sorteoNorm(draw.categoria), estado: sorteoNorm(draw.estado),
+      fechaInicio: draw.fechaInicio || "", fechaFin: draw.fechaFin || "",
+      color: color(draw.color), totalBoletos: propios.length,
+      boletos: propios.sort((a, b) => Number(a.numero) - Number(b.numero)).map(ticket => ({
+        codigo: sorteoClean(ticket.codigo, 80), tipo: sorteoNorm(ticket.tipo), origen: sorteoClean(ticket.origen, 80)
+      })),
+      premios: uniqueIds(draw.premioIds, 5).map(id => premiosMap.get(id)).filter(Boolean),
+      ganador: maskedWinner(draw.ganador),
+      ganadorActual: winnerSelf,
+      eleccion: entrega ? {
+        premioId: entrega.premioId || "", premioNombre: entrega.premioNombre || "",
+        estado: entrega.estado || "pendiente", codigo: entrega.codigo || "", cupon: entrega.cupon || "",
+        instrucciones: entrega.instrucciones || ""
+      } : null
+    };
+  }).sort((a, b) => String(b.fechaInicio).localeCompare(String(a.fechaInicio)));
+  const ciclos = Math.max(0, Number(cliente.fidelidadCiclos) || 0);
+  const oro = cliente.clienteOro === true || sorteoNorm(cliente.nivelCliente) === "oro" || ciclos >= 6;
+  return { ok: true, cliente: { clientId, nivel: oro ? "oro" : "regular", ciclos }, sorteos: resultado };
+}
+
+async function choosePrize(db, body) {
+  const { clientId } = await resolvePublicClient(db, body.token);
+  const sorteoId = sorteoSafeId(body.sorteoId);
+  const premioId = sorteoSafeId(body.premioId);
+  if (!sorteoId || !premioId) throw Object.assign(new Error("Selección inválida."), { status: 400 });
+  const drawRef = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
+  const prizeRef = db.collection(PREMIOS_COLLECTION).doc(premioId);
+  const entregaRef = db.collection(ENTREGAS_COLLECTION).doc(`${sorteoId}_${clientId}`);
+  const result = await db.runTransaction(async transaction => {
+    const [drawSnap, prizeSnap, deliverySnap] = await Promise.all([
+      transaction.get(drawRef), transaction.get(prizeRef), transaction.get(entregaRef)
+    ]);
+    if (!drawSnap.exists || String((drawSnap.data() || {}).ganador?.clientId || "") !== clientId) throw Object.assign(new Error("Este cliente no es el ganador del sorteo."), { status: 403 });
+    const draw = drawSnap.data() || {};
+    if (!uniqueIds(draw.premioIds, 5).includes(premioId)) throw new Error("El premio no pertenece a este sorteo.");
+    if (deliverySnap.exists) {
+      const previous = deliverySnap.data() || {};
+      if (String(previous.premioId || "") !== premioId) throw new Error("El premio ya fue elegido y no puede cambiarse.");
+      return previous;
+    }
+    if (!prizeSnap.exists || (prizeSnap.data() || {}).activo === false) throw new Error("Este premio ya no está disponible.");
+    const prize = prizeSnap.data() || {};
+    let codigo = "";
+    let cupon = "";
+    const codes = Array.isArray(prize.codigosDisponibles) ? [...prize.codigosDisponibles] : [];
+    if (prize.entregaModo === "codigo") {
+      if (!codes.length) throw new Error("El código digital se agotó. Contacte a soporte.");
+      codigo = sorteoClean(codes.shift(), 300);
+    } else if (prize.entregaModo === "cupon") {
+      cupon = `SUB-${randomBytes(4).toString("hex").toUpperCase()}`;
+    } else if ((Number(prize.stock) || 0) - (Number(prize.reservados) || 0) - (Number(prize.entregados) || 0) <= 0) {
+      throw new Error("El premio seleccionado se agotó.");
+    }
+    const estado = codigo || cupon ? "listo" : "pendiente";
+    const entrega = {
+      sorteoId, clientId, premioId,
+      premioNombre: sorteoClean(prize.nombre, 120), tipo: sorteoNorm(prize.tipo),
+      valor: Math.max(0, Number(prize.valor) || 0),
+      unidad: sorteoClean(prize.unidad, 40),
+      plataforma: sorteoClean(prize.plataforma, 100),
+      estado, codigo, cupon,
+      instrucciones: sorteoClean(prize.instrucciones, 500),
+      elegidoAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    transaction.set(entregaRef, entrega);
+    transaction.set(prizeRef, {
+      codigosDisponibles: codes,
+      stock: prize.entregaModo === "codigo" ? codes.length : Number(prize.stock) || 0,
+      reservados: estado === "pendiente" ? admin.firestore.FieldValue.increment(1) : Number(prize.reservados) || 0,
+      entregados: estado === "listo" ? admin.firestore.FieldValue.increment(1) : Number(prize.entregados) || 0,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.update(drawRef, {
+      "ganador.premioId": premioId,
+      "ganador.premioNombre": entrega.premioNombre,
+      "ganador.elegidoAt": admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return entrega;
+  });
+  return { ...result, elegidoAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+}
+
+async function savePrize(db, editor, body) {
+  const id = sorteoSafeId(body.id);
+  const ref = id ? db.collection(PREMIOS_COLLECTION).doc(id) : db.collection(PREMIOS_COLLECTION).doc();
+  const snap = id ? await ref.get() : null;
+  const previous = snap?.exists ? snap.data() || {} : {};
+  if (editor.kind === "relojes" && id && sorteoNorm(previous.ownerVendor) !== "relojes") throw Object.assign(new Error("Relojes solo puede editar sus propios premios."), { status: 403 });
+  const prize = normalizePrize(body.premio || {}, previous);
+  const requestedOwner = sorteoNorm(body.premio?.ownerVendor);
+  const ownerVendor = editor.kind === "relojes"
+    ? "relojes"
+    : (["sublicuentas", "relojes"].includes(requestedOwner) ? requestedOwner : sorteoNorm(previous.ownerVendor || "sublicuentas"));
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await ref.set({
+    ...prize,
+    ownerVendor,
+    createdAt: previous.createdAt || now,
+    updatedAt: now,
+    updatedBy: editor.actor
+  }, { merge: false });
+  return { ok: true, id: ref.id };
+}
+
+async function saveDraw(db, editor, body) {
+  const id = sorteoSafeId(body.id);
+  const ref = id ? db.collection(SORTEOS_COLLECTION).doc(id) : db.collection(SORTEOS_COLLECTION).doc();
+  const snap = id ? await ref.get() : null;
+  const previous = snap?.exists ? snap.data() || {} : {};
+  if (previous.ganador) throw new Error("Un sorteo con ganador ya no puede editarse.");
+  if (editor.kind === "relojes" && id && sorteoNorm(previous.alcance) !== "relojes") throw Object.assign(new Error("Relojes solo puede editar sus propios sorteos."), { status: 403 });
+  const draw = normalizeDraw(body.sorteo || {}, previous, editor);
+  const prizeDocs = await Promise.all(draw.premioIds.map(prizeId => db.collection(PREMIOS_COLLECTION).doc(prizeId).get()));
+  if (prizeDocs.some(doc => !doc.exists || !prizeAvailable(doc.data() || {}))) throw new Error("Uno de los premios seleccionados no está disponible o se agotó.");
+  if (editor.kind === "relojes" && prizeDocs.some(doc => sorteoNorm((doc.data() || {}).ownerVendor) !== "relojes")) throw Object.assign(new Error("Relojes solo puede utilizar sus propios premios."), { status: 403 });
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await ref.set({ ...draw, createdAt: previous.createdAt || now, updatedAt: now, updatedBy: editor.actor }, { merge: false });
+  return { ok: true, id: ref.id };
+}
+
+async function closeDraw(db, editor, id) {
+  const ref = db.collection(SORTEOS_COLLECTION).doc(sorteoSafeId(id));
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = snap.data() || {};
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede cerrar este sorteo."), { status: 403 });
+  if (draw.ganador) throw new Error("El sorteo ya tiene ganador.");
+  await ref.set({ estado: "cerrado", cerradoAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return { ok: true, id: ref.id, estado: "cerrado" };
+}
+
+async function spinDraw(db, editor, id) {
+  const sorteoId = sorteoSafeId(id);
+  const ref = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = snap.data() || {};
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede realizar este sorteo."), { status: 403 });
+  if (draw.estado !== "cerrado") throw new Error("Cierre la participación antes de girar la ruleta.");
+  if (draw.ganador) return { ok: true, id: sorteoId, ganador: draw.ganador, repetido: true };
+  const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get();
+  const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(ticket => ticket.activo !== false);
+  if (!tickets.length) throw new Error("Este sorteo no tiene boletos participantes.");
+  const chosen = tickets[randomInt(tickets.length)];
+  const ganador = {
+    ticketId: chosen.id,
+    codigo: chosen.codigo,
+    clientId: chosen.clientId,
+    clienteNombre: chosen.clienteNombre,
+    telefono: chosen.telefono,
+    vendedor: chosen.vendedor,
+    tipo: chosen.tipo,
+    premioId: "",
+    premioNombre: ""
+  };
+  const saved = await db.runTransaction(async transaction => {
+    const latest = await transaction.get(ref);
+    if (!latest.exists) throw new Error("Sorteo no encontrado.");
+    const current = latest.data() || {};
+    if (current.ganador) return current.ganador;
+    if (current.estado !== "cerrado") throw new Error("El sorteo ya no está cerrado.");
+    transaction.set(ref, {
+      ganador,
+      estado: "finalizado",
+      sorteadoAt: admin.firestore.FieldValue.serverTimestamp(),
+      sorteadoPor: editor.actor,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.set(db.collection("auditoria_eventos").doc(), {
+      tipo: "sorteo_realizado", sorteoId, ganadorTicket: ganador.codigo,
+      ganadorClientId: ganador.clientId, usuario: editor.actor,
+      totalParticipantes: tickets.length,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return ganador;
+  });
+  return { ok: true, id: sorteoId, ganador: saved, totalParticipantes: tickets.length };
+}
+
+async function markDelivered(db, editor, body) {
+  const entregaId = sorteoSafeId(body.id);
+  if (!entregaId) throw new Error("Entrega inválida.");
+  const ref = db.collection(ENTREGAS_COLLECTION).doc(entregaId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error("Entrega no encontrada."), { status: 404 });
+  const entrega = snap.data() || {};
+  const drawSnap = await db.collection(SORTEOS_COLLECTION).doc(sorteoSafeId(entrega.sorteoId)).get();
+  if (!drawSnap.exists || !drawVisibleToEditor(drawSnap.data() || {}, editor)) throw Object.assign(new Error("No puede modificar esta entrega."), { status: 403 });
+  await db.runTransaction(async transaction => {
+    const latest = await transaction.get(ref);
+    if (!latest.exists) throw Object.assign(new Error("Entrega no encontrada."), { status: 404 });
+    const current = latest.data() || {};
+    if (current.estado === "entregado") return;
+    const prizeRef = current.estado === "pendiente" && current.premioId
+      ? db.collection(PREMIOS_COLLECTION).doc(sorteoSafeId(current.premioId)) : null;
+    const prizeSnap = prizeRef ? await transaction.get(prizeRef) : null;
+    transaction.set(ref, {
+      estado: "entregado",
+      instrucciones: sorteoClean(body.instrucciones || current.instrucciones, 500),
+      entregadoAt: admin.firestore.FieldValue.serverTimestamp(),
+      entregadoPor: editor.actor,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (prizeRef && prizeSnap?.exists) {
+      const prize = prizeSnap.data() || {};
+      transaction.set(prizeRef, {
+        reservados: Math.max(0, (Number(prize.reservados) || 0) - 1),
+        entregados: Math.max(0, Number(prize.entregados) || 0) + 1,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+  });
+  return { ok: true, id: entregaId, estado: "entregado" };
+}
+
+export default async function handler(req, res) {
+  setHeaders(res);
+  if (req.method === "OPTIONS") return res.status(200).json({ ok: true });
+  try {
+    const db = getApp().firestore();
+    if (req.method === "GET") return res.status(200).json(await publicLoad(db, req.query?.token));
+    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido." });
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const action = sorteoNorm(body.accion || "cargar");
+    if (action === "elegir_premio") {
+      const result = await choosePrize(db, body);
+      return res.status(200).json({ ok: true, eleccion: result });
+    }
+    const editor = await requireEditor(req, res);
+    if (!editor) return;
+    if (action === "cargar") return res.status(200).json(await adminLoad(db, editor));
+    if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
+    if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
+    if (action === "cerrar_sorteo") return res.status(200).json(await closeDraw(db, editor, body.id));
+    if (action === "girar_ruleta") return res.status(200).json(await spinDraw(db, editor, body.id));
+    if (action === "marcar_entregado") return res.status(200).json(await markDelivered(db, editor, body));
+    return res.status(400).json({ ok: false, error: "Acción no válida." });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    if (status >= 500) console.error("SORTEOS_ERROR", error);
+    return res.status(status).json({ ok: false, error: String(error?.message || error || "Error interno.") });
+  }
+}
