@@ -73,21 +73,33 @@
     root.dataset.sorteosReady='1';
     root.innerHTML=`
       <div class="sr-admin">
-        <section class="sr-hero">
-          <div class="sr-hero-gift" aria-hidden="true"><span>🎁</span><i>★</i></div>
-          <div class="sr-hero-copy"><small>FIDELIDAD QUE SE SIENTE</small><h3>Sorteos y premios</h3><p>Cada compra y renovación puede convertirse en una oportunidad real de ganar.</p></div>
-          <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
-            <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+        <div class="sr-layout">
+          <div class="sr-main">
+            <section class="sr-hero">
+              <div class="sr-hero-gift" aria-hidden="true"><span>🎁</span><i>★</i></div>
+              <div class="sr-hero-copy"><small>FIDELIDAD QUE SE SIENTE</small><h3>Sorteos y premios</h3><p>Cada compra y renovación puede convertirse en una oportunidad real de ganar.</p></div>
+              <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
+                <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+              </div>
+            </section>
+            <section class="sr-metrics" id="srMetrics"></section>
+            <nav class="sr-tabs" aria-label="Administración de sorteos">
+              <button type="button" class="sr-tab on" data-sr-tab="sorteos">🎟️ Sorteos</button>
+              <button type="button" class="sr-tab" data-sr-tab="premios">🎁 Premios digitales</button>
+              <button type="button" class="sr-tab" data-sr-tab="ganadores">🏆 Ganadores</button>
+            </nav>
+            <section id="srBody"><div class="sr-empty">Cargando sorteos…</div></section>
+            <div class="sr-status" id="srStatus" aria-live="polite"></div>
           </div>
-        </section>
-        <section class="sr-metrics" id="srMetrics"></section>
-        <nav class="sr-tabs" aria-label="Administración de sorteos">
-          <button type="button" class="sr-tab on" data-sr-tab="sorteos">🎟️ Sorteos</button>
-          <button type="button" class="sr-tab" data-sr-tab="premios">🎁 Premios digitales</button>
-          <button type="button" class="sr-tab" data-sr-tab="ganadores">🏆 Ganadores</button>
-        </nav>
-        <section id="srBody"><div class="sr-empty">Cargando sorteos…</div></section>
-        <div class="sr-status" id="srStatus" aria-live="polite"></div>
+          <aside class="sr-rail">
+            <div class="sr-rail-panel sr-live-winner" id="srLiveWinner"></div>
+            <button type="button" class="sr-btn primary pulse sr-rail-cta" id="srQuickSpin" hidden>🎡 Girar próxima ruleta</button>
+            <div class="sr-rail-panel">
+              <h4>🏆 Ganadores recientes</h4>
+              <div class="sr-rail-list" id="srRecentList"></div>
+            </div>
+          </aside>
+        </div>
       </div>
       <div class="sr-modal" id="srModal" hidden></div>`;
     const modal=root.querySelector('#srModal');
@@ -130,10 +142,74 @@
   }
   function render(){
     renderMetrics();
+    renderLiveWinner();
+    renderRecentList();
+    renderQuickSpin();
     if(state.tab==='premios')renderPrizes();
     else if(state.tab==='ganadores')renderWinners();
     else renderDraws();
   }
+
+  function timeAgo(value){
+    const date=dateObject(value);if(!date)return '';
+    const diff=Math.max(0,Date.now()-date.getTime());
+    const min=Math.floor(diff/60000);
+    if(min<1)return 'justo ahora';
+    if(min<60)return `hace ${min} min`;
+    const hr=Math.floor(min/60);if(hr<24)return `hace ${hr}h`;
+    return `hace ${Math.floor(hr/24)}d`;
+  }
+  function recentWinners(limit=6){
+    return state.sorteos.filter(item=>item.ganador).sort((a,b)=>{
+      const ta=dateObject(a.sorteadoAt||a.ganador?.elegidoAt)?.getTime()||0;
+      const tb=dateObject(b.sorteadoAt||b.ganador?.elegidoAt)?.getTime()||0;
+      return tb-ta;
+    }).slice(0,limit);
+  }
+  function renderLiveWinner(){
+    const target=byId('srLiveWinner');if(!target)return;
+    const [latest]=recentWinners(1);
+    if(!latest){
+      target.classList.remove('is-live');
+      target.innerHTML=`<div class="sr-live-empty"><span>🎡</span><b>Sin ganadores todavía</b><small>Cuando gire una ruleta, aparecerá aquí al instante.</small></div>`;
+      return;
+    }
+    const winner=latest.ganador||{},delivery=deliveryFor(latest);
+    const recent=(Date.now()-(dateObject(latest.sorteadoAt)?.getTime()||0))<180000;
+    target.classList.toggle('is-live',recent);
+    const stateLabel=!delivery?'Esperando que elija premio':(delivery.estado==='entregado'?'✔ Premio entregado':delivery.estado==='listo'?'Código listo':'Preparar entrega');
+    target.innerHTML=`
+      ${recent?'<span class="sr-live-badge">● EN VIVO</span>':'<span class="sr-live-badge muted">ÚLTIMO GANADOR</span>'}
+      <span class="sr-live-crown">🏆</span>
+      <b>${esc(winner.clienteNombre||'Cliente')}</b>
+      <span class="sr-live-draw">${esc(latest.titulo||'Sorteo')}</span>
+      <em>${esc(winner.codigo||'')}${winner.codigo&&latest.sorteadoAt?' · ':''}${esc(timeAgo(latest.sorteadoAt))}</em>
+      <div class="sr-live-status">${esc(stateLabel)}</div>`;
+  }
+  function renderRecentList(){
+    const target=byId('srRecentList');if(!target)return;
+    const winners=recentWinners(6);
+    target.innerHTML=winners.map(draw=>{
+      const winner=draw.ganador||{},initial=esc((winner.clienteNombre||'C').trim().charAt(0).toUpperCase()||'C');
+      return `<article><span class="sr-rail-avatar">${initial}</span><div><b>${esc(winner.clienteNombre||'Cliente')}</b><small>${esc(draw.titulo||'Sorteo')} · ${esc(timeAgo(draw.sorteadoAt))}</small></div></article>`;
+    }).join('')||'<div class="sr-empty small">Aún no hay historial de ganadores.</div>';
+  }
+  function renderQuickSpin(){
+    const button=byId('srQuickSpin');if(!button)return;
+    const ready=state.sorteos.find(item=>item.estado==='cerrado'&&!item.ganador);
+    button.hidden=!ready;
+    button.onclick=ready?()=>openWheel(ready.id):null;
+  }
+
+  let pollTimer=null;
+  function startPolling(){
+    stopPolling();
+    pollTimer=setInterval(()=>{
+      if(document.getElementById('screen-sorteos')?.classList.contains('active'))load(true);
+      else stopPolling();
+    },25000);
+  }
+  function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
 
   function drawPrizeNames(draw){
     return (draw.premioIds||[]).map(id=>state.premios.find(item=>item.id===id)?.nombre).filter(Boolean);
@@ -335,9 +411,9 @@
     catch(error){status(error.message,'bad');}
   }
 
-  function init(){shell();if(document.getElementById('screen-sorteos')?.classList.contains('active'))load();}
-  window.SublichatSorteos={open:()=>{shell();load();},reload:()=>load(true)};
+  function init(){shell();if(document.getElementById('screen-sorteos')?.classList.contains('active')){load();startPolling();}}
+  window.SublichatSorteos={open:()=>{shell();load();startPolling();},reload:()=>load(true)};
   document.addEventListener('DOMContentLoaded',init);
-  new MutationObserver(()=>{if(document.getElementById('screen-sorteos')?.classList.contains('active')){shell();load();}})
+  new MutationObserver(()=>{if(document.getElementById('screen-sorteos')?.classList.contains('active')){shell();load();startPolling();}})
     .observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class']});
 })();
