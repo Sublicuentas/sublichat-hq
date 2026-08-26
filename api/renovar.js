@@ -8,6 +8,7 @@
 
 import admin from "firebase-admin";
 import { randomBytes } from "node:crypto";
+import { registrarEventoSorteosSeguro } from "./sorteos-eventos.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -1034,6 +1035,30 @@ export default async function handler(req, res) {
           servicioActualizado: !!servicioActualizado,
           createdAt: isoNow()
         });
+      } catch (_) {}
+
+      // Sorteos: boleto automático por compra nueva o por renovación real (la
+      // fecha del servicio se movió). Una edición que no toca fechaRenovacion
+      // (ej. cambiar solo el correo) no genera boleto. eventoId es estable por
+      // compra/fecha, así un reintento del mismo guardado nunca duplica boletos —
+      // el candado real vive en sorteo_eventos dentro de sorteos-eventos.js.
+      try {
+        const compraId = String(servicioGuardado?.compraId || "");
+        const fechaNueva = String(servicioGuardado?.fechaRenovacion || "");
+        const fechaPrevia = String(servicioAnterior?.fechaRenovacion || "");
+        const esCompraNueva = compraId && (created || !servicioActualizado);
+        const esRenovacionReal = compraId && servicioActualizado && fechaNueva && fechaNueva !== fechaPrevia;
+        if (esCompraNueva) {
+          await registrarEventoSorteosSeguro({
+            tipo: "compra", clientId: docRef.id, eventoId: `compra:${compraId}`,
+            clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
+          });
+        } else if (esRenovacionReal) {
+          await registrarEventoSorteosSeguro({
+            tipo: "renovacion", clientId: docRef.id, eventoId: `renov:${compraId}:${fechaNueva}`,
+            clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
+          });
+        }
       } catch (_) {}
 
       // Crea una URL permanente por beneficiario y conserva, como enlaces
