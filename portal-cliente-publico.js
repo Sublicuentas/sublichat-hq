@@ -17,7 +17,7 @@
     cuentas:'/assets/portal-icono-mis-cuentas-transparent.png?v=20260816-4',
     promociones:'/assets/portal-icono-promociones-transparent.png?v=20260816-4',
     pagos:'/assets/portal-icono-metodos-pago-transparent.png?v=20260816-4',
-    sorteos:'emoji:🎁',
+    sorteos:'/assets/portal-icono-sorteos-premios-transparent.png?v=20260826-1',
     perfil:'/assets/portal-icono-perfil-transparent.png?v=20260816-4',
     correo:'/assets/portal-icono-correo-transparent.png?v=20260816-4',
     contrasena:'/assets/portal-icono-contrasena-transparent.png?v=20260816-4'
@@ -179,6 +179,7 @@
       const iconImage=element('img','portal-category-icon-image');
       iconImage.src=iconSource;iconImage.alt='';iconImage.loading='eager';iconImage.decoding='async';icon.append(iconImage);
     }
+    if(String(iconSource||'').includes('sorteos-premios'))icon.classList.add('is-rewards');
     button.append(
       icon,
       element('b','',title),
@@ -192,7 +193,10 @@
     const heading=element('h2','portal-panel-title');
     let icon;
     if(String(iconSource||'').startsWith('emoji:')){icon=element('span','portal-panel-title-icon is-emoji',String(iconSource).slice(6));}
-    else{icon=element('img','portal-panel-title-icon');icon.src=iconSource;icon.alt='';icon.loading='lazy';icon.decoding='async';}
+    else{
+      icon=element('img','portal-panel-title-icon');icon.src=iconSource;icon.alt='';icon.loading='lazy';icon.decoding='async';
+      if(String(iconSource||'').includes('sorteos-premios'))icon.classList.add('is-rewards');
+    }
     heading.append(icon,document.createTextNode(title));
     if(highlight)heading.append(element('span','',` ${highlight}`));
     return heading;
@@ -356,14 +360,19 @@
     const cycles=Math.max(0,Number(customer.ciclos)||0);
     const isGold=customer.nivel==='oro';
     const summary=element('section',`portal-loyalty ${isGold?'is-gold':''}`);
-    const badge=element('span','portal-loyalty-badge',isGold?'★':'♡');
+    const badge=element('span','portal-loyalty-badge',isGold?'★':'☆');
     const copy=element('div','portal-loyalty-copy');
     copy.append(
-      element('small','',isGold?'BENEFICIO ACTIVO':'SU CAMINO A CLUB ORO'),
-      element('b','',isGold?'Cliente Oro':'Cliente frecuente'),
-      element('span','',isGold?'Recibe boletos extra en los sorteos participantes.':`${Math.min(cycles,6)} de 6 ciclos completados`)
+      element('div','portal-loyalty-kicker',isGold?'BENEFICIO ACTIVO':'PROGRAMA DE FIDELIDAD'),
+      element('div','portal-loyalty-title',isGold?'Cliente Oro':'Camino al Club Oro'),
+      element('div','portal-loyalty-detail',isGold?'Recibe boletos extra en los sorteos participantes.':`${Math.min(cycles,6)} de 6 ciclos completados`)
     );
     const progress=element('div','portal-loyalty-progress');
+    progress.setAttribute('role','progressbar');
+    progress.setAttribute('aria-label','Progreso hacia Cliente Oro');
+    progress.setAttribute('aria-valuemin','0');
+    progress.setAttribute('aria-valuemax','6');
+    progress.setAttribute('aria-valuenow',String(Math.min(cycles,6)));
     const bar=element('i');bar.style.width=`${isGold?100:Math.min(100,(cycles/6)*100)}%`;progress.append(bar);
     summary.append(badge,copy,progress);panel.append(summary);
   }
@@ -508,7 +517,7 @@
     nav.append(
       categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
       categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
-      categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Vea sus boletos y elija si gana')
+      categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Consulte sus boletos y premios')
     );
     if(state.paymentAllowed){
       nav.append(categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera'));
@@ -521,7 +530,7 @@
     const promos=element('section','portal-panel');promos.id='portal-panel-promociones';promos.dataset.panel='promociones';promos.role='tabpanel';promos.hidden=true;
     promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
     const raffles=element('section','portal-panel');raffles.id='portal-panel-sorteos';raffles.dataset.panel='sorteos';raffles.role='tabpanel';raffles.hidden=true;
-    raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Sus compras, renovaciones y beneficios Oro se convierten en boletos.'));
+    raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Cada compra o renovación puede darle nuevas oportunidades de ganar.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
     panels.append(accounts,promos,raffles);

@@ -6,10 +6,10 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Su acceso — Sublicuentas</title>
-<meta name="sublicuentas-access-ui-version" content="20260820-inter-premium-v3-all">
+<meta name="sublicuentas-access-ui-version" content="20260826-rewards-icon-v4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260820-5">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20260826-4">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -28,7 +28,7 @@
   .live-dot{ width:11px;height:11px;border-radius:50%; background:var(--red); box-shadow:0 0 0 6px var(--red-soft); position:relative; }
   .live-label{ font-weight:800; font-size:11.5px; letter-spacing:.14em; color:var(--red); text-transform:uppercase; }
   .h1{ font-family:'Inter',Arial,sans-serif; font-weight:400; font-size:36px; line-height:1.04; margin:0 0 14px; letter-spacing:-.01em; }
-  .h1 span{ display:block; color:var(--red); }
+  .h1 span{ display:inline; color:var(--red); }
   .hello{ font-size:17px; font-weight:800; margin:0 0 3px; }
   .sub{ font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:22px; }
   .card{ background:transparent; border:0; border-radius:0; padding:0; box-shadow:none; }
@@ -557,7 +557,6 @@
     const servicios=Array.isArray(d.servicios)&&d.servicios.length?d.servicios:[d];
     const activos=servicios.filter(s=>estadoServicio(s).kind!=="expired").length;
     const primero=servicios.find(s=>!s.vencido)||servicios[0]||{};
-    const emoji=PLAT_EMOJI[platKey(primero.plataforma)]||"📱";
     const soporte=bloqueSoporte(d);
     const multiple=servicios.length>1;
     const perfilesUnicos=!multiple?perfilesDelServicio(primero).length:0;
@@ -569,10 +568,10 @@
     const stageEl=document.getElementById('stage');
     stageEl.dataset.portalVendedor=String(d.vendedor||"");
     stageEl.innerHTML=`
-      <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Entrega en vivo":"Renovación pendiente"}</span>${etiquetaConteo?`<span class="multi-count">${etiquetaConteo}</span>`:""}</div>
-      <h1 class="h1">¡Acceso entregado <span>con éxito!</span></h1>
+      <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Acceso disponible":"Renovación pendiente"}</span>${etiquetaConteo?`<span class="multi-count">${etiquetaConteo}</span>`:""}</div>
+      <h1 class="h1">¡Todo <span>listo!</span></h1>
       <div class="hello">Hola, ${esc(d.titular||"Cliente")}</div>
-      <div class="sub">Guarde esta información para consultarla cuando la necesite. ${emoji}</div>
+      <div class="sub">Su acceso ya está disponible. Guarde este enlace para consultar sus cuentas, promociones y premios cuando lo necesite.</div>
       <div class="access-list">${contenido}</div>
     `;
     activarAccesosMultiples();
@@ -612,7 +611,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20260817-10"></script>
+<script src="/portal-cliente-publico.js?v=20260826-4"></script>
 
 </body>
 </html>
