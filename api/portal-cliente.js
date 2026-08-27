@@ -1,7 +1,8 @@
 // api/portal-cliente.js · Portal público complementario para las URL de acceso
 //
 // Este endpoint NO modifica clientes, servicios, fichas, enlaces ni inventario.
-// Solo administra y publica promociones segmentadas y métodos de pago.
+// Administra promociones y métodos de pago, y publica qué secciones puede ver
+// cada cliente. Sorteos queda limitado a clientes directos de Sublicuentas/Relojes.
 
 const admin = require('firebase-admin');
 
@@ -53,6 +54,13 @@ function norm(value) {
     .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
 }
 
+function directVendorGroup(value) {
+  const valueNorm = norm(value);
+  if (['relojes', 'reloj', 'libni'].includes(valueNorm)) return 'relojes';
+  if (['sublicuentas', 'sublicuenta', 'naara'].includes(valueNorm)) return 'sublicuentas';
+  return valueNorm;
+}
+
 function safeId(value) {
   return clean(value, 120).replace(/[^a-zA-Z0-9_-]/g, '');
 }
@@ -78,7 +86,7 @@ function editorKind(user) {
 }
 
 function vendorCanUsePayments(value) {
-  return PAYMENT_VENDOR_KEYS.has(norm(value));
+  return PAYMENT_VENDOR_KEYS.has(directVendorGroup(value));
 }
 
 async function requirePortalEditor(req, res) {
@@ -243,7 +251,7 @@ async function publicPortal(db, req, res) {
   if (!clientSnap.exists) return res.status(404).json({ ok: false, error: 'No se encontró el cliente.' });
   const client = clientSnap.data() || {};
   const vendorNorm = norm(client.vendedor_norm || client.vendedor || '');
-  const paymentAccess = vendorCanUsePayments(vendorNorm);
+  const directAccess = vendorCanUsePayments(vendorNorm);
   const today = todayHonduras();
   const promociones = promoSnap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
@@ -267,9 +275,9 @@ async function publicPortal(db, req, res) {
   return res.status(200).json({
     ok: true,
     promociones,
-    metodosPago: paymentAccess ? config.metodos.filter(item => item.activo !== false) : [],
-    avisoPago: paymentAccess ? config.avisoPago : '',
-    secciones: { promociones: true, pagos: paymentAccess }
+    metodosPago: directAccess ? config.metodos.filter(item => item.activo !== false) : [],
+    avisoPago: directAccess ? config.avisoPago : '',
+    secciones: { promociones: true, pagos: directAccess, sorteos: directAccess }
   });
 }
 

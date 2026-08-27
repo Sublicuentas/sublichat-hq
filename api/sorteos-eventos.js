@@ -15,7 +15,10 @@
 
 import admin from "firebase-admin";
 import { createHash } from "node:crypto";
-import { reglasSorteo, sorteoClean, sorteoEventoId, sorteoNorm, sorteoSafeId } from "./sorteos-lib.js";
+import {
+  reglasSorteo, sorteoClean, sorteoEventoId, sorteoNorm, sorteoSafeId,
+  sorteoVendorElegible, sorteoVendorGroup
+} from "./sorteos-lib.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -28,13 +31,6 @@ function getApp() {
 
 function hash(value, length = 40) {
   return createHash("sha256").update(String(value || "")).digest("hex").slice(0, length);
-}
-
-function vendorGroup(value) {
-  const raw = sorteoNorm(value);
-  if (["relojes", "reloj", "libni"].includes(raw)) return "relojes";
-  if (["sublicuentas", "sublicuenta", "naara"].includes(raw)) return "sublicuentas";
-  return raw;
 }
 
 function iso(value) {
@@ -55,7 +51,7 @@ function activeDraw(draw = {}, now = Date.now()) {
 }
 
 function scopeAllows(scope, vendor) {
-  const target = sorteoNorm(scope || "sublicuentas"), group = vendorGroup(vendor);
+  const target = sorteoNorm(scope || "sublicuentas"), group = sorteoVendorGroup(vendor);
   return target === "ambos" ? ["sublicuentas", "relojes"].includes(group) : target === group;
 }
 
@@ -136,14 +132,30 @@ export async function registrarEventoSorteos(rawEvent = {}) {
   if (!type || !clientId || !eventId) return { ok: false, omitido: "evento_incompleto", creados: 0 };
   const clientSnap = await db.collection("clientes").doc(clientId).get();
   if (!clientSnap.exists) return { ok: false, omitido: "cliente_no_existe", creados: 0 };
-  const client = clientSnap.data() || {}, vendor = sorteoClean(rawEvent.vendedor || client.vendedor, 80), vendorNorm = sorteoNorm(rawEvent.vendedorNorm || client.vendedor_norm || vendor);
+  const client = clientSnap.data() || {}, vendor = sorteoClean(client.vendedor || rawEvent.vendedor, 80);
+  const vendorNorm = sorteoVendorGroup(client.vendedor_norm || client.vendedor || rawEvent.vendedorNorm || rawEvent.vendedor);
+  if (!sorteoVendorElegible(vendorNorm)) {
+    return { ok: true, omitido: "vendedor_no_elegible", creados: 0 };
+  }
   const event = {
     tipo: type, clientId, eventoId: eventId, clienteNombre: sorteoClean(rawEvent.clienteNombre || client.nombrePerfil || client.nombre || "Cliente", 120),
     telefono: sorteoClean(rawEvent.telefono || client.telefono, 40), vendedor: vendor, vendedorNorm: vendorNorm, origen: sorteoClean(rawEvent.origen || "Sublichat", 80)
   };
-  const loyalty = await updateLoyalty(db, { ...event, ciclosOro: rawEvent.ciclosOro });
-  const drawSnap = await db.collection("sorteos").where("estado", "==", "activo").limit(100).get();
-  const draws = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(draw => activeDraw(draw) && scopeAllows(draw.alcance, vendorNorm));
+  const currentCycles = Math.max(0, Number(client.fidelidadCiclos) || 0);
+  const currentGoldAt = Math.max(1, Number(rawEvent.ciclosOro) || reglasSorteo({}).ciclosOro);
+  const loyalty = rawEvent.omitirFidelidad === true
+    ? {
+      ciclos: currentCycles,
+      nivel: client.clienteOro === true || sorteoNorm(client.nivelCliente) === "oro" || currentCycles >= currentGoldAt ? "oro" : "regular",
+      oro: client.clienteOro === true || sorteoNorm(client.nivelCliente) === "oro" || currentCycles >= currentGoldAt
+    }
+    : await updateLoyalty(db, { ...event, ciclosOro: rawEvent.ciclosOro });
+  const requestedDrawId = sorteoSafeId(rawEvent.sorteoId);
+  const drawDocs = requestedDrawId
+    ? [await db.collection("sorteos").doc(requestedDrawId).get()]
+    : (await db.collection("sorteos").where("estado", "==", "activo").limit(100).get()).docs;
+  const draws = drawDocs.filter(doc => doc.exists).map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter(draw => activeDraw(draw) && scopeAllows(draw.alcance, vendorNorm));
   const results = [];
   for (const draw of draws) {
     const drawRules = reglasSorteo(draw.reglas || {});

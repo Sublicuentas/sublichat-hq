@@ -1,13 +1,18 @@
 import admin from "firebase-admin";
 import { randomInt, randomBytes } from "node:crypto";
 import {
-  reglasSorteo, sorteoClean, sorteoNorm, sorteoSafeId
+  reglasSorteo, sorteoClean, sorteoNorm, sorteoSafeId,
+  sorteoVendorElegible, sorteoVendorGroup
 } from "./sorteos-lib.js";
+import { registrarEventoSorteosSeguro } from "./sorteos-eventos.js";
 
 const PREMIOS_COLLECTION = "premios_digitales";
 const SORTEOS_COLLECTION = "sorteos";
 const BOLETOS_COLLECTION = "sorteo_boletos";
 const ENTREGAS_COLLECTION = "premios_entregas";
+const CARGAS_COLLECTION = "sorteo_cargas";
+const CARGA_AGOSTO_2026 = "2026-08";
+const CARGA_CHUNK = 8;
 const TIPOS_PREMIO = new Set([
   "perfil", "descuento_porcentaje", "descuento_fijo", "cine",
   "recarga", "dias_extra", "personalizado"
@@ -73,6 +78,36 @@ function timeMs(value) {
   if (Number.isFinite(seconds)) return seconds * 1000;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function historicalDateMs(value) {
+  if (!value) return 0;
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const seconds = Number(value._seconds ?? value.seconds);
+  if (Number.isFinite(seconds)) return seconds * 1000;
+  const raw = sorteoClean(value, 80);
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = new Date(dmy ? `${dmy[3]}-${dmy[2]}-${dmy[1]}T12:00:00Z` : (ymd ? `${raw}T12:00:00Z` : raw));
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function historicalMonth(value) {
+  const milliseconds = historicalDateMs(value);
+  if (!milliseconds) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit"
+  }).formatToParts(new Date(milliseconds));
+  const get = type => parts.find(part => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}`;
+}
+
+function historicalEventType(record = {}) {
+  const type = sorteoNorm(record.tipo).replace(/[\s-]+/g, "_");
+  if (type === "crm_ficha_upsert") return record.creado === true || record.servicioActualizado === false ? "compra" : "";
+  if (["servicio_agregado", "compra", "compra_nueva", "nueva_compra", "servicio_comprado"].includes(type)) return "compra";
+  if (["servicio_renovado", "servicios_renovados", "renovacion", "renovacion_confirmada", "cliente_renovado"].includes(type)) return "renovacion";
+  return "";
 }
 
 function color(value, fallback = "#E2231A") {
@@ -227,17 +262,21 @@ async function adminLoad(db, editor) {
   const [drawSnap, prizeSnap, ticketSnap, deliverySnap] = await Promise.all([
     db.collection(SORTEOS_COLLECTION).limit(150).get(),
     db.collection(PREMIOS_COLLECTION).limit(300).get(),
-    db.collection(BOLETOS_COLLECTION).orderBy("createdAt", "desc").limit(2000).get(),
+    db.collection(BOLETOS_COLLECTION).orderBy("createdAt", "desc").limit(10000).get(),
     db.collection(ENTREGAS_COLLECTION).limit(1000).get()
   ]);
   const sorteos = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(draw => drawVisibleToEditor(draw, editor));
   const allowed = new Set(sorteos.map(draw => draw.id));
+  const drawMap = new Map(sorteos.map(draw => [draw.id, draw]));
   const boletos = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(ticket => allowed.has(String(ticket.sorteoId || "")));
+    .filter(ticket => {
+      const draw = drawMap.get(String(ticket.sorteoId || ""));
+      return Boolean(draw) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor);
+    });
   const countByDraw = {};
   boletos.forEach(ticket => { countByDraw[ticket.sorteoId] = (countByDraw[ticket.sorteoId] || 0) + 1; });
-  sorteos.forEach(draw => { draw.totalBoletos = Math.max(Number(draw.totalBoletos) || 0, countByDraw[draw.id] || 0); });
+  sorteos.forEach(draw => { draw.totalBoletos = countByDraw[draw.id] || 0; });
   sorteos.sort((a, b) => timeMs(b.createdAt || b.fechaInicio) - timeMs(a.createdAt || a.fechaInicio));
   const premios = prizeSnap.docs.filter(doc => prizeVisibleToEditor(doc.data() || {}, editor)).map(adminPrize)
     .sort((a, b) => Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre, "es"));
@@ -265,11 +304,200 @@ async function resolvePublicClient(db, token) {
 
 function scopeMatches(draw, vendor) {
   const scope = sorteoNorm(draw.alcance);
-  const rawVendor = sorteoNorm(vendor);
-  const normalized = ["relojes", "reloj", "libni"].includes(rawVendor)
-    ? "relojes"
-    : (["sublicuentas", "sublicuenta", "naara"].includes(rawVendor) ? "sublicuentas" : rawVendor);
+  const normalized = sorteoVendorGroup(vendor);
   return scope === "ambos" ? ["sublicuentas", "relojes"].includes(normalized) : scope === normalized;
+}
+
+function recordInHistoricalMonth(record = {}, month = CARGA_AGOSTO_2026) {
+  return [record.fechaTS, record.createdAt, record.fecha, record.updatedAt, record.timestamp]
+    .some(value => historicalMonth(value) === month);
+}
+
+function valuesContainHistoricalMonth(values = [], month = CARGA_AGOSTO_2026) {
+  return values.some(value => historicalMonth(value) === month);
+}
+
+async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) {
+  const [clientsSnap, historySnap, auditSnap] = await Promise.all([
+    db.collection("clientes").limit(5000).get(),
+    db.collection("historial_clientes").limit(20000).get(),
+    db.collection("auditoria_eventos").limit(20000).get()
+  ]);
+  const clients = new Map();
+  clientsSnap.docs.forEach(doc => {
+    const data = doc.data() || {};
+    const vendor = sorteoVendorGroup(data.vendedor_norm || data.vendedor || "");
+    if (!sorteoVendorElegible(vendor) || !scopeMatches(draw, vendor)) return;
+    clients.set(doc.id, { id: doc.id, data, vendor });
+  });
+
+  const flags = new Map();
+  const sources = { historial: 0, auditoria: 0, fichas: 0 };
+  const mark = (clientIdValue, type, source) => {
+    const clientId = sorteoSafeId(clientIdValue);
+    if (!clients.has(clientId) || !["compra", "renovacion"].includes(type)) return;
+    const current = flags.get(clientId) || { compra: false, renovacion: false };
+    if (!current[type]) sources[source] += 1;
+    current[type] = true;
+    flags.set(clientId, current);
+  };
+
+  historySnap.docs.forEach(doc => {
+    const data = doc.data() || {};
+    if (!recordInHistoricalMonth(data, month)) return;
+    mark(data.clientId, historicalEventType(data), "historial");
+  });
+  auditSnap.docs.forEach(doc => {
+    const data = doc.data() || {};
+    if (!recordInHistoricalMonth(data, month)) return;
+    mark(data.clienteId || data.clientId, historicalEventType(data), "auditoria");
+  });
+
+  clients.forEach(({ id, data }) => {
+    const services = Array.isArray(data.servicios) ? data.servicios : [];
+    if (services.length && valuesContainHistoricalMonth([
+      data.fechaCompra, data.fechaVenta, data.fechaContratacion, data.fechaRegistro,
+      data.fechaAlta, data.fechaInicio, data.createdAt, data.created_at
+    ], month)) mark(id, "compra", "fichas");
+    if (valuesContainHistoricalMonth([
+      data.ultimaRenovacionAt, data.renovadoAt, data.fechaUltimaRenovacion
+    ], month)) mark(id, "renovacion", "fichas");
+    services.forEach(service => {
+      const item = service || {};
+      if (valuesContainHistoricalMonth([
+        item.fechaCompra, item.fechaVenta, item.fechaContratacion, item.fechaInicio,
+        item.fecha_inicio, item.createdAt, item.created_at
+      ], month)) mark(id, "compra", "fichas");
+      if (valuesContainHistoricalMonth([
+        item.ultimaRenovacionAt, item.renovadoAt, item.fechaUltimaRenovacion
+      ], month)) mark(id, "renovacion", "fichas");
+    });
+  });
+
+  const tasks = [];
+  [...flags.keys()].sort().forEach(clientId => {
+    const item = flags.get(clientId) || {};
+    if (item.compra) tasks.push({ clientId, tipo: "compra" });
+    if (item.renovacion) tasks.push({ clientId, tipo: "renovacion" });
+  });
+  return { tasks, clients: new Set(tasks.map(item => item.clientId)).size, sources };
+}
+
+async function loadHistoricalJob(db, draw, editor, reset = false) {
+  const id = sorteoSafeId(`${draw.id}_${CARGA_AGOSTO_2026}`);
+  const ref = db.collection(CARGAS_COLLECTION).doc(id);
+  const current = await ref.get();
+  if (current.exists && !reset) return { ref, job: current.data() || {} };
+  const candidates = await collectHistoricalCandidates(db, draw, CARGA_AGOSTO_2026);
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const job = {
+    sorteoId: draw.id,
+    periodo: CARGA_AGOSTO_2026,
+    tareas: candidates.tasks,
+    clientesDetectados: candidates.clients,
+    fuentes: candidates.sources,
+    cursor: 0,
+    totalCreados: 0,
+    totalOmitidos: 0,
+    errores: [],
+    completado: candidates.tasks.length === 0,
+    createdAt: now,
+    updatedAt: now,
+    updatedBy: editor.actor
+  };
+  await ref.set(job, { merge: false });
+  return { ref, job };
+}
+
+async function backfillAugust2026(db, editor, body) {
+  const drawId = sorteoSafeId(body.id);
+  if (!drawId) throw Object.assign(new Error("Sorteo inválido."), { status: 400 });
+  const drawRef = db.collection(SORTEOS_COLLECTION).doc(drawId);
+  const drawSnap = await drawRef.get();
+  if (!drawSnap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = { id: drawSnap.id, ...(drawSnap.data() || {}) };
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede cargar clientes en este sorteo."), { status: 403 });
+  if (draw.estado !== "activo") throw new Error("La carga de agosto solo puede hacerse en un sorteo activo.");
+  if (sorteoNorm(draw.categoria) !== "general") throw new Error("Use un sorteo de categoría General para incluir compras y renovaciones de agosto.");
+  const rules = reglasSorteo(draw.reglas || {});
+  if (rules.compra < 1 || rules.renovacion < 1) throw new Error("Configure al menos un boleto para compra y uno para renovación antes de cargar agosto.");
+  const now = Date.now(), starts = timeMs(draw.fechaInicio), ends = timeMs(draw.fechaFin);
+  if ((starts && starts > now) || (ends && ends < now)) throw new Error("El sorteo debe encontrarse dentro de sus fechas activas para cargar agosto.");
+
+  const { ref: jobRef, job } = await loadHistoricalJob(db, draw, editor, body.reiniciar === true);
+  const tasks = Array.isArray(job.tareas) ? job.tareas : [];
+  const cursor = Math.max(0, Number(job.cursor) || 0);
+  if (job.completado === true || cursor >= tasks.length) {
+    return {
+      ok: true, completado: true, periodo: CARGA_AGOSTO_2026,
+      clientesDetectados: Number(job.clientesDetectados) || 0,
+      totalTareas: tasks.length, procesados: cursor,
+      boletosCreados: Number(job.totalCreados) || 0,
+      omitidos: Number(job.totalOmitidos) || 0,
+      errores: Array.isArray(job.errores) ? job.errores.length : 0
+    };
+  }
+
+  const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", drawId).get();
+  const existing = new Set(ticketSnap.docs.map(doc => doc.data() || {}).filter(ticket =>
+    ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+  ).map(ticket => `${sorteoSafeId(ticket.clientId)}|${sorteoNorm(ticket.tipo)}`));
+  const chunk = tasks.slice(cursor, cursor + CARGA_CHUNK);
+  let created = 0, omitted = 0;
+  const errors = Array.isArray(job.errores) ? [...job.errores].slice(-40) : [];
+  for (const task of chunk) {
+    const clientId = sorteoSafeId(task.clientId), type = sorteoNorm(task.tipo);
+    const key = `${clientId}|${type}`;
+    if (!clientId || !["compra", "renovacion"].includes(type) || existing.has(key)) {
+      omitted += 1;
+      continue;
+    }
+    const result = await registrarEventoSorteosSeguro({
+      tipo: type,
+      clientId,
+      eventoId: `retro:${CARGA_AGOSTO_2026}:${type}:${clientId}`,
+      sorteoId: drawId,
+      omitirFidelidad: true,
+      origen: "Carga agosto 2026"
+    });
+    created += Math.max(0, Number(result.creados) || 0);
+    if (result.ok === false) errors.push({ clientId, tipo: type, error: sorteoClean(result.error || result.omitido || "No procesado", 180) });
+    else if (!result.creados) omitted += 1;
+    existing.add(key);
+  }
+
+  const nextCursor = cursor + chunk.length;
+  const completed = nextCursor >= tasks.length;
+  const totalCreated = Math.max(0, Number(job.totalCreados) || 0) + created;
+  const totalOmitted = Math.max(0, Number(job.totalOmitidos) || 0) + omitted;
+  await jobRef.set({
+    cursor: nextCursor,
+    totalCreados: totalCreated,
+    totalOmitidos: totalOmitted,
+    errores: errors.slice(-40),
+    completado: completed,
+    completedAt: completed ? admin.firestore.FieldValue.serverTimestamp() : null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedBy: editor.actor
+  }, { merge: true });
+  if (completed) {
+    await db.collection("auditoria_eventos").doc().set({
+      tipo: "sorteo_carga_agosto_2026",
+      sorteoId: drawId,
+      clientesDetectados: Number(job.clientesDetectados) || 0,
+      boletosCreados: totalCreated,
+      tareasProcesadas: nextCursor,
+      usuario: editor.actor,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  return {
+    ok: true, completado: completed, periodo: CARGA_AGOSTO_2026,
+    clientesDetectados: Number(job.clientesDetectados) || 0,
+    totalTareas: tasks.length, procesados: nextCursor,
+    boletosCreados: totalCreated, creadosEnEstePaso: created,
+    omitidos: totalOmitted, errores: errors.length
+  };
 }
 
 function maskedWinner(winner = {}) {
@@ -281,13 +509,16 @@ function maskedWinner(winner = {}) {
 
 async function publicLoad(db, token) {
   const { clientId, cliente } = await resolvePublicClient(db, token);
+  const vendor = sorteoVendorGroup(cliente.vendedor_norm || cliente.vendedor || "");
+  if (!sorteoVendorElegible(vendor)) {
+    return { ok: true, habilitado: false, cliente: { clientId, nivel: "regular", ciclos: 0 }, sorteos: [] };
+  }
   const [drawSnap, ticketSnap, prizeSnap, deliveriesSnap] = await Promise.all([
     db.collection(SORTEOS_COLLECTION).limit(150).get(),
     db.collection(BOLETOS_COLLECTION).where("clientId", "==", clientId).get(),
     db.collection(PREMIOS_COLLECTION).limit(300).get(),
     db.collection(ENTREGAS_COLLECTION).where("clientId", "==", clientId).get()
   ]);
-  const vendor = sorteoNorm(cliente.vendedor_norm || cliente.vendedor || "");
   const now = Date.now();
   const draws = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(draw => scopeMatches(draw, vendor) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
@@ -322,11 +553,14 @@ async function publicLoad(db, token) {
   }).sort((a, b) => String(b.fechaInicio).localeCompare(String(a.fechaInicio)));
   const ciclos = Math.max(0, Number(cliente.fidelidadCiclos) || 0);
   const oro = cliente.clienteOro === true || sorteoNorm(cliente.nivelCliente) === "oro" || ciclos >= 6;
-  return { ok: true, cliente: { clientId, nivel: oro ? "oro" : "regular", ciclos }, sorteos: resultado };
+  return { ok: true, habilitado: true, cliente: { clientId, nivel: oro ? "oro" : "regular", ciclos }, sorteos: resultado };
 }
 
 async function choosePrize(db, body) {
-  const { clientId } = await resolvePublicClient(db, body.token);
+  const { clientId, cliente } = await resolvePublicClient(db, body.token);
+  if (!sorteoVendorElegible(cliente.vendedor_norm || cliente.vendedor || "")) {
+    throw Object.assign(new Error("Sorteos está disponible únicamente para clientes directos de Sublicuentas y Relojes."), { status: 403 });
+  }
   const sorteoId = sorteoSafeId(body.sorteoId);
   const premioId = sorteoSafeId(body.premioId);
   if (!sorteoId || !premioId) throw Object.assign(new Error("Selección inválida."), { status: 400 });
@@ -447,7 +681,11 @@ async function closeDraw(db, editor, id) {
   if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede cerrar este sorteo."), { status: 403 });
   if (draw.ganador) throw new Error("El sorteo ya tiene ganador.");
   if (draw.estado !== "activo") throw new Error("Solo un sorteo activo puede cerrar su participación.");
-  if ((Number(draw.totalBoletos) || 0) <= 0) throw new Error("Todavía no hay boletos; espere una compra o renovación antes de cerrar.");
+  const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", ref.id).get();
+  const validTickets = ticketSnap.docs.map(doc => doc.data() || {}).filter(ticket =>
+    ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+  );
+  if (!validTickets.length) throw new Error("Todavía no hay boletos válidos de Sublicuentas o Relojes para cerrar.");
   await ref.set({ estado: "cerrado", cerradoAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { ok: true, id: ref.id, estado: "cerrado" };
 }
@@ -462,7 +700,9 @@ async function spinDraw(db, editor, id) {
   if (draw.estado !== "cerrado") throw new Error("Cierre la participación antes de girar la ruleta.");
   if (draw.ganador) return { ok: true, id: sorteoId, ganador: draw.ganador, repetido: true };
   const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get();
-  const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(ticket => ticket.activo !== false);
+  const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(ticket =>
+    ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+  );
   if (!tickets.length) throw new Error("Este sorteo no tiene boletos participantes.");
   const chosen = tickets[randomInt(tickets.length)];
   const ganador = {
@@ -554,6 +794,7 @@ export default async function handler(req, res) {
     if (action === "cargar") return res.status(200).json(await adminLoad(db, editor));
     if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
+    if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));
     if (action === "cerrar_sorteo") return res.status(200).json(await closeDraw(db, editor, body.id));
     if (action === "girar_ruleta") return res.status(200).json(await spinDraw(db, editor, body.id));
     if (action === "marcar_entregado") return res.status(200).json(await markDelivered(db, editor, body));

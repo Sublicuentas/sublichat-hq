@@ -22,6 +22,17 @@ export function sorteoNorm(value) {
     .replace(/\s+/g, " ");
 }
 
+export function sorteoVendorGroup(value) {
+  const normalized = sorteoNorm(value);
+  if (["relojes", "reloj", "libni"].includes(normalized)) return "relojes";
+  if (["sublicuentas", "sublicuenta", "naara"].includes(normalized)) return "sublicuentas";
+  return normalized;
+}
+
+export function sorteoVendorElegible(value) {
+  return ["sublicuentas", "relojes"].includes(sorteoVendorGroup(value));
+}
+
 export function sorteoSafeId(value) {
   return sorteoClean(value, 160).replace(/[^a-zA-Z0-9_-]/g, "");
 }
