@@ -20,6 +20,34 @@
   const host=()=>document.getElementById('rbac-sorteos');
   const byId=id=>document.getElementById(id);
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const HEX_COLOR=/^#[0-9a-f]{6}$/i;
+
+  function safeHex(value,fallback='#2A5FD9'){
+    const candidate=String(value||'').trim();
+    return HEX_COLOR.test(candidate)?candidate:String(fallback||'#2A5FD9');
+  }
+  function themeAccent(){
+    const css=getComputedStyle(document.documentElement);
+    return safeHex(css.getPropertyValue('--theme-accent').trim()||css.getPropertyValue('--accent').trim());
+  }
+  function contrastColor(value){
+    const hex=safeHex(value).slice(1);
+    const channels=[0,2,4].map(index=>parseInt(hex.slice(index,index+2),16)/255).map(channel=>channel<=.04045?channel/12.92:Math.pow((channel+.055)/1.055,2.4));
+    const luminance=.2126*channels[0]+.7152*channels[1]+.0722*channels[2];
+    const white=1.05/(luminance+.05),dark=(luminance+.05)/.055;
+    return white>=dark?'#FFFFFF':'#111827';
+  }
+  function syncThemeTokens(){
+    const accent=themeAccent();
+    document.documentElement.style.setProperty('--sorteos-on-accent',contrastColor(accent));
+  }
+  let themeObserver=null;
+  function watchTheme(){
+    syncThemeTokens();
+    if(themeObserver)return;
+    themeObserver=new MutationObserver(syncThemeTokens);
+    themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  }
 
   function dateObject(value){
     if(!value)return null;
@@ -76,10 +104,22 @@
         <div class="sr-layout">
           <div class="sr-main">
             <section class="sr-hero">
-              <div class="sr-hero-gift" aria-hidden="true"><span>🎁</span><i>★</i></div>
-              <div class="sr-hero-copy"><small>FIDELIDAD QUE SE SIENTE</small><h3>Sorteos y premios</h3><p>Cada compra y renovación puede convertirse en una oportunidad real de ganar.</p></div>
-              <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
-                <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+              <div class="sr-hero-copy">
+                <small>FIDELIDAD QUE SE SIENTE</small>
+                <h3>Premios que hacen volver</h3>
+                <p>Convierta cada compra y renovación en boletos para ganar beneficios digitales.</p>
+                <div class="sr-hero-actions">
+                  <button type="button" class="sr-hero-btn primary" data-sr-hero-tab="premios">Ver premios</button>
+                  <button type="button" class="sr-hero-btn" id="srHeroNewDraw">Crear sorteo</button>
+                </div>
+                <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
+                  <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+                </div>
+              </div>
+              <div class="sr-hero-art" aria-hidden="true">
+                <span class="sr-art-ticket">🎟️</span><span class="sr-art-star">★</span>
+                <span class="sr-art-gift">🎁</span><span class="sr-art-trophy">🏆</span>
+                <i></i><b></b>
               </div>
             </section>
             <section class="sr-metrics" id="srMetrics"></section>
@@ -109,6 +149,10 @@
       root.querySelectorAll('[data-sr-tab]').forEach(item=>item.classList.toggle('on',item===button));
       render();status('');
     }));
+    root.querySelectorAll('[data-sr-hero-tab]').forEach(button=>button.addEventListener('click',()=>{
+      state.tab=button.dataset.srHeroTab;syncTab();render();status('');
+    }));
+    byId('srHeroNewDraw')?.addEventListener('click',()=>openDraw(''));
   }
 
   async function load(force=false){
@@ -220,7 +264,8 @@
     const canEdit=!winner&&['borrador','activo'].includes(draw.estado);
     const canClose=!winner&&draw.estado==='activo';
     const canSpin=!winner&&draw.estado==='cerrado';
-    return `<article class="sr-draw-card" style="--sr-accent:${esc(draw.color||'#E2231A')}">
+    const cardColor=safeHex(draw.color,themeAccent());
+    return `<article class="sr-draw-card" style="--sr-item-accent:${esc(cardColor)}">
       <header><div><span class="sr-state ${esc(draw.estado||'borrador')}">${esc(ESTADOS[draw.estado]||draw.estado)}</span><span class="sr-scope">${esc(ALCANCES[draw.alcance]||draw.alcance)}</span></div><b class="sr-ticket-total">${Number(draw.totalBoletos)||0} <small>boletos</small></b></header>
       <h4>${esc(draw.titulo||'Sorteo')}</h4><p>${esc(draw.descripcion||'Los clientes participan automáticamente con sus compras y renovaciones.')}</p>
       <div class="sr-draw-meta"><span>◎ ${esc(CATEGORIAS[draw.categoria]||draw.categoria)}</span><span>⌛ ${dateText(draw.fechaFin)}</span></div>
@@ -247,10 +292,12 @@
 
   function prizeCard(prize){
     const type=TIPO_PREMIO[prize.tipo]||TIPO_PREMIO.personalizado;
-    return `<article class="sr-prize-card" style="--sr-prize:${esc(prize.color||'#E2231A')}">
-      <div class="sr-prize-icon">${type[0]}</div><div class="sr-prize-copy"><div><span class="sr-state ${prize.activo!==false?'activo':'borrador'}">${prize.activo!==false?'Disponible':'Oculto'}</span><span class="sr-scope">${esc(prize.ownerVendor==='relojes'?'Relojes':'Sublicuentas')}</span></div>
-      <h4>${esc(prize.nombre)}</h4><p>${esc(prize.descripcion||prizeLabel(prize))}</p><small>${esc(stockText(prize))} · ${esc(type[1])}</small></div>
-      <button type="button" class="sr-btn ghost" data-sr-edit-prize="${esc(prize.id)}">Editar</button>
+    const cardColor=safeHex(prize.color,themeAccent());
+    return `<article class="sr-prize-card sr-prize-${esc(prize.tipo||'personalizado')}" style="--sr-prize:${esc(cardColor)};--sr-prize-on:${contrastColor(cardColor)}">
+      <div class="sr-prize-top"><span class="sr-state ${prize.activo!==false?'activo':'borrador'}">${prize.activo!==false?'Disponible':'Oculto'}</span><span class="sr-scope">${esc(prize.ownerVendor==='relojes'?'Relojes':'Sublicuentas')}</span></div>
+      <div class="sr-prize-icon" aria-hidden="true">${type[0]}</div>
+      <div class="sr-prize-copy"><h4>${esc(prize.nombre)}</h4><p>${esc(prize.descripcion||prizeLabel(prize))}</p><small>${esc(stockText(prize))} · ${esc(type[1])}</small></div>
+      <button type="button" class="sr-btn ghost" data-sr-edit-prize="${esc(prize.id)}">Editar premio</button>
     </article>`;
   }
   function renderPrizes(){
@@ -278,7 +325,8 @@
   function typeOptions(selected){return Object.entries(TIPO_PREMIO).map(([value,item])=>`<option value="${value}" ${value===selected?'selected':''}>${item[0]} ${esc(item[1])}</option>`).join('');}
   function openPrize(id){
     const current=state.premios.find(item=>item.id===id);
-    const prize=current?{...current}:{nombre:'',descripcion:'',tipo:'perfil',valor:1,unidad:'mes',plataforma:'',entregaModo:'manual',instrucciones:'',stock:1,activo:true,color:'#E2231A',ownerVendor:state.permisos.alcance==='relojes'?'relojes':'sublicuentas'};
+    const accent=themeAccent();
+    const prize=current?{...current}:{nombre:'',descripcion:'',tipo:'perfil',valor:1,unidad:'mes',plataforma:'',entregaModo:'manual',instrucciones:'',stock:1,activo:true,color:accent,ownerVendor:state.permisos.alcance==='relojes'?'relojes':'sublicuentas'};
     const modal=byId('srModal');if(!modal)return;modal.hidden=false;
     modal.innerHTML=`<form class="sr-sheet" id="srPrizeForm"><div class="sr-modal-head"><div><small>PREMIO DIGITAL</small><h3>${current?'Editar premio':'Nuevo premio'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
       <div class="sr-form">
@@ -293,7 +341,7 @@
         <label class="sr-field">Existencias manuales<input id="srPrizeStock" type="number" min="0" max="9999" value="${Number(prize.stock)||0}"></label>
         <label class="sr-field wide">Nuevos códigos digitales · uno por línea<textarea id="srPrizeCodes" placeholder="CINE-ABC-123&#10;CINE-XYZ-456"></textarea><small>${current&&prize.entregaModo==='codigo'?`Ya hay ${Number(prize.codigosDisponibles)||0} código(s) guardados. Los nuevos se agregarán sin mostrarlos aquí.`:'Para boletos de cine u otros códigos virtuales.'}</small></label>
         <label class="sr-field wide">Instrucciones para el ganador<textarea id="srPrizeInstructions" maxlength="500" placeholder="Cómo usar o reclamar el premio">${esc(prize.instrucciones||'')}</textarea></label>
-        <label class="sr-field color">Color<input id="srPrizeColor" type="color" value="${esc(prize.color||'#E2231A')}"></label>
+        <label class="sr-field color">Color<input id="srPrizeColor" type="color" value="${esc(safeHex(prize.color,accent))}"></label>
         <label class="sr-switch"><input id="srPrizeActive" type="checkbox" ${prize.activo!==false?'checked':''}><span></span> Premio disponible</label>
       </div><div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srPrizeCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar premio</button></div></form>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srPrizeCancel').onclick=closeModal;
@@ -324,7 +372,8 @@
   function openDraw(id){
     const current=state.sorteos.find(item=>item.id===id);
     if(!current&&state.premios.filter(item=>item.activo!==false).length<2){state.tab='premios';syncTab();render();status('Cree al menos dos premios antes de publicar un sorteo.','bad');return;}
-    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30},color:'#E2231A'};
+    const accent=themeAccent();
+    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30},color:accent};
     const rules={compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30,...(draw.reglas||{})};
     const modal=byId('srModal');if(!modal)return;modal.hidden=false;
     modal.innerHTML=`<form class="sr-sheet wide" id="srDrawForm"><div class="sr-modal-head"><div><small>CAMPAÑA DE FIDELIDAD</small><h3>${current?'Editar sorteo':'Nuevo sorteo'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
@@ -336,7 +385,7 @@
         <label class="sr-field">Inicio<input id="srDrawStart" type="datetime-local" required value="${esc(localInput(draw.fechaInicio)||draw.fechaInicio||defaultLocal())}"></label>
         <label class="sr-field">Cierre<input id="srDrawEnd" type="datetime-local" required value="${esc(localInput(draw.fechaFin)||draw.fechaFin||defaultLocal(7))}"></label>
         <label class="sr-field">Publicación<select id="srDrawState"><option value="activo" ${draw.estado==='activo'?'selected':''}>Publicar ahora</option><option value="borrador" ${draw.estado==='borrador'?'selected':''}>Guardar borrador</option></select></label>
-        <label class="sr-field color">Color<input id="srDrawColor" type="color" value="${esc(draw.color||'#E2231A')}"></label>
+        <label class="sr-field color">Color<input id="srDrawColor" type="color" value="${esc(safeHex(draw.color,accent))}"></label>
         <div class="sr-form-section"><b>Boletos automáticos</b><span>La misma compra o renovación nunca se cuenta dos veces.</span></div>
         <label class="sr-field">Compra nueva<input id="srRuleBuy" type="number" min="0" max="20" value="${Number(rules.compra)}"></label>
         <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" min="0" max="20" value="${Number(rules.renovacion)}"></label>
@@ -411,9 +460,19 @@
     catch(error){status(error.message,'bad');}
   }
 
-  function init(){shell();if(document.getElementById('screen-sorteos')?.classList.contains('active')){load();startPolling();}}
-  window.SublichatSorteos={open:()=>{shell();load();startPolling();},reload:()=>load(true)};
+  let visibilityObserver=null;
+  function watchVisibility(){
+    const screen=document.getElementById('screen-sorteos');if(!screen||visibilityObserver)return;
+    let wasActive=screen.classList.contains('active');
+    visibilityObserver=new MutationObserver(()=>{
+      const active=screen.classList.contains('active');
+      if(active&&!wasActive){shell();load();startPolling();}
+      if(!active&&wasActive)stopPolling();
+      wasActive=active;
+    });
+    visibilityObserver.observe(screen,{attributes:true,attributeFilter:['class']});
+  }
+  function init(){watchTheme();shell();watchVisibility();if(document.getElementById('screen-sorteos')?.classList.contains('active')){load();startPolling();}}
+  window.SublichatSorteos={open:()=>{watchTheme();shell();watchVisibility();load();startPolling();},reload:()=>load(true)};
   document.addEventListener('DOMContentLoaded',init);
-  new MutationObserver(()=>{if(document.getElementById('screen-sorteos')?.classList.contains('active')){shell();load();startPolling();}})
-    .observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class']});
 })();

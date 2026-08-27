@@ -1446,7 +1446,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 </script>
 
 <link rel="stylesheet" href="/catalogo-relojes-admin.css?v=20260822-2">
-<link rel="stylesheet" href="/sorteos-admin.css?v=20260826-2">
+<link rel="stylesheet" href="/sorteos-admin.css?v=20260826-4">
 </head>
 <body>
 <!-- INTRO SUBLIROBOT -->
@@ -7234,6 +7234,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(screen==='control-cuentas')return isSublicuentasAccount();
     if(screen==='revendedores')return isSublicuentasAccount();
     if(screen==='portal-cliente')return canPortalCliente();
+    if(screen==='sorteos')return canPortalCliente();
     if(screen==='catalogo-relojes')return canPortalCliente();
     return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
   }
@@ -7543,7 +7544,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='revendedores'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='revendedores'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='sorteos'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
@@ -12000,7 +12001,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <script src="/portal-cliente-admin.js?v=20260820-1"></script>
 <script src="/catalogo-relojes-admin.js?v=20260822-2"></script>
 <script src="/revendedores-admin.js?v=20260825-1"></script>
-<script src="/sorteos-admin.js?v=20260826-1"></script>
+<script src="/sorteos-admin.js?v=20260826-4"></script>
 </body>
 </html>
 
