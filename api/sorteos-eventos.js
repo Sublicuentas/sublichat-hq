@@ -15,7 +15,7 @@
 
 import admin from "firebase-admin";
 import { createHash } from "node:crypto";
-import { reglasSorteo, sorteoClean, sorteoNorm, sorteoSafeId } from "./sorteos-lib.js";
+import { reglasSorteo, sorteoClean, sorteoEventoId, sorteoNorm, sorteoSafeId } from "./sorteos-lib.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -88,7 +88,7 @@ async function updateLoyalty(db, event) {
 }
 
 async function currentTicketCount(db, drawId, clientId) {
-  const snap = await db.collection("sorteo_boletos").where("clientId", "==", clientId).limit(500).get();
+  const snap = await db.collection("sorteo_boletos").where("clientId", "==", clientId).get();
   return snap.docs.reduce((sum, doc) => sum + (String((doc.data() || {}).sorteoId) === drawId ? 1 : 0), 0);
 }
 
@@ -96,14 +96,22 @@ async function createEventTickets(db, draw, event, quantity) {
   const drawId = sorteoSafeId(draw.id), clientId = sorteoSafeId(event.clientId), eventId = sorteoClean(event.eventoId, 500);
   if (!drawId || !clientId || !eventId || quantity <= 0) return { creados: 0, duplicado: false };
   const drawRules = reglasSorteo(draw.reglas || {}), existing = await currentTicketCount(db, drawId, clientId);
-  const total = Math.min(Math.max(0, Number(quantity) || 0), Math.max(0, drawRules.limitePorCliente - existing));
-  if (!total) return { creados: 0, limite: true };
   const key = hash(`${drawId}|${event.tipo}|${clientId}|${eventId}`);
   const eventRef = db.collection("sorteo_eventos").doc(key), drawRef = db.collection("sorteos").doc(drawId);
+  const counterRef = db.collection("sorteo_contadores").doc(hash(`${drawId}|${clientId}`));
   return db.runTransaction(async transaction => {
-    const [eventSnap, drawSnap] = await Promise.all([transaction.get(eventRef), transaction.get(drawRef)]);
+    const [eventSnap, drawSnap, counterSnap] = await Promise.all([
+      transaction.get(eventRef), transaction.get(drawRef), transaction.get(counterRef)
+    ]);
     if (eventSnap.exists) return { creados: 0, duplicado: true };
     if (!drawSnap.exists || !activeDraw(drawSnap.data() || {})) return { creados: 0, cerrado: true };
+    const counted = counterSnap.exists ? Math.max(0, Number((counterSnap.data() || {}).total) || 0) : existing;
+    const total = Math.min(Math.max(0, Number(quantity) || 0), Math.max(0, drawRules.limitePorCliente - counted));
+    if (!total) {
+      transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId, cantidad: 0, limitado: true, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      transaction.set(counterRef, { sorteoId: drawId, clientId, total: counted, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { creados: 0, limite: true };
+    }
     const latest = drawSnap.data() || {}, start = Math.max(0, Number(latest.ultimoNumero) || 0) + 1, codes = [];
     for (let index = 0; index < total; index += 1) {
       const number = start + index, code = `SOR-${String(drawId).slice(-4).toUpperCase()}-${String(number).padStart(5, "0")}`;
@@ -115,6 +123,7 @@ async function createEventTickets(db, draw, event, quantity) {
       codes.push(code);
     }
     transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId, cantidad: total, codigos: codes, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.set(counterRef, { sorteoId: drawId, clientId, total: counted + total, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     transaction.set(drawRef, { ultimoNumero: start + total - 1, totalBoletos: admin.firestore.FieldValue.increment(total), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     return { creados: total, codigos: codes, duplicado: false };
   });
@@ -123,7 +132,7 @@ async function createEventTickets(db, draw, event, quantity) {
 export async function registrarEventoSorteos(rawEvent = {}) {
   const db = getApp().firestore();
   const type = ["compra", "renovacion"].includes(sorteoNorm(rawEvent.tipo)) ? sorteoNorm(rawEvent.tipo) : "";
-  const clientId = sorteoSafeId(rawEvent.clientId), eventId = sorteoClean(rawEvent.eventoId, 500);
+  const clientId = sorteoSafeId(rawEvent.clientId), eventId = sorteoEventoId(rawEvent, type);
   if (!type || !clientId || !eventId) return { ok: false, omitido: "evento_incompleto", creados: 0 };
   const clientSnap = await db.collection("clientes").doc(clientId).get();
   if (!clientSnap.exists) return { ok: false, omitido: "cliente_no_existe", creados: 0 };

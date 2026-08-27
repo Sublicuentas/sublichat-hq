@@ -26,6 +26,23 @@ export function sorteoSafeId(value) {
   return sorteoClean(value, 160).replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
+export function sorteoFechaKey(value) {
+  const raw = sorteoClean(value, 40);
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const candidate = dmy ? `${dmy[3]}-${dmy[2]}-${dmy[1]}` : raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return "";
+  const date = new Date(`${candidate}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== candidate ? "" : candidate;
+}
+
+export function sorteoEventoId(raw = {}, tipo = "") {
+  const compraId = sorteoSafeId(raw.compraId);
+  if (compraId && tipo === "compra") return `compra:${compraId}`;
+  const fecha = sorteoFechaKey(raw.fechaEvento);
+  if (compraId && tipo === "renovacion" && fecha) return `renov:${compraId}:${fecha}`;
+  return sorteoClean(raw.eventoId, 500);
+}
+
 function integer(value, min, max, fallback) {
   return Number.isFinite(Number(value))
     ? Math.max(min, Math.min(max, Math.round(Number(value))))

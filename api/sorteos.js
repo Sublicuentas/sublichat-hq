@@ -66,6 +66,15 @@ function iso(value) {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
+function timeMs(value) {
+  if (!value) return 0;
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const seconds = Number(value._seconds ?? value.seconds);
+  if (Number.isFinite(seconds)) return seconds * 1000;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
 function color(value, fallback = "#E2231A") {
   const text = sorteoClean(value, 7);
   return /^#[0-9a-f]{6}$/i.test(text) ? text : fallback;
@@ -84,6 +93,9 @@ function normalizePrize(raw = {}, previous = {}) {
   const tipo = TIPOS_PREMIO.has(sorteoNorm(raw.tipo)) ? sorteoNorm(raw.tipo) : "personalizado";
   const nombre = sorteoClean(raw.nombre, 120);
   if (!nombre) throw new Error("Escriba el nombre del premio.");
+  const valor = Math.max(0, Number(raw.valor) || 0);
+  if (tipo !== "personalizado" && valor <= 0) throw new Error("El valor del premio debe ser mayor que cero.");
+  if (tipo === "descuento_porcentaje" && valor > 100) throw new Error("El descuento porcentual no puede superar el 100%.");
   const stock = Math.max(0, Math.min(9999, Math.round(Number(raw.stock != null ? raw.stock : previous.stock) || 0)));
   const codigosNuevos = normalizeCodes(raw.codigos);
   const codigosAnteriores = Array.isArray(previous.codigosDisponibles) ? previous.codigosDisponibles.map(item => sorteoClean(item, 300)).filter(Boolean) : [];
@@ -99,7 +111,7 @@ function normalizePrize(raw = {}, previous = {}) {
     nombre,
     descripcion: sorteoClean(raw.descripcion, 500),
     tipo,
-    valor: Math.max(0, Number(raw.valor) || 0),
+    valor,
     unidad: sorteoClean(raw.unidad, 40),
     plataforma: sorteoClean(raw.plataforma, 100),
     entregaModo,
@@ -142,6 +154,25 @@ function normalizeDraw(raw = {}, previous = {}, editor = {}) {
     ganador: previous.ganador || null,
     color: color(raw.color, previous.color || "#E2231A")
   };
+}
+
+function sameValues(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function assertDrawEditAllowed(previous = {}, next = {}, hasId = false) {
+  if (!["borrador", "activo"].includes(next.estado)) throw new Error("Use los botones de cerrar y girar para finalizar un sorteo.");
+  if (!hasId) return;
+  if (["cerrado", "finalizado"].includes(sorteoNorm(previous.estado))) throw new Error("Un sorteo cerrado ya no puede editarse.");
+  const issued = Math.max(0, Number(previous.totalBoletos) || 0);
+  if (!issued) return;
+  const eligibilityChanged = ["categoria", "alcance", "fechaInicio", "fechaFin"].some(field => String(previous[field] || "") !== String(next[field] || ""));
+  const prizesChanged = !sameValues(uniqueIds(previous.premioIds, 5).sort(), uniqueIds(next.premioIds, 5).sort());
+  const rulesChanged = !sameValues(reglasSorteo(previous.reglas || {}), reglasSorteo(next.reglas || {}));
+  if (eligibilityChanged || prizesChanged || rulesChanged) {
+    throw new Error("Ya existen boletos. Para proteger la transparencia no puede cambiar participantes, reglas ni premios.");
+  }
+  if (next.estado === "borrador") throw new Error("Un sorteo con boletos no puede volver a borrador; cierre la participación cuando corresponda.");
 }
 
 function publicPrize(doc) {
@@ -207,7 +238,7 @@ async function adminLoad(db, editor) {
   const countByDraw = {};
   boletos.forEach(ticket => { countByDraw[ticket.sorteoId] = (countByDraw[ticket.sorteoId] || 0) + 1; });
   sorteos.forEach(draw => { draw.totalBoletos = Math.max(Number(draw.totalBoletos) || 0, countByDraw[draw.id] || 0); });
-  sorteos.sort((a, b) => String(b.createdAt || b.fechaInicio || "").localeCompare(String(a.createdAt || a.fechaInicio || "")));
+  sorteos.sort((a, b) => timeMs(b.createdAt || b.fechaInicio) - timeMs(a.createdAt || a.fechaInicio));
   const premios = prizeSnap.docs.filter(doc => prizeVisibleToEditor(doc.data() || {}, editor)).map(adminPrize)
     .sort((a, b) => Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre, "es"));
   const entregas = deliverySnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
@@ -252,9 +283,9 @@ async function publicLoad(db, token) {
   const { clientId, cliente } = await resolvePublicClient(db, token);
   const [drawSnap, ticketSnap, prizeSnap, deliveriesSnap] = await Promise.all([
     db.collection(SORTEOS_COLLECTION).limit(150).get(),
-    db.collection(BOLETOS_COLLECTION).where("clientId", "==", clientId).limit(1000).get(),
+    db.collection(BOLETOS_COLLECTION).where("clientId", "==", clientId).get(),
     db.collection(PREMIOS_COLLECTION).limit(300).get(),
-    db.collection(ENTREGAS_COLLECTION).where("clientId", "==", clientId).limit(100).get()
+    db.collection(ENTREGAS_COLLECTION).where("clientId", "==", clientId).get()
   ]);
   const vendor = sorteoNorm(cliente.vendedor_norm || cliente.vendedor || "");
   const now = Date.now();
@@ -369,6 +400,17 @@ async function savePrize(db, editor, body) {
   const ownerVendor = editor.kind === "relojes"
     ? "relojes"
     : (["sublicuentas", "relojes"].includes(requestedOwner) ? requestedOwner : sorteoNorm(previous.ownerVendor || "sublicuentas"));
+  if (id && snap?.exists) {
+    const referenced = await db.collection(SORTEOS_COLLECTION).where("premioIds", "array-contains", id).limit(50).get();
+    const locked = referenced.docs.some(doc => ["activo", "cerrado", "finalizado"].includes(sorteoNorm((doc.data() || {}).estado)));
+    if (locked) {
+      const protectedFields = ["nombre", "descripcion", "tipo", "valor", "unidad", "plataforma", "entregaModo"];
+      const identityChanged = protectedFields.some(field => String(previous[field] ?? "") !== String(prize[field] ?? ""));
+      if (identityChanged || ownerVendor !== sorteoNorm(previous.ownerVendor || "sublicuentas") || prize.activo === false) {
+        throw new Error("Este premio está comprometido en un sorteo publicado. Puede agregar existencias o instrucciones, pero no cambiarlo ni ocultarlo.");
+      }
+    }
+  }
   const now = admin.firestore.FieldValue.serverTimestamp();
   await ref.set({
     ...prize,
@@ -388,6 +430,7 @@ async function saveDraw(db, editor, body) {
   if (previous.ganador) throw new Error("Un sorteo con ganador ya no puede editarse.");
   if (editor.kind === "relojes" && id && sorteoNorm(previous.alcance) !== "relojes") throw Object.assign(new Error("Relojes solo puede editar sus propios sorteos."), { status: 403 });
   const draw = normalizeDraw(body.sorteo || {}, previous, editor);
+  assertDrawEditAllowed(previous, draw, Boolean(id && snap?.exists));
   const prizeDocs = await Promise.all(draw.premioIds.map(prizeId => db.collection(PREMIOS_COLLECTION).doc(prizeId).get()));
   if (prizeDocs.some(doc => !doc.exists || !prizeAvailable(doc.data() || {}))) throw new Error("Uno de los premios seleccionados no está disponible o se agotó.");
   if (editor.kind === "relojes" && prizeDocs.some(doc => sorteoNorm((doc.data() || {}).ownerVendor) !== "relojes")) throw Object.assign(new Error("Relojes solo puede utilizar sus propios premios."), { status: 403 });
@@ -403,6 +446,8 @@ async function closeDraw(db, editor, id) {
   const draw = snap.data() || {};
   if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede cerrar este sorteo."), { status: 403 });
   if (draw.ganador) throw new Error("El sorteo ya tiene ganador.");
+  if (draw.estado !== "activo") throw new Error("Solo un sorteo activo puede cerrar su participación.");
+  if ((Number(draw.totalBoletos) || 0) <= 0) throw new Error("Todavía no hay boletos; espere una compra o renovación antes de cerrar.");
   await ref.set({ estado: "cerrado", cerradoAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { ok: true, id: ref.id, estado: "cerrado" };
 }

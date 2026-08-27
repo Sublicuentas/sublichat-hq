@@ -1042,6 +1042,7 @@ export default async function handler(req, res) {
       // (ej. cambiar solo el correo) no genera boleto. eventoId es estable por
       // compra/fecha, así un reintento del mismo guardado nunca duplica boletos —
       // el candado real vive en sorteo_eventos dentro de sorteos-eventos.js.
+      let sorteoResult = null;
       try {
         const compraId = String(servicioGuardado?.compraId || "");
         const fechaNueva = String(servicioGuardado?.fechaRenovacion || "");
@@ -1049,17 +1050,20 @@ export default async function handler(req, res) {
         const esCompraNueva = compraId && (created || !servicioActualizado);
         const esRenovacionReal = compraId && servicioActualizado && fechaNueva && fechaNueva !== fechaPrevia;
         if (esCompraNueva) {
-          await registrarEventoSorteosSeguro({
-            tipo: "compra", clientId: docRef.id, eventoId: `compra:${compraId}`,
+          sorteoResult = await registrarEventoSorteosSeguro({
+            tipo: "compra", clientId: docRef.id, compraId, eventoId: `compra:${compraId}`,
             clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
           });
         } else if (esRenovacionReal) {
-          await registrarEventoSorteosSeguro({
-            tipo: "renovacion", clientId: docRef.id, eventoId: `renov:${compraId}:${fechaNueva}`,
+          sorteoResult = await registrarEventoSorteosSeguro({
+            tipo: "renovacion", clientId: docRef.id, compraId, fechaEvento: fechaNueva,
+            eventoId: `renov:${compraId}:${fechaNueva}`,
             clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
           });
         }
-      } catch (_) {}
+      } catch (error) {
+        sorteoResult = { ok: false, creados: 0, error: String(error?.message || error || "No se generaron boletos.") };
+      }
 
       // Crea una URL permanente por beneficiario y conserva, como enlaces
       // puntuales, los tokens antiguos que no fueron elegidos para la fusión.
@@ -1111,7 +1115,8 @@ export default async function handler(req, res) {
         beneficiarioTipo: beneficiarioActual.tipo,
         beneficiarioNombre: beneficiarioActual.nombre,
         token: tokenPublico,
-        linkPublico: tokenPublico ? `/c/${tokenPublico}` : ""
+        linkPublico: tokenPublico ? `/c/${tokenPublico}` : "",
+        sorteos: sorteoResult
       });
     }
 
@@ -1430,6 +1435,32 @@ export default async function handler(req, res) {
       });
     }
 
+    let sorteoResult = null;
+    if (acc === "renovar" && verified && String(mutation.fechaNueva || "") !== String(mutation.fechaAnterior || "")) {
+      const clientePersistido = persistedData || {};
+      const compraEvento = mutation.touchedCompraId || `servicio-${mutation.touchedIndex}`;
+      sorteoResult = await registrarEventoSorteosSeguro({
+        tipo: "renovacion", clientId: docRef.id, compraId: compraEvento, fechaEvento: mutation.fechaNueva,
+        eventoId: `renov:${compraEvento}:${mutation.fechaNueva}`,
+        clienteNombre: clientePersistido.nombrePerfil || clientePersistido.nombre || mutation.nombreTitular || "Cliente",
+        telefono: clientePersistido.telefono || "", vendedor: clientePersistido.vendedor || body.vendedor || "", origen: "Sublichat"
+      });
+      try {
+        await db.collection("historial_clientes").add({
+          clientId: docRef.id,
+          tipo: "servicio_renovado",
+          descripcion: `Renovación confirmada: ${mutation.fechaAnterior || "-"} → ${mutation.fechaNueva || "-"}`,
+          plataforma: plataforma || "",
+          fechaAnterior: mutation.fechaAnterior || "",
+          fechaRenovacion: mutation.fechaNueva || "",
+          origen: "Sublichat",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (_) {}
+    } else if (acc === "renovar" && verified) {
+      sorteoResult = { ok: true, creados: 0, omitido: "fecha_sin_cambio" };
+    }
+
     const serviciosResumen = persistedServices.map((s, i) => `${i}:${s.plataforma || "?"}=${s.fechaRenovacion || "?"}`);
     return res.status(200).json({
       ok: true,
@@ -1442,6 +1473,7 @@ export default async function handler(req, res) {
       compraId: mutation.touchedCompraId,
       fechaAnterior: mutation.fechaAnterior,
       fechaNueva: mutation.fechaNueva,
+      sorteos: sorteoResult,
       serviciosResumen
     });
   } catch (e) {
