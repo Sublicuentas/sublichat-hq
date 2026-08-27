@@ -264,6 +264,7 @@
     const canEdit=!winner&&['borrador','activo'].includes(draw.estado);
     const canClose=!winner&&draw.estado==='activo';
     const canSpin=!winner&&draw.estado==='cerrado';
+    const canBackfill=!winner&&draw.estado==='activo'&&draw.categoria==='general';
     const cardColor=safeHex(draw.color,themeAccent());
     return `<article class="sr-draw-card" style="--sr-item-accent:${esc(cardColor)}">
       <header><div><span class="sr-state ${esc(draw.estado||'borrador')}">${esc(ESTADOS[draw.estado]||draw.estado)}</span><span class="sr-scope">${esc(ALCANCES[draw.alcance]||draw.alcance)}</span></div><b class="sr-ticket-total">${Number(draw.totalBoletos)||0} <small>boletos</small></b></header>
@@ -274,6 +275,7 @@
       <footer>
         <button type="button" class="sr-btn ghost" data-sr-tickets="${esc(draw.id)}">Ver boletos</button>
         ${canEdit?`<button type="button" class="sr-btn ghost" data-sr-edit-draw="${esc(draw.id)}">Editar</button>`:''}
+        ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar agosto 2026</button>`:''}
         ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
         ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
       </footer>
@@ -285,6 +287,7 @@
       <div class="sr-draw-grid">${state.sorteos.map(drawCard).join('')||'<div class="sr-empty"><b>Todavía no hay sorteos.</b><br>Cree primero dos premios y después publique su primera campaña.</div>'}</div>`;
     byId('srNewDraw')?.addEventListener('click',()=>openDraw(''));
     body.querySelectorAll('[data-sr-edit-draw]').forEach(button=>button.addEventListener('click',()=>openDraw(button.dataset.srEditDraw)));
+    body.querySelectorAll('[data-sr-backfill]').forEach(button=>button.addEventListener('click',()=>backfillAugust(button.dataset.srBackfill,button)));
     body.querySelectorAll('[data-sr-close]').forEach(button=>button.addEventListener('click',()=>closeDraw(button.dataset.srClose)));
     body.querySelectorAll('[data-sr-spin]').forEach(button=>button.addEventListener('click',()=>openWheel(button.dataset.srSpin)));
     body.querySelectorAll('[data-sr-tickets]').forEach(button=>button.addEventListener('click',()=>openTickets(button.dataset.srTickets)));
@@ -419,6 +422,25 @@
 
   function syncTab(){
     host()?.querySelectorAll('[data-sr-tab]').forEach(item=>item.classList.toggle('on',item.dataset.srTab===state.tab));
+  }
+  async function backfillAugust(id,button){
+    const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
+    if(!confirm(`¿Cargar en “${draw.titulo}” a los clientes directos de Sublicuentas/Relojes que compraron o renovaron durante agosto de 2026?\n\nPuede repetir esta acción sin duplicar boletos.`))return;
+    if(button)button.disabled=true;
+    status('Buscando compras y renovaciones confirmadas de agosto…');
+    let reset=true,last=null;
+    try{
+      do{
+        last=await api({accion:'cargar_agosto_2026',id,reiniciar:reset});
+        reset=false;
+        status(`Carga de agosto: ${Number(last.procesados)||0} de ${Number(last.totalTareas)||0} operaciones revisadas · ${Number(last.boletosCreados)||0} boletos creados.`);
+      }while(last&&!last.completado);
+      await load(true);
+      const errors=Number(last?.errores)||0;
+      status(`Agosto cargado: ${Number(last?.clientesDetectados)||0} cliente(s) detectados y ${Number(last?.boletosCreados)||0} boleto(s) nuevos.${errors?` ${errors} registro(s) requieren revisión.`:' Sin duplicados.'}`,errors?'bad':'good');
+    }catch(error){
+      status(error.message,'bad');
+    }finally{if(button&&document.body.contains(button))button.disabled=false;}
   }
   async function closeDraw(id){
     const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;

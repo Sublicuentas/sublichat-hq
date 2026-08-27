@@ -6,9 +6,11 @@
     error:false,
     sorteosData:null,
     sorteosError:false,
+    sorteosLoading:false,
     enhanced:false,
     activePanel:'cuentas',
-    paymentAllowed:false
+    paymentAllowed:false,
+    rafflesAllowed:false
   };
 
   const LOGO_KEYS=new Set(['tigo','atlantida','bac','ficohsa','davivienda','banpais','tengo','occidente']);
@@ -65,19 +67,40 @@
     return String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
   }
 
+  function directVendorGroup(value){
+    const normalized=normalizeVendor(value);
+    if(['relojes','reloj','libni'].includes(normalized))return 'relojes';
+    if(['sublicuentas','sublicuenta','naara'].includes(normalized))return 'sublicuentas';
+    return normalized;
+  }
+
+  function directFeaturesVisible(value){return PAYMENT_VENDOR_KEYS.has(directVendorGroup(value));}
+
   function paymentsVisible(){
     return state.paymentAllowed&&state.data?.secciones?.pagos!==false;
   }
 
-  function syncPaymentVisibility(){
-    const visible=paymentsVisible();
-    const button=document.querySelector('[data-portal-panel="pagos"]');
-    const panel=document.getElementById('portal-panel-pagos');
+  function rafflesVisible(){
+    return state.rafflesAllowed&&state.data?.secciones?.sorteos!==false;
+  }
+
+  function syncCategoryVisibility(){
+    const paymentVisible=paymentsVisible(),raffleVisible=rafflesVisible();
+    const paymentButton=document.querySelector('[data-portal-panel="pagos"]');
+    const paymentPanel=document.getElementById('portal-panel-pagos');
+    const raffleButton=document.querySelector('[data-portal-panel="sorteos"]');
+    const rafflePanel=document.getElementById('portal-panel-sorteos');
     const nav=document.querySelector('.portal-categories');
-    if(button)button.hidden=!visible;
-    if(panel&&!visible)panel.hidden=true;
-    if(nav){nav.classList.remove('two-categories');nav.classList.toggle('four-categories',visible);}
-    if(!visible&&state.activePanel==='pagos')selectPanel('cuentas',false);
+    if(paymentButton)paymentButton.hidden=!paymentVisible;
+    if(paymentPanel&&!paymentVisible)paymentPanel.hidden=true;
+    if(raffleButton)raffleButton.hidden=!raffleVisible;
+    if(rafflePanel&&!raffleVisible)rafflePanel.hidden=true;
+    if(nav){
+      const count=2+Number(paymentVisible)+Number(raffleVisible);
+      nav.classList.toggle('two-categories',count===2);
+      nav.classList.toggle('four-categories',count===4);
+    }
+    if((!paymentVisible&&state.activePanel==='pagos')||(!raffleVisible&&state.activePanel==='sorteos'))selectPanel('cuentas',false);
   }
 
   function loadMascot(image){
@@ -502,7 +525,9 @@
 
     const introNodes=['.live-row','.h1','.hello','.sub'].map(selector=>stage.querySelector(`:scope > ${selector}`)).filter(Boolean);
     const count=serviceCount(accessList);
-    state.paymentAllowed=PAYMENT_VENDOR_KEYS.has(normalizeVendor(stage.dataset.portalVendedor));
+    const directAccess=directFeaturesVisible(stage.dataset.portalVendedor);
+    state.paymentAllowed=state.data?.secciones?state.data.secciones.pagos===true:directAccess;
+    state.rafflesAllowed=state.data?.secciones?state.data.secciones.sorteos===true:directAccess;
     stage.dataset.portalEnhanced='1';stage.classList.add('portal-enhanced');document.body.classList.add('portal-ready');
 
     const brand=element('header','portal-brand');
@@ -516,13 +541,16 @@
     const nav=element('nav','portal-categories');nav.role='tablist';nav.setAttribute('aria-label','Categorías de su portal');
     nav.append(
       categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
-      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas'),
-      categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Consulte sus boletos y premios')
+      categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas')
     );
+    if(state.rafflesAllowed){
+      nav.append(categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Consulte sus boletos y premios'));
+    }
     if(state.paymentAllowed){
       nav.append(categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera'));
     }
-    nav.classList.toggle('four-categories',state.paymentAllowed);
+    nav.classList.toggle('two-categories',!state.paymentAllowed&&!state.rafflesAllowed);
+    nav.classList.toggle('four-categories',state.paymentAllowed&&state.rafflesAllowed);
 
     const panels=element('main','portal-panels');
     const accounts=element('section','portal-panel portal-account-panel');accounts.id='portal-panel-cuentas';accounts.dataset.panel='cuentas';accounts.role='tabpanel';
@@ -533,11 +561,13 @@
     raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Cada compra o renovación puede darle nuevas oportunidades de ganar.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
-    panels.append(accounts,promos,raffles);
+    panels.append(accounts,promos);
+    if(state.rafflesAllowed)panels.append(raffles);
     if(state.paymentAllowed)panels.append(payments);
 
     stage.replaceChildren(brand,intro,nav,panels);
-    state.enhanced=true;syncPaymentVisibility();renderPromotions();renderPayments();renderRaffles();selectPanel('cuentas',false);
+    state.enhanced=true;syncCategoryVisibility();renderPromotions();renderPayments();renderRaffles();selectPanel('cuentas',false);
+    if(state.rafflesAllowed&&!state.sorteosData&&!state.sorteosLoading)loadRaffles();
   }
 
   async function loadPortal(){
@@ -548,22 +578,31 @@
       const data=await response.json();
       if(!response.ok||!data.ok)throw new Error(data.error||'No se pudo cargar el portal.');
       state.data=data;
-      if(data.secciones&&typeof data.secciones==='object')state.paymentAllowed=data.secciones.pagos===true;
+      if(data.secciones&&typeof data.secciones==='object'){
+        state.paymentAllowed=data.secciones.pagos===true;
+        state.rafflesAllowed=data.secciones.sorteos===true;
+      }
     }catch(_){state.error=true;}
-    syncPaymentVisibility();renderPromotions();renderPayments();
+    if(!state.rafflesAllowed){state.sorteosData=null;state.sorteosError=false;}
+    syncCategoryVisibility();renderPromotions();renderPayments();
+    if(state.rafflesAllowed&&!state.sorteosData&&!state.sorteosLoading)loadRaffles();
   }
 
   async function loadRaffles(force=false){
+    if(!rafflesVisible())return;
+    if(state.sorteosLoading)return;
     const token=tokenFromLocation();
     if(!token){state.sorteosError=true;renderRaffles();return;}
     if(force){state.sorteosData=null;state.sorteosError=false;renderRaffles();}
+    state.sorteosLoading=true;
     try{
       const response=await fetch(`/api/sorteos?token=${encodeURIComponent(token)}&_=${Date.now()}`,{cache:'no-store'});
       const data=await response.json();
       if(!response.ok||!data.ok)throw new Error(data.error||'No se pudieron cargar los sorteos.');
+      if(data.habilitado===false){state.rafflesAllowed=false;state.sorteosData=null;state.sorteosError=false;syncCategoryVisibility();return;}
       state.sorteosData=data;state.sorteosError=false;
     }catch(_){state.sorteosError=true;}
-    renderRaffles();
+    finally{state.sorteosLoading=false;renderRaffles();}
   }
 
   const stage=document.getElementById('stage');
@@ -576,5 +615,4 @@
     enhance();
   }
   loadPortal();
-  loadRaffles();
 })();
