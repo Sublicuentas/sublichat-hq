@@ -230,6 +230,81 @@ function normName(v) {
     .replace(/\s+/g, " ");
 }
 
+function canonicalVendedor(v = "") {
+  const raw = String(v || "").replace(/\s+/g, " ").trim();
+  const norm = normName(raw);
+  if (norm === "geissel" || norm === "geisell") return "Geisell";
+  return raw;
+}
+
+function normVendedorIdentidad(v = "") {
+  const norm = normName(v);
+  return norm === "geissel" ? "geisell" : norm;
+}
+
+function vendedorEfectivoServicio(servicio = {}, cliente = {}) {
+  const vendedor = canonicalVendedor(
+    servicio?.vendedor || cliente?.vendedor ||
+    (Array.isArray(cliente?.vendedores) ? cliente.vendedores[0] : "") || ""
+  );
+  const vendedorNormRaw = normName(servicio?.vendedor_norm || vendedor || cliente?.vendedor_norm || "");
+  const vendedorNorm = vendedorNormRaw === "geissel" ? "geisell" : vendedorNormRaw;
+  const vendedorTelefono = String(
+    servicio?.vendedorTelefono ||
+    (vendedorNorm && vendedorNorm === normVendedorIdentidad(cliente?.vendedor_norm || cliente?.vendedor || "")
+      ? cliente?.vendedorTelefono
+      : "") || ""
+  ).trim();
+  return { vendedor, vendedor_norm: vendedorNorm, vendedorTelefono };
+}
+
+function heredarVendedorServicios(servicios = [], cliente = {}) {
+  return (Array.isArray(servicios) ? servicios : []).map(servicio => {
+    const actual = { ...(servicio || {}) };
+    const vendedor = vendedorEfectivoServicio(actual, cliente);
+    if (!vendedor.vendedor_norm) return actual;
+    return {
+      ...actual,
+      vendedor: vendedor.vendedor,
+      vendedor_norm: vendedor.vendedor_norm,
+      ...(vendedor.vendedorTelefono ? { vendedorTelefono: vendedor.vendedorTelefono } : {})
+    };
+  });
+}
+
+function resumenVendedoresCliente(servicios = [], cliente = {}) {
+  const porNorm = new Map();
+  (Array.isArray(servicios) ? servicios : []).forEach(servicio => {
+    const vendedor = vendedorEfectivoServicio(servicio, cliente);
+    if (vendedor.vendedor_norm && !porNorm.has(vendedor.vendedor_norm)) porNorm.set(vendedor.vendedor_norm, vendedor);
+  });
+  if (!porNorm.size) {
+    const vendedor = vendedorEfectivoServicio({}, cliente);
+    if (vendedor.vendedor_norm) porNorm.set(vendedor.vendedor_norm, vendedor);
+  }
+  const vendedores = [...porNorm.values()];
+  const legacyNorm = normVendedorIdentidad(cliente?.vendedor_norm || cliente?.vendedor || "");
+  const principal = vendedores.find(v => v.vendedor_norm === legacyNorm) || vendedores[0] || { vendedor: "", vendedor_norm: "", vendedorTelefono: "" };
+  return {
+    vendedores: vendedores.map(v => v.vendedor),
+    vendedores_norm: vendedores.map(v => v.vendedor_norm),
+    clienteCompartido: vendedores.length > 1,
+    vendedor: principal.vendedor,
+    vendedor_norm: principal.vendedor_norm,
+    vendedorTelefono: principal.vendedorTelefono || (
+      principal.vendedor_norm && principal.vendedor_norm === legacyNorm
+        ? String(cliente?.vendedorTelefono || "").trim()
+        : ""
+    )
+  };
+}
+
+function clienteTieneVendedor(cliente = {}, vendedor = "") {
+  const buscado = normVendedorIdentidad(vendedor);
+  if (!buscado) return true;
+  return resumenVendedoresCliente(cliente?.servicios || [], cliente).vendedores_norm.includes(buscado);
+}
+
 function normPhone(v) {
   return String(v || "").replace(/\D/g, "");
 }
@@ -619,7 +694,7 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil, vendedorNo
   if (snap.empty) return null;
 
   let candidatos = snap.docs.slice();
-  if (vNorm) candidatos = candidatos.filter(d => normName(d.data()?.vendedor || "") === vNorm);
+  if (vNorm) candidatos = candidatos.filter(d => clienteTieneVendedor(d.data() || {}, vNorm));
   // El teléfono se usa solo como DESAMBIGUADOR cuando viene presente; nunca
   // como llave de creación. Esto permite distinguir homónimos del mismo vendedor.
   if (tNorm) candidatos = candidatos.filter(d => normPhone(d.data()?.telefono || "") === tNorm);
@@ -679,6 +754,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   const dispositivoFinal = usaDispositivo && ["tv", "cel"].includes(String(principal.dispositivo || ""))
     ? String(principal.dispositivo)
     : "";
+  const vendedor = vendedorEfectivoServicio(servicio, anterior);
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
@@ -690,6 +766,9 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
     perfiles,
+    vendedor: vendedor.vendedor,
+    vendedor_norm: vendedor.vendedor_norm,
+    vendedorTelefono: vendedor.vendedorTelefono,
     visibilidadUrl: normalizarVisibilidadUrl(servicio.visibilidadUrl, anterior.visibilidadUrl),
     beneficiarioTipo: beneficiario.tipo,
     beneficiarioNombre: beneficiario.nombre,
@@ -850,7 +929,7 @@ export default async function handler(req, res) {
         if (!doc.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
         const data = doc.data() || {};
         const nombreTitular = data.nombrePerfil || data.nombre || "Cliente";
-        const servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+        const servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
         if (!servicios.length) throw crmUserError("Este cliente todavía no tiene servicios para publicar.");
         const accesos = prepararAccesosBeneficiarios({
           servicios,
@@ -861,6 +940,7 @@ export default async function handler(req, res) {
         const serviciosLimpios = servicios.map(limpiarServicioCRM);
         transaction.set(docRef, {
           servicios: serviciosLimpios,
+          ...resumenVendedoresCliente(serviciosLimpios, data),
           tokenAcceso: accesos.tokenTitular,
           accesosBeneficiarios: accesos.registro,
           updatedAt: isoNow()
@@ -899,10 +979,8 @@ export default async function handler(req, res) {
       const servicio = body.servicio || {};
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
       const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
-      let vendedor = cliente.vendedor || body.vendedor || "";
-      if (normName(vendedor) === "geissel") vendedor = "Geisell";
-      const vendedorTelefonoPresente = cliente.vendedorTelefono != null || body.vendedorTelefono != null;
-      const vendedorTelefono = cliente.vendedorTelefono || body.vendedorTelefono || "";
+      const vendedor = canonicalVendedor(servicio.vendedor || cliente.vendedor || body.vendedor || "");
+      const vendedorTelefono = servicio.vendedorTelefono || cliente.vendedorTelefono || body.vendedorTelefono || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
       const tNorm = normPhone(tel);
 
@@ -937,7 +1015,7 @@ export default async function handler(req, res) {
         if (exactId && !latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
         const data = latest.exists ? (latest.data() || {}) : {};
         const created = !latest.exists;
-        let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+        let servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
         const pNorm = normPlat(servicio.plataforma);
         const correoEntrada = Array.isArray(servicio.perfiles) && servicio.perfiles.length
           ? (servicio.perfiles[0]?.correo ?? servicio.correo ?? "")
@@ -983,7 +1061,12 @@ export default async function handler(req, res) {
         if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
           throw crmUserError("Falta el nombre de la persona que usará este acceso.");
         }
-        const nuevo = buildServicio(servicio, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
+        const nuevo = buildServicio({
+          ...servicio,
+          vendedor: vendedor || servicioAnterior?.vendedor || data.vendedor || "",
+          vendedor_norm: normName(vendedor || servicioAnterior?.vendedor_norm || data.vendedor_norm || ""),
+          vendedorTelefono: vendedorTelefono || servicioAnterior?.vendedorTelefono || ""
+        }, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -1006,6 +1089,7 @@ export default async function handler(req, res) {
           tokenTitularAnterior: data.tokenAcceso
         });
         const serviciosLimpios = servicios.map(limpiarServicioCRM);
+        const resumenVendedores = resumenVendedoresCliente(serviciosLimpios, data);
         const beneficiarioActual = datosBeneficiario(serviciosLimpios[idx], nombreFinal);
         const tokenPublico = String(accesos.registro[beneficiarioActual.key]?.token || accesos.tokenTitular || "");
         const update = {
@@ -1015,9 +1099,7 @@ export default async function handler(req, res) {
           nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
           telefono: tel || data.telefono || "",
           telefono_norm: tNorm || data.telefono_norm || "",
-          vendedor: vendedor || data.vendedor || "",
-          vendedor_norm: normName(vendedor || data.vendedor || ""),
-          vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
+          ...resumenVendedores,
           servicios: serviciosLimpios,
           tokenAcceso: accesos.tokenTitular,
           accesosBeneficiarios: accesos.registro,
@@ -1049,7 +1131,9 @@ export default async function handler(req, res) {
           creado: !!created,
           nombre: nombreFinal || "",
           telefono: tel || "",
-          vendedor: vendedor || "",
+          vendedor: servicioGuardado?.vendedor || vendedor || "",
+          vendedor_norm: servicioGuardado?.vendedor_norm || normName(vendedor || ""),
+          atendidoPor: String(authUser.usuario || authUser.uid || "sublichat"),
           servicioActualizado: !!servicioActualizado,
           createdAt: isoNow()
         });
@@ -1070,13 +1154,13 @@ export default async function handler(req, res) {
         if (esCompraNueva) {
           sorteoResult = await registrarEventoSorteosSeguro({
             tipo: "compra", clientId: docRef.id, compraId, eventoId: `compra:${compraId}`,
-            clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
+            clienteNombre: nombreFinal, telefono: tel, vendedor: servicioGuardado?.vendedor || vendedor, origen: "Sublichat"
           });
         } else if (esRenovacionReal) {
           sorteoResult = await registrarEventoSorteosSeguro({
             tipo: "renovacion", clientId: docRef.id, compraId, fechaEvento: fechaNueva,
             eventoId: `renov:${compraId}:${fechaNueva}`,
-            clienteNombre: nombreFinal, telefono: tel, vendedor, origen: "Sublichat"
+            clienteNombre: nombreFinal, telefono: tel, vendedor: servicioGuardado?.vendedor || vendedor, origen: "Sublichat"
           });
         }
       } catch (error) {
@@ -1157,7 +1241,7 @@ export default async function handler(req, res) {
       const vendedorNormBody = normName(body.vendedor || "");
       const filtrarPorVendedor = (s) => {
         if (!s || s.empty || !vendedorNormBody) return s;
-        const propios = s.docs.filter(d => normName(d.data()?.vendedor || "") === vendedorNormBody);
+        const propios = s.docs.filter(d => clienteTieneVendedor(d.data() || {}, vendedorNormBody));
         return { empty: propios.length === 0, docs: propios };
       };
       if (clienteNorm) snap = filtrarPorVendedor(await query.where("nombre_norm", "==", clienteNorm).limit(5).get());
@@ -1199,7 +1283,7 @@ export default async function handler(req, res) {
       const latest = await transaction.get(docRef);
       if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
       const data = latest.data() || {};
-      let servicios = Array.isArray(data.servicios) ? data.servicios.map(limpiarServicioCRM) : [];
+      let servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
       const nombreTitular = data.nombrePerfil || data.nombre || "";
       const compraIdBody = String(body.compraId || body.servicio?.compraId || "").trim();
       let fechaAnterior = null, fechaNueva = null, touchedIndex = null, touchedCompraId = "";
@@ -1219,7 +1303,13 @@ export default async function handler(req, res) {
         fechaNueva = nuevaFecha;
         touchedIndex = idx;
         touchedCompraId = String(s.compraId || compraIdBody || "");
-        servicios[idx] = { ...s, fechaRenovacion: nuevaFecha, updatedAt: isoNow() };
+        servicios[idx] = {
+          ...s,
+          fechaRenovacion: nuevaFecha,
+          ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
+          ultimaRenovacionProcesadaAt: isoNow(),
+          updatedAt: isoNow()
+        };
 
       } else if (acc === "eliminar") {
         const { servicioIndex } = body;
@@ -1279,7 +1369,16 @@ export default async function handler(req, res) {
       } else if (acc === "agregar") {
         const { servicio } = body;
         if (!servicio || !servicio.plataforma) throw crmUserError("Faltan datos del servicio nuevo.");
-        const nuevo = buildServicio(servicio, "", {}, nombreTitular);
+        const nuevo = buildServicio({
+          ...servicio,
+          vendedor: servicio.vendedor || body.vendedor || data.vendedor || "",
+          vendedor_norm: servicio.vendedor_norm || normName(servicio.vendedor || body.vendedor || data.vendedor_norm || data.vendedor || ""),
+          vendedorTelefono: servicio.vendedorTelefono || (
+            normName(servicio.vendedor || body.vendedor || data.vendedor || "") === normName(data.vendedor_norm || data.vendedor || "")
+              ? data.vendedorTelefono || ""
+              : ""
+          )
+        }, "", {}, nombreTitular);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -1319,7 +1418,10 @@ export default async function handler(req, res) {
           beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
           dispositivo: servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo,
           esRoku: servicio.esRoku != null ? servicio.esRoku : anterior.esRoku,
-          visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl
+          visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl,
+          vendedor: servicio.vendedor != null ? servicio.vendedor : anterior.vendedor,
+          vendedor_norm: servicio.vendedor_norm != null ? servicio.vendedor_norm : anterior.vendedor_norm,
+          vendedorTelefono: servicio.vendedorTelefono != null ? servicio.vendedorTelefono : anterior.vendedorTelefono
         }, servicio.fichaTexto || anterior.fichaTexto || "", anterior, nombreTitular);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
@@ -1349,6 +1451,7 @@ export default async function handler(req, res) {
       } else {
         transaction.set(docRef, {
           servicios: serviciosLimpios,
+          ...resumenVendedoresCliente(serviciosLimpios, data),
           tokenAcceso: accesos.tokenTitular,
           accesosBeneficiarios: accesos.registro,
           updatedAt: isoNow()
@@ -1457,11 +1560,14 @@ export default async function handler(req, res) {
     if (acc === "renovar" && verified && String(mutation.fechaNueva || "") !== String(mutation.fechaAnterior || "")) {
       const clientePersistido = persistedData || {};
       const compraEvento = mutation.touchedCompraId || `servicio-${mutation.touchedIndex}`;
+      const servicioPersistido = mutation.touchedCompraId
+        ? persistedServices.find(s => String(s?.compraId || "") === mutation.touchedCompraId)
+        : persistedServices[mutation.touchedIndex];
       sorteoResult = await registrarEventoSorteosSeguro({
         tipo: "renovacion", clientId: docRef.id, compraId: compraEvento, fechaEvento: mutation.fechaNueva,
         eventoId: `renov:${compraEvento}:${mutation.fechaNueva}`,
         clienteNombre: clientePersistido.nombrePerfil || clientePersistido.nombre || mutation.nombreTitular || "Cliente",
-        telefono: clientePersistido.telefono || "", vendedor: clientePersistido.vendedor || body.vendedor || "", origen: "Sublichat"
+        telefono: clientePersistido.telefono || "", vendedor: servicioPersistido?.vendedor || clientePersistido.vendedor || body.vendedor || "", origen: "Sublichat"
       });
       try {
         await db.collection("historial_clientes").add({
@@ -1471,6 +1577,8 @@ export default async function handler(req, res) {
           plataforma: plataforma || "",
           fechaAnterior: mutation.fechaAnterior || "",
           fechaRenovacion: mutation.fechaNueva || "",
+          vendedor: servicioPersistido?.vendedor || "",
+          procesadoPor: String(authUser.usuario || authUser.uid || "sublichat"),
           origen: "Sublichat",
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });

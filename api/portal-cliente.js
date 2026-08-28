@@ -222,13 +222,31 @@ function paymentConfig(data = {}) {
   };
 }
 
-function promotionMatches(promo, clientId, vendorNorm, today) {
+function clientVendors(client = {}, services = null) {
+  const rows = Array.isArray(services) ? services : (Array.isArray(client.servicios) ? client.servicios : []);
+  const map = new Map();
+  rows.forEach(service => {
+    const nombreRaw = clean(service?.vendedor || client.vendedor, 80);
+    const idRaw = norm(service?.vendedor_norm || nombreRaw || client.vendedor_norm || client.vendedor || '');
+    const id = idRaw === 'geissel' ? 'geisell' : idRaw;
+    const nombre = id === 'geisell' ? 'Geisell' : nombreRaw;
+    if (id && !map.has(id)) map.set(id, nombre || id);
+  });
+  if (!map.size) {
+    const idRaw = norm(client.vendedor_norm || client.vendedor || '');
+    const id = idRaw === 'geissel' ? 'geisell' : idRaw;
+    if (id) map.set(id, id === 'geisell' ? 'Geisell' : (clean(client.vendedor, 80) || id));
+  }
+  return [...map.entries()].map(([id, nombre]) => ({ id, nombre }));
+}
+
+function promotionMatches(promo, clientId, vendorNorms, today) {
   if (!promo || promo.activa === false) return false;
   if (promo.fechaInicio && promo.fechaInicio > today) return false;
   if (promo.fechaFin && promo.fechaFin < today) return false;
   const target = normalizeTarget(promo.alcance || {});
   if (target.tipo === 'clientes') return target.clientes.includes(clientId);
-  if (target.tipo === 'vendedores') return target.vendedores.includes(vendorNorm);
+  if (target.tipo === 'vendedores') return (Array.isArray(vendorNorms) ? vendorNorms : [vendorNorms]).some(v => target.vendedores.includes(v));
   return true;
 }
 
@@ -250,12 +268,18 @@ async function publicPortal(db, req, res) {
   ]);
   if (!clientSnap.exists) return res.status(404).json({ ok: false, error: 'No se encontró el cliente.' });
   const client = clientSnap.data() || {};
-  const vendorNorm = norm(client.vendedor_norm || client.vendedor || '');
-  const directAccess = vendorCanUsePayments(vendorNorm);
+  const pointerData = pointer.data() || {};
+  const beneficiaryKey = clean(pointerData.beneficiarioKey || '', 160);
+  const relevantServices = (Array.isArray(client.servicios) ? client.servicios : []).filter(service => {
+    if (!beneficiaryKey) return true;
+    return clean(service?.beneficiarioKey || (String(service?.beneficiarioTipo || '').toLowerCase() === 'tercero' ? '' : 'titular'), 160) === beneficiaryKey;
+  });
+  const vendorNorms = clientVendors(client, relevantServices).map(v => v.id);
+  const directAccess = vendorNorms.some(vendorCanUsePayments);
   const today = todayHonduras();
   const promociones = promoSnap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(promo => promotionMatches(promo, clientId, vendorNorm, today))
+    .filter(promo => promotionMatches(promo, clientId, vendorNorms, today))
     .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
     .slice(0, 20)
     .map(promo => ({
@@ -290,16 +314,19 @@ async function loadAdmin(db, editor) {
   const restricted = editor && editor.kind === 'relojes';
   const allClients = clientsSnap.docs.map(doc => {
     const data = doc.data() || {};
+    const vendedores = clientVendors(data);
     return {
       id: doc.id,
       nombre: clean(data.nombrePerfil || data.nombre || 'Cliente', 100),
       telefono: clean(data.telefono, 40),
-      vendedor: clean(data.vendedor, 80),
-      vendedorNorm: norm(data.vendedor_norm || data.vendedor || '')
+      vendedor: vendedores.map(v => v.nombre).join(' + '),
+      vendedorNorm: vendedores[0]?.id || '',
+      vendedores,
+      clienteCompartido: vendedores.length > 1
     };
   });
   const clientes = allClients
-    .filter(client => !restricted || client.vendedorNorm === 'relojes')
+    .filter(client => !restricted || client.vendedores.some(v => v.id === 'relojes'))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   let promociones = promoSnap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
@@ -307,9 +334,9 @@ async function loadAdmin(db, editor) {
   promociones.sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
   const vendorMap = new Map();
   clientes.forEach(client => {
-    if (client.vendedorNorm && !vendorMap.has(client.vendedorNorm)) {
-      vendorMap.set(client.vendedorNorm, client.vendedor || client.vendedorNorm);
-    }
+    client.vendedores.forEach(vendedor => {
+      if (!vendorMap.has(vendedor.id)) vendorMap.set(vendedor.id, vendedor.nombre || vendedor.id);
+    });
   });
   const config = paymentConfig(configSnap.exists ? configSnap.data() : {});
   return {
@@ -327,7 +354,7 @@ async function relojesClientIds(db) {
   const snap = await db.collection('clientes').limit(5000).get();
   return new Set(snap.docs.filter(doc => {
     const d = doc.data() || {};
-    return norm(d.vendedor_norm || d.vendedor || '') === 'relojes';
+    return clientVendors(d).some(v => v.id === 'relojes');
   }).map(doc => doc.id));
 }
 

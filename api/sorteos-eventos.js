@@ -132,8 +132,10 @@ export async function registrarEventoSorteos(rawEvent = {}) {
   if (!type || !clientId || !eventId) return { ok: false, omitido: "evento_incompleto", creados: 0 };
   const clientSnap = await db.collection("clientes").doc(clientId).get();
   if (!clientSnap.exists) return { ok: false, omitido: "cliente_no_existe", creados: 0 };
-  const client = clientSnap.data() || {}, vendor = sorteoClean(client.vendedor || rawEvent.vendedor, 80);
-  const vendorNorm = sorteoVendorGroup(client.vendedor_norm || client.vendedor || rawEvent.vendedorNorm || rawEvent.vendedor);
+  // El evento viene de una compra concreta; su vendedor debe prevalecer sobre
+  // la cabecera legacy del cliente, que puede tener cuentas compartidas.
+  const client = clientSnap.data() || {}, vendor = sorteoClean(rawEvent.vendedor || client.vendedor, 80);
+  const vendorNorm = sorteoVendorGroup(rawEvent.vendedorNorm || rawEvent.vendedor || client.vendedor_norm || client.vendedor);
   if (!sorteoVendorElegible(vendorNorm)) {
     return { ok: true, omitido: "vendedor_no_elegible", creados: 0 };
   }

@@ -308,6 +308,14 @@ function scopeMatches(draw, vendor) {
   return scope === "ambos" ? ["sublicuentas", "relojes"].includes(normalized) : scope === normalized;
 }
 
+function clientVendorGroups(cliente = {}) {
+  const servicios = Array.isArray(cliente.servicios) ? cliente.servicios : [];
+  const values = servicios.length
+    ? servicios.map(servicio => servicio?.vendedor_norm || servicio?.vendedor || cliente.vendedor_norm || cliente.vendedor)
+    : [cliente.vendedor_norm || cliente.vendedor];
+  return [...new Set(values.map(sorteoVendorGroup).filter(sorteoVendorElegible))];
+}
+
 function recordInHistoricalMonth(record = {}, month = CARGA_AGOSTO_2026) {
   return [record.fechaTS, record.createdAt, record.fecha, record.updatedAt, record.timestamp]
     .some(value => historicalMonth(value) === month);
@@ -326,9 +334,9 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
   const clients = new Map();
   clientsSnap.docs.forEach(doc => {
     const data = doc.data() || {};
-    const vendor = sorteoVendorGroup(data.vendedor_norm || data.vendedor || "");
-    if (!sorteoVendorElegible(vendor) || !scopeMatches(draw, vendor)) return;
-    clients.set(doc.id, { id: doc.id, data, vendor });
+    const vendors = clientVendorGroups(data).filter(vendor => scopeMatches(draw, vendor));
+    if (!vendors.length) return;
+    clients.set(doc.id, { id: doc.id, data, vendor: vendors[0], vendors });
   });
 
   const flags = new Map();
@@ -509,8 +517,8 @@ function maskedWinner(winner = {}) {
 
 async function publicLoad(db, token) {
   const { clientId, cliente } = await resolvePublicClient(db, token);
-  const vendor = sorteoVendorGroup(cliente.vendedor_norm || cliente.vendedor || "");
-  if (!sorteoVendorElegible(vendor)) {
+  const vendors = clientVendorGroups(cliente);
+  if (!vendors.length) {
     return { ok: true, habilitado: false, cliente: { clientId, nivel: "regular", ciclos: 0 }, sorteos: [] };
   }
   const [drawSnap, ticketSnap, prizeSnap, deliveriesSnap] = await Promise.all([
@@ -521,7 +529,7 @@ async function publicLoad(db, token) {
   ]);
   const now = Date.now();
   const draws = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(draw => scopeMatches(draw, vendor) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
+    .filter(draw => vendors.some(vendor => scopeMatches(draw, vendor)) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
   const drawIds = new Set(draws.map(draw => draw.id));
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(ticket => drawIds.has(String(ticket.sorteoId || "")));
@@ -558,7 +566,7 @@ async function publicLoad(db, token) {
 
 async function choosePrize(db, body) {
   const { clientId, cliente } = await resolvePublicClient(db, body.token);
-  if (!sorteoVendorElegible(cliente.vendedor_norm || cliente.vendedor || "")) {
+  if (!clientVendorGroups(cliente).length) {
     throw Object.assign(new Error("Sorteos está disponible únicamente para clientes directos de Sublicuentas y Relojes."), { status: 403 });
   }
   const sorteoId = sorteoSafeId(body.sorteoId);

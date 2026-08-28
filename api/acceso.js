@@ -359,6 +359,18 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     };
   });
   const principal = perfilesPublicos[0] || {};
+  const vendedorRaw = String(servicio.vendedor || cliente.vendedor || "").trim();
+  const vendedor = normName(vendedorRaw) === "geissel" ? "Geisell" : vendedorRaw;
+  const vendedorNorm = normName(vendedor);
+  const clienteVendedorNorm = normName(cliente.vendedor || cliente.vendedor_norm || "");
+  const mismoVendedor = ["geissel", "geisell"].includes(vendedorNorm)
+    ? ["geissel", "geisell"].includes(clienteVendedorNorm)
+    : vendedorNorm === clienteVendedorNorm;
+  const vendedorTelefono = String(
+    servicio.vendedorTelefono ||
+    (mismoVendedor ? cliente.vendedorTelefono : "") ||
+    vendedorTel(vendedor) || ""
+  ).trim();
 
   return {
     plataforma,
@@ -375,8 +387,8 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     perfiles: perfilesPublicos,
     fechaRenovacion,
     terminos: termsFor(plataforma),
-    vendedor: cliente.vendedor || "",
-    vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+    vendedor,
+    vendedorTelefono
   };
 }
 
@@ -443,6 +455,10 @@ export default async function handler(req, res) {
         }))
         .sort(ordenarServiciosPublicos);
       const activos = publicos.filter(s => !s.vencido).length;
+      const vendedores = [...new Map(publicos.filter(s => s.vendedor).map(s => [normName(s.vendedor), {
+        vendedor: s.vendedor,
+        vendedorTelefono: s.vendedorTelefono || ""
+      }])).values()];
       return res.status(200).json({
         ok: true,
         multi: true,
@@ -452,8 +468,10 @@ export default async function handler(req, res) {
         totalServicios: publicos.length,
         totalActivos: activos,
         totalVencidos: publicos.length - activos,
-        vendedor: cliente.vendedor || "",
-        vendedorTelefono: cliente.vendedorTelefono || vendedorTel(cliente.vendedor) || ""
+        vendedores,
+        clienteCompartido: vendedores.length > 1,
+        vendedor: vendedores.length === 1 ? vendedores[0].vendedor : "",
+        vendedorTelefono: vendedores.length === 1 ? vendedores[0].vendedorTelefono : ""
       });
     }
 
