@@ -1973,14 +1973,18 @@ function clienteBeneficiarioKey(servicio={}){
 }
 function flattenCliente(doc, clienteId=""){
   const F=CONFIG.fields;
-  const nombre=doc[F.nombre]||"—", vendedor=doc[F.vendedor]||"—";
+  const nombre=doc[F.nombre]||"—", vendedorCliente=doc[F.vendedor]||"—";
   const telefono=doc[F.telefono]||"";
-  const vendedorTelefono=doc.vendedorTelefono||"";
+  const vendedorTelefonoCliente=doc.vendedorTelefono||"";
   const nombreNorm=doc.nombre_norm||"";
   const servs=Array.isArray(doc[F.servicios])?doc[F.servicios]:[];
   const accesos=doc.accesosBeneficiarios&&typeof doc.accesosBeneficiarios==="object"&&!Array.isArray(doc.accesosBeneficiarios)?doc.accesosBeneficiarios:{};
   const tokenTitular=String(doc.tokenAcceso||accesos.titular?.token||"");
   return servs.map((s,srvIndex)=>{
+    let vendedor=String(s.vendedor||vendedorCliente||"—").trim();
+    if(clienteSearchNorm(vendedor)==="geissel")vendedor="Geisell";
+    const vendedorNorm=clienteSearchNorm(s.vendedor_norm||vendedor);
+    const vendedorTelefono=String(s.vendedorTelefono||(vendedorNorm===clienteSearchNorm(doc.vendedor_norm||vendedorCliente)?vendedorTelefonoCliente:"")||"").trim();
     const perfiles=perfilesDeCompra(s,nombre);
     const principal=perfiles[0]||{};
     const rawClave=principal.clave||s.clave||s.contrasena||s.password||"";
@@ -1992,7 +1996,9 @@ function flattenCliente(doc, clienteId=""){
     const beneficiarioKey=clienteBeneficiarioKey(s);
     const tokenGrupo=String(accesos[beneficiarioKey]?.token||(beneficiarioKey==="titular"?tokenTitular:"")||s.token||"");
     return {
-      nombre,vendedor,telefono,vendedorTelefono,nombreNorm,clienteId,
+      nombre,vendedor,vendedorNorm,telefono,vendedorTelefono,nombreNorm,clienteId,
+      vendedores:Array.isArray(doc.vendedores)?doc.vendedores.slice():[vendedor],
+      clienteCompartido:doc.clienteCompartido===true||(Array.isArray(doc.vendedores_norm)&&doc.vendedores_norm.length>1),
       srvIndex,
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
@@ -2360,6 +2366,9 @@ function renderTable(){
     g.fecha=prox.fecha; g.st=statusOf(prox.fecha);
     g.total=g.servicios.reduce((s,x)=>s+x.precio,0);
     g.plats=g.servicios.map(x=>x.plataforma);
+    g.vendedores=[...new Set(g.servicios.map(x=>x.vendedor).filter(v=>v&&v!=="—"))];
+    g.vendedor=g.vendedores.join(" + ")||g.vendedor||"";
+    g.clienteCompartido=g.vendedores.length>1;
     return g;
   }).sort((a,b)=>(a.fecha?+a.fecha:9e15)-(b.fecha?+b.fecha:9e15));
   const shown=rows.slice(0,MAX_ROWS);
@@ -2369,7 +2378,7 @@ function renderTable(){
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
     const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><b>${clienteEsc(g.nombre)}</b></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button><button type="button" class="danger" data-client-action="no-renovo" data-client-index="${i}">❌ No renovó</button></div></td></tr>`;
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><span><b>${clienteEsc(g.nombre)}</b>${g.clienteCompartido?`<small style="display:block;color:var(--muted);margin-top:3px">🔀 Compartido: ${clienteEsc(g.vendedor)}</small>`:""}</span></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button><button type="button" class="danger" data-client-action="no-renovo" data-client-index="${i}">❌ No renovó</button></div></td></tr>`;
   }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
   document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
@@ -4042,10 +4051,14 @@ function grupoCobroPorFecha(grupo){
   const serviciosGrupo=Array.isArray(grupo.servicios)&&grupo.servicios.length?grupo.servicios:[grupo];
   const fechaObjetivo=grupo.fecha||grupo.fechaRaw||serviciosGrupo[0]?.fecha||serviciosGrupo[0]?.fechaRaw||null;
   const claveObjetivo=cobroFechaClave(fechaObjetivo);
+  const vendedorObjetivo=clienteSearchNorm(serviciosGrupo[0]?.vendedor||grupo.vendedor||"");
   let serviciosCliente=Array.isArray(DATA)?DATA.filter(s=>cobroEsMismoCliente(s,grupo)):[];
   if(!serviciosCliente.length&&Array.isArray(grupo.serviciosCliente))serviciosCliente=grupo.serviciosCliente.slice();
   if(!serviciosCliente.length)serviciosCliente=serviciosGrupo.slice();
-  let serviciosFecha=serviciosCliente.filter(s=>cobroFechaClave(s.fecha||s.fechaRaw)===claveObjetivo);
+  let serviciosFecha=serviciosCliente.filter(s=>
+    cobroFechaClave(s.fecha||s.fechaRaw)===claveObjetivo&&
+    (!vendedorObjetivo||clienteSearchNorm(s.vendedor||"")===vendedorObjetivo)
+  );
   if(!serviciosFecha.length)serviciosFecha=serviciosGrupo.filter(s=>cobroFechaClave(s.fecha||s.fechaRaw)===claveObjetivo);
   if(!serviciosFecha.length)serviciosFecha=[serviciosGrupo[0]].filter(Boolean);
   serviciosFecha=serviciosFecha.slice().sort((a,b)=>(Number(a.srvIndex)||0)-(Number(b.srvIndex)||0));
@@ -4216,6 +4229,15 @@ const PLATS_DISPONIBLES=[
   ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],
   ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"]
 ];
+const VENDEDORES_SERVICIO=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
+const VENDEDORES_SERVICIO_TEL={relojes:"32126332",sublicuentas:"89464277","sublicuentas 2":"89464328",yami:"96877246",jimena:"88501036",heber:"32174922",abner:"94306551",manuel:"87989267"};
+function vendedorServicioSesion(){
+  const usuario=clienteSearchNorm(typeof currentUser==="function"?currentUser():"");
+  if(["sublicuentas","naara"].includes(usuario))return "Sublicuentas";
+  if(["relojes","libni","daniela","finanzas"].includes(usuario))return "Relojes";
+  if(usuario==="geissel"||usuario==="geisell")return "Geisell";
+  return VENDEDORES_SERVICIO.find(v=>clienteSearchNorm(v)===usuario)||"";
+}
 const gestionBtn=$cobro("cobroGestionar"), gestionBox=$cobro("cobroGestion");
 if(gestionBtn)gestionBtn.addEventListener("click",()=>{
   const vis=gestionBox.style.display!=="none";
@@ -4230,7 +4252,7 @@ function pintarGestion(){
     <div class="cg-item">
       <div class="cg-info">
         <div class="cg-plat">${s.plataforma}</div>
-        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"}</div>
+        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"} · 🧾 ${clienteEsc(s.vendedor||"Sin vendedor")}</div>
       </div>
       <div class="cg-act">
         <button class="edit" data-i="${i}" title="Editar">✏️</button>
@@ -4271,6 +4293,7 @@ function abrirServForm(modo, serv){
     $cobro("servSub").textContent=g?g.nombre:"";
     // llenar selector de plataformas
     $cobro("servPlat").innerHTML=PLATS_DISPONIBLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+    $cobro("servVendedoresList").innerHTML=VENDEDORES_SERVICIO.map(v=>`<option value="${v}"></option>`).join("");
     if(modo==="editar" && serv){
       const principal=(Array.isArray(serv.perfiles)&&serv.perfiles[0])||{};
       servEditandoPlat=serv.plataformaRaw||serv.plataforma;
@@ -4286,12 +4309,14 @@ function abrirServForm(modo, serv){
       $cobro("servCorreo").value=principal.correo||serv.correo||"";
       $cobro("servPin").value=principal.clave||serv.clave||serv.pin||"";
       $cobro("servPinPerfil").value=principal.pinPerfil||principal.pin||serv.pinPerfil||"";
+      $cobro("servVendedor").value=serv.vendedor||g?.vendedor||"";
     }else{
       servEditandoPlat=null;
       servEditandoCorreo=null;
       servEditandoIndex=null;
       servEditandoCompraId="";
       $cobro("servPrecio").value=""; $cobro("servFecha").value=""; $cobro("servNombrePerfil").value=g?.nombre||""; $cobro("servCorreo").value=""; $cobro("servPin").value=""; $cobro("servPinPerfil").value="";
+      $cobro("servVendedor").value=vendedorServicioSesion()||(Array.isArray(g?.vendedores)&&g.vendedores.length===1?g.vendedores[0]:"");
     }
     servActualizarCampos();
     $cobro("servHint").textContent="";
@@ -4327,9 +4352,12 @@ $cobro("servSave")?.addEventListener("click",async()=>{
     correo:fichaNeedsCorreo($cobro("servPlat").value)?$cobro("servCorreo").value.trim():"",
     clave:$cobro("servPin").value.trim(),
     perfil:$cobro("servNombrePerfil").value.trim()||g.nombre,
-    pinPerfil:$cobro("servPinPerfil").value.trim()
+    pinPerfil:$cobro("servPinPerfil").value.trim(),
+    vendedor:$cobro("servVendedor").value.trim().replace(/^Geissel$/i,"Geisell")
   };
-  if(!servicio.precio||!servicio.fechaRenovacion||(fichaNeedsCorreo(servicio.plataforma)&&!servicio.correo)){ $cobro("servHint").textContent="Complete precio, fecha y los datos requeridos."; return; }
+  servicio.vendedor_norm=clienteSearchNorm(servicio.vendedor);
+  servicio.vendedorTelefono=VENDEDORES_SERVICIO_TEL[servicio.vendedor_norm]||"";
+  if(!servicio.precio||!servicio.fechaRenovacion||!servicio.vendedor||(fichaNeedsCorreo(servicio.plataforma)&&!servicio.correo)){ $cobro("servHint").textContent="Complete vendedor, precio, fecha y los datos requeridos."; return; }
   if(fichaNeedsClave(servicio.plataforma)&&!servicio.clave){$cobro("servHint").textContent="Esta plataforma requiere clave.";return;}
   if(fichaNeedsPin(servicio.plataforma)&&!servicio.pinPerfil){$cobro("servHint").textContent="Esta plataforma requiere un PIN individual.";return;}
   $cobro("servHint").textContent="Guardando…";
@@ -4500,15 +4528,16 @@ async function send(){
   const porCliente={};
   DATA.forEach(c=>{
     const key=c.nombre+"|"+(c.telefono||"");
-    if(!porCliente[key]) porCliente[key]={nombre:c.nombre,tel:c.telefono||"",vendedor:c.vendedor||"",cuentas:[]};
+    if(!porCliente[key]) porCliente[key]={nombre:c.nombre,tel:c.telefono||"",vendedor:c.vendedor||"",vendedores:[],cuentas:[]};
+    if(c.vendedor&&!porCliente[key].vendedores.includes(c.vendedor))porCliente[key].vendedores.push(c.vendedor);
     porCliente[key].cuentas.push({
       plataforma:c.plataforma, precio:c.precio,
       renueva:c.fecha?c.fecha.toISOString().slice(0,10):null,
       estado:statusOf(c.fecha).t,
-      correo:c.correo||"", clave:c.clave||c.pin||"", pinPerfil:c.pinPerfil||""
+      correo:c.correo||"", clave:c.clave||c.pin||"", pinPerfil:c.pinPerfil||"", vendedor:c.vendedor||""
     });
   });
-  const contexto=Object.values(porCliente);
+  const contexto=Object.values(porCliente).map(g=>({...g,vendedor:g.vendedores.join(" + ")||g.vendedor}));
   try{
     const r=await fetch(CONFIG.chatEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pregunta:text,hoy:today.toISOString().slice(0,10),clientes:contexto})});
     const j=await r.json();
@@ -6469,6 +6498,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       perfiles,
       beneficiarioTipo,
       beneficiarioNombre,
+      vendedor:fichaVendedorActual(),
+      vendedor_norm:String(fichaVendedorActual()||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," "),
+      vendedorTelefono:fichaVendedorTelefonoActual(),
       // VERSION 20 · metadata para /c/{token}: no afecta lo que se guarda de
       // correo/clave/PIN (eso sigue dependiendo solo de la plataforma).
       dispositivo:fichaUsaSelectorDispositivo(plat)?(principal.dispositivo||""):"",
@@ -6740,9 +6772,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const fechaISO=(s.fechaRaw?fbAISO(s.fechaRaw):"") || (s.fecha?s.fecha.toISOString().slice(0,10):"");
     fichaQ("fichaNombre").value=(g&&g.nombre)||"";
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
-    const vendedorFicha=(g&&g.vendedor)||fichaVendedorSesion();
+    const vendedorFicha=s.vendedor||fichaVendedorSesion()||(g&&Array.isArray(g.vendedores)&&g.vendedores.length===1?g.vendedores[0]:(g&&g.vendedor)||"");
     fichaSetVendedor(vendedorFicha);
-    fichaQ("fichaVendedorTelefono").value=(g&&g.vendedorTelefono)||fichaVendedorTel(vendedorFicha);
+    fichaQ("fichaVendedorTelefono").value=s.vendedorTelefono||((g&&g.vendedor===vendedorFicha)?g.vendedorTelefono:"")||fichaVendedorTel(vendedorFicha);
     const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
     fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
     fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
@@ -6837,7 +6869,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const plat=s.plataforma||fichaPlatformLabel(s.plataformaRaw)||"Servicio";
       const acceso=s.correo||"Sin correo/usuario";
       const para=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?`Para ${s.beneficiarioNombre||"tercero"}`:"Titular";
-      return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · ${fichaEsc(para)} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
+      return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · 🧾 ${fichaEsc(s.vendedor||"Sin vendedor")} · ${fichaEsc(para)} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
     }).join("");
     list.querySelectorAll("[data-ficha-servicio]").forEach(btn=>btn.addEventListener("click",()=>fichaSeleccionarServicio(Number(btn.dataset.fichaServicio))));
     fichaActualizarModoNuevoServicio();
@@ -6875,8 +6907,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       clienteId:fichaClienteIdActual,
       nombre:fichaGetVal("fichaNombre")||(fichaGrupoActual&&fichaGrupoActual.nombre)||"",
       telefono:fichaGetVal("fichaTelefono")||(fichaGrupoActual&&fichaGrupoActual.telefono)||"",
-      vendedor:fichaVendedorActual()||(fichaGrupoActual&&fichaGrupoActual.vendedor)||"",
-      vendedorTelefono:fichaVendedorTelefonoActual()||(fichaGrupoActual&&fichaGrupoActual.vendedorTelefono)||""
+      vendedor:fichaVendedorSesion()||"",
+      vendedorTelefono:fichaVendedorTel(fichaVendedorSesion())||""
     };
     fichaGrupoActual=grupo;
     fichaForzarNuevoServicioActual=true;
@@ -6895,7 +6927,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaRenderPerfilesExtra();
     fichaRenderServicePicker();
     fichaActualizarModoNuevoServicio();
-    fichaStatus("Complete la nueva plataforma y sus accesos. El nombre, número, vendedor y URL pertenecen al mismo cliente.","info");
+    fichaStatus("Complete la nueva plataforma y sus accesos. El vendedor elegido pertenecerá solo a esta cuenta; el nombre, número y URL siguen siendo del mismo cliente.","info");
     const sheet=fichaQ("fichaModal")&&fichaQ("fichaModal").querySelector(".ficha-sheet");
     if(sheet)sheet.scrollTop=0;
     setTimeout(()=>fichaQ("fichaPlat")&&fichaQ("fichaPlat").focus(),60);
@@ -7057,7 +7089,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         <div class="ficha-grid">
           <label class="ficha-field"><span>Cliente titular</span><input class="ficha-input" id="fichaNombre" placeholder="Nombre de quien compra"></label>
           <label class="ficha-field"><span>Teléfono</span><input class="ficha-input" id="fichaTelefono" placeholder="Ej. 9999-9999"></label>
-          <label class="ficha-field"><span>Vendedor</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
+          <label class="ficha-field"><span>Vendedor responsable de esta cuenta</span><select class="ficha-select" id="fichaVendedor"><option value="">Seleccione vendedor</option>${FICHA_VENDEDORES.map(v=>`<option value="${v}">${v}</option>`).join("")}<option value="__nuevo__">➕ Agregar vendedor</option></select><small style="display:block;margin-top:5px;color:var(--muted)">Cambiarlo transfiere únicamente la cuenta seleccionada.</small></label><label class="ficha-field" id="fichaVendedorNuevoBox" style="display:none"><span>Nuevo vendedor</span><input class="ficha-input" id="fichaVendedorNuevo" placeholder="Escriba el vendedor"></label>
           <label class="ficha-field"><span>Número del vendedor / soporte</span><input class="ficha-input" id="fichaVendedorTelefono" inputmode="tel" placeholder="Solo el número autorizado"></label>
           <label class="ficha-field"><span>¿Quién usará este acceso?</span><select class="ficha-select" id="fichaBeneficiarioTipo"><option value="titular">El cliente titular</option><option value="tercero">Otra persona / tercero</option></select></label>
           <label class="ficha-field" id="fichaBeneficiarioNombreBox" style="display:none"><span>Nombre del beneficiario</span><input class="ficha-input" id="fichaBeneficiarioNombre" placeholder="Ej. María López"></label>
@@ -7237,7 +7269,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=forceNewService?null:((preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,visibilidadUrl:grupo.visibilidadUrl,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono,iptvProveedor:grupo.iptvProveedor,iptvPantallas:grupo.iptvPantallas,iptvLista:grupo.iptvLista,iptvHora:grupo.iptvHora,oleadaDispositivos:grupo.oleadaDispositivos}:null));
+    const serv=forceNewService?null:((preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,visibilidadUrl:grupo.visibilidadUrl,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedor:grupo.vendedor,vendedorTelefono:grupo.vendedorTelefono,iptvProveedor:grupo.iptvProveedor,iptvPantallas:grupo.iptvPantallas,iptvLista:grupo.iptvLista,iptvHora:grupo.iptvHora,oleadaDispositivos:grupo.oleadaDispositivos}:null));
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaForzarNuevoServicioActual=forceNewService;
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
@@ -7833,7 +7865,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function renderCRM(){
     const el=document.getElementById('rbac-crm-master'); if(!el)return;
     const grupos={}; DATA.forEach(c=>{const k=c.nombre+'|'+(c.telefono||''); if(!grupos[k])grupos[k]={nombre:c.nombre,telefono:c.telefono,vendedor:c.vendedor,total:0,servicios:[]}; grupos[k].total+=c.precio; grupos[k].servicios.push(c);});
-    const rows=Object.values(grupos).sort((a,b)=>b.total-a.total).slice(0,120);
+    const rows=Object.values(grupos).map(g=>({...g,vendedor:[...new Set(g.servicios.map(s=>s.vendedor).filter(Boolean))].join(' + ')||g.vendedor})).sort((a,b)=>b.total-a.total).slice(0,120);
     el.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${rows.length}</b><span>Clientes únicos</span></div><div class="rbac-card"><b>${DATA.length}</b><span>Servicios</span></div><div class="rbac-card"><b>${fmt(DATA.reduce((s,c)=>s+c.precio,0))}</b><span>Cartera total</span></div></div><div class="tbl-wrap"><table class="rbac-table"><thead><tr><th>Cliente</th><th>Teléfono</th><th>Vendedor</th><th>Servicios</th><th>Total</th></tr></thead><tbody>${rows.map(g=>`<tr><td>${esc(g.nombre)}</td><td>${esc(g.telefono||'—')}</td><td>${esc(g.vendedor||'—')}</td><td>${g.servicios.length}</td><td>${fmt(g.total)}</td></tr>`).join('')}</tbody></table></div>`;
   }
   function renderAuditoria(){
@@ -8507,6 +8539,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     </div>
     <label class="serv-label">Plataforma</label>
     <select id="servPlat" class="serv-input"></select>
+    <label class="serv-label">Vendedor responsable de esta cuenta</label>
+    <input id="servVendedor" class="serv-input" type="text" list="servVendedoresList" placeholder="Ej. Sublicuentas o Relojes">
+    <datalist id="servVendedoresList"></datalist>
     <label class="serv-label">Precio (Lps)</label>
     <input id="servPrecio" class="serv-input" type="number" inputmode="numeric" placeholder="Ej: 130">
     <label class="serv-label">Fecha de renovación</label>

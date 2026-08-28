@@ -315,17 +315,35 @@ function renderClientes(){
   const b=$('#revBody');
   b.innerHTML=`
     <div class="cr-tools"><input class="cr-search" id="revCliSearch" placeholder="Buscar cliente por nombre o teléfono" value="${esc(state.clienteQ)}"></div>
+    <div class="cr-card" style="margin-bottom:12px"><h3>Vendedor por cuenta</h3><small>La migración copia el vendedor actual a cada servicio antiguo y crea un respaldo. Después podrá transferir cuentas individuales sin mover las demás.</small><div class="cr-row" style="margin-top:10px"><button class="cr-btn ghost" id="revPreviewVendedoresServicio">Revisar migración</button><button class="cr-btn red" id="revAplicarVendedoresServicio">Aplicar migración</button></div></div>
     <div id="revCliList"><div class="cr-empty">Escribí para buscar, o dejá vacío y Enter para ver los últimos.</div></div>
     <div id="revCliDetalle"></div>`;
   const inp=$('#revCliSearch');
   inp.onkeydown=e=>{ if(e.key==='Enter'){ state.clienteQ=inp.value.trim(); loadClientesList(); } };
+  $('#revPreviewVendedoresServicio').onclick=previsualizarVendedoresServicio;
+  $('#revAplicarVendedoresServicio').onclick=aplicarVendedoresServicio;
+}
+async function previsualizarVendedoresServicio(){
+  try{
+    const d=await api('GET','actualizaciones/vendedores-por-servicio');
+    alert(`Clientes a actualizar: ${d.clientesAActualizar||0}.\nServicios que heredarán vendedor: ${d.serviciosQueHeredaranVendedor||0}.\nServicios sin vendedor para revisión manual: ${d.serviciosSinVendedor||0}.`);
+  }catch(e){status(e.message,'bad')}
+}
+async function aplicarVendedoresServicio(){
+  if(!confirm('¿Aplicar el vendedor por cuenta? Se guardará un respaldo antes de modificar cada ficha.'))return;
+  const btn=$('#revAplicarVendedoresServicio');if(btn){btn.disabled=true;btn.textContent='Aplicando…'}
+  try{
+    const d=await api('POST','actualizaciones/vendedores-por-servicio',{});
+    status(`✅ Migración completa: ${d.clientesActualizados||0} clientes actualizados. ${d.serviciosSinVendedor||0} servicios quedaron para revisión manual.`,'good');
+    await loadClientesList();
+  }catch(e){status(e.message,'bad');if(btn){btn.disabled=false;btn.textContent='Aplicar migración'}}
 }
 function renderClientesList(){
   const box=$('#revCliList'); if(!box) return;
   box.innerHTML=`<div class="cr-grid">${(state.clientes||[]).map(c=>`
     <article class="cr-card">
       <h3>${esc(c.nombre)}</h3>
-      <small>${esc(c.telefono||'sin teléfono')} · vendedor: ${esc(c.vendedor_norm||'—')}</small>
+      <small>${esc(c.telefono||'sin teléfono')} · ${c.clienteCompartido?'🔀 compartido: ':'vendedor: '}${esc(c.vendedor||(Array.isArray(c.vendedores)?c.vendedores.join(' + '):c.vendedor_norm)||'—')}</small>
       <div class="cr-row"><small>${c.servicios} servicio(s)</small><button class="cr-btn ghost" data-ver-cliente="${esc(c.id)}">Ver</button></div>
     </article>`).join('')||'<div class="cr-empty">Sin resultados.</div>'}</div>`;
   box.querySelectorAll('[data-ver-cliente]').forEach(x=>x.onclick=()=>verCliente(x.dataset.verCliente));
@@ -342,24 +360,24 @@ async function verCliente(id){
 function renderClienteDetalle(){
   const box=$('#revCliDetalle'); const c=state.clienteSel; if(!c) return;
   const servicios=Array.isArray(c.servicios)?c.servicios:[];
-  const opcionesVendedor=(state.vendedores||[]).map(v=>`<option value="${esc(v.nombre_norm||v.id)}" ${(''+v.nombre_norm===''+c.vendedor_norm)?'selected':''}>${esc(v.nombre)}</option>`).join('');
+  const vendedoresResumen=[...new Set(servicios.map(s=>s.vendedor).filter(Boolean))];
   box.innerHTML=`<div class="cr-card" style="margin-top:12px">
     <h2>👤 ${esc(c.nombrePerfil||c.nombre||'Cliente')}</h2>
+    <small>${vendedoresResumen.length>1?'🔀 Cliente compartido · ':''}Vendedores por cuenta: ${esc(vendedoresResumen.join(' + ')||c.vendedor||'—')}</small>
     <div class="cr-form">
       <label class="cr-field">Nombre<input id="cdNombre" value="${esc(c.nombrePerfil||c.nombre||'')}"></label>
       <label class="cr-field">Teléfono<input id="cdTelefono" value="${esc(c.telefono||'')}"></label>
-      <label class="cr-field">Vendedor<select id="cdVendedor">${opcionesVendedor}</select></label>
     </div>
     <div class="cr-actions">
       <button class="cr-btn danger" id="cdDelete">Eliminar cliente</button>
       <button class="cr-btn red" id="cdSave">💾 Guardar datos</button>
     </div>
     <div class="cr-section">Servicios</div>
-    <div class="cr-grid">${servicios.map((s,i)=>servicioCard(s,i)).join('')||'<div class="cr-empty">Sin servicios.</div>'}</div>
+    <div class="cr-grid">${servicios.map((s,i)=>servicioCard(s,i,c)).join('')||'<div class="cr-empty">Sin servicios.</div>'}</div>
   </div>`;
   $('#cdSave').onclick=async()=>{
     try{
-      await api('PATCH','clientes/'+c.id,{nombrePerfil:$('#cdNombre').value.trim(),telefono:$('#cdTelefono').value.trim(),vendedor_norm:$('#cdVendedor').value});
+      await api('PATCH','clientes/'+c.id,{nombrePerfil:$('#cdNombre').value.trim(),telefono:$('#cdTelefono').value.trim()});
       status('✅ Datos guardados.','good'); await verCliente(c.id);
     }catch(e){ alert(e.message); }
   };
@@ -371,9 +389,18 @@ function renderClienteDetalle(){
   box.querySelectorAll('[data-save-servicio]').forEach(x=>x.onclick=()=>guardarServicio(c.id,x.dataset.saveServicio));
   box.querySelectorAll('[data-del-servicio]').forEach(x=>x.onclick=()=>eliminarServicio(c.id,x.dataset.delServicio));
 }
-function servicioCard(s,idx){
+function servicioCard(s,idx,c){
+  const actualRaw=String(s.vendedor_norm||s.vendedor||c?.vendedor_norm||c?.vendedor||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  const actual=actualRaw==='geissel'?'geisell':actualRaw;
+  const conocidos=state.vendedores||[];
+  const tieneActual=conocidos.some(v=>String(v.nombre_norm||v.id||'')===actual);
+  const opciones=(tieneActual?'':`<option value="${esc(actual)}" selected>${esc(s.vendedor||actual||'Sin vendedor')}</option>`)+conocidos.map(v=>{
+    const vn=String(v.nombre_norm||v.id||'');
+    return `<option value="${esc(vn)}" ${vn===actual?'selected':''}>${esc(v.nombre||vn)}</option>`;
+  }).join('');
   return `<article class="cr-card">
     <h3>${esc(s.plataforma||'Servicio')}</h3>
+    <label class="cr-field">Vendedor responsable<select id="svVendedor-${idx}">${opciones}</select></label>
     <label class="cr-field">Precio<input type="number" min="0" step="1" id="svPrecio-${idx}" value="${s.precio??''}"></label>
     <label class="cr-field">Vencimiento (DD/MM/AAAA)<input id="svFecha-${idx}" value="${esc(s.fechaRenovacion||'')}"></label>
     <label class="cr-field">Correo<input id="svCorreo-${idx}" value="${esc(s.correo||'')}"></label>
@@ -393,6 +420,10 @@ async function guardarServicio(clienteId,idx){
   patch.correo=$('#svCorreo-'+idx)?.value.trim()||'';
   patch.clave=$('#svClave-'+idx)?.value.trim()||'';
   patch.pin=$('#svPin-'+idx)?.value.trim()||'';
+  patch.vendedor_norm=$('#svVendedor-'+idx)?.value||'';
+  const vendedor=(state.vendedores||[]).find(v=>String(v.nombre_norm||v.id)===patch.vendedor_norm);
+  patch.vendedor=vendedor?.nombre||patch.vendedor_norm;
+  patch.compraId=String(state.clienteSel?.servicios?.[idx]?.compraId||'');
   try{
     await api('PATCH',`clientes/${clienteId}/servicios/${idx}`,patch);
     status('✅ Servicio actualizado.','good');
@@ -401,7 +432,7 @@ async function guardarServicio(clienteId,idx){
 }
 async function eliminarServicio(clienteId,idx){
   if(!confirm('¿Eliminar este servicio del cliente?')) return;
-  try{ await api('DELETE',`clientes/${clienteId}/servicios/${idx}`); await verCliente(clienteId); }
+  try{ await api('DELETE',`clientes/${clienteId}/servicios/${idx}`,undefined,{compraId:String(state.clienteSel?.servicios?.[idx]?.compraId||'')}); await verCliente(clienteId); }
   catch(e){ alert(e.message); }
 }
 

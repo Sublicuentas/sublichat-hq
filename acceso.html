@@ -509,7 +509,7 @@
         </span>
         <span class="multi-chevron" aria-hidden="true">⌄</span>
       </button>
-      <div class="multi-details" id="${panelId}"${abierto?"":" hidden"}><div class="multi-details-inner">${detalleServicioHtml(d,index)}</div></div>
+      <div class="multi-details" id="${panelId}"${abierto?"":" hidden"}><div class="multi-details-inner">${detalleServicioHtml(d,index)}${d._mostrarSoporte?bloqueSoporte(d):""}</div></div>
     </section>`;
   }
 
@@ -568,16 +568,18 @@
     const servicios=Array.isArray(d.servicios)&&d.servicios.length?d.servicios:[d];
     const activos=servicios.filter(s=>estadoServicio(s).kind!=="expired").length;
     const primero=servicios.find(s=>!s.vencido)||servicios[0]||{};
-    const soporte=bloqueSoporte(d);
     const multiple=servicios.length>1;
+    const vendedores=[...new Set(servicios.map(s=>String(s.vendedor||"").trim().toLowerCase()).filter(Boolean))];
+    const soportePorServicio=multiple&&vendedores.length>1;
+    const soporte=soportePorServicio?"":bloqueSoporte(d.vendedor?d:(servicios[0]||d));
     const perfilesUnicos=!multiple?perfilesDelServicio(primero).length:0;
     const etiquetaConteo=multiple?`${servicios.length} ACCESO${servicios.length===1?"":"S"}`:(perfilesUnicos>1?`${perfilesUnicos} PERFILES`:"");
     // En las fichas con varios accesos, todos inician cerrados para que el
     // cliente vea primero la lista completa y elija cuál desea consultar.
     const primerAbierto=-1;
-    const contenido=`<div class="multi-list${multiple?"":" single-access-list"}">${servicios.map((s,i)=>filaServicioMultiple(s,i,servicios.length,false)).join("")}</div>${soporte}`;
+    const contenido=`<div class="multi-list${multiple?"":" single-access-list"}">${servicios.map((s,i)=>filaServicioMultiple({...s,_mostrarSoporte:soportePorServicio},i,servicios.length,false)).join("")}</div>${soporte}`;
     const stageEl=document.getElementById('stage');
-    stageEl.dataset.portalVendedor=String(d.vendedor||"");
+    stageEl.dataset.portalVendedor=String(d.vendedor||(vendedores.length===1?servicios[0]?.vendedor:"")||"");
     stageEl.innerHTML=`
       <div class="live-row"><span class="live-dot"></span><span class="live-label">${activos?"Acceso disponible":"Renovación pendiente"}</span>${etiquetaConteo?`<span class="multi-count">${etiquetaConteo}</span>`:""}</div>
       <h1 class="h1">¡Todo <span>listo!</span></h1>
