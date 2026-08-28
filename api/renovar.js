@@ -91,7 +91,7 @@ const PLAT_ALIASES = {
   universal: "universal", universalp: "universal",
   spotify: "spotify", youtube: "youtube", deezer: "deezer", duolingo: "duolingo",
   canva: "canva", gemini: "gemini", chatgpt: "chatgpt",
-  office: "office", microsoft: "office", star: "star",
+  office: "office", office2021: "office2021", microsoft: "office", star: "star",
   viki: "viki", rakutenviki: "viki",
   windows10: "windows10", win10: "windows10",
   windows11: "windows11", win11: "windows11",
@@ -101,9 +101,14 @@ const PLAT_ALIASES = {
 function canonPlat(v) {
   const key = normPlatKey(v);
   if (PLAT_ALIASES[key]) return PLAT_ALIASES[key];
-  // oleada/iptv traen variantes con número de dispositivos (oleada1, iptv3, etc.):
-  // se agrupan por el prefijo para no perder la coincidencia por esa cifra.
+  const oleada = key.match(/^oleada(?:tv)?([13])$/);
+  if (oleada) return `oleadatv${oleada[1]}`;
+  if (/^latintv[1234]$/.test(key)) return key;
+  if (/^liontv[1235]$/.test(key)) return key;
+  if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
   if (key.startsWith("oleada")) return "oleada";
+  if (key.startsWith("latintv")) return "latintv";
+  if (key.startsWith("liontv")) return "liontv";
   if (key.startsWith("iptv")) return "iptv";
   return key;
 }
@@ -174,6 +179,8 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("chatgpt") ||
     p.includes("duolingo") ||
     p.includes("oleada") ||
+    p.includes("latintv") ||
+    p.includes("liontv") ||
     p.includes("iptv") ||
     p.includes("viki") ||
     p.includes("windows") ||
@@ -201,10 +208,8 @@ function servicioEsSerial(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = canonPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  return [
-    "vipnetflix", "spotify", "youtube", "oleada", "iptv",
-    "viki", "deezer", "crunchyroll"
-  ].includes(p);
+  if (p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 
 function servicioUsaSelectorDispositivo(plataforma) {
@@ -700,6 +705,17 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     updatedAt: isoNow()
   };
 
+  const familia = canonPlat(plataformaFinal);
+  if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("iptv")) {
+    out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? "");
+    out.iptvPantallas = Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
+    out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
+    out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
+  }
+  if (familia.startsWith("oleada")) {
+    out.oleadaDispositivos = Math.max(1, Number(servicio.oleadaDispositivos ?? anterior.oleadaDispositivos ?? 1) || 1);
+  }
+
   if (sinClave) out.sinClave = true;
   if (sinPinPerfil) out.sinPinPerfil = true;
   else if (principal.pinPerfil || pinPerfil) out.pinPerfil = principal.pinPerfil || pinPerfil;
@@ -883,7 +899,8 @@ export default async function handler(req, res) {
       const servicio = body.servicio || {};
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
       const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
-      const vendedor = cliente.vendedor || body.vendedor || "";
+      let vendedor = cliente.vendedor || body.vendedor || "";
+      if (normName(vendedor) === "geissel") vendedor = "Geisell";
       const vendedorTelefonoPresente = cliente.vendedorTelefono != null || body.vendedorTelefono != null;
       const vendedorTelefono = cliente.vendedorTelefono || body.vendedorTelefono || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
@@ -999,6 +1016,7 @@ export default async function handler(req, res) {
           telefono: tel || data.telefono || "",
           telefono_norm: tNorm || data.telefono_norm || "",
           vendedor: vendedor || data.vendedor || "",
+          vendedor_norm: normName(vendedor || data.vendedor || ""),
           vendedorTelefono: vendedorTelefonoPresente ? vendedorTelefono : (data.vendedorTelefono || ""),
           servicios: serviciosLimpios,
           tokenAcceso: accesos.tokenTitular,

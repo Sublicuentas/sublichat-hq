@@ -54,10 +54,15 @@ function canonPlatform(value) {
     hbomax:"hbomax",hbo:"hbomax",max:"hbomax",prime:"primevideo",primevideo:"primevideo",
     paramount:"paramount",paramountp:"paramount",crunchy:"crunchyroll",crunchyroll:"crunchyroll",
     vix:"vix",viki:"viki",universal:"universal",universalp:"universal",spotify:"spotify",youtube:"youtube",
-    canva:"canva",gemini:"gemini",chatgpt:"chatgpt",duolingo:"duolingo",office:"office",microsoft:"office"
+    canva:"canva",gemini:"gemini",chatgpt:"chatgpt",duolingo:"duolingo",office:"office",office2021:"office2021",microsoft:"office"
   };
   if (aliases[key]) return aliases[key];
+  const oleada = key.match(/^oleada(?:tv)?([13])$/);
+  if (oleada) return `oleadatv${oleada[1]}`;
+  if (/^latintv[1234]$/.test(key) || /^liontv[1235]$/.test(key) || /^iptv[134]$/.test(key)) return key;
   if (key.startsWith("oleada")) return "oleada";
+  if (key.startsWith("latintv")) return "latintv";
+  if (key.startsWith("liontv")) return "liontv";
   if (key.startsWith("iptv")) return "iptv";
   return key;
 }

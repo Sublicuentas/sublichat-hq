@@ -2,7 +2,7 @@
 //
 // 🚨 Script de SOLO LECTURA (no modifica nada) para el incidente de ago-2026:
 // clientes de distintos vendedores con el mismo nombre (ej. "Karina Castillo"
-// de Geissel y "Karina Castillo" de Relojes) que quedaron fusionados en UN
+// de Geisell y "Karina Castillo" de Relojes) que quedaron fusionados en UN
 // SOLO documento de Firestore, porque el ID del documento se generaba solo
 // a partir del nombre, sin el vendedor (ver api/renovar.js, función
 // findCliente + ficha_upsert, ya corregido).

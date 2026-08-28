@@ -63,12 +63,17 @@ function canonPlat(v) {
     disneypremium: "disneyp", disneystandard: "disneys", disneystandardsinespn: "disneys",
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki",
-    office365: "office", win10: "windows10", win11: "windows11",
+    office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
     adobe: "adobeexpress", esetnod32: "eset"
   };
   if (aliases[p]) return aliases[p];
   if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
   if (p.includes("disney") && p.includes("premium")) return "disneyp";
+  const oleada = p.match(/^oleada(?:tv)?([13])$/);
+  if (oleada) return `oleadatv${oleada[1]}`;
+  if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^iptv[134]$/.test(p)) return p;
+  if (p.startsWith("latintv")) return "latintv";
+  if (p.startsWith("liontv")) return "liontv";
   return p;
 }
 
@@ -81,7 +86,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("office") || p.includes("paramount") || p.includes("appletv") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("oleada") ||
-    p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
+    p.includes("latintv") || p.includes("liontv") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
     p.includes("adobe") || p.includes("eset")
   );
 }
@@ -97,10 +102,8 @@ function servicioEsSerial(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  return [
-    "vipnetflix", "spotify", "youtube", "oleada", "iptv",
-    "viki", "deezer", "crunchyroll"
-  ].includes(p);
+  if (p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 function servicioUsaSelectorDispositivo(plataforma) {
   const p = normPlat(plataforma);
@@ -115,7 +118,7 @@ function celularSoloCodigo(plataforma) {
   return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("universal") || p.includes("netflix");
 }
 
-const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", yami: "96877246", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
+const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", sublicuentas2: "89464328", yami: "96877246", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
 function vendedorTel(v) {
   const n = normPlat(v);
   return VENDEDOR_TELS[n] || "";
@@ -149,6 +152,9 @@ function termsFor(plataforma) {
   const p = canonPlat(plataforma);
   if (p === "netflixpremium") return TERMS.netflix;
   if (p === "vipnetflix" || (p.includes("netflix") && p.includes("vip"))) return TERMS.vipnetflix;
+  if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return TERMS.iptv;
+  if (p.startsWith("oleada")) return TERMS.oleada;
+  if (p === "office2021") return TERMS.office;
   return TERMS[p] || TERMS.default;
 }
 
@@ -157,9 +163,12 @@ const PLAT_LABELS = {
   disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN", primevideo: "Prime Video",
   crunchyroll: "Crunchyroll", universal: "Universal+", vix: "ViX+", paramount: "Paramount+",
   spotify: "Spotify Premium", deezer: "Deezer Premium HiFi", youtube: "YouTube Premium",
-  canva: "Canva", gemini: "Gemini", chatgpt: "ChatGPT", duolingo: "Duolingo",
-  office: "Office 365", oleada: "Oleada TV", iptv: "IPTV", viki: "Viki Rakuten", appletv: "Apple TV",
-  windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET"
+  canva: "Canva", gemini: "Gemini Pro", chatgpt: "ChatGPT", duolingo: "Duolingo",
+  office: "Office 365", office2021: "Office 2021", oleada: "Oleada TV", oleadatv1: "Oleada TV (1 dispositivo)", oleadatv3: "Oleada TV (3 dispositivos)",
+  latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
+  liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
+  iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
+  windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
 };
 function platLabel(plataforma) {
   const p = canonPlat(plataforma);

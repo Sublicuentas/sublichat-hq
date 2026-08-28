@@ -77,9 +77,9 @@ async function getRevAdminToken(force = false) {
   return cachedToken;
 }
 
-// Solo estos 3 recursos existen bajo /rev/admin/ — evita que esto se use
+// Solo estos recursos existen bajo /rev/admin/ — evita que esto se use
 // como proxy abierto hacia cualquier URL.
-const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas"]);
+const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas", "actualizaciones"]);
 
 async function reenviar(pathSegments, queryParams, method, body, token) {
   const target = pathSegments.map(encodeURIComponent).join("/");
@@ -141,7 +141,7 @@ export default async function handler(req, res) {
     // En toda mutación de precios, comprobar contra Render que el dato ya es
     // legible antes de confirmar "Guardado" a Sublichat.
     if (status >= 200 && status < 300 && primerSegmento === "precios" && method !== "GET") {
-      const verificacion = await reenviar(["precios"], [], "GET", undefined, token);
+      const verificacion = await reenviar(["precios"], extras, "GET", undefined, token);
       if (verificacion.status < 200 || verificacion.status >= 300) {
         return res.status(502).json({ ok: false, error: "Se guardó el cambio, pero no se pudo confirmar la sincronización con el Panel de Socios." });
       }
