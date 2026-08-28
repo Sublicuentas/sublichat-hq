@@ -172,7 +172,6 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("youtube") ||
     p.includes("office") ||
     p.includes("paramount") ||
-    p.includes("appletv") ||
     p.includes("vix") ||
     p.includes("canva") ||
     p.includes("gemini") ||
@@ -196,7 +195,8 @@ function servicioNoUsaClave(plataforma) {
     p.includes("gemini") ||
     p.includes("chatgpt") ||
     p.includes("duolingo") ||
-    p.includes("adobeexpress")
+    p.includes("adobeexpress") ||
+    p.includes("appletv")
   );
 }
 
@@ -218,7 +218,8 @@ function servicioUsaSelectorDispositivo(plataforma) {
 }
 
 function servicioRequiereCorreo(plataforma) {
-  return !servicioEsSerial(plataforma);
+  const p = canonPlat(plataforma);
+  return !servicioEsSerial(p) && p !== "appletv";
 }
 
 function normName(v) {
@@ -538,6 +539,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
 
   const prev = perfilesOperativos(anterior, nombreTitular);
   const plataforma = servicio.plataforma || anterior.plataforma || "";
+  const sinCorreo = !servicioRequiereCorreo(plataforma);
   const sinClave = servicioNoUsaClave(plataforma);
   const sinPin = servicioNoUsaPinPerfil(plataforma);
   const usaDispositivo = servicioUsaSelectorDispositivo(plataforma);
@@ -557,7 +559,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       perfilId: String(raw.perfilId || raw.id || previo.perfilId || recordId("perfil")),
       nombre,
       perfil: String(topNombre ?? raw.perfil ?? raw.nombrePerfil ?? raw.nombre ?? previo.perfil ?? nombre).trim(),
-      correo: String(topCorreo ?? raw.correo ?? previo.correo ?? servicio.correo ?? anterior.correo ?? "").trim(),
+      correo: sinCorreo ? "" : String(topCorreo ?? raw.correo ?? previo.correo ?? servicio.correo ?? anterior.correo ?? "").trim(),
       clave: sinClave ? "" : String(topClave ?? raw.clave ?? raw.password ?? raw.contrasena ?? previo.clave ?? servicio.clave ?? anterior.clave ?? "").trim()
     };
     const dispositivoRaw = raw.dispositivo != null
@@ -577,10 +579,10 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
 }
 
 async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "" } = {}) {
-  const antes = anterior ? perfilesOperativos(anterior, nombreTitular) : [];
-  const despues = nuevo ? perfilesOperativos(nuevo, nombreTitular) : [];
   const plataformaAnterior = anterior?.plataforma || nuevo?.plataforma || "";
   const plataformaNueva = nuevo?.plataforma || anterior?.plataforma || "";
+  const antes = anterior && servicioRequiereCorreo(plataformaAnterior) ? perfilesOperativos(anterior, nombreTitular) : [];
+  const despues = nuevo && servicioRequiereCorreo(plataformaNueva) ? perfilesOperativos(nuevo, nombreTitular) : [];
   const key = (p, plataforma) => `${familiaInventario(plataforma)}|${normCorreo(p.correo)}|${normName(p.nombre)}`;
   const nuevas = new Set(despues.map((p) => key(p, plataformaNueva)));
   const resultados = [];
@@ -729,6 +731,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   //   Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
   //   Netflix VIP, Paramount+, ViX+, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
   //   Canva, Gemini, ChatGPT y Duolingo son solo correo.
+  //   Apple TV se entrega únicamente mediante PIN, sin correo ni clave.
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
   const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
@@ -762,7 +765,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     plataforma: plataformaFinal,
     precio: parseMoney(servicio.precio || servicio.precioLps || servicio.pago || servicio.monto),
     fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
-    correo: principal.correo || servicio.correo || "",
+    correo: servicioRequiereCorreo(plataformaFinal) ? (principal.correo || servicio.correo || "") : "",
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
     perfiles,
@@ -823,6 +826,7 @@ function limpiarServicioCRM(servicio = {}) {
 
   if (servicioNoUsaClave(s.plataforma)) s.clave = "";
   if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
+  if (!servicioRequiereCorreo(s.plataforma)) s.correo = "";
   if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
   const usaDispositivo = servicioUsaSelectorDispositivo(s.plataforma);
   if (Array.isArray(s.perfiles) && s.perfiles.length) {
@@ -831,7 +835,7 @@ function limpiarServicioCRM(servicio = {}) {
       p.perfilId = String(p.perfilId || p.id || recordId("perfil"));
       p.nombre = String(p.nombre || p.nombrePerfil || p.perfil || `Perfil ${index + 1}`).trim();
       p.perfil = String(p.perfil || p.nombrePerfil || p.nombre || "").trim();
-      p.correo = String(p.correo ?? s.correo ?? "").trim();
+      p.correo = servicioRequiereCorreo(s.plataforma) ? String(p.correo ?? s.correo ?? "").trim() : "";
       p.clave = servicioNoUsaClave(s.plataforma) ? "" : String(p.clave ?? p.password ?? p.contrasena ?? s.clave ?? "").trim();
       const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
       if (pPin) p.pinPerfil = pPin;
@@ -852,7 +856,7 @@ function limpiarServicioCRM(servicio = {}) {
     s.modalidad = s.perfiles.length > 1 ? "multiperfil" : "individual";
     if (!s.compraId) s.compraId = recordId("compra");
     const principal = s.perfiles[0];
-    s.correo = principal.correo || s.correo || "";
+    s.correo = servicioRequiereCorreo(s.plataforma) ? (principal.correo || s.correo || "") : "";
     s.clave = servicioNoUsaClave(s.plataforma) ? "" : (principal.clave || s.clave || "");
     s.perfil = principal.perfil || principal.nombre || s.perfil || "";
     if (principal.pinPerfil) s.pinPerfil = principal.pinPerfil;

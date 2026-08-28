@@ -62,7 +62,7 @@ function canonPlat(v) {
     netflixpremium: "netflix", netflixpremiumvip: "vipnetflix", vip: "vipnetflix",
     disneypremium: "disneyp", disneystandard: "disneys", disneystandardsinespn: "disneys",
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
-    universalplus: "universal", universalp: "universal", rakutenviki: "viki",
+    universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
     adobe: "adobeexpress", esetnod32: "eset"
   };
@@ -79,11 +79,11 @@ function canonPlat(v) {
 
 // Mismo criterio que api/renovar.js (mantener sincronizado si cambian las reglas).
 function servicioNoUsaPinPerfil(plataforma) {
-  const p = normPlat(plataforma);
+  const p = canonPlat(plataforma);
   return (
     (p.includes("netflix") && p.includes("vip")) ||
     p.includes("spotify") || p.includes("deezer") || p.includes("youtube") ||
-    p.includes("office") || p.includes("paramount") || p.includes("appletv") ||
+    p.includes("office") || p.includes("paramount") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("oleada") ||
     p.includes("latintv") || p.includes("liontv") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
@@ -91,13 +91,17 @@ function servicioNoUsaPinPerfil(plataforma) {
   );
 }
 function servicioNoUsaClave(plataforma) {
-  const p = normPlat(plataforma);
+  const p = canonPlat(plataforma);
   return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") ||
-    p.includes("duolingo") || p.includes("adobeexpress");
+    p.includes("duolingo") || p.includes("adobeexpress") || p.includes("appletv");
 }
 function servicioEsSerial(plataforma) {
-  const p = normPlat(plataforma);
+  const p = canonPlat(plataforma);
   return p === "windows10" || p === "windows11" || p === "eset";
+}
+function servicioRequiereCorreo(plataforma) {
+  const p = canonPlat(plataforma);
+  return !servicioEsSerial(p) && p !== "appletv";
 }
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
@@ -258,7 +262,7 @@ function resolverModo(servicio = {}) {
   const esRoku = !!servicio.esRoku;
   const platUsaPin = !servicioNoUsaPinPerfil(plataforma);
   const platUsaClave = !servicioNoUsaClave(plataforma);
-  let mostrarCorreo = true, mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
+  let mostrarCorreo = servicioRequiereCorreo(plataforma), mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
 
   // Windows y ESET son licencias: nunca se presentan como correo/contraseña.
   if (servicioEsSerial(plataforma)) {
@@ -292,7 +296,7 @@ function resolverModo(servicio = {}) {
       modo = platUsaClave ? "cred" : "invite";
     }
   } else {
-    modo = platUsaClave ? "cred" : "invite";
+    modo = platUsaClave ? "cred" : (mostrarCorreo ? "invite" : "pin");
   }
 
   return { modo, mostrarCorreo, mostrarClave, mostrarPin };
@@ -317,7 +321,7 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
 
   return {
     ...camposAutomaticos,
-    mostrarCorreo: !servicioEsSerial(servicio.plataforma) && elegidos.correo,
+    mostrarCorreo: servicioRequiereCorreo(servicio.plataforma) && elegidos.correo,
     mostrarClave: !servicioNoUsaClave(servicio.plataforma) && elegidos.clave,
     mostrarPin: !servicioNoUsaPinPerfil(servicio.plataforma) && elegidos.pin,
     visibilidadModo: modo
