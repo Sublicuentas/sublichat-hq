@@ -257,7 +257,10 @@
     chatgpt:{logo:"/assets/platformas/chatgpt.jpg",bg:"#edf7f3",fallback:"AI",color:"#10a37f"},
     duolingo:{logo:"/assets/platformas/duolingo.jpg",bg:"#effbe8",fallback:"D",color:"#58cc02"},
     office:{logo:"/assets/platformas/office365.jpg",bg:"#fff0eb",fallback:"O",color:"#d83b01"},
+    office2021:{logo:"/assets/platformas/office365.jpg",bg:"#fff0eb",fallback:"O21",color:"#d83b01"},
     oleada:{logo:"/assets/platformas/oleada.jpg",bg:"#e9faff",fallback:"TV",color:"#007f99"},
+    latintv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LatinTV"},
+    liontv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LionTV"},
     iptv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"TV"},
     viki:{logo:"/assets/platformas/viki.jpg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
     appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"tv"},
@@ -273,7 +276,7 @@
     netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
-    chatgpt:"🤖",duolingo:"📚",office:"💻",oleada:"🌊",iptv:"📺",
+    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",oleada:"🌊",latintv:"📺",liontv:"🦁",iptv:"📺",
     viki:"📺",appletv:"📺",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
   };
 
@@ -282,7 +285,14 @@
     const k=String(v||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
     return PLAT_ALIASES[k]||k;
   }
-  function platVisual(v){ return PLAT_VISUALS[platKey(v)]||{logo:"",bg:"#111827",fallback:"TV"}; }
+  function platVisual(v){
+    const k=platKey(v);
+    if(k.startsWith("oleada"))return PLAT_VISUALS.oleada;
+    if(k.startsWith("latintv"))return PLAT_VISUALS.latintv;
+    if(k.startsWith("liontv"))return PLAT_VISUALS.liontv;
+    if(k.startsWith("iptv"))return PLAT_VISUALS.iptv;
+    return PLAT_VISUALS[k]||{logo:"",bg:"#111827",fallback:"TV"};
+  }
   function platLogo(v,label){
     const visual=platVisual(v);
     const style=`--plat-bg:${visual.bg||"#111827"};--plat-color:${visual.color||"#fff"}`;
@@ -391,7 +401,8 @@
 
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
-    const etiquetaAcceso=platKey(d.plataforma).includes("oleada")?"Usuario":"Correo";
+    const plataforma=platKey(d.plataforma);
+    const etiquetaAcceso=["oleada","latintv","liontv","iptv"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
     const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;

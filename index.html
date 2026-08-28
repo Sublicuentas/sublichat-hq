@@ -1902,9 +1902,11 @@ const PLAT_LABELS = {
   spotify:"Spotify", youtube:"YouTube", deezer:"Deezer", duolingo:"Duolingo",
   oleada:"Oleada TV", oleada1:"Oleada TV (1)", oleada3:"Oleada TV (3)", oleadatv:"Oleada TV",
   oleadatv1:"Oleada TV (1)", oleadatv3:"Oleada TV (3)", oleadatv4:"Oleada TV (4)",
-  iptv:"IPTV", iptv1:"IPTV (1)", iptv3:"IPTV (3)", iptv4:"IPTV (4)",
-  canva:"Canva", gemini:"Gemini", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", microsoft:"Office 365",
-  viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET"
+  latintv:"LatinTV", latintv1:"LatinTV (1 dispositivo)", latintv2:"LatinTV (2 dispositivos)", latintv3:"LatinTV (3 dispositivos)", latintv4:"LatinTV (4 dispositivos)",
+  liontv:"LionTV", liontv1:"LionTV (1 dispositivo)", liontv2:"LionTV (2 dispositivos)", liontv3:"LionTV (3 dispositivos)", liontv5:"LionTV (5 dispositivos)",
+  iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
+  canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
+  viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32 · 1 año / 1 dispositivo"
 };
 const platLabel = p => { const k=String(p||"").toLowerCase().trim();
   return PLAT_LABELS[k] || (p ? p.charAt(0).toUpperCase()+p.slice(1) : "—"); };
@@ -1996,6 +1998,11 @@ function flattenCliente(doc, clienteId=""){
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
       beneficiarioTipo,beneficiarioNombre,beneficiarioKey,
       visibilidadUrl:s.visibilidadUrl||{modo:"plataforma"},
+      iptvProveedor:String(s.iptvProveedor||s.proveedorIptv||""),
+      iptvPantallas:Number(s.iptvPantallas||0)||0,
+      iptvLista:String(s.iptvLista||s.listaIptv||""),
+      iptvHora:String(s.iptvHora||s.horaIptv||""),
+      oleadaDispositivos:Number(s.oleadaDispositivos||0)||0,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
       precio:Number(s[F.s_precio])||0,
@@ -2414,9 +2421,11 @@ const INV_PLAT_CANON=[
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["crunchyroll","Crunchyroll"],["universal","Universal+"],
   ["vix","ViX"],["paramount","Paramount+"],["star","Star+"],["appletv","Apple TV"],["viki","Viki Rakuten"],
   ["spotify","Spotify"],["youtube","YouTube"],["deezer","Deezer"],["duolingo","Duolingo"],
-  ["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],["office","Office 365"],
+  ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["office","Office 365"],["office2021","Office 2021"],
   ["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
-  ["oleada","Oleada TV"],["iptv","IPTV"]
+  ["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
+  ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
+  ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"]
 ];
 function invNuevoInit(){
   const sel=document.getElementById("invNPlat");
@@ -4201,8 +4210,11 @@ const PLATS_DISPONIBLES=[
   ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["paramount","Paramount+"],["crunchyroll","Crunchyroll"],
   ["vix","ViX"],["viki","Viki Rakuten"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
-  ["deezer","Deezer"],["duolingo","Duolingo"],["oleada","Oleada TV"],["iptv","IPTV"],["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],
-  ["office","Office 365"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"]
+  ["deezer","Deezer"],["duolingo","Duolingo"],["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
+  ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
+  ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"],
+  ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],
+  ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"]
 ];
 const gestionBtn=$cobro("cobroGestionar"), gestionBox=$cobro("cobroGestion");
 if(gestionBtn)gestionBtn.addEventListener("click",()=>{
@@ -5057,12 +5069,12 @@ function gCaminoBombas(){
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
-    ["canva","Canva"],["gemini","Gemini"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
-    ["office","Office 365"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
-    ["oleada","Oleada TV"],["iptv","IPTV"]
+    ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
+    ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32 · 1 año / 1 dispositivo"],
+    ["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"]
   ];
-  const FICHA_VENDEDORES=["Relojes","Sublicuentas","Geissel","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
-  const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+  const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
+  const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", sublicuentas2:"89464328", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
 // VERSION 27 · Cuatro variantes URL con el mismo acabado visual y sin pie de
 // vendedor. La ficha tradicional conserva por separado el teléfono del
@@ -5187,19 +5199,28 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
       if(btn){ const old=btn.textContent; btn.textContent="✅ Copiado"; setTimeout(()=>{btn.textContent=old;},1400); }
     }catch(e){ fichaToast("⚠️ No se pudo copiar automático."); }
   }
-  const FICHA_PRECIOS={
+  const FICHA_PRECIOS_GENERAL={
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, oleada:90, iptv:130,
-    viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
+    office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
   };
+  const FICHA_PRECIOS_ESPECIALES={
+    netflix:130, vipnetflix:150, disneyp:100, disneys:70, hbomax:80, primevideo:80,
+    crunchyroll:80, vix:80, paramount:80, viki:80, spotify:110, deezer:90,
+    canva:69, gemini:170, duolingo:89, office:449, office2021:449, eset:399,
+    oleada1:90, oleada3:200,
+    latintv1:99, latintv2:149, latintv3:199, latintv4:249,
+    liontv1:250, liontv2:275, liontv3:300, liontv5:350
+  };
+  const FICHA_VENDEDORES_TARIFA_ESPECIAL=new Set(["sublicuentas","sublicuentas2","relojes","geisell","geissel"]);
   // Reglas reales de entrega por plataforma. Se separan de la pregunta de
   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
   // regla "TV ya vinculada" y oculte correo/clave.
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","appletv","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","oleada","iptv","windows10","windows11","adobeexpress","eset"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","appletv","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","oleada","latintv","liontv","iptv","windows10","windows11","adobeexpress","eset"]);
   const FICHA_SERIAL=new Set(["windows10","windows11","eset"]);
-  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","oleada","iptv","viki","deezer","crunchyroll"]);
+  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","oleada","latintv","liontv","iptv","viki","deezer","crunchyroll"]);
   const FICHA_CON_DISPOSITIVO=new Set(["netflix","disneyp","disneys","hbomax","vix","universal","primevideo"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
   const FICHA_TEMPLATES={
@@ -5744,6 +5765,15 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
 
   const fichaNorm=s=>String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"");
+  const fichaBaseRegla=plat=>{
+    const p=fichaNorm(plat);
+    if(/^oleadatv[13]$/.test(p))return "oleada";
+    if(/^latintv[1234]$/.test(p))return "latintv";
+    if(/^liontv[1235]$/.test(p))return "liontv";
+    if(/^iptv[1234]$/.test(p))return "iptv";
+    return p;
+  };
+  const fichaEsIptv=plat=>["latintv","liontv","iptv"].includes(fichaBaseRegla(plat));
   const fichaQ=id=>document.getElementById(id);
   let fichaClienteIdActual="";
   let fichaGrupoActual=null;
@@ -5786,12 +5816,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(cand<today){ const max=new Date(y,m+2,0).getDate(); return new Date(y,m+1,Math.min(d,max)).toISOString().slice(0,10); }
     return cand.toISOString().slice(0,10);
   };
-  const fichaNeedsClave=plat=>!FICHA_SOLO_CORREO.has(fichaNorm(plat));
-  const fichaNeedsPin=plat=>!FICHA_SIN_PIN.has(fichaNorm(plat));
-  const fichaNeedsCorreo=plat=>!FICHA_SERIAL.has(fichaNorm(plat));
-  const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaNorm(plat));
-  const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaNorm(plat));
-  const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaNorm(plat));
+  const fichaNeedsClave=plat=>!FICHA_SOLO_CORREO.has(fichaBaseRegla(plat));
+  const fichaNeedsPin=plat=>!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
+  const fichaNeedsCorreo=plat=>!FICHA_SERIAL.has(fichaBaseRegla(plat));
+  const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaBaseRegla(plat));
+  const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaBaseRegla(plat));
+  const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaBaseRegla(plat));
 
   // VERSION 28 · La ficha tradicional de WhatsApp/respaldo SIEMPRE se arma
   // con todos los campos reales que usa la plataforma. TV, celular, Roku y la
@@ -5922,15 +5952,19 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(actualizarAviso)fichaAvisoDispositivo();
   }
   const fichaTemplateFor=plat=>{
-    const k=fichaNorm(plat);
+    const k=fichaBaseRegla(plat);
     if(k==="netflixpremium") return FICHA_TEMPLATES.netflix;
     if(k==="vipnetflix"||k==="vip") return FICHA_TEMPLATES.vipnetflix;
+    if(k==="office2021") return FICHA_TEMPLATES.office;
+    if(fichaEsIptv(k)) return FICHA_TEMPLATES.iptv;
     return FICHA_TEMPLATES[k] || FICHA_TEMPLATES.default;
   };
   const fichaReglasFor=plat=>{
-    const k=fichaNorm(plat);
+    const k=fichaBaseRegla(plat);
     if(k==="netflixpremium")return FICHA_REGLAS_MULTIPERFIL.netflix;
     if(k==="vipnetflix"||k==="vip")return FICHA_REGLAS_MULTIPERFIL.vipnetflix;
+    if(k==="office2021")return FICHA_REGLAS_MULTIPERFIL.office;
+    if(fichaEsIptv(k))return FICHA_REGLAS_MULTIPERFIL.iptv;
     return FICHA_REGLAS_MULTIPERFIL[k]||FICHA_REGLAS_MULTIPERFIL.default;
   };
   const fichaPlatformLabel=plat=>{
@@ -5955,7 +5989,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(p.includes("office")||p.includes("windows"))return "🪟";
     if(p.includes("adobe"))return "🅰️";
     if(p.includes("eset"))return "🛡️";
-    if(p.includes("oleada")||p.includes("iptv"))return "📺";
+    if(p.includes("oleada")||p.includes("iptv")||p.includes("latintv")||p.includes("liontv"))return "📺";
     return "📱";
   }
   function fichaPlatValue(raw){
@@ -5986,13 +6020,16 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(n.includes("gemini")) return "gemini";
     if(n.includes("chatgpt") || n.includes("openai")) return "chatgpt";
     if(n.includes("duolingo")) return "duolingo";
+    if(n.includes("office2021") || (n.includes("office")&&n.includes("2021"))) return "office2021";
     if(n.includes("office") || n.includes("365")) return "office";
     if(n.includes("windows 10") || n.includes("windows10") || n.includes("win10")) return "windows10";
     if(n.includes("windows 11") || n.includes("windows11") || n.includes("win11")) return "windows11";
     if(n.includes("adobe")) return "adobeexpress";
     if(n.includes("eset") || n.includes("nod32")) return "eset";
     if(n.includes("oleada") || n.includes("magis")) return "oleada";
-    if(n.includes("iptv") || n.includes("icomplay") || n.includes("lion") || n.includes("tvgo") || n.includes("titan")) return "iptv";
+    if(n.includes("latintv")) return "latintv";
+    if(n.includes("liontv") || n.includes("lion")) return "liontv";
+    if(n.includes("iptv") || n.includes("icomplay") || n.includes("tvgo") || n.includes("titan")) return "iptv";
     const hit=FICHA_PLATS.find(([v,l])=>fichaNorm(v)===n || fichaNorm(l)===n);
     return hit?hit[0]:"netflix";
   }
@@ -6088,7 +6125,64 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaPerfilesExtraActuales.splice(i,1);fichaRenderPerfilesExtra();fichaRefreshTemplate();
     }));
   }
-  const fichaPrecioDefault=plat=>Number(FICHA_PRECIOS[fichaNorm(plat)]||0);
+  function fichaCantidadDesdePlataforma(raw, fallback="1"){
+    const n=fichaNorm(raw);
+    const m=n.match(/(?:oleadatv|oleada|latintv|liontv|iptv)([1-5])$/);
+    return m?m[1]:String(fallback||"1");
+  }
+  function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
+    const plat=fichaBaseRegla(fichaGetVal("fichaPlat"));
+    const pantallas=fichaQ("fichaIptvPantallas"), proveedor=fichaQ("fichaIptvProveedor");
+    const permitidas=plat==="liontv"?[1,2,3,5]:[1,2,3,4];
+    if(pantallas){
+      const deseada=String(cantidadPreferida||pantallas.value||"1");
+      pantallas.innerHTML=permitidas.map(n=>`<option value="${n}">${n} dispositivo${n===1?"":"s"}</option>`).join("");
+      pantallas.value=permitidas.includes(Number(deseada))?deseada:String(permitidas[0]);
+    }
+    if(proveedor){
+      const anterior=String(proveedorPreferido||proveedor.value||"");
+      const opciones=plat==="liontv"
+        ? [["liontv","LionTV (liontv.es)"]]
+        : plat==="latintv"
+          ? [["latintv","LatinTV (latvgt.com)"],["latintv2","LatinTV (enlatv.com)"]]
+          : [["latintv","LatinTV (latvgt.com)"],["latintv2","LatinTV (enlatv.com)"],["liontv","LionTV (liontv.es)"]];
+      proveedor.innerHTML=opciones.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+      proveedor.value=opciones.some(([v])=>v===anterior)?anterior:opciones[0][0];
+    }
+  }
+  function fichaPlataformaGuardar(plat=fichaGetVal("fichaPlat")){
+    const p=fichaBaseRegla(plat);
+    if(p==="oleada"){
+      const n=["1","3"].includes(fichaGetVal("fichaOleadaDispositivos"))?fichaGetVal("fichaOleadaDispositivos"):"1";
+      return `oleadatv${n}`;
+    }
+    if(p==="latintv"){
+      const n=["1","2","3","4"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
+      return `latintv${n}`;
+    }
+    if(p==="liontv"){
+      const n=["1","2","3","5"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
+      return `liontv${n}`;
+    }
+    if(p==="iptv") return `iptv${fichaGetVal("fichaIptvPantallas")||"1"}`;
+    return p;
+  }
+  function fichaPrecioClave(plat){
+    const p=fichaBaseRegla(plat);
+    if(p==="oleada")return `oleada${fichaGetVal("fichaOleadaDispositivos")||"1"}`;
+    if(p==="latintv"||p==="liontv")return `${p}${fichaGetVal("fichaIptvPantallas")||"1"}`;
+    return p;
+  }
+  const fichaPrecioDefault=plat=>{
+    const clave=fichaPrecioClave(plat);
+    const base=fichaBaseRegla(plat);
+    const especial=FICHA_VENDEDORES_TARIFA_ESPECIAL.has(fichaNorm(fichaVendedorActual()));
+    const mapa=especial?FICHA_PRECIOS_ESPECIALES:FICHA_PRECIOS_GENERAL;
+    const valor=Object.prototype.hasOwnProperty.call(mapa,clave)?mapa[clave]
+      : Object.prototype.hasOwnProperty.call(mapa,base)?mapa[base]
+        : FICHA_PRECIOS_GENERAL[base];
+    return Number(valor||0);
+  };
   const fichaPrecioActual=()=>{
     const val=Number(fichaGetVal("fichaPrecio"));
     if(val>0) return val;
@@ -6099,7 +6193,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const plat=fichaGetVal("fichaPlat");
     const def=fichaPrecioDefault(plat);
     const current=String(el.value||"").trim();
-    const knownDefaults=new Set(Object.values(FICHA_PRECIOS).filter(Boolean).map(String));
+    const knownDefaults=new Set([...Object.values(FICHA_PRECIOS_GENERAL),...Object.values(FICHA_PRECIOS_ESPECIALES)].filter(Boolean).map(String));
+    if(force){
+      el.dataset.manual="";
+      el.value=def?String(def):"";
+      return;
+    }
     if(el.dataset.manual==="1" && current && !force) return;
     if(def && (!current || (!el.dataset.manual && knownDefaults.has(current)) || (force && !el.dataset.manual))){
       el.value=String(def);
@@ -6108,8 +6207,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaVendedorActual(){
     const sel=fichaQ("fichaVendedor");
     const v=(sel&&sel.value||"").trim();
-    if(v==="__nuevo__") return fichaGetVal("fichaVendedorNuevo");
-    return v;
+    const elegido=v==="__nuevo__" ? fichaGetVal("fichaVendedorNuevo") : v;
+    return fichaNorm(elegido)==="geissel"?"Geisell":elegido;
   }
   function fichaToggleVendedorNuevo(){
     const box=fichaQ("fichaVendedorNuevoBox");
@@ -6151,7 +6250,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(perfiles.length>1){
       const detalle=perfiles.map((p,index)=>{
         const camposPerfil=camposRespaldo;
-        const tipoAcceso=["oleada","iptv"].includes(fichaNorm(plat))?"👤 Usuario":"📧 Correo";
+        const tipoAcceso=fichaBaseRegla(plat)==="oleada"||fichaEsIptv(plat)?"👤 Usuario":"📧 Correo";
         const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`];
         if(fichaUsaSelectorDispositivo(plat))acceso.push(p.dispositivo==="tv"?`📺 Instalación: TV${p.esRoku?" (Roku)":" (No Roku)"}`:"📱 Instalación: Celular");
         if(camposPerfil.correo)acceso.push(`${tipoAcceso}: ${p.correo||"—"}`);
@@ -6159,7 +6258,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         if(camposPerfil.pin)acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
         return acceso.join("\n");
       }).join("\n\n");
-      const datosIptv=fichaNorm(plat)==="iptv"?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n`:"";
+      const datosIptv=fichaEsIptv(plat)?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n`:"";
       const reglas=aplicarVariables(fichaReglasFor(plat));
       return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
@@ -6277,8 +6376,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const showClave=fichaNeedsClave(plat);
     const showPin=fichaNeedsPin(plat);
     const showDispositivo=fichaUsaSelectorDispositivo(plat);
-    const showIptv=fichaNorm(plat)==="iptv";
-    const showOleada=fichaNorm(plat)==="oleada";
+    const showIptv=fichaEsIptv(plat);
+    const showOleada=fichaBaseRegla(plat)==="oleada";
     const correoBox=fichaQ("fichaCorreoBox"),claveBox=fichaQ("fichaClaveBox"), pinBox=fichaQ("fichaPinBox"), iptvBox=fichaQ("fichaIptvBox"),
           iptvListaBox=fichaQ("fichaIptvListaBox"), iptvHoraBox=fichaQ("fichaIptvHoraBox"), iptvPantallasBox=fichaQ("fichaIptvPantallasBox"), oleadaBox=fichaQ("fichaOleadaBox");
     const dispositivoBox=fichaQ("fichaDispositivoBox"),rokuBox=fichaQ("fichaRokuBox"),dispositivoEl=fichaQ("fichaDispositivo"),rokuEl=fichaQ("fichaEsRoku");
@@ -6350,6 +6449,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const dia=fichaGetVal("fichaDia");
     if(!fecha && dia) fecha=fichaNextDateFromDay(dia);
     const plat=fichaGetVal("fichaPlat");
+    const plataformaGuardar=fichaPlataformaGuardar(plat);
     const clave=fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"";
     const perfiles=fichaRecolectarPerfiles();
     const principal=perfiles[0]||{};
@@ -6358,7 +6458,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const servicio={
       compraId:fichaCompraIdActual||fichaNuevoId("compra"),
       modalidad:perfiles.length>1?"multiperfil":"individual",
-      plataforma:plat,
+      plataforma:plataformaGuardar,
       precio:fichaPrecioActual(),
       fechaRenovacion:fecha,
       visibilidadUrl:fichaVisibilidadUrlActual(),
@@ -6374,6 +6474,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       dispositivo:fichaUsaSelectorDispositivo(plat)?(principal.dispositivo||""):"",
       esRoku:fichaUsaSelectorDispositivo(plat)&&principal.dispositivo==="tv"&&principal.esRoku===true
     };
+    if(fichaEsIptv(plat)){
+      servicio.iptvProveedor=fichaGetVal("fichaIptvProveedor")||fichaBaseRegla(plat);
+      servicio.iptvPantallas=Number(fichaGetVal("fichaIptvPantallas")||1);
+      servicio.iptvLista=fichaGetVal("fichaIptvLista");
+      servicio.iptvHora=fichaGetVal("fichaIptvHora");
+    }
+    if(fichaBaseRegla(plat)==="oleada") servicio.oleadaDispositivos=Number(fichaGetVal("fichaOleadaDispositivos")||1);
     if(fichaNeedsPin(plat)) servicio.pinPerfil=principal.pinPerfil||fichaGetVal("fichaPinPerfil");
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
     return {
@@ -6597,7 +6704,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaSetVendedor(v){
     const sel=fichaQ("fichaVendedor");
     const nuevo=fichaQ("fichaVendedorNuevo");
-    const clean=String(v||"").trim();
+    let clean=String(v||"").trim();
+    if(fichaNorm(clean)==="geissel")clean="Geisell";
     if(!sel) return;
     if(["naara","libni"].includes(fichaNorm(clean))){ sel.value=""; if(nuevo) nuevo.value=""; fichaToggleVendedorNuevo(); return; }
     if(!clean){ sel.value=""; if(nuevo) nuevo.value=""; fichaToggleVendedorNuevo(); return; }
@@ -6615,6 +6723,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     }
     const usuario=fichaNorm(raw);
     if(["sublicuentas","naara"].includes(usuario)) return "Sublicuentas";
+    if(usuario==="sublicuentas2") return "Sublicuentas 2";
+    if(usuario==="geissel") return "Geisell";
     if(["relojes","libni","daniela","finanzas"].includes(usuario)) return "Relojes";
     return FICHA_VENDEDORES.find(v=>fichaNorm(v)===usuario)||"";
   }
@@ -6637,10 +6747,29 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
     fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
     fichaToggleBeneficiario();
-    fichaQ("fichaPlat").value=fichaPlatValue(s.plataformaRaw||s.plataforma||"");
-    if(![...fichaQ("fichaPlat").options].some(o=>o.value===fichaQ("fichaPlat").value)){
-      fichaQ("fichaPlat").value=FICHA_PLATS[0][0];
+    const plataformaGuardada=s.plataformaRaw||s.plataforma||"";
+    const plataformaFormulario=fichaPlatValue(plataformaGuardada);
+    const selectorPlataforma=fichaQ("fichaPlat");
+    selectorPlataforma.querySelector('option[data-legacy-iptv]')?.remove();
+    if(plataformaFormulario==="iptv"){
+      const opcion=document.createElement("option");
+      opcion.value="iptv";opcion.textContent="IPTV anterior (identifique si es LatinTV o LionTV)";opcion.dataset.legacyIptv="1";
+      selectorPlataforma.appendChild(opcion);
     }
+    selectorPlataforma.value=plataformaFormulario;
+    if(![...selectorPlataforma.options].some(o=>o.value===selectorPlataforma.value)) selectorPlataforma.value=FICHA_PLATS[0][0];
+    const cantidadGuardada=String(s.iptvPantallas||s.oleadaDispositivos||fichaCantidadDesdePlataforma(plataformaGuardada,"1"));
+    if(fichaEsIptv(fichaQ("fichaPlat").value)){
+      const proveedorGuardado=String(s.iptvProveedor||s.proveedorIptv||s.proveedor||"");
+      fichaActualizarIptvOpciones(cantidadGuardada,proveedorGuardado);
+      fichaQ("fichaIptvLista").value=String(s.iptvLista||s.listaIptv||s.lista||"");
+      fichaQ("fichaIptvHora").value=String(s.iptvHora||s.horaIptv||s.hora||"");
+    }else{
+      fichaActualizarIptvOpciones("1","");
+      fichaQ("fichaIptvLista").value="";
+      fichaQ("fichaIptvHora").value="";
+    }
+    fichaQ("fichaOleadaDispositivos").value=["1","3"].includes(cantidadGuardada)?cantidadGuardada:"1";
     fichaQ("fichaPrecio").dataset.manual=s.precio?"1":"";
     fichaQ("fichaPrecio").value=s.precio||"";
     fichaSetPrecioDefault(!s.precio);
@@ -6959,10 +7088,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field" id="fichaCorreoBox"><span id="fichaCorreoLabel">Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
           <label class="ficha-field" id="fichaClaveBox"><span id="fichaClaveLabel">Perfil 1 · Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
           <label class="ficha-field" id="fichaPinBox"><span>Perfil 1 · PIN individual</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
-          <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Proveedor IPTV</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latvgt.com)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV</option></select></label>
+          <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Servidor / URL del IPTV seleccionado</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latvgt.com)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV (liontv.es)</option></select></label>
           <label class="ficha-field" id="fichaIptvListaBox" style="display:none"><span>Lista (app IPTV)</span><input class="ficha-input" id="fichaIptvLista" placeholder="Ej. Icomplay"></label>
           <label class="ficha-field" id="fichaIptvHoraBox" style="display:none"><span>Hora de activación</span><input class="ficha-input" id="fichaIptvHora" type="time"></label>
-          <label class="ficha-field" id="fichaIptvPantallasBox" style="display:none"><span>Pantallas</span><select class="ficha-select" id="fichaIptvPantallas"><option value="1">1 pantalla</option><option value="2">2 pantallas</option><option value="3">3 pantallas</option><option value="4">4 pantallas</option></select></label>
+          <label class="ficha-field" id="fichaIptvPantallasBox" style="display:none"><span>Dispositivos contratados</span><select class="ficha-select" id="fichaIptvPantallas"><option value="1">1 dispositivo</option><option value="2">2 dispositivos</option><option value="3">3 dispositivos</option><option value="4">4 dispositivos</option></select></label>
           <label class="ficha-field" id="fichaOleadaBox" style="display:none"><span>Dispositivos Oleada TV</span><select class="ficha-select" id="fichaOleadaDispositivos"><option value="1">1 dispositivo</option><option value="3">3 dispositivos</option></select></label>
           <label class="ficha-field"><span>Perfil 1 · Nombre de la persona/perfil</span><input class="ficha-input" id="fichaPerfil" placeholder="Ej. María"></label>
         </div>
@@ -7035,7 +7164,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const hidden=fichaQ("fichaTexto");
       if(view && hidden) hidden.value=view.innerText;
     });
-    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
+    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaActualizarIptvOpciones("1",""); fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
     fichaQ("fichaDispositivo").addEventListener("change",()=>{
       const rokuBox=fichaQ("fichaRokuBox");
       if(rokuBox) rokuBox.style.display = fichaUsaSelectorDispositivo(fichaGetVal("fichaPlat"))&&fichaGetVal("fichaDispositivo")==="tv" ? "block" : "none";
@@ -7051,9 +7180,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
-    fichaQ("fichaIptvPantallas").addEventListener("change",fichaRefreshTemplate);
-    fichaQ("fichaOleadaDispositivos").addEventListener("change",fichaRefreshTemplate);
-    fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaRefreshTemplate(); });
+    fichaQ("fichaIptvPantallas").addEventListener("change",()=>{fichaSetPrecioDefault(true);fichaRefreshTemplate();});
+    fichaQ("fichaOleadaDispositivos").addEventListener("change",()=>{fichaSetPrecioDefault(true);fichaRefreshTemplate();});
+    fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaSetPrecioDefault(true); fichaRefreshTemplate(); });
     fichaQ("fichaVendedorNuevo").addEventListener("input",fichaRefreshTemplate);
     // El número del vendedor sí se guarda para el soporte dentro de /c/{token},
     // pero ya no forma parte de ninguna variante de entrega de la URL.
@@ -7108,7 +7237,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const preferredIndex=opts&&opts.servicioIndex!=null&&Number.isInteger(Number(opts.servicioIndex))?Number(opts.servicioIndex):null;
     let preferredPos=preferredIndex==null?-1:fichaServiciosActuales.findIndex(s=>s&&s.srvIndex!=null&&Number(s.srvIndex)===preferredIndex);
     if(preferredPos<0&&fichaServiciosActuales.length)preferredPos=0;
-    const serv=forceNewService?null:((preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,visibilidadUrl:grupo.visibilidadUrl,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono}:null));
+    const serv=forceNewService?null:((preferredPos>=0?fichaServiciosActuales[preferredPos]:null) || (grupo&&!forceBlank?{plataformaRaw:grupo.plataformaRaw,plataforma:grupo.plataforma,precio:grupo.precio,fechaRaw:grupo.fechaRaw,fecha:grupo.fecha,correo:grupo.correo,pin:grupo.pin,clave:grupo.clave,pinPerfil:grupo.pinPerfil,perfil:grupo.perfil,perfiles:grupo.perfiles,compraId:grupo.compraId,modalidad:grupo.modalidad,fichaTexto:grupo.fichaTexto,srvIndex:grupo.srvIndex,token:grupo.token,dispositivo:grupo.dispositivo,esRoku:grupo.esRoku,visibilidadUrl:grupo.visibilidadUrl,beneficiarioTipo:grupo.beneficiarioTipo,beneficiarioNombre:grupo.beneficiarioNombre,beneficiarioKey:grupo.beneficiarioKey,vendedorTelefono:grupo.vendedorTelefono,iptvProveedor:grupo.iptvProveedor,iptvPantallas:grupo.iptvPantallas,iptvLista:grupo.iptvLista,iptvHora:grupo.iptvHora,oleadaDispositivos:grupo.oleadaDispositivos}:null));
     fichaClienteIdActual=forceBlank?"":String((grupo&&grupo.clienteId)||(serv&&serv.clienteId)||"");
     fichaForzarNuevoServicioActual=forceNewService;
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
@@ -7276,7 +7405,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     sublicuentas:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     naara:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     magdiel:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Auditoría y estadísticas',emoji:'📊'},
-    geissel:{nombre:'Geissel',cargo:'Asesora de ventas'}, geisell:{nombre:'Geissel',cargo:'Asesora de ventas'},
+    geissel:{nombre:'Geisell',cargo:'Asesora de ventas'}, geisell:{nombre:'Geisell',cargo:'Asesora de ventas'},
     yami:{nombre:'Yami',cargo:'Asesora de ventas'}, manuel:{nombre:'Manuel',cargo:'Asesor de ventas'}, heber:{nombre:'Heber',cargo:'Asesor de ventas'}, abner:{nombre:'Abner',cargo:'Asesor de ventas'}, jimena:{nombre:'Jimena',cargo:'Asesora de ventas'}, elizabeth:{nombre:'Elizabeth',cargo:'Asesora de ventas'}, lucy:{nombre:'Lucy',cargo:'Asesora de ventas'}
   };
   function profileKey(){return 'sublichat_profile_'+norm(currentUser()||currentRole()||'usuario');}
@@ -12000,7 +12129,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 </script>
 <script src="/portal-cliente-admin.js?v=20260820-1"></script>
 <script src="/catalogo-relojes-admin.js?v=20260822-2"></script>
-<script src="/revendedores-admin.js?v=20260825-1"></script>
+<script src="/revendedores-admin.js?v=20260828-1"></script>
 <script src="/sorteos-admin.js?v=20260826-4"></script>
 </body>
 </html>

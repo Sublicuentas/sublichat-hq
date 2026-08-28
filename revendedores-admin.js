@@ -10,7 +10,8 @@
    la página) para no repetir estilos. */
 
 const API='/api/revendedores-admin';
-const state={tab:'precios',precios:null,vendedores:null,clientes:null,recompensas:null,clienteQ:'',clienteSel:null,loading:false};
+const TARIFA_ESPECIAL='propietarios_2026';
+const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,clienteQ:'',clienteSel:null,loading:false};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
@@ -62,7 +63,7 @@ function render(){
 async function loadPrecios(force){
   if(state.precios&&!force) return render();
   const b=$('#revBody'); if(b) b.innerHTML='<div class="cr-empty">Cargando precios…</div>';
-  try{ const d=await api('GET','precios'); state.precios=d.precios||[]; render(); }
+  try{ const d=await api('GET','precios',undefined,{tarifa:state.tarifa}); state.precios=d.precios||[]; render(); }
   catch(e){ if(b) b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`; }
 }
 function renderPrecios(){
@@ -76,10 +77,17 @@ function renderPrecios(){
   });
   const vacio=!state.precios.length;
   b.innerHTML=`
-    <div class="cr-tools">${vacio?'<span></span>':''}<button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button></div>
+    <div class="cr-tools" style="flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="cr-btn ${state.tarifa==='general'?'red':'ghost'}" data-tarifa="general">Tarifa general</button>
+        <button class="cr-btn ${state.tarifa===TARIFA_ESPECIAL?'red':'ghost'}" data-tarifa="${TARIFA_ESPECIAL}">Sublicuentas · Relojes · Geisell</button>
+      </div>
+      <button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button>
+    </div>
+    ${state.tarifa===TARIFA_ESPECIAL?`<div class="cr-card" style="margin-bottom:12px"><h3>Actualización de precios y vendedores</h3><small>Corrige Geissel → Geisell, actualiza sus clientes, asigna esta tarifa y crea Sublicuentas 2 con el teléfono 8946-4328.</small><div class="cr-row" style="margin-top:10px"><button class="cr-btn ghost" id="revPreviewActualizacion">Revisar cambios</button><button class="cr-btn red" id="revAplicarActualizacion">Aplicar actualización</button></div></div>`:''}
     ${vacio?`<div class="cr-empty">Catálogo vacío.<br><br>
-      <button class="cr-btn red" id="revImportarInicial">📥 Importar catálogo inicial</button><br><br>
-      <small>Trae los precios que ya estaban cargados en el Panel de Socios (Netflix, Disney, HBO, etc.) para poder editarlos desde acá. Es seguro tocarlo aunque ya lo hayas usado antes — no duplica.</small>
+      <button class="cr-btn red" id="revImportarInicial">📥 ${state.tarifa==='general'?'Importar catálogo inicial':'Cargar tarifa especial'}</button><br><br>
+      <small>${state.tarifa==='general'?'Trae el catálogo general del Panel de Socios.':'Carga los 28 precios definidos para Sublicuentas, Relojes y Geisell.'}</small>
     </div>`:''}
     ${orden.map(cat=>`
       <div class="cr-section">${esc(cat)}</div>
@@ -87,16 +95,41 @@ function renderPrecios(){
     `).join('')}`;
   $('#revAddPrecio').onclick=nuevoPrecio;
   if(vacio) $('#revImportarInicial').onclick=importarPreciosIniciales;
+  b.querySelectorAll('[data-tarifa]').forEach(x=>x.onclick=()=>{state.tarifa=x.dataset.tarifa;state.precios=null;loadPrecios(true)});
+  if($('#revPreviewActualizacion'))$('#revPreviewActualizacion').onclick=previsualizarActualizacion;
+  if($('#revAplicarActualizacion'))$('#revAplicarActualizacion').onclick=aplicarActualizacion;
   b.querySelectorAll('[data-save-precio]').forEach(x=>x.onclick=()=>guardarPrecio(x.dataset.savePrecio));
   b.querySelectorAll('[data-del-precio]').forEach(x=>x.onclick=()=>eliminarPrecio(x.dataset.delPrecio));
 }
 async function importarPreciosIniciales(){
   const btn=$('#revImportarInicial'); if(btn){ btn.disabled=true; btn.textContent='Importando…'; }
   try{
-    const d=await api('POST','precios/importar-inicial');
-    status(`✅ Catálogo importado: ${d.creados} nuevos, ${d.actualizados} actualizados.`,'good');
+    const ruta=state.tarifa==='general'?'precios/importar-inicial':'precios/importar-especial';
+    const d=await api('POST',ruta,undefined,{tarifa:state.tarifa});
+    status(state.tarifa==='general'
+      ?`✅ Catálogo importado: ${d.creados||0} nuevos, ${d.actualizados||0} actualizados.`
+      :`✅ Tarifa especial cargada: ${d.actualizados||0} precios.`, 'good');
     await loadPrecios(true);
   }catch(e){ status(e.message,'bad'); if(btn){ btn.disabled=false; btn.textContent='📥 Importar catálogo inicial'; } }
+}
+async function previsualizarActualizacion(){
+  try{
+    const d=await api('GET','actualizaciones/precios-agosto-2026');
+    const pendientes=(d.iptvPendientes||[]).reduce((n,x)=>n+Number(x.cantidad||0),0);
+    alert(`Se actualizarán ${d.clientesAActualizar||0} clientes y ${d.serviciosConRegla||0} servicios.\nRegistros Geisell encontrados: ${d.registrosGeisellEncontrados||0}.\nIPTV antiguos pendientes de identificar: ${pendientes}.`);
+  }catch(e){status(e.message,'bad')}
+}
+async function aplicarActualizacion(){
+  if(!confirm('¿Aplicar los precios especiales, corregir Geisell y crear Sublicuentas 2? Se guardará un respaldo antes de cambiar clientes.'))return;
+  const btn=$('#revAplicarActualizacion');if(btn){btn.disabled=true;btn.textContent='Aplicando…'}
+  try{
+    const d=await api('POST','actualizaciones/precios-agosto-2026',{});
+    state.precios=null;state.vendedores=null;
+    await loadPrecios(true);
+    const pendientes=(d.iptvPendientes||[]).reduce((n,x)=>n+Number(x.cantidad||0),0);
+    status(`✅ Actualización completa: ${d.clientesActualizados||0} clientes y ${d.serviciosConRegla||0} servicios revisados.${pendientes?' '+pendientes+' IPTV antiguos quedaron para identificar.':''}`,'good');
+    if(d.sublicuentas2Pin)pinModal('Sublicuentas 2',d.sublicuentas2Pin,'Usuario: sublicuentas 2 · WhatsApp: 8946-4328');
+  }catch(e){status(e.message,'bad');if(btn){btn.disabled=false;btn.textContent='Aplicar actualización'}}
 }
 function precioCard(p){
   const id=p.id;
@@ -130,14 +163,14 @@ async function guardarPrecio(id){
   const datos=leerFormPrecio(id);
   if(!datos.nombre){ status('Ponele un nombre al ítem.','bad'); return; }
   try{
-    const d=await api('PUT','precios/'+id,datos);
+    const d=await api('PUT','precios/'+id,datos,{tarifa:state.tarifa});
     status(d.sincronizado?'✅ Guardado y sincronizado con el Panel de Socios.':'✅ Guardado.','good');
     await loadPrecios(true);
   }catch(e){ status(e.message,'bad'); }
 }
 async function eliminarPrecio(id){
   if(!confirm('¿Eliminar este ítem del catálogo? Ya no lo verán los socios.')) return;
-  try{ await api('DELETE','precios/'+id); await loadPrecios(true); }
+  try{ await api('DELETE','precios/'+id,undefined,{tarifa:state.tarifa}); await loadPrecios(true); }
   catch(e){ status(e.message,'bad'); }
 }
 function nuevoPrecio(){
@@ -161,8 +194,8 @@ function nuevoPrecio(){
         variante:$('#npVariante').value.trim(),
         detalle:$('#npDetalle').value.trim(),
         precio:precioRaw===''?null:Number(precioRaw),
-        activo:true,
-      });
+        activo:true,tarifaId:state.tarifa,
+      },{tarifa:state.tarifa});
       m.remove(); await loadPrecios(true);
     }catch(e){ alert(e.message); }
   };
@@ -193,7 +226,7 @@ function vendedorCard(r){
   const activo=r.activo!==false;
   return `<article class="cr-card">
     <div class="cr-row"><h3>${esc(r.nombre)}</h3><span class="cr-badge ${activo?'':'paused'}">${activo?'Activo':'Inactivo — no puede entrar'}</span></div>
-    <small>Usuario: ${esc(r.nombre_norm||r.id)} · TG: ${esc(r.telegramId||'—')}</small>
+    <small>Usuario: ${esc(r.nombre_norm||r.id)} · WhatsApp: ${esc(r.telefono||'—')} · TG: ${esc(r.telegramId||'—')}</small>
     <div class="cr-row"><small>${r.clientes||0} clientes · ${r.vencidos||0} vencidos</small></div>
     <div class="cr-row">
       <button class="cr-btn ghost" data-edit-vend="${esc(r.id)}">Editar</button>
@@ -215,15 +248,16 @@ function nuevoVendedor(){
   const m=modal(`<h2>Nuevo vendedor</h2>
     <div class="cr-form">
       <label class="cr-field wide">Nombre<input id="nvNombre" placeholder="Ej. Juan Pérez"></label>
-      <label class="cr-field wide">ID de Telegram<input id="nvTelegram" placeholder="Ej. 123456789"></label>
+      <label class="cr-field wide">WhatsApp<input id="nvTelefono" inputmode="tel" placeholder="Ej. 8946-4328"></label>
+      <label class="cr-field wide">ID de Telegram (opcional)<input id="nvTelegram" placeholder="Ej. 123456789"></label>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="nvCancel">Cancelar</button><button class="cr-btn red" id="nvOk">Crear</button></div>`);
   $('#nvCancel').onclick=()=>m.remove();
   $('#nvOk').onclick=async()=>{
-    const nombre=$('#nvNombre').value.trim(), telegramId=$('#nvTelegram').value.trim();
-    if(!nombre||!telegramId){ alert('Completá nombre e ID de Telegram.'); return; }
+    const nombre=$('#nvNombre').value.trim(), telegramId=$('#nvTelegram').value.trim(), telefono=$('#nvTelefono').value.trim();
+    if(!nombre||(!telefono&&!telegramId)){ alert('Completá el nombre y al menos WhatsApp o ID de Telegram.'); return; }
     try{
-      const d=await api('POST','revendedores',{nombre,telegramId});
+      const d=await api('POST','revendedores',{nombre,telegramId,telefono});
       m.remove();
       pinModal(d.nombre,d.pin,`Usuario de acceso: ${d.nombre_norm}`);
       await loadVendedores(true);
@@ -235,7 +269,8 @@ function editarVendedor(id){
   const m=modal(`<h2>Editar vendedor</h2>
     <div class="cr-form">
       <label class="cr-field wide">Nombre<input id="evNombre" value="${esc(r.nombre)}"></label>
-      <label class="cr-field wide">ID de Telegram<input id="evTelegram" value="${esc(r.telegramId||'')}"></label>
+      <label class="cr-field wide">WhatsApp<input id="evTelefono" value="${esc(r.telefono||'')}"></label>
+      <label class="cr-field wide">ID de Telegram (opcional)<input id="evTelegram" value="${esc(r.telegramId||'')}"></label>
       <label class="cr-check"><input type="checkbox" id="evActivo" ${r.activo!==false?'checked':''}> Cuenta activa</label>
       <small>Usuario de acceso (${esc(r.nombre_norm)}) no se puede cambiar acá — reasigná los clientes primero si hace falta.</small>
     </div>
@@ -243,7 +278,7 @@ function editarVendedor(id){
   $('#evCancel').onclick=()=>m.remove();
   $('#evOk').onclick=async()=>{
     try{
-      await api('PATCH','revendedores/'+id,{nombre:$('#evNombre').value.trim(),telegramId:$('#evTelegram').value.trim(),activo:$('#evActivo').checked});
+      await api('PATCH','revendedores/'+id,{nombre:$('#evNombre').value.trim(),telefono:$('#evTelefono').value.trim(),telegramId:$('#evTelegram').value.trim(),activo:$('#evActivo').checked});
       m.remove(); await loadVendedores(true);
     }catch(e){ alert(e.message); }
   };
