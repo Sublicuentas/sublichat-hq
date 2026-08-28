@@ -5247,8 +5247,10 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
   // regla "TV ya vinculada" y oculte correo/clave.
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","appletv","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","oleada","latintv","liontv","iptv","windows10","windows11","adobeexpress","eset"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","oleada","latintv","liontv","iptv","windows10","windows11","adobeexpress","eset"]);
   const FICHA_SERIAL=new Set(["windows10","windows11","eset"]);
+  const FICHA_SIN_CLAVE=new Set([...FICHA_SOLO_CORREO,"appletv"]);
+  const FICHA_SIN_CORREO=new Set([...FICHA_SERIAL,"appletv"]);
   const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","oleada","latintv","liontv","iptv","viki","deezer","crunchyroll"]);
   const FICHA_CON_DISPOSITIVO=new Set(["netflix","disneyp","disneys","hbomax","vix","universal","primevideo"]);
   const IPTV_URLS={latintv:"http://latvgt.com:80", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80"};
@@ -5425,6 +5427,20 @@ Aquí tiene los datos para disfrutar de su contenido:
 📺 Compatible con TV, Celular, Tablet y Web.
 
 ✔️ Garantía vigente durante todo el periodo adquirido.
+
+🚀 Sublicuentas`,
+    appletv:
+`*🍎 Entrega de su acceso Apple TV 🍎*
+
+👤 Perfil: *_{perfil}_*
+*🔐 PIN de acceso: {pin}*
+*📅 Renovación: {renovTexto}*
+
+🚨 Condiciones del servicio:
+📌 Acceso únicamente mediante el PIN entregado.
+📌 No modificar el perfil.
+📌 Acceso solo para un dispositivo.
+📌 Garantía vigente durante el periodo contratado.
 
 🚀 Sublicuentas`,
     oleada:
@@ -5845,9 +5861,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(cand<today){ const max=new Date(y,m+2,0).getDate(); return new Date(y,m+1,Math.min(d,max)).toISOString().slice(0,10); }
     return cand.toISOString().slice(0,10);
   };
-  const fichaNeedsClave=plat=>!FICHA_SOLO_CORREO.has(fichaBaseRegla(plat));
+  const fichaNeedsClave=plat=>!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));
   const fichaNeedsPin=plat=>!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
-  const fichaNeedsCorreo=plat=>!FICHA_SERIAL.has(fichaBaseRegla(plat));
+  const fichaNeedsCorreo=plat=>!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
   const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaBaseRegla(plat));
   const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaBaseRegla(plat));
   const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaBaseRegla(plat));
@@ -5881,19 +5897,19 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const desdePerfil=perfil&&typeof perfil==="object";
     const dispositivo=desdePerfil?String(perfil.dispositivo||"").trim():fichaGetVal("fichaDispositivo");
     const esRoku=desdePerfil?(dispositivo==="tv"&&perfil.esRoku===true):(fichaGetVal("fichaEsRoku")==="si");
-    const platClave=fichaNeedsClave(plat), platPin=fichaNeedsPin(plat);
+    const platCorreo=fichaNeedsCorreo(plat), platClave=fichaNeedsClave(plat), platPin=fichaNeedsPin(plat);
     if(fichaEsSerial(plat)) return {correo:false,clave:true,pin:false,modo:"serial"};
     if(fichaCredencialesSiempre(plat)) return {correo:true,clave:true,pin:platPin,modo:"cred"};
     if(dispositivo==="tv"){
-      if(esRoku) return {correo:true, clave:platClave, pin:platPin, modo:"cred"};
+      if(esRoku) return {correo:platCorreo, clave:platClave, pin:platPin, modo:"cred"};
       return {correo:false, clave:false, pin:platPin, modo:"perfil"};
     }
     if(dispositivo==="cel"){
-      if(platClave && fichaCelularSoloCodigo(plat)) return {correo:true, clave:false, pin:platPin, modo:"codigo"};
-      return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
+      if(platClave && fichaCelularSoloCodigo(plat)) return {correo:platCorreo, clave:false, pin:platPin, modo:"codigo"};
+      return {correo:platCorreo, clave:platClave, pin:platPin, modo:platClave?"cred":(platCorreo?"invite":"pin")};
     }
     // Sin dispositivo elegido todavía: se comporta como antes de este cambio.
-    return {correo:true, clave:platClave, pin:platPin, modo:platClave?"cred":"invite"};
+    return {correo:platCorreo, clave:platClave, pin:platPin, modo:platClave?"cred":(platCorreo?"invite":"pin")};
   }
 
   // La visibilidad de la URL se guarda por servicio. "plataforma" conserva
@@ -6466,6 +6482,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     else if(campos.modo==="codigo"&&["disneyp","disneys"].includes(fichaNorm(plat))) msg="📲 El cliente verá correo, perfil y PIN. En Disney+, cuando aparezca ‘Escribir contraseña’, debe tocar ‘¿Problemas para iniciar sesión? Enviar un código de acceso único’ y pedir el código a su vendedor.";
     else if(campos.modo==="codigo") msg="📲 El cliente verá correo, perfil y PIN cuando la plataforma lo requiera; debe presionar Siguiente y luego \"Iniciar sesión con código\".";
     else if(campos.modo==="perfil") msg="📺 El cliente no verá correo ni clave — solo su perfil y PIN, porque el TV ya tiene la cuenta vinculada.";
+    else if(fichaBaseRegla(plat)==="appletv") msg="🍎 Apple TV se entrega únicamente con el PIN. No se mostrará ni se solicitará correo o clave.";
     else if(fichaNorm(plat)==="vipnetflix") msg="✅ Netflix Premium VIP mostrará siempre correo y clave, sin preguntar dispositivo y sin PIN de acceso.";
     else if(fichaNorm(plat)==="primevideo"&&dispositivo==="cel") msg="✅ Prime Video mostrará correo y clave. Si la app solicita un código de acceso, el cliente deberá pedirlo a su vendedor.";
     else msg="✅ El cliente verá correo"+(campos.clave?" y clave":"")+(campos.pin?" y PIN":"")+" normalmente.";
