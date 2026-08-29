@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 25  ·  URL permanente + visibilidad elegible por servicio
+// api/renovar.js  ·  VERSION 26  ·  conciliación segura de compra + URL permanente
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -154,6 +154,35 @@ function resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, co
   }
   if (lista.length === 1 && (!tieneCriterio || servicioCoincide(lista[0], { plataforma, correo }))) return 0;
   return -1;
+}
+
+// Al abrir una ficha antigua, la interfaz y Firebase pueden asignar compraId en
+// momentos distintos. Si ambos IDs difieren, conciliamos únicamente cuando la
+// plataforma/correo originales identifican UNA sola compra dentro del mismo
+// documento del cliente. Una coincidencia ambigua nunca se acepta.
+function resolveFichaUpsertIndex(servicios, { compraId, plataformaOriginal, correoOriginal } = {}) {
+  const lista = Array.isArray(servicios) ? servicios : [];
+  const compraBuscada = String(compraId || "").trim();
+  if (compraBuscada) {
+    const exacto = lista.findIndex(s => String(s?.compraId || "").trim() === compraBuscada);
+    if (exacto !== -1) return { idx: exacto, compraIdReconciliado: false };
+  }
+
+  // Sin el ID enviado y la plataforma que la pantalla abrió originalmente no
+  // hay información suficiente para sustituir la validación estricta.
+  if (!compraBuscada || !String(plataformaOriginal || "").trim()) {
+    return { idx: -1, compraIdReconciliado: false };
+  }
+
+  const candidatos = [];
+  lista.forEach((actual, index) => {
+    if (servicioCoincide(actual, { plataforma: plataformaOriginal, correo: correoOriginal })) {
+      candidatos.push(index);
+    }
+  });
+  return candidatos.length === 1
+    ? { idx: candidatos[0], compraIdReconciliado: true }
+    : { idx: -1, compraIdReconciliado: false };
 }
 
 function crmUserError(message) {
@@ -1027,9 +1056,16 @@ export default async function handler(req, res) {
         const correoNorm = String(correoEntrada || "").trim().toLowerCase();
         const compraIdEntrada = String(servicio.compraId || "").trim();
         const tieneIndice = body.servicioIndex !== null && body.servicioIndex !== undefined && body.servicioIndex !== "";
-        let idx = compraIdEntrada
-          ? servicios.findIndex(s => String(s?.compraId || "").trim() === compraIdEntrada)
-          : -1;
+        const tieneCorreoOriginal = body.correoOriginal !== null && body.correoOriginal !== undefined;
+        const plataformaOriginal = body.plataformaOriginal || "";
+        const correoOriginal = tieneCorreoOriginal ? body.correoOriginal : "";
+        const compraResuelta = resolveFichaUpsertIndex(servicios, {
+          compraId: compraIdEntrada,
+          plataformaOriginal,
+          correoOriginal
+        });
+        let idx = compraResuelta.idx;
+        const compraIdReconciliado = compraResuelta.compraIdReconciliado;
 
         if (idx === -1 && tieneIndice) {
           const solicitado = Number(body.servicioIndex);
@@ -1040,9 +1076,9 @@ export default async function handler(req, res) {
           if (compraIdEntrada && compraActual && compraActual !== compraIdEntrada) {
             throw crmUserError("La compra seleccionada cambió en Firebase. Recargue antes de guardar.");
           }
-          const plataformaOriginal = body.plataformaOriginal || servicios[solicitado].plataforma || "";
-          const correoOriginal = body.correoOriginal != null ? body.correoOriginal : (servicios[solicitado].correo || "");
-          if (!servicioCoincide(servicios[solicitado], { plataforma: plataformaOriginal, correo: correoOriginal })) {
+          const plataformaEsperada = plataformaOriginal || servicios[solicitado].plataforma || "";
+          const correoEsperado = tieneCorreoOriginal ? correoOriginal : (servicios[solicitado].correo || "");
+          if (!servicioCoincide(servicios[solicitado], { plataforma: plataformaEsperada, correo: correoEsperado })) {
             throw crmUserError("La ficha seleccionada ya no coincide con Firebase. Recargue antes de guardar.");
           }
           idx = solicitado;
@@ -1065,8 +1101,12 @@ export default async function handler(req, res) {
         if (String(servicio.beneficiarioTipo || "").toLowerCase() === "tercero" && !String(servicio.beneficiarioNombre || "").trim()) {
           throw crmUserError("Falta el nombre de la persona que usará este acceso.");
         }
+        // Si acabamos de conciliar un ID viejo, el ID ya guardado en Firebase
+        // prevalece. Así la próxima edición usa una identidad estable.
+        const compraIdAutoritativo = String(servicioAnterior?.compraId || compraIdEntrada || "").trim();
         const nuevo = buildServicio({
           ...servicio,
+          compraId: compraIdAutoritativo,
           vendedor: vendedor || servicioAnterior?.vendedor || data.vendedor || "",
           vendedor_norm: normName(vendedor || servicioAnterior?.vendedor_norm || data.vendedor_norm || ""),
           vendedorTelefono: vendedorTelefono || servicioAnterior?.vendedorTelefono || ""
@@ -1113,7 +1153,7 @@ export default async function handler(req, res) {
         transaction.set(docRef, update, { merge: true });
         return {
           created, idx, nombreFinal, serviciosLimpios, accesos,
-          servicioActualizado, servicioAnterior,
+          servicioActualizado, servicioAnterior, compraIdReconciliado,
           servicioGuardado: serviciosLimpios[idx], beneficiarioActual, tokenPublico
         };
       });
@@ -1121,7 +1161,7 @@ export default async function handler(req, res) {
       const {
         created, idx, nombreFinal, serviciosLimpios, accesos,
         servicioActualizado, servicioAnterior, servicioGuardado,
-        beneficiarioActual, tokenPublico
+        beneficiarioActual, tokenPublico, compraIdReconciliado
       } = fichaResultado;
 
       // Rastro forense de identidad para futuras auditorías. La creación nunca
@@ -1139,6 +1179,7 @@ export default async function handler(req, res) {
           vendedor_norm: servicioGuardado?.vendedor_norm || normName(vendedor || ""),
           atendidoPor: String(authUser.usuario || authUser.uid || "sublichat"),
           servicioActualizado: !!servicioActualizado,
+          compraIdReconciliado: !!compraIdReconciliado,
           createdAt: isoNow()
         });
       } catch (_) {}
@@ -1216,6 +1257,7 @@ export default async function handler(req, res) {
           tienePin: !!p.pinPerfil
         })),
         servicioActualizado,
+        compraIdReconciliado,
         servicioIndex: idx,
         inventario: invResult,
         beneficiarioTipo: beneficiarioActual.tipo,
