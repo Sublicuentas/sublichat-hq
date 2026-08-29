@@ -93,7 +93,7 @@ function servicioNoUsaPinPerfil(plataforma) {
 function servicioNoUsaClave(plataforma) {
   const p = canonPlat(plataforma);
   return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") ||
-    p.includes("duolingo") || p.includes("adobeexpress") || p.includes("appletv");
+    p.includes("duolingo") || p.includes("adobeexpress");
 }
 function servicioEsSerial(plataforma) {
   const p = canonPlat(plataforma);
@@ -101,7 +101,7 @@ function servicioEsSerial(plataforma) {
 }
 function servicioRequiereCorreo(plataforma) {
   const p = canonPlat(plataforma);
-  return !servicioEsSerial(p) && p !== "appletv";
+  return !servicioEsSerial(p);
 }
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
@@ -264,6 +264,12 @@ function resolverModo(servicio = {}) {
   const platUsaClave = !servicioNoUsaClave(plataforma);
   let mostrarCorreo = servicioRequiereCorreo(plataforma), mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
 
+  // Apple TV conserva correo, clave y PIN en el CRM, pero la ficha pública
+  // entrega exclusivamente el PIN individual al cliente.
+  if (canonPlat(plataforma) === "appletv") {
+    return { modo: "pin", mostrarCorreo: false, mostrarClave: false, mostrarPin: true };
+  }
+
   // Windows y ESET son licencias: nunca se presentan como correo/contraseña.
   if (servicioEsSerial(plataforma)) {
     return { modo: "serial", mostrarCorreo: false, mostrarClave: true, mostrarPin: false };
@@ -307,6 +313,20 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
   const raw = servicio.visibilidadUrl;
   const fuente = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { modo: raw };
   const modo = VISIBILIDAD_URL_MODOS.has(String(fuente?.modo || "")) ? String(fuente.modo) : "plataforma";
+
+  // Esta restricción no se puede ampliar con "Todos" ni con un modo
+  // personalizado: para Apple TV la URL del cliente siempre es solo PIN.
+  if (canonPlat(servicio.plataforma) === "appletv") {
+    return {
+      ...camposAutomaticos,
+      modo: "pin",
+      mostrarCorreo: false,
+      mostrarClave: false,
+      mostrarPin: true,
+      visibilidadModo: modo
+    };
+  }
+
   if (modo === "plataforma") return { ...camposAutomaticos, visibilidadModo: modo };
 
   let elegidos = { correo: false, clave: false, pin: false };

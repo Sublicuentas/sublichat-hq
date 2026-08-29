@@ -195,8 +195,7 @@ function servicioNoUsaClave(plataforma) {
     p.includes("gemini") ||
     p.includes("chatgpt") ||
     p.includes("duolingo") ||
-    p.includes("adobeexpress") ||
-    p.includes("appletv")
+    p.includes("adobeexpress")
   );
 }
 
@@ -219,7 +218,7 @@ function servicioUsaSelectorDispositivo(plataforma) {
 
 function servicioRequiereCorreo(plataforma) {
   const p = canonPlat(plataforma);
-  return !servicioEsSerial(p) && p !== "appletv";
+  return !servicioEsSerial(p);
 }
 
 function normName(v) {
@@ -479,7 +478,8 @@ async function sincronizarEnlacesPublicos(db, { clienteId, servicios = [], regis
 // No confundir con servicioNoUsaClave/servicioNoUsaPinPerfil, que rigen lo que se
 // GUARDA en el CRM (la clave real sigue guardándose como respaldo interno). Esta
 // regla solo controla qué se muestra en la ficha pública /c/{token}. La ficha
-// tradicional de WhatsApp/respaldo siempre utiliza todos los datos guardados.
+// tradicional de WhatsApp/respaldo utiliza los datos guardados, excepto Apple
+// TV: correo y clave quedan internos y la entrega al cliente lleva solo el PIN.
 function celularSoloCodigo(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   if (p.includes("netflix") && p.includes("vip")) return false; // Netflix VIP no entra aquí
@@ -731,7 +731,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   //   Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
   //   Netflix VIP, Paramount+, ViX+, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
   //   Canva, Gemini, ChatGPT y Duolingo son solo correo.
-  //   Apple TV se entrega únicamente mediante PIN, sin correo ni clave.
+  //   Apple TV guarda correo, clave y PIN; la ficha pública entrega únicamente el PIN.
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
   const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
