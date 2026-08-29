@@ -1,4 +1,4 @@
-// api/chat.js  ·  VERSION 11  (Gemini 2.5 + auth + rate limit)
+// api/chat.js  ·  VERSION 12  (Gemini + reescritura breve + auth + rate limit)
 // 1) Sube este archivo en la carpeta /api de tu proyecto en Vercel.
 // 2) En Vercel → Settings → Environment Variables agrega:  GEMINI_API_KEY = tu_key
 //    (la sacas en https://aistudio.google.com/apikey)
@@ -166,8 +166,8 @@ export default async function handler(req, res) {
   // GET normal: solo muestra configuración/version.
   if (req.method !== "POST") return res.status(200).json({
     ok: true,
-    version: 11,
-    msg: "chat v11 activo. Use POST. Use ?test=1 para probar Gemini.",
+    version: 12,
+    msg: "chat v12 activo. Use POST. Use ?test=1 para probar Gemini.",
     geminiConfigured: Boolean(API_KEY),
     defaultModel: process.env.GEMINI_MODEL || "gemini-3.5-flash",
     rewriteModel: process.env.GEMINI_REWRITE_MODEL || "gemini-3.1-flash-lite"
@@ -193,8 +193,19 @@ export default async function handler(req, res) {
 
   if (!API_KEY) return res.status(500).json({ error: "Falta GEMINI_API_KEY en Vercel" });
 
+  const isRewrite = String(mode || "").toLowerCase() === "rewrite";
   // Contexto: le damos a Gemini los datos reales para que NO invente.
-  const systemPrompt = `Eres "Subli", el asistente de operaciones de Sublicuentas, un negocio hondureño
+  const systemPrompt = isRewrite ? `Eres especialista en mensajes breves de renovación para Sublicuentas.
+Tu única tarea es reescribir un mensaje de entretenimiento premium para WhatsApp.
+
+REGLAS OBLIGATORIAS:
+- Devuelva exactamente 2 líneas cortas y no más de 300 caracteres en total.
+- Use "usted", español natural de Honduras, tono cordial y comercial.
+- Incluya de 2 a 4 emojis y negrita de WhatsApp con asteriscos.
+- Conserve exactamente cliente, servicios, fecha y costo indicados por el usuario.
+- No invente promociones ni datos.
+- Nunca agregue cuentas bancarias, transferencias, depósitos, tarjetas, comprobantes, instrucciones ni métodos de pago.
+- Devuelva únicamente el mensaje, sin título, explicación, lista ni saludo adicional.` : `Eres "Subli", el asistente de operaciones de Sublicuentas, un negocio hondureño
 de reventa de suscripciones (Netflix, Disney+, HBO Max, Prime Video, etc.).
 Hablas en español de Honduras, claro y directo, usando "usted". La moneda es Lempiras (Lps).
 Hoy es ${hoy}.
@@ -215,7 +226,6 @@ DATOS DE LA CARTERA (JSON):
 ${JSON.stringify(clientes || [])}`;
 
   try {
-    const isRewrite = String(mode || "").toLowerCase() === "rewrite";
     const model = isRewrite
       ? (process.env.GEMINI_REWRITE_MODEL || "gemini-3.1-flash-lite")
       : (process.env.GEMINI_MODEL || "gemini-3.5-flash");
@@ -237,8 +247,8 @@ ${JSON.stringify(clientes || [])}`;
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: pregunta }] }],
           generationConfig: {
-            temperature: isRewrite ? 0.85 : 0.4,
-            maxOutputTokens: isRewrite ? 600 : 2048,
+            temperature: isRewrite ? 1.0 : 0.4,
+            maxOutputTokens: isRewrite ? 160 : 2048,
             thinkingConfig: { thinkingBudget: 0 }
           }
         })
