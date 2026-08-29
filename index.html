@@ -3924,76 +3924,110 @@ function descServicios(g){
   return `sus servicios de ${unicas.slice(0,-1).join(", ")} y ${ultimo}`;
 }
 
-// Mensajes cortos y realmente distintos. El tema también cambia el color de la
-// vista previa para reconocer visualmente cada variante; WhatsApp recibe texto limpio.
-const COBRO_FORMATOS=[
-  {tema:"oceano", texto:"👋 Hola, {n}.\n{aviso}\n💳 Renovación: {m}. ¿Desea renovarlo? ✅", multiInicio:"👋 Hola, {n}. Estas son sus renovaciones:", multiCierre:"✅ ¿Desea que las dejemos activas?"},
-  {tema:"bosque", texto:"🌟 {n}, queremos que siga disfrutando.\n{aviso}\n💰 {m}. ¿Se lo dejamos activo?", multiInicio:"🌟 {n}, este es su resumen de renovación:", multiCierre:"💚 Confírmenos y las dejamos listas."},
-  {tema:"sol", texto:"⏰ Recordatorio para {n}:\n{aviso}\n💵 {m}. Confírmenos y renovamos.", multiInicio:"⏰ Recordatorio para {n}:", multiCierre:"🙌 Confírmenos y renovamos."},
-  {tema:"uva", texto:"✨ Hola, {n}.\n{aviso}\n💳 {m}. ¿Procedemos con la renovación?", multiInicio:"✨ Hola, {n}. Sus próximas renovaciones:", multiCierre:"💜 ¿Procedemos con la renovación?"},
-  {tema:"coral", texto:"📣 {n}, tenemos un recordatorio.\n{aviso}\n💰 Total: {m}. ¿Lo renovamos?", multiInicio:"📣 {n}, tiene estas renovaciones:", multiCierre:"✅ ¿Las renovamos?"},
-  {tema:"cielo", texto:"🎬 Hola, {n}.\n{aviso}\n✅ Manténgalo activo por {m}.", multiInicio:"🎬 Hola, {n}. Mantenga activos sus servicios:", multiCierre:"💬 Avísenos y los renovamos."},
-  {tema:"rosa", texto:"💫 {n}, su entretenimiento continúa.\n{aviso}\n💳 Renovación: {m}. ¿Le ayudamos?", multiInicio:"💫 {n}, aquí tiene sus renovaciones:", multiCierre:"✅ ¿Le ayudamos a mantenerlas activas?"},
-  {tema:"lima", texto:"🙌 Buen día, {n}.\n{aviso}\n💰 {m}. Responda *RENOVAR* y lo activamos.", multiInicio:"🙌 Buen día, {n}. Su resumen:", multiCierre:"💬 Responda *RENOVAR* y las activamos."}
+// Las aperturas, cierres y estructuras se combinan para ofrecer miles de
+// mensajes diferentes. Todos conservan el mismo principio comercial: dos
+// líneas, costo visible, emojis y cero datos bancarios o métodos de pago.
+const COBRO_APERTURAS=[
+  {tema:"oceano",texto:"🎬 Hola, {n}. *Que continúe su entretenimiento premium* ✨"},
+  {tema:"bosque",texto:"🌟 {n}, siga disfrutando *entretenimiento premium sin pausas* 🍿"},
+  {tema:"sol",texto:"☀️ Hola, {n}. *Su diversión merece continuar* 🎬"},
+  {tema:"uva",texto:"✨ {n}, tenemos lista su próxima renovación 🎞️"},
+  {tema:"coral",texto:"🍿 Hola, {n}. *Sus historias favoritas pueden continuar* ✨"},
+  {tema:"cielo",texto:"📺 {n}, mantenga activo su mejor entretenimiento 🎬"},
+  {tema:"rosa",texto:"💫 Hola, {n}. *Su entretenimiento premium está por renovarse* 🍿"},
+  {tema:"lima",texto:"🙌 {n}, que no se detenga lo que más disfruta 🎬"},
+  {tema:"oceano",texto:"🎬 {n}, su próxima maratón puede seguir sin pausas ✨"},
+  {tema:"bosque",texto:"💚 Hola, {n}. *Siga disfrutando contenido premium* 📺"},
+  {tema:"sol",texto:"🌟 {n}, hoy puede darle continuidad a su entretenimiento 🎬"},
+  {tema:"uva",texto:"💎 Hola, {n}. *Mantenga viva la emoción* 🍿"},
+  {tema:"coral",texto:"🎉 {n}, su entretenimiento favorito quiere continuar ✨"},
+  {tema:"cielo",texto:"📺 Hola, {n}. *Renueve y siga disfrutando sin interrupciones* 🎬"},
+  {tema:"rosa",texto:"🌈 {n}, que continúen sus momentos de entretenimiento 🍿"},
+  {tema:"lima",texto:"✨ Hola, {n}. *Continuemos con su entretenimiento premium* 🙌"}
+];
+const COBRO_CIERRES=[
+  "¿Desea renovar? ✅",
+  "¿Confirmamos la renovación? ✨",
+  "¿Continuamos? 🎬",
+  "¿Le ayudamos a renovar? 💫",
+  "¿Renovamos hoy? ✅",
+  "¿Quiere seguir disfrutando? 🍿",
+  "Respóndanos *SÍ* y renovamos 🙌",
+  "¿Damos continuidad? 📺",
+  "¿Lo dejamos listo? ✨",
+  "¿Seguimos sin pausas? 🎬",
+  "¿Confirma para renovar? ✅",
+  "¿Activamos la renovación? 💎",
+  "¿Desea mantenerlo activo? 🍿",
+  "¿Renovamos para que siga disfrutando? ✨"
+];
+const COBRO_LINEAS_DETALLE=[
+  "📅 {detalle} · {monto}. {cierre}",
+  "🍿 {detalle} · Renovación {monto}. {cierre}",
+  "💫 {detalle} · {monto} de renovación. {cierre}",
+  "🎬 {detalle} · Valor {monto}. {cierre}",
+  "📺 {detalle} · Total {monto}. {cierre}",
+  "✨ {detalle} · Renovación por {monto}. {cierre}",
+  "🌟 {detalle} · Costo {monto}. {cierre}",
+  "🍿 {detalle} · Solo {monto}. {cierre}"
 ];
 
-let _bolsaPlantillas=[], _ultimaPlantillaIndex=null;
-function _sacarPlantillaIndex(){
-  if(!_bolsaPlantillas.length){
-    _bolsaPlantillas=COBRO_FORMATOS.map((_,i)=>i);
-    // Fisher-Yates: mezcla real, no solo Math.random() puro
-    for(let i=_bolsaPlantillas.length-1;i>0;i--){
-      const j=Math.floor(Math.random()*(i+1));
-      [_bolsaPlantillas[i],_bolsaPlantillas[j]]=[_bolsaPlantillas[j],_bolsaPlantillas[i]];
-    }
+let _cobroBolsaVariaciones=[],_cobroUltimaFirma="";
+function _recargarBolsaCobro(){
+  const bolsa=[];
+  COBRO_APERTURAS.forEach((_,aperturaIndex)=>COBRO_CIERRES.forEach((__,cierreIndex)=>COBRO_LINEAS_DETALLE.forEach((___,detalleIndex)=>bolsa.push(`${aperturaIndex}:${cierreIndex}:${detalleIndex}`))));
+  for(let i=bolsa.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [bolsa[i],bolsa[j]]=[bolsa[j],bolsa[i]];
   }
-  let idx=_bolsaPlantillas.pop();
-  // Al empezar una bolsa nueva tampoco repite el último estilo de la anterior.
-  if(idx===_ultimaPlantillaIndex && _bolsaPlantillas.length){
-    const otro=_bolsaPlantillas.pop();
-    _bolsaPlantillas.unshift(idx);
-    idx=otro;
+  if(bolsa.length>1&&bolsa[bolsa.length-1]===_cobroUltimaFirma)[bolsa[0],bolsa[bolsa.length-1]]=[bolsa[bolsa.length-1],bolsa[0]];
+  _cobroBolsaVariaciones=bolsa;
+}
+function _sacarVariacionCobro(){
+  if(!_cobroBolsaVariaciones.length)_recargarBolsaCobro();
+  const firma=_cobroBolsaVariaciones.pop();
+  _cobroUltimaFirma=firma;
+  const [aperturaIndex,cierreIndex,detalleIndex]=firma.split(":").map(Number);
+  return {apertura:COBRO_APERTURAS[aperturaIndex],cierre:COBRO_CIERRES[cierreIndex],linea:COBRO_LINEAS_DETALLE[detalleIndex],firma};
+}
+function cobroEtiquetaServicios(servicios){
+  if(servicios.length===1){
+    const s=servicios[0]||{};
+    const cantidad=Number(s.cantidadPerfiles)||1;
+    return `${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}${cantidad>1?` · ${cantidad} perfiles`:""}`;
   }
-  _ultimaPlantillaIndex=idx;
-  return idx;
+  const conteo=new Map();
+  servicios.forEach(s=>{
+    const nombre=s.plataforma||platLabel(s.plataformaRaw)||"Servicio";
+    conteo.set(nombre,(conteo.get(nombre)||0)+1);
+  });
+  return [...conteo.entries()].map(([nombre,cantidad])=>cantidad>1?`${cantidad} ${nombre}`:nombre).join(" + ");
 }
-function cobroAvisoServicio(s){
-  const cantidad=Number(s.cantidadPerfiles)||1;
-  const plat=`*${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}${cantidad>1?` · ${cantidad} perfiles`:""}*`;
-  if(!s.fecha) return `📅 ${plat} tiene fecha pendiente de confirmar.`;
-  const dias=daysTo(s.fecha), fecha=`*${fechaLarga(s.fecha)}*`;
-  if(dias<0) return `⚠️ ${plat} venció el ${fecha}.`;
-  if(dias===0) return `⏰ ${plat} vence *hoy*.`;
-  if(dias===1) return `📅 ${plat} vence *mañana*.`;
-  return `📅 ${plat} renueva el ${fecha}.`;
+function cobroMomentoServicio(s,plural=false){
+  if(!s||!s.fecha)return plural?"tienen fecha por confirmar":"tiene fecha por confirmar";
+  const dias=daysTo(s.fecha),fecha=`*${fechaLarga(s.fecha)}*`;
+  if(dias<0)return plural?`vencieron el ${fecha}`:`venció el ${fecha}`;
+  if(dias===0)return plural?"vencen *hoy*":"vence *hoy*";
+  if(dias===1)return plural?"vencen *mañana*":"vence *mañana*";
+  return plural?`renuevan el ${fecha}`:`renueva el ${fecha}`;
 }
-function cobroFechaCompacta(s){
-  if(!s.fecha) return "fecha pendiente";
-  const dias=daysTo(s.fecha);
-  if(dias<0) return `venció ${fechaLarga(s.fecha)}`;
-  if(dias===0) return "vence hoy";
-  if(dias===1) return "vence mañana";
-  return fechaLarga(s.fecha);
+function cobroDetalleCompacto(servicios){
+  return `*${cobroEtiquetaServicios(servicios)}* ${cobroMomentoServicio(servicios[0],servicios.length>1)}`;
 }
 function generarMensajeCobro(g){
   const servicios=(g.servicios&&g.servicios.length?g.servicios:[g]).filter(Boolean);
   const total = g.total!=null ? g.total : g.precio;
   const nombre=`*${g.nombre||"Cliente"}*`;
   const monto=`*${fmt(total)}*`;
-  const formato=COBRO_FORMATOS[_sacarPlantillaIndex()]||COBRO_FORMATOS[0];
-  let msg;
-  if(servicios.length===1){
-    msg=formato.texto
-      .replaceAll("{n}",nombre)
-      .replaceAll("{aviso}",cobroAvisoServicio(servicios[0]))
-      .replaceAll("{m}",monto);
-  }else{
-    const iconos=["🎬","📺","🍿","✨","🎧","📱"];
-    const detalle=servicios.map((s,i)=>`${iconos[i%iconos.length]} *${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}* · ${cobroFechaCompacta(s)} · *${fmt(s.precio)}*`).join("\n");
-    msg=`${formato.multiInicio.replaceAll("{n}",nombre)}\n${detalle}\n💳 Total: ${monto}\n${formato.multiCierre}`;
-  }
+  const variacion=_sacarVariacionCobro();
+  const primera=variacion.apertura.texto.replaceAll("{n}",nombre);
+  const segunda=variacion.linea
+    .replaceAll("{detalle}",cobroDetalleCompacto(servicios))
+    .replaceAll("{monto}",monto)
+    .replaceAll("{cierre}",variacion.cierre);
+  const msg=`${primera}\n${segunda}`;
   generarMensajeCobro.ultimo=msg;
-  generarMensajeCobro.tema=formato.tema;
+  generarMensajeCobro.tema=variacion.apertura.tema;
   return msg;
 }
 
@@ -4017,12 +4051,31 @@ function cobroSetMensaje(texto,tema){
 function asegurarNegritasCobro(texto,g){
   let salida=String(texto||"");
   const total=g?(g.total!=null?g.total:g.precio):null;
-  const valores=[g&&g.nombre, total!=null?fmt(total):null].filter(Boolean);
+  const servicios=g?(g.servicios&&g.servicios.length?g.servicios:[g]):[];
+  const plataformas=servicios.map(s=>s&&(s.plataforma||platLabel(s.plataformaRaw))).filter(Boolean);
+  const valores=[g&&g.nombre,...plataformas,total!=null?fmt(total):null].filter(Boolean);
   valores.forEach(valor=>{
-    if(salida.includes(`*${valor}*`))return;
+    const yaEstaEnNegrita=[...salida.matchAll(/\*([^*\n]+)\*/g)].some(match=>match[1].includes(String(valor)));
+    if(yaEstaEnNegrita)return;
     const safe=String(valor).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
     salida=salida.replace(new RegExp(safe),`*${valor}*`);
   });
+  return salida;
+}
+function normalizarMensajeCobroIA(texto,g){
+  const limpio=String(texto||"")
+    .replace(/```(?:\w+)?/g,"")
+    .replace(/^\s*(?:mensaje|versi[oó]n)\s*:\s*/i,"")
+    .trim();
+  const lineas=limpio.split(/\r?\n/).map(linea=>linea.replace(/^\s*[-•]\s*/,"").trim()).filter(Boolean);
+  if(lineas.length!==2)throw new Error("La IA no respetó el límite de dos líneas.");
+  let salida=lineas.join("\n");
+  if(salida.length>300)throw new Error("La IA devolvió un mensaje demasiado largo.");
+  const detallePago=/\b(?:BAC|Ficohsa|Banpa[ií]s|Atl[aá]ntida|Lafise|Davivienda|PayPal|Binance|Tigo\s*Money|transferencia|dep[oó]sito|cuenta\s+bancaria|n[uú]mero\s+de\s+cuenta|m[eé]todo(?:s)?\s+de\s+pago|tarjeta|comprobante|billetera|pague\s+a|env[ií]e\s+el\s+pago)\b/i;
+  if(detallePago.test(salida))throw new Error("La IA agregó detalles de pago no permitidos.");
+  const emojis=salida.match(/\p{Extended_Pictographic}/gu)||[];
+  if(emojis.length<2)throw new Error("La IA no agregó suficientes emojis.");
+  salida=asegurarNegritasCobro(salida,g);
   return salida;
 }
 
@@ -4422,10 +4475,13 @@ $cobro("cobroIA").addEventListener("click",async()=>{
   try{
     const total=cobroActual.total!=null?cobroActual.total:cobroActual.precio;
     const servDesc=descServicios(cobroActual);
-    const prompt=`Genere una NUEVA versión de este mensaje de renovación para WhatsApp.
-Debe ser claramente diferente de la versión actual, pero conservar EXACTAMENTE los datos reales.
-Use "usted", español natural de Honduras, tono cordial y comercial, 3 a 5 líneas breves y 2 a 4 emojis.
-No invente precios, fechas, servicios ni promociones. Mantenga en negrita con asteriscos los servicios y el total cuando sea útil.
+    const prompt=`Genere un mensaje NUEVO de renovación de entretenimiento premium para WhatsApp.
+REGLA OBLIGATORIA: exactamente 2 líneas cortas y máximo 300 caracteres en total.
+Use "usted", español natural de Honduras, tono bonito, cordial y comercial, con 2 a 4 emojis.
+Use negrita de WhatsApp con asteriscos en cliente, servicios y costo.
+La primera línea debe saludar y emocionar; la segunda debe incluir servicio, fecha, costo y una pregunta breve para renovar.
+PROHIBIDO agregar cuentas bancarias, transferencias, depósitos, tarjetas, comprobantes o cualquier método/detalle de pago.
+No invente precios, fechas, servicios ni promociones. No escriba explicaciones, listas ni párrafos adicionales.
 Cliente: "${cobroActual.nombre}".
 Servicios: ${servDesc}.
 Total: ${fmt(total)}.
@@ -4459,7 +4515,7 @@ Devuelva SOLO el nuevo mensaje, sin explicación. Variación: ${Date.now()}.`;
     if(!txt || /^Gemini:\s*/i.test(txt) || /No obtuve respuesta/i.test(txt)){
       throw new Error(txt||"La IA no devolvió texto.");
     }
-    txt=asegurarNegritasCobro(txt,cobroActual);
+    txt=normalizarMensajeCobroIA(txt,cobroActual);
     // Si por casualidad Gemini devuelve prácticamente lo mismo, usar una
     // variante local para que el botón SIEMPRE produzca un cambio visible.
     const norm=s=>String(s||"").toLowerCase().replace(/\s+/g," ").trim();
@@ -8506,7 +8562,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   <div class="cobro-sheet">
     <div class="cobro-head">
       <div>
-        <div class="cobro-title">💬 Mensaje de renovación</div>
+        <div class="cobro-title">🎬 Renovación premium</div>
         <div class="cobro-sub" id="cobroCliente">—</div>
       </div>
       <button class="cobro-x" id="cobroClose">✕</button>
@@ -8518,7 +8574,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     </details>
     <div class="cobro-actions">
       <button class="cobro-btn ghost" id="cobroVariar">🎨 Otro estilo</button>
-      <button class="cobro-btn ghost" id="cobroIA">✨ Mensaje IA</button>
+      <button class="cobro-btn ghost" id="cobroIA">✨ Mensaje IA corto</button>
     </div>
     <div class="cobro-actions">
       <button class="cobro-btn ghost" id="cobroCopy">📋 Copiar</button>
