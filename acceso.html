@@ -263,7 +263,7 @@
     liontv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LionTV"},
     iptv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"TV"},
     viki:{logo:"/assets/platformas/viki.jpg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
-    appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"tv"},
+    appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"🍎"},
     windows10:{logo:"/assets/platformas/windows10.jpg",bg:"#1674c8",fallback:"W10"},
     windows11:{logo:"/assets/platformas/windows11.jpg",bg:"#eaf5ff",fallback:"W11",color:"#1674c8"},
     adobeexpress:{logo:"/assets/platformas/adobeexpress.jpg",bg:"#ffffff",fallback:"Ae",color:"#e536d2"},
@@ -277,7 +277,7 @@
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
     chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",oleada:"🌊",latintv:"📺",liontv:"🦁",iptv:"📺",
-    viki:"📺",appletv:"📺",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
+    viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
   };
 
   function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
@@ -334,7 +334,8 @@
     const largo=nombre.length;
     const size=largo>25?"clamp(11.5px,3vw,15px)":(largo>20?"clamp(12px,3.4vw,16px)":(largo>16?"clamp(13px,3.7vw,18px)":"18px"));
     const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:"";
-    return `<div class="plat-name" style="--plat-name-size:${size}">${estrella}<span class="plat-title">${esc(nombre)}</span></div>`;
+    const apple=platKey(d.plataforma)==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:"";
+    return `<div class="plat-name" style="--plat-name-size:${size}">${estrella}${apple}<span class="plat-title">${esc(nombre)}</span></div>`;
   }
 
   function nombreAcceso(d){
@@ -499,7 +500,7 @@
   function filaServicioMultiple(d,index,total,abierto){
     const estado=estadoServicio(d);
     const panelId=`detalle-acceso-${index}`;
-    const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:"";
+    const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:(platKey(d.plataforma)==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:"");
     return `<section class="multi-service${abierto?" open":""}" data-service-index="${index}">
       <button class="multi-trigger" type="button" aria-expanded="${abierto?"true":"false"}" aria-controls="${panelId}" aria-label="Acceso ${index+1} de ${total}: ${esc(nombrePlataforma(d))}">
         ${platLogo(d.plataforma,nombrePlataforma(d))}
