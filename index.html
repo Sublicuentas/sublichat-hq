@@ -6564,8 +6564,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const principal=perfiles[0]||{};
     const beneficiarioTipo=fichaGetVal("fichaBeneficiarioTipo")==="tercero"?"tercero":"titular";
     const beneficiarioNombre=fichaNombreBeneficiario();
+    // Una compra antigua puede no tener compraId todavía. Al editarla enviamos
+    // vacío para que el servidor la identifique por su índice y le asigne el ID
+    // autoritativo de Firebase; los IDs nuevos se generan solo al crear compras.
+    const compraIdGuardar=fichaCompraIdActual||((fichaForzarNuevoServicioActual||fichaServicioIndexActual==null)?fichaNuevoId("compra"):"");
     const servicio={
-      compraId:fichaCompraIdActual||fichaNuevoId("compra"),
+      compraId:compraIdGuardar,
       modalidad:perfiles.length>1?"multiperfil":"individual",
       plataforma:plataformaGuardar,
       precio:fichaPrecioActual(),
