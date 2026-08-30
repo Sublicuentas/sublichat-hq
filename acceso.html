@@ -406,7 +406,7 @@
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
     const plataforma=platKey(d.plataforma);
-    const etiquetaAcceso=["oleada","latintv","liontv","iptv"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
+    const etiquetaAcceso=["oleada","latintv","liontv","iptv","stella"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
     const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
