@@ -18,6 +18,7 @@
 <!-- FIX_VISIBLE_LIC_20260608_5 | AULA_CURSOS_PRO_20260608_6 -->
 <!-- FIX_INSERTAR_FILA_SIN_SALTO_20260707 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="image" href="/assets/sublirobot-intro-actualizado.jpg?v=20260830-1">
 <link rel="stylesheet" href="/portal-cliente-admin.css?v=20260820-2">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -926,11 +927,11 @@ tbody td{border-color:var(--line)!important;color:var(--txt)!important}
   .intro-ring::after{inset:-18px;border-color:rgba(232,49,63,.34);animation:ringSpin 2.8s linear reverse infinite}
   @keyframes ringSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
   .intro-bot{position:absolute;left:50%;top:39%;width:190px;max-width:52vw;transform:translate(-50%,-50%) scale(.72);opacity:0;z-index:4;
-    filter:drop-shadow(0 28px 36px rgba(0,0,0,.55)) drop-shadow(0 0 28px rgba(232,49,63,.42));
+    object-fit:contain;mix-blend-mode:screen;
     animation:botReveal 3.25s cubic-bezier(.16,.8,.28,1) forwards}
-  @keyframes botReveal{0%{opacity:0;transform:translate(-50%,-36%) scale(.55);filter:blur(14px) brightness(.55)}28%{opacity:1;filter:blur(0) brightness(1.12)}52%{transform:translate(-50%,-50%) scale(1.06)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  @keyframes botReveal{0%{opacity:0;transform:translate(-50%,-36%) scale(.55)}28%{opacity:1}52%{transform:translate(-50%,-50%) scale(1.06)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
   .intro-brand{position:absolute;left:24px;right:24px;top:58%;z-index:5;text-align:center;opacity:0;animation:brandIn 1.15s ease forwards .95s}
-  .intro-brand h1{font-family:var(--ff);font-size:clamp(34px,11vw,56px);letter-spacing:-1.8px;line-height:.92;color:#fff;text-shadow:0 0 26px rgba(232,49,63,.34)}
+  .intro-brand h1{font-family:'Space Grotesk',var(--fb);font-size:clamp(34px,11vw,56px);font-weight:500;letter-spacing:-1.2px;line-height:.96;color:#fff;text-shadow:0 0 22px rgba(232,49,63,.28)}
   .intro-brand p{font-family:var(--fb);font-size:12px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#b9c3d6;margin-top:12px}
   @keyframes brandIn{from{opacity:0;transform:translateY(24px) scale(.96);filter:blur(8px)}to{opacity:1;transform:none;filter:blur(0)}}
   .intro-chip{position:absolute;left:50%;bottom:94px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:999px;
@@ -1455,7 +1456,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     <img class="intro-poster" id="introPoster" alt="Sublicuentas">
     <div class="intro-orb"></div>
     <div class="intro-ring"></div>
-    <img class="intro-bot" id="introBot" alt="Sublirobot">
+    <img class="intro-bot" id="introBot" src="/assets/sublirobot-intro-actualizado.jpg?v=20260830-1" width="1054" height="1536" decoding="async" fetchpriority="high" alt="Sublirobot actualizado">
     <div class="intro-brand"><h1>Sublicuentas</h1><p>Centro de operaciones</p></div>
     <div class="intro-chip">Conectamos tu entretenimiento</div>
     <div class="scan"></div>
@@ -1717,11 +1718,11 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     <div class="card">
       <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg></span> Inventario de cuentas</h2>
       <div class="inv-stats" id="invStats"></div>
-      <button class="cobro-btn renew" id="invNuevoBtn" type="button" style="width:100%;margin-bottom:10px">➕ Agregar plataforma / correo nuevo</button>
+      <button class="cobro-btn renew" id="invNuevoBtn" type="button" style="width:100%;margin-bottom:10px">➕ Agregar cuenta nueva</button>
       <div id="invNuevoForm" class="iv-nuevo-form" style="display:none">
         <label class="serv-label">Plataforma</label>
         <select class="serv-input" id="invNPlat"></select>
-        <label class="serv-label">Correo</label>
+        <label class="serv-label" id="invNIdentLabel">Correo</label>
         <input class="serv-input" id="invNCorreo" type="text" placeholder="correo@sublicuentas.com" autocapitalize="off">
         <label class="serv-label">Clave</label>
         <input class="serv-input" id="invNClave" type="text" placeholder="Clave de la cuenta">
@@ -1730,7 +1731,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <button class="cobro-btn renew" id="invNGuardar" type="button" style="width:100%;margin-top:12px">💾 Guardar en inventario</button>
         <div class="cr-hint" id="invNHint"></div>
       </div>
-      <div class="toolbar"><div class="search">🔎 <input id="invQ" type="text" placeholder="Buscar correo o plataforma…"></div></div>
+      <div class="toolbar"><div class="search">🔎 <input id="invQ" type="text" placeholder="Buscar usuario, correo o plataforma…"></div></div>
       <div class="toolbar">
         <select id="invPlat"><option value="">Todas las plataformas</option></select>
         <select id="invCupo">
@@ -2439,6 +2440,14 @@ const INV_PLAT_CANON=[
   ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
   ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"]
 ];
+const invUsaUsuario=plataforma=>/^(stellatv|oleadatv|latintv|liontv|iptv)/.test(String(plataforma||"").toLowerCase().replace(/[^a-z0-9]/g,""));
+function invNuevoActualizarIdentificador(){
+  const plataforma=document.getElementById("invNPlat")?.value||"";
+  const usaUsuario=invUsaUsuario(plataforma);
+  const label=document.getElementById("invNIdentLabel"),input=document.getElementById("invNCorreo");
+  if(label)label.textContent=usaUsuario?"Usuario":"Correo";
+  if(input)input.placeholder=usaUsuario?"usuario de la cuenta":"correo@sublicuentas.com";
+}
 function invNuevoInit(){
   const sel=document.getElementById("invNPlat");
   if(sel && sel.options.length===0){
@@ -2446,6 +2455,8 @@ function invNuevoInit(){
       const o=document.createElement("option"); o.value=codigo; o.textContent=label; sel.appendChild(o);
     });
   }
+  if(sel&&!sel._identWired){sel._identWired=true;sel.addEventListener("change",invNuevoActualizarIdentificador);}
+  invNuevoActualizarIdentificador();
   const btn=document.getElementById("invNuevoBtn");
   const form=document.getElementById("invNuevoForm");
   if(btn && form && !btn._wired){
@@ -2453,7 +2464,7 @@ function invNuevoInit(){
     btn.addEventListener("click",()=>{
       const show=form.style.display==="none";
       form.style.display=show?"block":"none";
-      btn.textContent=show?"➖ Cerrar formulario":"➕ Agregar plataforma / correo nuevo";
+      btn.textContent=show?"➖ Cerrar formulario":"➕ Agregar cuenta nueva";
     });
   }
   const save=document.getElementById("invNGuardar");
@@ -2464,12 +2475,13 @@ function invNuevoInit(){
 }
 async function invNuevoGuardar(){
   const plataforma=document.getElementById("invNPlat").value;
+  const identLabel=invUsaUsuario(plataforma)?"Usuario":"Correo";
   const correo=(document.getElementById("invNCorreo").value||"").trim();
   const clave=(document.getElementById("invNClave").value||"").trim();
   const perfiles=Math.max(1,Number(document.getElementById("invNPerfiles").value)||1);
   const hint=document.getElementById("invNHint");
-  if(!correo){ if(hint)hint.textContent="⚠️ Poné el correo de la cuenta."; return; }
-  if(!confirm(`¿Agregar esta cuenta al inventario?\n\nPlataforma: ${platLabel(plataforma)}\nCorreo: ${correo}\nClave: ${clave||"—"}\nPerfiles: ${perfiles}`)) return;
+  if(!correo){ if(hint)hint.textContent=`⚠️ Poné el ${identLabel.toLowerCase()} de la cuenta.`; return; }
+  if(!confirm(`¿Agregar esta cuenta al inventario?\n\nPlataforma: ${platLabel(plataforma)}\n${identLabel}: ${correo}\nClave: ${clave||"—"}\nPerfiles: ${perfiles}`)) return;
   const btn=document.getElementById("invNGuardar");
   if(btn){btn.disabled=true;btn.textContent="Guardando…";}
   if(hint)hint.textContent="Guardando…";
@@ -2484,7 +2496,7 @@ async function invNuevoGuardar(){
       document.getElementById("invNPerfiles").value="5";
       if(hint)hint.textContent="";
       document.getElementById("invNuevoForm").style.display="none";
-      document.getElementById("invNuevoBtn").textContent="➕ Agregar plataforma / correo nuevo";
+      document.getElementById("invNuevoBtn").textContent="➕ Agregar cuenta nueva";
       setTimeout(()=>load(),800);
     }else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
   }catch(e){ if(hint)hint.textContent="⚠️ No pude conectar."; }
@@ -2541,7 +2553,7 @@ function invFiltrar(){
       <div class="ic-top">
         <div style="flex:1;min-width:0">
           <div class="ic-plat">${platLabel(c.plataforma)}</div>
-          <div class="ic-correo">${c.correo||"sin correo"}</div>
+          <div class="ic-correo">${c.correo||"sin acceso"}</div>
         </div>
         <span class="ic-cupo ${libre?"libre":"lleno"}">${libre?`${disp} libre${disp>1?"s":""}`:"llena"}</span>
       </div>
@@ -2556,6 +2568,7 @@ function invFiltrar(){
 let invActual=null;
 function invAbrir(c){
   invActual=c;
+  const identLabel=invUsaUsuario(c.plataforma)?"Usuario":"Correo";
   document.getElementById("invTitle").textContent=platLabel(c.plataforma);
   document.getElementById("invSub").textContent=c.correo||"—";
   const disp=invDisp(c), cap=invCap(c);
@@ -2566,7 +2579,7 @@ function invAbrir(c){
       ${perfiles.map(p=>`<div class="ivp"><span>${p.slot!=null?`Slot ${p.slot} · `:""}${p.nombre||"—"}</span><span style="color:var(--txt2)">PIN: ${p.pin||"—"}</span></div>`).join("")}
     </div>`:`<div style="font-size:12.5px;color:var(--muted);margin-top:12px">Sin perfiles asignados.</div>`;
   document.getElementById("invView").innerHTML=`
-    <div class="iv-row"><span class="k">Correo</span><span class="v">${c.correo||"—"}</span></div>
+    <div class="iv-row"><span class="k">${identLabel}</span><span class="v">${c.correo||"—"}</span></div>
     <div class="iv-row"><span class="k">Clave</span><span class="v">${c.clave||"—"}</span></div>
     <div class="iv-row"><span class="k">Plataforma</span><span class="v">${platLabel(c.plataforma)}</span></div>
     <div class="iv-row"><span class="k">Capacidad</span><span class="v">${cap}</span></div>
@@ -2574,7 +2587,7 @@ function invAbrir(c){
     <div class="iv-row"><span class="k">Disponibles</span><span class="v">${disp}</span></div>
     <div class="iv-row"><span class="k">Estado</span><span class="v">${c.estado||"—"}</span></div>
     ${perfilesHtml}
-    <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar correo / clave</button>
+    <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar ${identLabel.toLowerCase()} / clave</button>
     <div class="cr-hint" id="invHint"></div>`;
   document.getElementById("invModal").classList.add("show");
   const eb=document.getElementById("invEditBtn");
@@ -2585,11 +2598,12 @@ document.getElementById("invClose").addEventListener("click",invCerrar);
 document.getElementById("invModal").addEventListener("click",e=>{ if(e.target.id==="invModal") invCerrar(); });
 
 async function invEditar(c){
-  const nuevoCorreo=prompt("Correo de la cuenta:",c.correo||"");
+  const identLabel=invUsaUsuario(c.plataforma)?"Usuario":"Correo";
+  const nuevoCorreo=prompt(`${identLabel} de la cuenta:`,c.correo||"");
   if(nuevoCorreo===null) return;
   const nuevaClave=prompt("Clave de la cuenta:",c.clave||"");
   if(nuevaClave===null) return;
-  if(!confirm(`¿Guardar cambios en esta cuenta?\n\nCorreo: ${nuevoCorreo}\nClave: ${nuevaClave}\n\nSe actualiza en la base de datos.`)) return;
+  if(!confirm(`¿Guardar cambios en esta cuenta?\n\n${identLabel}: ${nuevoCorreo}\nClave: ${nuevaClave}\n\nSe actualiza en la base de datos.`)) return;
   const hint=document.getElementById("invHint"); if(hint)hint.textContent="Guardando…";
   try{
     const r=await fetch(CONFIG.invEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
@@ -4407,10 +4421,13 @@ const servNeedsCorreo=plat=>!SERVICIO_SERIAL.has(servPlataformaBase(plat));
 const servNeedsClave=plat=>!SERVICIO_SIN_CLAVE.has(servPlataformaBase(plat));
 const servNeedsPin=plat=>!SERVICIO_SIN_PIN.has(servPlataformaBase(plat));
 const servEsSerial=plat=>SERVICIO_SERIAL.has(servPlataformaBase(plat));
+const servUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","iptv"].includes(servPlataformaBase(plat));
 function servActualizarCampos(){
   const plat=$cobro("servPlat")?.value||"";
-  const correoBox=$cobro("servCorreoField"),keyBox=$cobro("servClaveField"),pinBox=$cobro("servPinPerfilField"),keyLabel=$cobro("servClaveLabel"),keyInput=$cobro("servPin");
+  const correoBox=$cobro("servCorreoField"),correoLabel=$cobro("servCorreoLabel"),correoInput=$cobro("servCorreo"),keyBox=$cobro("servClaveField"),pinBox=$cobro("servPinPerfilField"),keyLabel=$cobro("servClaveLabel"),keyInput=$cobro("servPin");
   if(correoBox)correoBox.style.display=servNeedsCorreo(plat)?"block":"none";
+  if(correoLabel)correoLabel.textContent=servUsaUsuario(plat)?"Usuario asignado":"Correo asignado";
+  if(correoInput)correoInput.placeholder=servUsaUsuario(plat)?"usuario de la cuenta":"correo de la cuenta";
   if(keyBox)keyBox.style.display=servNeedsClave(plat)?"block":"none";
   if(pinBox)pinBox.style.display=servNeedsPin(plat)?"block":"none";
   if(keyLabel)keyLabel.textContent=servEsSerial(plat)?"Serial / licencia":"Clave / contraseña";
@@ -4565,7 +4582,7 @@ const SUBLI_AVATAR_FIX="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACA
 const setImg=(id,src)=>{ const el=document.getElementById(id); if(el) el.src=src; };
 setImg("avatarImg",SUBLI_AVATAR_FIX);
 setImg("introPoster",POSTER);
-setImg("introBot",MASCOT);
+setImg("introBot","/assets/sublirobot-intro-actualizado.jpg?v=20260830-1");
 setImg("loginRobot",MASCOT);
 setImg("heroImg",MASCOT);
 setImg("mascotBg",MASCOT);
@@ -5916,6 +5933,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return p;
   };
   const fichaEsIptv=plat=>["latintv","liontv","iptv"].includes(fichaBaseRegla(plat));
+  const fichaUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","iptv"].includes(fichaBaseRegla(plat));
   const fichaQ=id=>document.getElementById(id);
   let fichaClienteIdActual="";
   let fichaGrupoActual=null;
@@ -6248,14 +6266,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaRenderPerfilesExtra(){
     const list=fichaQ("fichaPerfilesExtraList"),count=fichaQ("fichaPerfilesCount"),removePrimary=fichaQ("fichaRemovePrimary");
     if(!list||!count)return;
-    const plat=fichaGetVal("fichaPlat"),showCorreo=fichaNeedsCorreo(plat),showClave=fichaNeedsClave(plat),showPin=fichaNeedsPin(plat),serial=fichaEsSerial(plat),showDispositivo=fichaUsaSelectorDispositivo(plat);
+    const plat=fichaGetVal("fichaPlat"),showCorreo=fichaNeedsCorreo(plat),showClave=fichaNeedsClave(plat),showPin=fichaNeedsPin(plat),serial=fichaEsSerial(plat),showDispositivo=fichaUsaSelectorDispositivo(plat),usaUsuario=fichaUsaUsuario(plat);
     count.textContent=`${1+fichaPerfilesExtraActuales.length} perfil${fichaPerfilesExtraActuales.length?"es":""} · 1 solo precio`;
     if(removePrimary)removePrimary.style.display=fichaPerfilesExtraActuales.length?"inline-flex":"none";
     list.innerHTML=fichaPerfilesExtraActuales.map((p,index)=>`<div class="ficha-profile-extra" data-ficha-profile-row="${index}">
       <div class="ficha-profile-extra-head"><b>Perfil ${index+2}</b><button type="button" data-ficha-profile-remove="${index}">🗑️ Quitar</button></div>
       <div class="ficha-profile-extra-grid">
         <label class="ficha-field"><span>Nombre de la persona/perfil</span><input class="ficha-input" data-ficha-profile-field="nombre" value="${fichaEsc(p.nombre||"")}" placeholder="Ej. Luis"></label>
-        <label class="ficha-field" style="${showCorreo?"":"display:none"}"><span>Correo / usuario asignado</span><input class="ficha-input" data-ficha-profile-field="correo" value="${fichaEsc(p.correo||"")}" placeholder="Cuenta donde está el perfil"></label>
+        <label class="ficha-field" style="${showCorreo?"":"display:none"}"><span>${usaUsuario?"Usuario asignado":"Correo asignado"}</span><input class="ficha-input" data-ficha-profile-field="correo" value="${fichaEsc(p.correo||"")}" placeholder="${usaUsuario?"Usuario de acceso":"Correo de la cuenta"}"></label>
         <label class="ficha-field" style="${showClave?"":"display:none"}"><span>${serial?"Serial / licencia":"Clave de esa cuenta"}</span><input class="ficha-input" data-ficha-profile-field="clave" value="${fichaEsc(p.clave||"")}" placeholder="${serial?"XXXXX-XXXXX-XXXXX":"Clave de acceso"}"></label>
         <label class="ficha-field" style="${showPin?"":"display:none"}"><span>PIN individual</span><input class="ficha-input" data-ficha-profile-field="pinPerfil" value="${fichaEsc(p.pinPerfil||"")}" placeholder="0000"></label>
         <label class="ficha-field" style="${showDispositivo?"":"display:none"}"><span>📺📱 ¿Dónde va a usar este perfil?</span><select class="ficha-select" data-ficha-profile-field="dispositivo"><option value=""${!p.dispositivo?" selected":""}>Pregunte al cliente…</option><option value="tv"${p.dispositivo==="tv"?" selected":""}>TV</option><option value="cel"${p.dispositivo==="cel"?" selected":""}>Celular</option></select></label>
@@ -6420,7 +6438,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(perfiles.length>1){
       const detalle=perfiles.map((p,index)=>{
         const camposPerfil=camposRespaldo;
-        const tipoAcceso=fichaBaseRegla(plat)==="oleada"||fichaEsIptv(plat)?"👤 Usuario":"📧 Correo";
+        const tipoAcceso=fichaUsaUsuario(plat)?"👤 Usuario":"📧 Correo";
         const acceso=[`*${index+1}. ${p.nombre||`Perfil ${index+1}`}*`];
         if(fichaUsaSelectorDispositivo(plat))acceso.push(p.dispositivo==="tv"?`📺 Instalación: TV${p.esRoku?" (Roku)":" (No Roku)"}`:"📱 Instalación: Celular");
         if(camposPerfil.correo)acceso.push(`${tipoAcceso}: ${p.correo||"—"}`);
@@ -6547,7 +6565,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const showDispositivo=fichaUsaSelectorDispositivo(plat);
     const showIptv=fichaEsIptv(plat);
     const showTvDigital=["oleada","stellatv"].includes(fichaBaseRegla(plat));
-    const correoBox=fichaQ("fichaCorreoBox"),claveBox=fichaQ("fichaClaveBox"), pinBox=fichaQ("fichaPinBox"), iptvBox=fichaQ("fichaIptvBox"),
+    const correoBox=fichaQ("fichaCorreoBox"),correoLabel=fichaQ("fichaCorreoLabel"),correoInput=fichaQ("fichaCorreo"),claveBox=fichaQ("fichaClaveBox"), pinBox=fichaQ("fichaPinBox"), iptvBox=fichaQ("fichaIptvBox"),
           iptvListaBox=fichaQ("fichaIptvListaBox"), iptvHoraBox=fichaQ("fichaIptvHoraBox"), iptvPantallasBox=fichaQ("fichaIptvPantallasBox"), oleadaBox=fichaQ("fichaOleadaBox");
     const dispositivoBox=fichaQ("fichaDispositivoBox"),rokuBox=fichaQ("fichaRokuBox"),dispositivoEl=fichaQ("fichaDispositivo"),rokuEl=fichaQ("fichaEsRoku");
     if(dispositivoBox)dispositivoBox.style.display=showDispositivo?"block":"none";
@@ -6557,6 +6575,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       if(rokuBox)rokuBox.style.display="none";
     }else if(rokuBox)rokuBox.style.display=fichaGetVal("fichaDispositivo")==="tv"?"block":"none";
     if(correoBox)correoBox.style.display=showCorreo?"block":"none";
+    if(correoLabel)correoLabel.textContent=fichaUsaUsuario(plat)?"Perfil 1 · Usuario":"Perfil 1 · Correo";
+    if(correoInput)correoInput.placeholder=fichaUsaUsuario(plat)?"Usuario de acceso":"correo@ejemplo.com";
     if(claveBox)claveBox.style.display=showClave?"block":"none";
     if(pinBox)pinBox.style.display=showPin?"block":"none";
     const claveLabel=fichaQ("fichaClaveLabel"),claveInput=fichaQ("fichaClave");
@@ -8694,7 +8714,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     <input id="servFecha" class="serv-input" type="date">
     <label class="serv-label">Nombre de la persona / perfil</label>
     <input id="servNombrePerfil" class="serv-input" type="text" placeholder="Ej. María">
-    <div id="servCorreoField"><label class="serv-label">Correo / usuario asignado</label>
+    <div id="servCorreoField"><label class="serv-label" id="servCorreoLabel">Correo asignado</label>
     <input id="servCorreo" class="serv-input" type="text" placeholder="correo de la cuenta"></div>
     <div id="servClaveField"><label class="serv-label" id="servClaveLabel">Clave / contraseña</label>
     <input id="servPin" class="serv-input" type="text" placeholder="clave de la cuenta"></div>
