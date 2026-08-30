@@ -258,6 +258,7 @@
     duolingo:{logo:"/assets/platformas/duolingo.jpg",bg:"#effbe8",fallback:"D",color:"#58cc02"},
     office:{logo:"/assets/platformas/office365.jpg",bg:"#fff0eb",fallback:"O",color:"#d83b01"},
     office2021:{logo:"/assets/platformas/office365.jpg",bg:"#fff0eb",fallback:"O21",color:"#d83b01"},
+    stellatv:{logo:"",bg:"#fff2e8",fallback:"🔥",color:"#e34a21"},
     oleada:{logo:"/assets/platformas/oleada.jpg",bg:"#e9faff",fallback:"TV",color:"#007f99"},
     latintv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LatinTV"},
     liontv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LionTV"},
@@ -270,13 +271,13 @@
     eset:{logo:"/assets/platformas/eset.jpg",bg:"#0a909c",fallback:"ESET"}
   };
 
-  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset"};
+  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset",stella:"stellatv"};
 
   const PLAT_EMOJI={
     netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
-    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",oleada:"🌊",latintv:"📺",liontv:"🦁",iptv:"📺",
+    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",iptv:"📺",
     viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
   };
 
@@ -287,6 +288,7 @@
   }
   function platVisual(v){
     const k=platKey(v);
+    if(k.startsWith("stellatv"))return PLAT_VISUALS.stellatv;
     if(k.startsWith("oleada"))return PLAT_VISUALS.oleada;
     if(k.startsWith("latintv"))return PLAT_VISUALS.latintv;
     if(k.startsWith("liontv"))return PLAT_VISUALS.liontv;
@@ -335,7 +337,8 @@
     const size=largo>25?"clamp(11.5px,3vw,15px)":(largo>20?"clamp(12px,3.4vw,16px)":(largo>16?"clamp(13px,3.7vw,18px)":"18px"));
     const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:"";
     const apple=platKey(d.plataforma)==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:"";
-    return `<div class="plat-name" style="--plat-name-size:${size}">${estrella}${apple}<span class="plat-title">${esc(nombre)}</span></div>`;
+    const stella=platKey(d.plataforma).startsWith("stellatv")?`<span class="plat-star" aria-hidden="true">🔥</span>`:"";
+    return `<div class="plat-name" style="--plat-name-size:${size}">${estrella}${apple}${stella}<span class="plat-title">${esc(nombre)}</span></div>`;
   }
 
   function nombreAcceso(d){
@@ -500,7 +503,8 @@
   function filaServicioMultiple(d,index,total,abierto){
     const estado=estadoServicio(d);
     const panelId=`detalle-acceso-${index}`;
-    const estrella=platKey(d.plataforma)==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:(platKey(d.plataforma)==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:"");
+    const platActual=platKey(d.plataforma);
+    const estrella=platActual==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:(platActual==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:(platActual.startsWith("stellatv")?`<span class="plat-star" aria-hidden="true">🔥</span>`:""));
     return `<section class="multi-service${abierto?" open":""}" data-service-index="${index}">
       <button class="multi-trigger" type="button" aria-expanded="${abierto?"true":"false"}" aria-controls="${panelId}" aria-label="Acceso ${index+1} de ${total}: ${esc(nombrePlataforma(d))}">
         ${platLogo(d.plataforma,nombrePlataforma(d))}

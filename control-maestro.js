@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260816-38';
+  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260830-39-STELLA';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -205,7 +205,7 @@
       office:'office',office365:'office',office2021:'office2021',microsoft:'office',microsoft365:'office',
       windows10:'windows10',win10:'windows10',windows11:'windows11',win11:'windows11',
       adobeexpress:'adobeexpress',adobe:'adobeexpress',eset:'eset',esetnod32:'eset',nod32:'eset',
-      magis:'magis',magistv:'magis',oleada:'oleada',oleadatv:'oleada',latintv:'latintv',liontv:'liontv',iptv:'iptv'
+      magis:'magis',magistv:'magis',stellatv:'stellatv',stella:'stellatv',oleada:'oleada',oleadatv:'oleada',latintv:'latintv',liontv:'liontv',iptv:'iptv'
     };
     if(aliases[k])return aliases[k];
     if(k.startsWith('canva'))return 'canva';
@@ -215,8 +215,10 @@
     if(k.startsWith('windows11'))return 'windows11';
     if(k.startsWith('adobeexpress'))return 'adobeexpress';
     if(k.startsWith('eset')||k.startsWith('nod32'))return 'eset';
+    const stella=k.match(/^stella(?:tv)?([123])(?:dispositivos?)?$/);if(stella)return `stellatv${stella[1]}`;
     const oleada=k.match(/^oleada(?:tv)?([13])$/);if(oleada)return `oleadatv${oleada[1]}`;
     if(/^latintv[1234]$/.test(k)||/^liontv[1235]$/.test(k)||/^iptv[134]$/.test(k))return k;
+    if(k.startsWith('stellatv')||k.startsWith('stella'))return 'stellatv';
     if(k.startsWith('oleada'))return 'oleada';
     if(k.startsWith('latintv'))return 'latintv';
     if(k.startsWith('liontv'))return 'liontv';
@@ -262,6 +264,10 @@
     if(n.includes('windows 11')||n.includes('win 11'))return ['windows11'];
     if(n.includes('adobe'))return ['adobeexpress'];
     if(n.includes('eset')||n.includes('nod32'))return ['eset'];
+    if(n.includes('stella')){
+      const m=n.match(/stella(?:\s*tv)?\s*([123])\b/);
+      return m?[`stellatv${m[1]}`]:['stellatv1','stellatv2','stellatv3'];
+    }
     if(n.includes('latin tv')||n.includes('latintv')){
       const m=n.match(/(?:latin\s*tv|latintv)\s*([1234])\b/);
       return m?[`latintv${m[1]}`]:['latintv1','latintv2','latintv3','latintv4'];
@@ -334,7 +340,7 @@
     paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
     spotify:'Spotify',youtube:'YouTube',deezer:'Deezer',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
     appletv:'Apple TV',star:'Star+',office:'Office 365',office2021:'Office 2021',windows10:'Windows 10',windows11:'Windows 11',
-    adobeexpress:'Adobe Express',eset:'ESET NOD32',magis:'Magis TV',oleada:'Oleada TV',oleadatv1:'Oleada TV (1)',oleadatv3:'Oleada TV (3)',
+    adobeexpress:'Adobe Express',eset:'ESET NOD32',magis:'Magis TV',stellatv:'Stella TV',stellatv1:'Stella TV (1)',stellatv2:'Stella TV (2)',stellatv3:'Stella TV (3)',oleada:'Oleada TV',oleadatv1:'Oleada TV (1)',oleadatv3:'Oleada TV (3)',
     latintv:'LatinTV',latintv1:'LatinTV (1)',latintv2:'LatinTV (2)',latintv3:'LatinTV (3)',latintv4:'LatinTV (4)',
     liontv:'LionTV',liontv1:'LionTV (1)',liontv2:'LionTV (2)',liontv3:'LionTV (3)',liontv5:'LionTV (5)',iptv:'IPTV anterior',
     vixmix:'ViX / Viki / Universal+'
@@ -862,7 +868,7 @@
     paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
     spotify:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
     appletv:'#555b66',star:'#7d30c9',office:'#d83b01',office2021:'#d83b01',windows10:'#0078d4',windows11:'#0067c0',adobeexpress:'#e60023',eset:'#008f83',
-    magis:'#16a085',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
+    magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
   };
 
   function platformColor(family){return AUDIT_PLATFORM_COLORS[auditFamily(family)]||'#168fd3';}
