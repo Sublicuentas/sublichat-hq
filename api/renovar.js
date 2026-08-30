@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 26  ·  conciliación segura de compra + URL permanente
+// api/renovar.js  ·  VERSION 27  ·  conciliación segura + soporte Stella TV
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -96,16 +96,20 @@ const PLAT_ALIASES = {
   windows10: "windows10", win10: "windows10",
   windows11: "windows11", win11: "windows11",
   adobeexpress: "adobeexpress", adobe: "adobeexpress",
-  eset: "eset", esetnod32: "eset"
+  eset: "eset", esetnod32: "eset",
+  stellatv: "stellatv", stella: "stellatv"
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
   if (PLAT_ALIASES[key]) return PLAT_ALIASES[key];
+  const stella = key.match(/^stella(?:tv)?([123])(?:dispositivos?)?$/);
+  if (stella) return `stellatv${stella[1]}`;
   const oleada = key.match(/^oleada(?:tv)?([13])$/);
   if (oleada) return `oleadatv${oleada[1]}`;
   if (/^latintv[1234]$/.test(key)) return key;
   if (/^liontv[1235]$/.test(key)) return key;
   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
+  if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
   if (key.startsWith("liontv")) return "liontv";
@@ -206,6 +210,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("gemini") ||
     p.includes("chatgpt") ||
     p.includes("duolingo") ||
+    p.includes("stella") ||
     p.includes("oleada") ||
     p.includes("latintv") ||
     p.includes("liontv") ||
@@ -236,7 +241,7 @@ function servicioEsSerial(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = canonPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 
@@ -758,7 +763,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   //   pinPerfil = PIN del perfil cuando aplique
   // Reglas principales:
   //   Netflix Premium, HBO Max, Disney Premium/Standard, Crunchyroll, Prime Video y Universal+ llevan correo + clave + PIN.
-  //   Netflix VIP, Paramount+, ViX+, Spotify, YouTube, Deezer, Office 365, Oleada e IPTV llevan clave, pero no PIN.
+  //   Netflix VIP, Paramount+, ViX+, Spotify, YouTube, Deezer, Office 365, Stella TV, Oleada e IPTV llevan clave, pero no PIN.
   //   Canva, Gemini, ChatGPT y Duolingo son solo correo.
   //   Apple TV guarda correo, clave y PIN; la ficha pública entrega únicamente el PIN.
   const tieneClaveNueva =
@@ -825,6 +830,10 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   }
   if (familia.startsWith("oleada")) {
     out.oleadaDispositivos = Math.max(1, Number(servicio.oleadaDispositivos ?? anterior.oleadaDispositivos ?? 1) || 1);
+  }
+  if (familia.startsWith("stellatv")) {
+    const limiteCodigo = familia.match(/^stellatv([123])$/)?.[1] || 1;
+    out.stellaDispositivos = Math.max(1, Math.min(3, Number(servicio.stellaDispositivos ?? anterior.stellaDispositivos ?? limiteCodigo) || 1));
   }
 
   if (sinClave) out.sinClave = true;

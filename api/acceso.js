@@ -1,4 +1,4 @@
-// api/acceso.js · VERSION 8 · URL permanente + soporte de vendedor completo
+// api/acceso.js · VERSION 9 · URL permanente + soporte Stella TV
 //
 // Endpoint público (sin login) que resuelve un token de entrega (/c/{token})
 // a los datos que el cliente debe ver. Es de SOLO LECTURA y agrupa únicamente
@@ -64,14 +64,17 @@ function canonPlat(v) {
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
-    adobe: "adobeexpress", esetnod32: "eset"
+    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv"
   };
   if (aliases[p]) return aliases[p];
   if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
   if (p.includes("disney") && p.includes("premium")) return "disneyp";
+  const stella = p.match(/^stella(?:tv)?([123])(?:dispositivos?)?$/);
+  if (stella) return `stellatv${stella[1]}`;
   const oleada = p.match(/^oleada(?:tv)?([13])$/);
   if (oleada) return `oleadatv${oleada[1]}`;
   if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^iptv[134]$/.test(p)) return p;
+  if (p.startsWith("stellatv") || p.startsWith("stella")) return "stellatv";
   if (p.startsWith("latintv")) return "latintv";
   if (p.startsWith("liontv")) return "liontv";
   return p;
@@ -85,7 +88,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("spotify") || p.includes("deezer") || p.includes("youtube") ||
     p.includes("office") || p.includes("paramount") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
-    p.includes("chatgpt") || p.includes("duolingo") || p.includes("oleada") ||
+    p.includes("chatgpt") || p.includes("duolingo") || p.includes("stella") || p.includes("oleada") ||
     p.includes("latintv") || p.includes("liontv") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
     p.includes("adobe") || p.includes("eset")
   );
@@ -106,7 +109,7 @@ function servicioRequiereCorreo(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 function servicioUsaSelectorDispositivo(plataforma) {
@@ -149,6 +152,7 @@ const TERMS = {
   gemini: ["Acceso vinculado únicamente al correo indicado.", "Recuerde aceptar la invitación de Google en su correo para activar las funciones avanzadas.", "Garantía vigente durante todo el periodo adquirido."],
   chatgpt: ["Acceso únicamente para el correo indicado", "No modificar datos internos", "Garantía vigente durante su tiempo adquirido"],
   duolingo: ["Cada persona debe aceptar la invitación enviada a su correo para activar las funciones Plus.", "La garantía permanece vigente durante el periodo adquirido."],
+  stellatv: ["Use únicamente la cantidad de dispositivos contratada.", "No compartir ni modificar el correo o la contraseña.", "Garantía vigente durante el periodo contratado."],
   oleada: ["No compartir usuario ni clave.", "Garantía vigente durante su tiempo adquirido."],
   iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."]
 };
@@ -156,6 +160,7 @@ function termsFor(plataforma) {
   const p = canonPlat(plataforma);
   if (p === "netflixpremium") return TERMS.netflix;
   if (p === "vipnetflix" || (p.includes("netflix") && p.includes("vip"))) return TERMS.vipnetflix;
+  if (p.startsWith("stellatv")) return TERMS.stellatv;
   if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return TERMS.iptv;
   if (p.startsWith("oleada")) return TERMS.oleada;
   if (p === "office2021") return TERMS.office;
@@ -168,7 +173,9 @@ const PLAT_LABELS = {
   crunchyroll: "Crunchyroll", universal: "Universal+", vix: "ViX+", paramount: "Paramount+",
   spotify: "Spotify Premium", deezer: "Deezer Premium HiFi", youtube: "YouTube Premium",
   canva: "Canva", gemini: "Gemini Pro", chatgpt: "ChatGPT", duolingo: "Duolingo",
-  office: "Office 365", office2021: "Office 2021", oleada: "Oleada TV", oleadatv1: "Oleada TV (1 dispositivo)", oleadatv3: "Oleada TV (3 dispositivos)",
+  office: "Office 365", office2021: "Office 2021",
+  stellatv: "Stella TV", stellatv1: "Stella TV (1 dispositivo)", stellatv2: "Stella TV (2 dispositivos)", stellatv3: "Stella TV (3 dispositivos)",
+  oleada: "Oleada TV", oleadatv1: "Oleada TV (1 dispositivo)", oleadatv3: "Oleada TV (3 dispositivos)",
   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
@@ -410,6 +417,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     visibilidadModo: principal.visibilidadModo || "plataforma",
     perfiles: perfilesPublicos,
     fechaRenovacion,
+    stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     terminos: termsFor(plataforma),
     vendedor,
     vendedorTelefono

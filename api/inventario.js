@@ -1,4 +1,4 @@
-// api/inventario.js  ·  VERSION 4  ·  Editar cuentas y sincronizar compras multiperfil
+// api/inventario.js  ·  VERSION 5  ·  Editar cuentas + soporte Stella TV
 //
 // Usa la misma cuenta de servicio que renovar.js (mismas env vars en Vercel):
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -54,12 +54,16 @@ function canonPlatform(value) {
     hbomax:"hbomax",hbo:"hbomax",max:"hbomax",prime:"primevideo",primevideo:"primevideo",
     paramount:"paramount",paramountp:"paramount",crunchy:"crunchyroll",crunchyroll:"crunchyroll",
     vix:"vix",viki:"viki",universal:"universal",universalp:"universal",spotify:"spotify",youtube:"youtube",
-    canva:"canva",gemini:"gemini",chatgpt:"chatgpt",duolingo:"duolingo",office:"office",office2021:"office2021",microsoft:"office"
+    canva:"canva",gemini:"gemini",chatgpt:"chatgpt",duolingo:"duolingo",office:"office",office2021:"office2021",microsoft:"office",
+    stellatv:"stellatv",stella:"stellatv"
   };
   if (aliases[key]) return aliases[key];
+  const stella = key.match(/^stella(?:tv)?([123])(?:dispositivos?)?$/);
+  if (stella) return `stellatv${stella[1]}`;
   const oleada = key.match(/^oleada(?:tv)?([13])$/);
   if (oleada) return `oleadatv${oleada[1]}`;
   if (/^latintv[1234]$/.test(key) || /^liontv[1235]$/.test(key) || /^iptv[134]$/.test(key)) return key;
+  if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
   if (key.startsWith("liontv")) return "liontv";
@@ -134,7 +138,7 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 4, msg: "inventario v4 activo (sincronización multiperfil). Usá POST." });
+    return res.status(200).json({ ok: true, version: 5, msg: "inventario v5 activo (sincronización multiperfil + Stella TV). Usá POST." });
 
   const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono } = req.body || {};
 
