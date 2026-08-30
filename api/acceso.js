@@ -152,7 +152,7 @@ const TERMS = {
   gemini: ["Acceso vinculado únicamente al correo indicado.", "Recuerde aceptar la invitación de Google en su correo para activar las funciones avanzadas.", "Garantía vigente durante todo el periodo adquirido."],
   chatgpt: ["Acceso únicamente para el correo indicado", "No modificar datos internos", "Garantía vigente durante su tiempo adquirido"],
   duolingo: ["Cada persona debe aceptar la invitación enviada a su correo para activar las funciones Plus.", "La garantía permanece vigente durante el periodo adquirido."],
-  stellatv: ["Use únicamente la cantidad de dispositivos contratada.", "No compartir ni modificar el correo o la contraseña.", "Garantía vigente durante el periodo contratado."],
+  stellatv: ["Use únicamente la cantidad de dispositivos contratada.", "Uso solo en Honduras.", "Garantía vigente durante el periodo contratado."],
   oleada: ["No compartir usuario ni clave.", "Garantía vigente durante su tiempo adquirido."],
   iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."]
 };
