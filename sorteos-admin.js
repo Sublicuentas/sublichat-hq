@@ -113,7 +113,7 @@
                   <button type="button" class="sr-hero-btn" id="srHeroNewDraw">Crear sorteo</button>
                 </div>
                 <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
-                  <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+3</b> Cliente Oro</span>
+                  <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+1 a +5</b> según nivel</span>
                 </div>
               </div>
               <div class="sr-hero-art" aria-hidden="true">
@@ -376,8 +376,8 @@
     const current=state.sorteos.find(item=>item.id===id);
     if(!current&&state.premios.filter(item=>item.activo!==false).length<2){state.tab='premios';syncTab();render();status('Cree al menos dos premios antes de publicar un sorteo.','bad');return;}
     const accent=themeAccent();
-    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30},color:accent};
-    const rules={compra:1,renovacion:2,oro:3,ciclosOro:6,limitePorCliente:30,...(draw.reglas||{})};
+    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30},color:accent};
+    const rules={compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30,...(draw.reglas||{})};
     const modal=byId('srModal');if(!modal)return;modal.hidden=false;
     modal.innerHTML=`<form class="sr-sheet wide" id="srDrawForm"><div class="sr-modal-head"><div><small>CAMPAÑA DE FIDELIDAD</small><h3>${current?'Editar sorteo':'Nuevo sorteo'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
       <div class="sr-form">
@@ -392,8 +392,8 @@
         <div class="sr-form-section"><b>Boletos automáticos</b><span>La misma compra o renovación nunca se cuenta dos veces.</span></div>
         <label class="sr-field">Compra nueva<input id="srRuleBuy" type="number" min="0" max="20" value="${Number(rules.compra)}"></label>
         <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" min="0" max="20" value="${Number(rules.renovacion)}"></label>
-        <label class="sr-field">Bono Cliente Oro<input id="srRuleGold" type="number" min="0" max="20" value="${Number(rules.oro)}"></label>
-        <label class="sr-field">Ciclos para ser Oro<input id="srRuleCycles" type="number" min="1" max="60" value="${Number(rules.ciclosOro)}"></label>
+        <label class="sr-field">Bonos por nivel<select id="srRuleLevelBonus"><option value="si" ${rules.bonoNivel!==false?'selected':''}>Activados</option><option value="no" ${rules.bonoNivel===false?'selected':''}>Desactivados</option></select></label>
+        <div class="sr-form-section"><b>6 niveles de fidelidad</b><span>Inicial, Bronce, Plata, Oro, Diamante y Élite. Cada mes renovado sube un ciclo.</span></div>
         <label class="sr-field">Máximo por cliente<input id="srRuleLimit" type="number" min="1" max="200" value="${Number(rules.limitePorCliente)}"></label>
         <div></div>
         <div class="sr-form-section"><b>Elegir mi premio</b><span>Seleccione de 2 a 5 opciones para que el ganador escoja una.</span></div>
@@ -414,7 +414,7 @@
       const payload={titulo:byId('srDrawTitle').value.trim(),descripcion:byId('srDrawDesc').value.trim(),categoria:byId('srDrawCategory').value,
         alcance:byId('srDrawScope').value,estado:byId('srDrawState').value,fechaInicio:startValue?new Date(startValue).toISOString():'',fechaFin:endValue?new Date(endValue).toISOString():'',
         color:byId('srDrawColor').value,premioIds:selected,reglas:{compra:Number(byId('srRuleBuy').value),renovacion:Number(byId('srRuleRenew').value),
-          oro:Number(byId('srRuleGold').value),ciclosOro:Number(byId('srRuleCycles').value),limitePorCliente:Number(byId('srRuleLimit').value)}};
+          bonoNivel:byId('srRuleLevelBonus').value==='si',limitePorCliente:Number(byId('srRuleLimit').value)}};
       try{await api({accion:'guardar_sorteo',id:current?.id||'',sorteo:payload});closeModal();await load(true);state.tab='sorteos';render();status('Sorteo guardado. Los próximos eventos válidos generarán boletos automáticamente.','good');}
       catch(error){status(error.message,'bad');if(button)button.disabled=false;}
     });
@@ -425,11 +425,14 @@
   }
   async function backfillAugust(id,button){
     const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
-    if(!confirm(`¿Cargar en “${draw.titulo}” a los clientes directos de Sublicuentas/Relojes que compraron o renovaron durante agosto de 2026?\n\nPuede repetir esta acción sin duplicar boletos.`))return;
     if(button)button.disabled=true;
-    status('Buscando compras y renovaciones confirmadas de agosto…');
+    status('Preparando auditoría de agosto…');
     let reset=true,last=null;
     try{
+      const preview=await api({accion:'cargar_agosto_2026',id,previsualizar:true});
+      const approved=confirm(`AUDITORÍA PREVIA · AGOSTO 2026\n\nClientes detectados: ${Number(preview.clientesDetectados)||0}\nCompras: ${Number(preview.compras)||0}\nRenovaciones por servicio: ${Number(preview.renovaciones)||0}\nBoletos estimados: ${Number(preview.boletosEstimados)||0}\n\n¿Autoriza emitir estos boletos en “${draw.titulo}”?`);
+      if(!approved)return;
+      status('Emitiendo boletos auditados de agosto…');
       do{
         last=await api({accion:'cargar_agosto_2026',id,reiniciar:reset});
         reset=false;

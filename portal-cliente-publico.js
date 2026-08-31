@@ -381,22 +381,23 @@
   function renderGoldSummary(panel){
     const customer=state.sorteosData?.cliente||{};
     const cycles=Math.max(0,Number(customer.ciclos)||0);
-    const isGold=customer.nivel==='oro';
-    const summary=element('section',`portal-loyalty ${isGold?'is-gold':''}`);
-    const badge=element('span','portal-loyalty-badge',isGold?'★':'☆');
+    const levelName=customer.nivelNombre||({inicial:'Inicial',bronce:'Bronce',plata:'Plata',oro:'Oro',diamante:'Diamante',elite:'Élite'}[customer.nivel]||'Inicial');
+    const isMax=customer.nivel==='elite';
+    const summary=element('section',`portal-loyalty ${['oro','diamante','elite'].includes(customer.nivel)?'is-gold':''}`);
+    const badge=element('span','portal-loyalty-badge',isMax?'★':'☆');
     const copy=element('div','portal-loyalty-copy');
     copy.append(
-      element('div','portal-loyalty-kicker',isGold?'BENEFICIO ACTIVO':'PROGRAMA DE FIDELIDAD'),
-      element('div','portal-loyalty-title',isGold?'Cliente Oro':'Camino al Club Oro'),
-      element('div','portal-loyalty-detail',isGold?'Recibe boletos extra en los sorteos participantes.':`${Math.min(cycles,6)} de 6 ciclos completados`)
+      element('div','portal-loyalty-kicker',customer.bono>0?'BENEFICIO ACTIVO':'PROGRAMA DE FIDELIDAD'),
+      element('div','portal-loyalty-title',`Nivel ${levelName}`),
+      element('div','portal-loyalty-detail',isMax?`Nivel máximo · recibe +${Number(customer.bono)||5} boletos extra.`:`${cycles} ciclos · Nivel ${levelName}${customer.siguiente?.nombre?` · próximo: ${customer.siguiente.nombre}`:''}${customer.mesesAsegurados?.length?` · ${customer.mesesAsegurados.length} mes(es) asegurado(s)`:''}`)
     );
     const progress=element('div','portal-loyalty-progress');
     progress.setAttribute('role','progressbar');
-    progress.setAttribute('aria-label','Progreso hacia Cliente Oro');
+    progress.setAttribute('aria-label','Progreso de fidelidad');
     progress.setAttribute('aria-valuemin','0');
     progress.setAttribute('aria-valuemax','6');
     progress.setAttribute('aria-valuenow',String(Math.min(cycles,6)));
-    const bar=element('i');bar.style.width=`${isGold?100:Math.min(100,(cycles/6)*100)}%`;progress.append(bar);
+    const bar=element('i');bar.style.width=`${isMax?100:Math.min(100,(cycles/6)*100)}%`;progress.append(bar);
     summary.append(badge,copy,progress);panel.append(summary);
   }
 
