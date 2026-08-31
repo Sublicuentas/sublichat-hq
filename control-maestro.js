@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260830-40-SACAR';
+  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260831-41-FORMULAS';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -166,6 +166,47 @@
       const out=valueText(v);return out==='[object Object]'?'':out;
     }
     return String(v).trim();
+  }
+
+  // Algunas versiones históricas del Excel guardaron clones de fórmula antes
+  // de su celda maestra (por ejemplo K83 apuntando a K84). Excel los acepta,
+  // pero ExcelJS exige que la maestra esté arriba o a la izquierda y se niega
+  // a volver a guardar el archivo. Convertir cada fórmula compartida en una
+  // fórmula independiente conserva el cálculo y elimina esa dependencia rota.
+  function normalizeSharedFormulas(workbook){
+    let repaired=0,fallbacks=0;
+    (workbook?.worksheets||[]).forEach((ws)=>{
+      ws.eachRow({includeEmpty:false},(row)=>{
+        row.eachCell({includeEmpty:false},(cell)=>{
+          const value=cell.value;
+          if(!value||typeof value!=='object')return;
+          const sharedClone=!!value.sharedFormula;
+          const sharedMaster=value.shareType==='shared'&&!!value.formula;
+          if(!sharedClone&&!sharedMaster)return;
+          const result=cell.result;
+          let formula=value.formula||'';
+          if(!formula&&sharedClone){
+            try{formula=cell.formula||'';}catch(_){formula='';}
+          }
+          if(formula){
+            const standalone={formula};
+            if(result!==undefined)standalone.result=result;
+            cell.value=standalone;
+            repaired++;
+          }else{
+            // Solo se usa cuando la maestra realmente no existe. Se conserva
+            // el último resultado visible para no perder el dato de la celda.
+            cell.value=result===undefined?null:result;
+            fallbacks++;
+          }
+        });
+      });
+    });
+    if(repaired||fallbacks){
+      workbook.calcProperties=workbook.calcProperties||{};
+      workbook.calcProperties.fullCalcOnLoad=true;
+    }
+    return {repaired,fallbacks};
   }
 
   function dateValue(v){
@@ -1414,6 +1455,7 @@
       const originalBase64=await loadTemplateBase64(false);
       const workbook=new ExcelJS.Workbook();
       await workbook.xlsx.load(base64ToBuffer(originalBase64));
+      normalizeSharedFormulas(workbook);
       const ws=workbook.getWorksheet(sheetName);
       if(!ws)throw new Error(`No encontré la hoja ${sheetName}.`);
       const header=findHeader(ws);
@@ -1426,9 +1468,8 @@
         try{cell.note=undefined;}catch(_){}
       });
 
-      // El archivo histórico trae miles de reglas de color dañadas. ExcelJS puede
-      // abrirlo, pero falla al guardarlo con “reading '0'”. Se sustituyen por las
-      // alertas válidas de vencimiento antes de escribir la nueva plantilla.
+      // El archivo histórico trae miles de reglas de color dañadas. Se sustituyen
+      // por las alertas válidas de vencimiento antes de escribir la plantilla.
       const repairedAnalysis=parseWorkbook(workbook,{servicios:[],cuentas:[]});
       rebuildConditionalFormatting(repairedAnalysis);
 
@@ -1741,6 +1782,7 @@
   async function buildUpdatedWorkbook(){
     const raw=await loadTemplateBase64(false);
     const wb=new ExcelJS.Workbook();await wb.xlsx.load(base64ToBuffer(raw));
+    normalizeSharedFormulas(wb);
     wb.calcProperties.fullCalcOnLoad=true;
     const src=source();
     const analysis=parseWorkbook(wb,src);
