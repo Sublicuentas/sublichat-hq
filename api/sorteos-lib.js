@@ -3,8 +3,22 @@
    para que los boletos y reglas queden sincronizados entre Telegram y Sublichat. */
 
 const DEFAULT_RULES = Object.freeze({
-  compra: 1, renovacion: 2, oro: 3, ciclosOro: 6, limitePorCliente: 30
+  compra: 1, renovacion: 2, bonoNivel: true, limitePorCliente: 30
 });
+
+export const NIVELES_FIDELIDAD = Object.freeze([
+  { id: "inicial", nombre: "Inicial", desde: 0, bono: 0 },
+  { id: "bronce", nombre: "Bronce", desde: 1, bono: 1 },
+  { id: "plata", nombre: "Plata", desde: 2, bono: 2 },
+  { id: "oro", nombre: "Oro", desde: 3, bono: 3 },
+  { id: "diamante", nombre: "Diamante", desde: 4, bono: 4 },
+  { id: "elite", nombre: "Élite", desde: 6, bono: 5 }
+]);
+
+export function nivelFidelidad(ciclos = 0) {
+  const total = Math.max(0, Math.floor(Number(ciclos) || 0));
+  return [...NIVELES_FIDELIDAD].reverse().find(item => total >= item.desde) || NIVELES_FIDELIDAD[0];
+}
 
 export function sorteoClean(value, max = 300) {
   return String(value == null ? "" : value)
@@ -64,8 +78,7 @@ export function reglasSorteo(raw = {}) {
   return {
     compra: integer(raw.compra, 0, 20, DEFAULT_RULES.compra),
     renovacion: integer(raw.renovacion, 0, 20, DEFAULT_RULES.renovacion),
-    oro: integer(raw.oro, 0, 20, DEFAULT_RULES.oro),
-    ciclosOro: integer(raw.ciclosOro, 1, 60, DEFAULT_RULES.ciclosOro),
+    bonoNivel: raw.bonoNivel !== false,
     limitePorCliente: integer(raw.limitePorCliente, 1, 200, DEFAULT_RULES.limitePorCliente)
   };
 }

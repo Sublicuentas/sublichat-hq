@@ -16,7 +16,7 @@
 import admin from "firebase-admin";
 import { createHash } from "node:crypto";
 import {
-  reglasSorteo, sorteoClean, sorteoEventoId, sorteoNorm, sorteoSafeId,
+  reglasSorteo, nivelFidelidad, sorteoClean, sorteoEventoId, sorteoNorm, sorteoSafeId,
   sorteoVendorElegible, sorteoVendorGroup
 } from "./sorteos-lib.js";
 
@@ -44,6 +44,13 @@ function monthHonduras() {
   return `${get("year")}-${get("month")}`;
 }
 
+function addMonths(month, amount) {
+  const match = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + Number(amount || 0), 1));
+  return date.toISOString().slice(0, 7);
+}
+
 function activeDraw(draw = {}, now = Date.now()) {
   if (draw.estado !== "activo") return false;
   const start = iso(draw.fechaInicio), end = iso(draw.fechaFin);
@@ -57,29 +64,40 @@ function scopeAllows(scope, vendor) {
 
 function categoryAllows(category, eventType) {
   const target = sorteoNorm(category || "general");
-  if (eventType === "oro") return target === "oro" || target === "general";
+  if (["oro", "nivel"].includes(eventType)) return target === "oro" || target === "general";
   if (target === "general") return ["compra", "renovacion"].includes(eventType);
   return target === eventType || (target === "compras" && eventType === "compra") || (target === "renovaciones" && eventType === "renovacion");
 }
 
 async function updateLoyalty(db, event) {
   const clientId = sorteoSafeId(event.clientId);
-  if (!clientId) return { ciclos: 0, nivel: "regular", oro: false };
-  const clientRef = db.collection("clientes").doc(clientId), month = monthHonduras();
+  if (!clientId) return { ciclos: 0, nivel: "inicial", nivelNombre: "Inicial", bono: 0 };
+  const requestedMonth = /^\d{4}-\d{2}$/.test(String(event.mesFidelidad || "")) ? String(event.mesFidelidad) : "";
+  const clientRef = db.collection("clientes").doc(clientId), month = requestedMonth || monthHonduras();
   const loyaltyRef = db.collection("fidelidad_eventos").doc(hash(`ciclo|${clientId}|${month}`));
   return db.runTransaction(async transaction => {
     const [clientSnap, eventSnap] = await Promise.all([transaction.get(clientRef), transaction.get(loyaltyRef)]);
-    if (!clientSnap.exists) return { ciclos: 0, nivel: "regular", oro: false };
+    if (!clientSnap.exists) return { ciclos: 0, nivel: "inicial", nivelNombre: "Inicial", bono: 0 };
     const client = clientSnap.data() || {};
     let cycles = Math.max(0, Number(client.fidelidadCiclos) || 0);
+    if (!client.fidelidadNivelNombre && sorteoNorm(client.nivelCliente) === "oro") cycles = Math.max(cycles, 3);
+    const todayMonth = monthHonduras();
+    const secured = [...new Set(Array.isArray(client.fidelidadMesesAsegurados) ? client.fidelidadMesesAsegurados.filter(item => /^\d{4}-\d{2}$/.test(item)) : [])];
+    const matured = secured.filter(item => item <= todayMonth);
+    cycles += matured.length;
+    const future = secured.filter(item => item > todayMonth);
     if (event.tipo === "renovacion" && !eventSnap.exists) {
       cycles += 1;
       transaction.set(loyaltyRef, { clientId, mes: month, tipo: "renovacion", eventoId: sorteoClean(event.eventoId, 300), createdAt: admin.firestore.FieldValue.serverTimestamp() });
     }
-    const goldAt = Math.max(1, Number(event.ciclosOro) || reglasSorteo({}).ciclosOro);
-    const gold = client.clienteOro === true || sorteoNorm(client.nivelCliente) === "oro" || cycles >= goldAt;
-    transaction.set(clientRef, { fidelidadCiclos: cycles, nivelCliente: gold ? "oro" : "regular", fidelidadUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    return { ciclos: cycles, nivel: gold ? "oro" : "regular", oro: gold };
+    const paidMonths = Math.max(1, Math.min(24, Math.round(Number(event.meses) || 1)));
+    for (let offset = 1; offset < paidMonths; offset += 1) {
+      const futureMonth = addMonths(month, offset);
+      if (futureMonth && futureMonth > todayMonth && !future.includes(futureMonth)) future.push(futureMonth);
+    }
+    const level = nivelFidelidad(cycles);
+    transaction.set(clientRef, { fidelidadCiclos: cycles, fidelidadMesesAsegurados: future.sort(), nivelCliente: level.id, fidelidadNivelNombre: level.nombre, fidelidadUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { ciclos: cycles, mesesAsegurados: future.sort(), nivel: level.id, nivelNombre: level.nombre, bono: level.bono };
   });
 }
 
@@ -144,14 +162,13 @@ export async function registrarEventoSorteos(rawEvent = {}) {
     telefono: sorteoClean(rawEvent.telefono || client.telefono, 40), vendedor: vendor, vendedorNorm: vendorNorm, origen: sorteoClean(rawEvent.origen || "Sublichat", 80)
   };
   const currentCycles = Math.max(0, Number(client.fidelidadCiclos) || 0);
-  const currentGoldAt = Math.max(1, Number(rawEvent.ciclosOro) || reglasSorteo({}).ciclosOro);
+  const currentLevel = nivelFidelidad(currentCycles);
   const loyalty = rawEvent.omitirFidelidad === true
     ? {
       ciclos: currentCycles,
-      nivel: client.clienteOro === true || sorteoNorm(client.nivelCliente) === "oro" || currentCycles >= currentGoldAt ? "oro" : "regular",
-      oro: client.clienteOro === true || sorteoNorm(client.nivelCliente) === "oro" || currentCycles >= currentGoldAt
+      nivel: currentLevel.id, nivelNombre: currentLevel.nombre, bono: currentLevel.bono
     }
-    : await updateLoyalty(db, { ...event, ciclosOro: rawEvent.ciclosOro });
+    : await updateLoyalty(db, { ...event, mesFidelidad: rawEvent.mesFidelidad, meses: rawEvent.meses });
   const requestedDrawId = sorteoSafeId(rawEvent.sorteoId);
   const drawDocs = requestedDrawId
     ? [await db.collection("sorteos").doc(requestedDrawId).get()]
@@ -162,7 +179,7 @@ export async function registrarEventoSorteos(rawEvent = {}) {
   for (const draw of draws) {
     const drawRules = reglasSorteo(draw.reglas || {});
     if (categoryAllows(draw.categoria, type)) results.push({ sorteoId: draw.id, tipo: type, ...await createEventTickets(db, draw, event, type === "compra" ? drawRules.compra : drawRules.renovacion) });
-    if (loyalty.oro && categoryAllows(draw.categoria, "oro")) results.push({ sorteoId: draw.id, tipo: "oro", ...await createEventTickets(db, draw, { ...event, tipo: "oro", eventoId: `oro:${clientId}:${draw.id}`, origen: "Cliente Oro" }, drawRules.oro) });
+    if (drawRules.bonoNivel && loyalty.bono > 0 && categoryAllows(draw.categoria, "nivel")) results.push({ sorteoId: draw.id, tipo: "nivel", ...await createEventTickets(db, draw, { ...event, tipo: "nivel", eventoId: `nivel:${event.eventoId}:${loyalty.nivel}`, origen: `Bono nivel ${loyalty.nivelNombre}` }, loyalty.bono) });
   }
   return { ok: true, creados: results.reduce((sum, item) => sum + Number(item.creados || 0), 0), fidelidad: loyalty, resultados: results };
 }

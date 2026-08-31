@@ -47,6 +47,12 @@ function parseFechaDMY(fechaStr) {
   return fecha;
 }
 
+function mesesPagadosEntre(inicio, fin) {
+  const a = parseFechaDMY(inicio), b = parseFechaDMY(fin);
+  if (!a || !b || b <= a) return 1;
+  return Math.max(1, Math.min(24, Math.round((b.getTime() - a.getTime()) / 2592000000)));
+}
+
 // Suma días a una fecha en formato DD/MM/YYYY y devuelve igual DD/MM/YYYY.
 function sumarDias(fechaStr, dias) {
   const base = parseFechaDMY(fechaStr);
@@ -1214,6 +1220,7 @@ export default async function handler(req, res) {
           sorteoResult = await registrarEventoSorteosSeguro({
             tipo: "renovacion", clientId: docRef.id, compraId, fechaEvento: fechaNueva,
             eventoId: `renov:${compraId}:${fechaNueva}`,
+            meses: mesesPagadosEntre(fechaPrevia, fechaNueva),
             clienteNombre: nombreFinal, telefono: tel, vendedor: servicioGuardado?.vendedor || vendedor, origen: "Sublichat"
           });
         }
@@ -1621,6 +1628,7 @@ export default async function handler(req, res) {
       sorteoResult = await registrarEventoSorteosSeguro({
         tipo: "renovacion", clientId: docRef.id, compraId: compraEvento, fechaEvento: mutation.fechaNueva,
         eventoId: `renov:${compraEvento}:${mutation.fechaNueva}`,
+        meses: mesesPagadosEntre(mutation.fechaAnterior, mutation.fechaNueva),
         clienteNombre: clientePersistido.nombrePerfil || clientePersistido.nombre || mutation.nombreTitular || "Cliente",
         telefono: clientePersistido.telefono || "", vendedor: servicioPersistido?.vendedor || clientePersistido.vendedor || body.vendedor || "", origen: "Sublichat"
       });
@@ -1628,6 +1636,7 @@ export default async function handler(req, res) {
         await db.collection("historial_clientes").add({
           clientId: docRef.id,
           tipo: "servicio_renovado",
+          compraId: compraEvento,
           descripcion: `Renovación confirmada: ${mutation.fechaAnterior || "-"} → ${mutation.fechaNueva || "-"}`,
           plataforma: plataforma || "",
           fechaAnterior: mutation.fechaAnterior || "",
