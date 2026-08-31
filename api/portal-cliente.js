@@ -2,7 +2,7 @@
 //
 // Este endpoint NO modifica clientes, servicios, fichas, enlaces ni inventario.
 // Administra promociones y métodos de pago, y publica qué secciones puede ver
-// cada cliente. Sorteos queda limitado a clientes directos de Sublicuentas/Relojes.
+// cada cliente. Los terceros de Relojes también pueden consultar Sorteos.
 
 const admin = require('firebase-admin');
 
@@ -240,6 +240,41 @@ function clientVendors(client = {}, services = null) {
   return [...map.entries()].map(([id, nombre]) => ({ id, nombre }));
 }
 
+function serviceBeneficiaryKey(service = {}) {
+  const saved = clean(service?.beneficiarioKey || '', 160);
+  if (saved) return saved;
+  if (norm(service?.beneficiarioTipo) !== 'tercero') return 'titular';
+  const nameKey = norm(service?.beneficiarioNombre || service?.beneficiario)
+    .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'persona';
+  return `tercero-${nameKey}`;
+}
+
+function portalRelevantServices(client = {}, pointerData = {}) {
+  const services = Array.isArray(client.servicios) ? client.servicios : [];
+  const savedKey = clean(pointerData.beneficiarioKey || '', 160);
+  if (pointerData.tipo === 'beneficiario' || savedKey) {
+    const targetKey = savedKey || 'titular';
+    return services.filter(service => serviceBeneficiaryKey(service) === targetKey);
+  }
+
+  // Compatibilidad con las URL individuales antiguas: se revalida el índice
+  // con compraId igual que /api/acceso para identificar al verdadero usuario.
+  const requestedIndex = Number(pointerData.servicioIndex);
+  let service = Number.isInteger(requestedIndex) && requestedIndex >= 0 ? services[requestedIndex] : null;
+  const purchaseId = clean(pointerData.compraId || '', 180);
+  if (!service || purchaseId && clean(service?.compraId || '', 180) !== purchaseId) {
+    service = purchaseId ? services.find(item => clean(item?.compraId || '', 180) === purchaseId) : null;
+  }
+  return service ? [service] : services;
+}
+
+function portalIsThirdParty(pointerData = {}, relevantServices = []) {
+  const savedKey = clean(pointerData.beneficiarioKey || '', 160);
+  if (pointerData.tipo === 'beneficiario' || savedKey) return (savedKey || 'titular') !== 'titular';
+  return relevantServices.length === 1 && norm(relevantServices[0]?.beneficiarioTipo) === 'tercero';
+}
+
 function promotionMatches(promo, clientId, vendorNorms, today) {
   if (!promo || promo.activa === false) return false;
   if (promo.fechaInicio && promo.fechaInicio > today) return false;
@@ -269,13 +304,11 @@ async function publicPortal(db, req, res) {
   if (!clientSnap.exists) return res.status(404).json({ ok: false, error: 'No se encontró el cliente.' });
   const client = clientSnap.data() || {};
   const pointerData = pointer.data() || {};
-  const beneficiaryKey = clean(pointerData.beneficiarioKey || '', 160);
-  const relevantServices = (Array.isArray(client.servicios) ? client.servicios : []).filter(service => {
-    if (!beneficiaryKey) return true;
-    return clean(service?.beneficiarioKey || (String(service?.beneficiarioTipo || '').toLowerCase() === 'tercero' ? '' : 'titular'), 160) === beneficiaryKey;
-  });
+  const relevantServices = portalRelevantServices(client, pointerData);
   const vendorNorms = clientVendors(client, relevantServices).map(v => v.id);
-  const directAccess = vendorNorms.some(vendorCanUsePayments);
+  const paymentAccess = vendorNorms.some(vendorCanUsePayments);
+  const thirdParty = portalIsThirdParty(pointerData, relevantServices);
+  const rafflesAccess = paymentAccess && (!thirdParty || vendorNorms.some(vendor => directVendorGroup(vendor) === 'relojes'));
   const today = todayHonduras();
   const promociones = promoSnap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
@@ -299,9 +332,9 @@ async function publicPortal(db, req, res) {
   return res.status(200).json({
     ok: true,
     promociones,
-    metodosPago: directAccess ? config.metodos.filter(item => item.activo !== false) : [],
-    avisoPago: directAccess ? config.avisoPago : '',
-    secciones: { promociones: true, pagos: directAccess, sorteos: directAccess }
+    metodosPago: paymentAccess ? config.metodos.filter(item => item.activo !== false) : [],
+    avisoPago: paymentAccess ? config.avisoPago : '',
+    secciones: { promociones: true, pagos: paymentAccess, sorteos: rafflesAccess }
   });
 }
 

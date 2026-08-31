@@ -1,4 +1,4 @@
-// api/inventario.js  ·  VERSION 5  ·  Editar cuentas + soporte Stella TV
+// api/inventario.js  ·  VERSION 6  ·  Sacar asignaciones de forma segura
 //
 // Usa la misma cuenta de servicio que renovar.js (mismas env vars en Vercel):
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -80,6 +80,41 @@ function plainClientValue(value) {
   return "";
 }
 
+function findInventoryClientIndex(clients, clientIndex, nombreCliente, slot) {
+  const rows = Array.isArray(clients) ? clients : [];
+  const wantedName = normText(nombreCliente);
+  const wantedSlot = normText(plainClientValue(slot));
+  const requested = Number(clientIndex);
+  const validRequested = Number.isInteger(requested) && requested >= 0 && requested < rows.length;
+  const sameName = client => !!wantedName && normText(client && client.nombre) === wantedName;
+  const sameSlot = client => !!wantedSlot && normText(plainClientValue(client && client.slot)) === wantedSlot;
+  const exact = client => {
+    if (!wantedName && !wantedSlot) return false;
+    return (!wantedName || sameName(client)) && (!wantedSlot || sameSlot(client));
+  };
+
+  // El índice proviene de la misma lectura de Bodega. Si además coincide toda
+  // la identidad disponible, es la opción más precisa incluso si hay nombres
+  // de perfil repetidos dentro de la cuenta.
+  if (validRequested && (!wantedName && !wantedSlot || exact(rows[requested]))) return requested;
+
+  const exactIndexes = rows.map((client, index) => exact(client) ? index : -1).filter(index => index >= 0);
+  if (exactIndexes.length === 1) return exactIndexes[0];
+
+  // Algunas cuentas antiguas guardaron slot como objeto y la pantalla lo leyó
+  // como texto. En ese caso basta una coincidencia única de nombre o de slot;
+  // nunca se elimina si ambos datos apuntan a personas diferentes.
+  const nameIndexes = wantedName ? rows.map((client, index) => sameName(client) ? index : -1).filter(index => index >= 0) : [];
+  const slotIndexes = wantedSlot ? rows.map((client, index) => sameSlot(client) ? index : -1).filter(index => index >= 0) : [];
+  if (wantedName && wantedSlot && nameIndexes.length === 1 && slotIndexes.length === 1 && nameIndexes[0] !== slotIndexes[0]) return -1;
+  if (validRequested && ((nameIndexes.length === 1 && nameIndexes[0] === requested) || (slotIndexes.length === 1 && slotIndexes[0] === requested))) return requested;
+  const uniqueFallbacks = new Set([
+    ...(nameIndexes.length === 1 ? nameIndexes : []),
+    ...(slotIndexes.length === 1 ? slotIndexes : [])
+  ]);
+  return uniqueFallbacks.size === 1 ? [...uniqueFallbacks][0] : -1;
+}
+
 async function inspectOrUpdateAccountServices(db, options = {}) {
   const platform = canonPlatform(options.platform);
   const oldEmail = normEmail(options.oldEmail);
@@ -138,7 +173,7 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 5, msg: "inventario v5 activo (sincronización multiperfil + Stella TV). Usá POST." });
+    return res.status(200).json({ ok: true, version: 6, msg: "inventario v6 activo (Sacar seguro + sincronización multiperfil + Stella TV). Usá POST." });
 
   const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono } = req.body || {};
 
@@ -207,15 +242,7 @@ export default async function handler(req, res) {
 
     if (accion === "quitarCliente") {
       const clients = Array.isArray(current.clientes) ? current.clientes : [];
-      const wantedName = normText(nombreCliente);
-      const wantedSlot = normText(plainClientValue(slot));
-      let index = Number.isInteger(Number(clienteIndex)) ? Number(clienteIndex) : -1;
-      const matches = (client) => {
-        if (wantedName && normText(client && client.nombre) !== wantedName) return false;
-        if (wantedSlot && normText(plainClientValue(client && client.slot)) !== wantedSlot) return false;
-        return !!(wantedName || wantedSlot);
-      };
-      if (index < 0 || index >= clients.length || !matches(clients[index])) index = clients.findIndex(matches);
+      const index = findInventoryClientIndex(clients, clienteIndex, nombreCliente, slot);
       if (index < 0) return res.status(200).json({ error: "No encontré ese cliente dentro de la cuenta." });
       const removed = clients[index] || {};
       const next = clients.filter((_, i) => i !== index);

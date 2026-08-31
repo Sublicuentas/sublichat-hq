@@ -296,10 +296,11 @@ async function resolvePublicClient(db, token) {
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(safeToken)) throw Object.assign(new Error("Enlace inválido."), { status: 400 });
   const pointer = await db.collection("enlaces").doc(safeToken).get();
   if (!pointer.exists || (pointer.data() || {}).activo === false) throw Object.assign(new Error("Este enlace ya no está disponible."), { status: 404 });
-  const clientId = sorteoSafeId((pointer.data() || {}).clienteId);
+  const enlace = pointer.data() || {};
+  const clientId = sorteoSafeId(enlace.clienteId);
   const clientSnap = clientId ? await db.collection("clientes").doc(clientId).get() : null;
   if (!clientSnap || !clientSnap.exists) throw Object.assign(new Error("No se encontró el cliente."), { status: 404 });
-  return { token: safeToken, clientId, cliente: clientSnap.data() || {} };
+  return { token: safeToken, clientId, cliente: clientSnap.data() || {}, enlace };
 }
 
 function scopeMatches(draw, vendor) {
@@ -314,6 +315,48 @@ function clientVendorGroups(cliente = {}) {
     ? servicios.map(servicio => servicio?.vendedor_norm || servicio?.vendedor || cliente.vendedor_norm || cliente.vendedor)
     : [cliente.vendedor_norm || cliente.vendedor];
   return [...new Set(values.map(sorteoVendorGroup).filter(sorteoVendorElegible))];
+}
+
+function serviceBeneficiaryKey(service = {}) {
+  const saved = sorteoClean(service?.beneficiarioKey || "", 160);
+  if (saved) return saved;
+  if (sorteoNorm(service?.beneficiarioTipo) !== "tercero") return "titular";
+  const nameKey = sorteoNorm(service?.beneficiarioNombre || service?.beneficiario)
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "persona";
+  return `tercero-${nameKey}`;
+}
+
+function publicPointerServices(cliente = {}, enlace = {}) {
+  const services = Array.isArray(cliente.servicios) ? cliente.servicios : [];
+  const savedKey = sorteoClean(enlace.beneficiarioKey || "", 160);
+  if (enlace.tipo === "beneficiario" || savedKey) {
+    const targetKey = savedKey || "titular";
+    return services.filter(service => serviceBeneficiaryKey(service) === targetKey);
+  }
+  const requestedIndex = Number(enlace.servicioIndex);
+  let service = Number.isInteger(requestedIndex) && requestedIndex >= 0 ? services[requestedIndex] : null;
+  const purchaseId = sorteoClean(enlace.compraId || "", 180);
+  if (!service || (purchaseId && sorteoClean(service?.compraId || "", 180) !== purchaseId)) {
+    service = purchaseId ? services.find(item => sorteoClean(item?.compraId || "", 180) === purchaseId) : null;
+  }
+  return service ? [service] : services;
+}
+
+function publicRaffleAccess(cliente = {}, enlace = {}) {
+  const relevantServices = publicPointerServices(cliente, enlace);
+  const savedKey = sorteoClean(enlace.beneficiarioKey || "", 160);
+  const thirdParty = enlace.tipo === "beneficiario" || savedKey
+    ? (savedKey || "titular") !== "titular"
+    : relevantServices.length === 1 && sorteoNorm(relevantServices[0]?.beneficiarioTipo) === "tercero";
+  const values = relevantServices.map(service =>
+    service?.vendedor_norm || service?.vendedor || cliente.vendedor_norm || cliente.vendedor
+  );
+  let vendors = [...new Set(values.map(sorteoVendorGroup).filter(sorteoVendorElegible))];
+  // Regla de negocio: los titulares conservan Sublicuentas/Relojes; un enlace
+  // para tercero participa únicamente cuando ese acceso fue vendido por Relojes.
+  if (thirdParty) vendors = vendors.filter(vendor => vendor === "relojes");
+  return { vendors, thirdParty };
 }
 
 function recordInHistoricalMonth(record = {}, month = CARGA_AGOSTO_2026) {
@@ -516,8 +559,8 @@ function maskedWinner(winner = {}) {
 }
 
 async function publicLoad(db, token) {
-  const { clientId, cliente } = await resolvePublicClient(db, token);
-  const vendors = clientVendorGroups(cliente);
+  const { clientId, cliente, enlace } = await resolvePublicClient(db, token);
+  const { vendors, thirdParty } = publicRaffleAccess(cliente, enlace);
   if (!vendors.length) {
     return { ok: true, habilitado: false, cliente: { clientId, nivel: "regular", ciclos: 0 }, sorteos: [] };
   }
@@ -532,13 +575,15 @@ async function publicLoad(db, token) {
     .filter(draw => vendors.some(vendor => scopeMatches(draw, vendor)) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
   const drawIds = new Set(draws.map(draw => draw.id));
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(ticket => drawIds.has(String(ticket.sorteoId || "")));
+    .filter(ticket => drawIds.has(String(ticket.sorteoId || "")) && vendors.includes(sorteoVendorGroup(ticket.vendedorNorm || ticket.vendedor)));
   const premiosMap = new Map(prizeSnap.docs.filter(doc => prizeAvailable(doc.data() || {})).map(doc => [doc.id, publicPrize(doc)]));
   const entregas = deliveriesSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
   const entregasMap = new Map(entregas.map(item => [String(item.sorteoId || ""), item]));
   const resultado = draws.map(draw => {
     const propios = tickets.filter(ticket => String(ticket.sorteoId || "") === draw.id);
-    const winnerSelf = String(draw.ganador?.clientId || "") === clientId;
+    const winnerVendor = sorteoVendorGroup(draw.ganador?.vendedorNorm || draw.ganador?.vendedor);
+    const winnerSelf = String(draw.ganador?.clientId || "") === clientId &&
+      (winnerVendor ? vendors.includes(winnerVendor) : !thirdParty);
     const entrega = winnerSelf ? entregasMap.get(draw.id) || null : null;
     return {
       id: draw.id,
@@ -565,9 +610,10 @@ async function publicLoad(db, token) {
 }
 
 async function choosePrize(db, body) {
-  const { clientId, cliente } = await resolvePublicClient(db, body.token);
-  if (!clientVendorGroups(cliente).length) {
-    throw Object.assign(new Error("Sorteos está disponible únicamente para clientes directos de Sublicuentas y Relojes."), { status: 403 });
+  const { clientId, cliente, enlace } = await resolvePublicClient(db, body.token);
+  const { vendors } = publicRaffleAccess(cliente, enlace);
+  if (!vendors.length) {
+    throw Object.assign(new Error("Sorteos no está disponible para este enlace."), { status: 403 });
   }
   const sorteoId = sorteoSafeId(body.sorteoId);
   const premioId = sorteoSafeId(body.premioId);
@@ -581,6 +627,9 @@ async function choosePrize(db, body) {
     ]);
     if (!drawSnap.exists || String((drawSnap.data() || {}).ganador?.clientId || "") !== clientId) throw Object.assign(new Error("Este cliente no es el ganador del sorteo."), { status: 403 });
     const draw = drawSnap.data() || {};
+    if (!vendors.some(vendor => scopeMatches(draw, vendor))) throw Object.assign(new Error("Este sorteo no pertenece a este enlace."), { status: 403 });
+    const winnerVendor = sorteoVendorGroup(draw.ganador?.vendedorNorm || draw.ganador?.vendedor);
+    if (winnerVendor && !vendors.includes(winnerVendor)) throw Object.assign(new Error("Este premio no pertenece a este enlace."), { status: 403 });
     if (!uniqueIds(draw.premioIds, 5).includes(premioId)) throw new Error("El premio no pertenece a este sorteo.");
     if (deliverySnap.exists) {
       const previous = deliverySnap.data() || {};
