@@ -5925,6 +5925,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
 
   const fichaNorm=s=>String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"");
+  const fichaTokenPlataforma=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"");
+  // La identidad se busca de la etiqueta más específica a la más general.
+  // Así "Disney Premium sin ESPN" no se confunde con "Disney Premium" y
+  // "Netflix Premium VIP" no se confunde con "Netflix Premium".
+  const FICHA_IDENTIDADES_TEXTO=FICHA_PLATS
+    .map(([key,label])=>({key,label,token:fichaTokenPlataforma(label)}))
+    .filter(item=>item.token)
+    .sort((a,b)=>b.token.length-a.token.length);
   const fichaBaseRegla=plat=>{
     const p=fichaNorm(plat);
     if(/^stellatv[123]$/.test(p))return "stellatv";
@@ -5934,6 +5942,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(/^iptv[1234]$/.test(p))return "iptv";
     return p;
   };
+  // Un texto personalizado que no menciona ninguna plataforma sigue siendo
+  // válido. Solo se invalida cuando menciona explícitamente OTRA plataforma;
+  // ese es el caso que dejaba Netflix pegado después de cambiar a Disney.
+  function fichaTextoCorrespondePlataforma(txt,plat){
+    const token=fichaTokenPlataforma(txt);
+    if(!token)return true;
+    const menciones=FICHA_IDENTIDADES_TEXTO
+      .map(item=>({...item,pos:token.indexOf(item.token)}))
+      .filter(item=>item.pos>=0);
+    if(!menciones.length)return true;
+    // Descarta coincidencias cortas contenidas en otra más específica en el
+    // mismo lugar (Disney Premium dentro de Disney Premium sin ESPN).
+    const especificas=menciones.filter(item=>!menciones.some(otra=>
+      otra!==item&&otra.pos<=item.pos&&otra.pos+otra.token.length>=item.pos+item.token.length&&otra.token.length>item.token.length
+    ));
+    const esperada=fichaBaseRegla(plat);
+    return especificas.some(item=>fichaBaseRegla(item.key)===esperada);
+  }
   const fichaEsIptv=plat=>["latintv","liontv","iptv"].includes(fichaBaseRegla(plat));
   const fichaUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","iptv"].includes(fichaBaseRegla(plat));
   const fichaQ=id=>document.getElementById(id);
@@ -6505,6 +6531,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaTextoTieneDatosCompletos(txt){
     const texto=String(txt||"");
     if(!texto.trim()) return false;
+    if(!fichaTextoCorrespondePlataforma(texto,fichaGetVal("fichaPlat"))) return false;
     const campos=fichaCamposRespaldoCompletos();
     const perfiles=fichaRecolectarPerfiles();
     const requeridos=[];
