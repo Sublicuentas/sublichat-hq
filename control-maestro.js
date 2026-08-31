@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260830-39-STELLA';
+  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260830-40-SACAR';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -1164,7 +1164,7 @@
     container.querySelectorAll('[data-cm-edit-service]').forEach(b=>b.onclick=()=>editAuditService(b.dataset.cmEditService));
     container.querySelectorAll('[data-cm-delete-service]').forEach(b=>b.onclick=()=>deleteAuditService(b.dataset.cmDeleteService));
     container.querySelectorAll('[data-cm-delete-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,b.dataset.cmDeleteExcel));
-    container.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>removeAuditAssignment(b.dataset.cmRemoveAssignment));
+    container.querySelectorAll('[data-cm-remove-assignment]').forEach(b=>b.onclick=()=>askRemoveAuditAssignment(b,b.dataset.cmRemoveAssignment));
     container.querySelectorAll('[data-cm-edit-inventory-client]').forEach(b=>b.onclick=()=>editAuditInventoryClient(b.dataset.cmEditInventoryClient));
     container.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
@@ -1297,6 +1297,64 @@
     };
   }
 
+  function restoreRemoveAssignmentButton(holder){
+    const original=holder?._cmOriginalButton;
+    if(holder?.isConnected&&original)holder.replaceWith(original);
+  }
+
+  function setRemoveAssignmentInline(holder,text,tone='working'){
+    if(!holder?.isConnected)return;
+    holder.className=`cm-excel-delete-confirm ${tone}`;
+    holder.innerHTML=`<b>${esc(text)}</b>`;
+  }
+
+  // La confirmación nativa del navegador (confirm/alert) cierra el modo de
+  // pantalla completa en Chrome. Se confirma dentro de la misma fila y se
+  // captura la asignación antes de cualquier recarga para no depender de un
+  // índice visual que pueda cambiar mientras se guarda en Firebase.
+  function askRemoveAuditAssignment(button,pointer){
+    if(!button?.isConnected||state.busy)return;
+    const {account,row}=auditRoster(pointer);
+    if(!account||!row?.inv){
+      mutationMessage('⚠️ La asignación cambió. Presione “Actualizar datos” e intente nuevamente.','error');
+      return;
+    }
+    const rawIndex=Number(row.invIndex);
+    const payload={
+      docId:String(row.inv._accountId||''),
+      clienteIndex:Number.isInteger(rawIndex)?rawIndex:-1,
+      nombreCliente:row.inv.nombre||row.name||'',
+      slot:fieldText(row.inv.slot)||row.profile||'',
+      rowName:row.name||row.inv.nombre||'este cliente',
+      accountEmail:account.email||'Sin correo',
+      platform:account.platform||'Sin plataforma',
+      accountKey:account.key||''
+    };
+    const holder=document.createElement('span');
+    holder.className='cm-excel-delete-confirm';
+    holder._cmOriginalButton=button;
+    holder._cmView=captureControlView();
+    holder._cmPayload=payload;
+    button.replaceWith(holder);
+    if(!payload.docId){
+      holder.classList.add('error');
+      holder.innerHTML='<b>⚠️ Esta asignación no tiene ID de Bodega.</b><button type="button" class="cm-excel-delete-back">Volver</button>';
+      holder.querySelector('.cm-excel-delete-back').onclick=(event)=>{event.stopPropagation();restoreRemoveAssignmentButton(holder);};
+      return;
+    }
+    holder.innerHTML=`<b>¿Sacar a ${esc(payload.rowName)} solo de Bodega?</b><button type="button" class="cm-excel-delete-cancel">Cancelar</button><button type="button" class="cm-excel-delete-ok">Sí, sacar</button>`;
+    holder.querySelector('.cm-excel-delete-cancel').onclick=(event)=>{event.stopPropagation();restoreRemoveAssignmentButton(holder);};
+    holder.querySelector('.cm-excel-delete-ok').onclick=async(event)=>{
+      event.stopPropagation();
+      setRemoveAssignmentInline(holder,'⏳ Sacando de Bodega…');
+      const result=await removeAuditAssignment(payload,holder);
+      if(result.ok||!holder.isConnected)return;
+      holder.className='cm-excel-delete-confirm error';
+      holder.innerHTML=`<b>⚠️ ${esc(result.message||'No se pudo sacar de Bodega.')}</b><button type="button" class="cm-excel-delete-back">Volver</button>`;
+      holder.querySelector('.cm-excel-delete-back').onclick=(e)=>{e.stopPropagation();restoreRemoveAssignmentButton(holder);};
+    };
+  }
+
   async function reloadControlAfterMutation(message,preferredKey=''){
     let reloadWarning='';
     try{if(typeof window.sublichatControlReload==='function')await window.sublichatControlReload();}
@@ -1402,16 +1460,26 @@
     }
   }
 
-  async function removeAuditAssignment(pointer){
-    const {account,row}=auditRoster(pointer);if(!account||!row?.inv||state.busy)return;
-    const docId=String(row.inv._accountId||'');if(!docId)return alert('Esta asignación no tiene ID de Bodega. Abra la cuenta para corregirla.');
-    if(!confirm(`¿Sacar a ${row.name||'este cliente'} de esta cuenta?\n\nCuenta: ${account.email||'Sin correo'}\nPlataforma: ${account.platform}\n\nEsto solo quita la asignación de Bodega. Si el servicio sigue activo en Clientes, no se elimina.`))return;
-    state.busy=true;mutationMessage('Quitando asignación de Bodega…','');render();
+  async function removeAuditAssignment(payload,feedbackHost=null){
+    if(!payload?.docId||state.busy)return {ok:false,message:'Esta asignación ya no está disponible.'};
+    const view=feedbackHost?._cmView||captureControlView();
+    state.busy=true;mutationMessage('Quitando asignación de Bodega…','');
     try{
-      await api({accion:'quitarCliente',docId,clienteIndex:row.invIndex,nombreCliente:row.inv.nombre||row.name||'',slot:fieldText(row.inv.slot)||row.profile||''},INVENTORY_API);
-      await reloadControlAfterMutation(`✅ ${row.name} fue retirado de la cuenta ${account.email}.`,account.key);
-    }catch(e){const text='⚠️ '+(e.message||'No se pudo quitar la asignación.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();}
+      const result=await api({
+        accion:'quitarCliente',docId:payload.docId,clienteIndex:payload.clienteIndex,
+        nombreCliente:payload.nombreCliente,slot:payload.slot
+      },INVENTORY_API);
+      await reloadControlAfterMutation(`✅ ${payload.rowName} fue retirado de la cuenta ${payload.accountEmail}.`,payload.accountKey);
+      state.busy=false;
+      render();restoreControlView(view);
+      return {ok:true,result};
+    }catch(e){
+      const detail=String(e?.message||'No se pudo quitar la asignación.');
+      console.error('[Control Maestro] No se pudo sacar de Bodega:',e);
+      mutationMessage(`⚠️ ${detail}`,'error');
+      state.busy=false;
+      return {ok:false,message:detail};
+    }
   }
 
   // ⚠️ FIX: cuando un cliente está asignado en Bodega pero no tiene un servicio
