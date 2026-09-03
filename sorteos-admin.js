@@ -113,7 +113,7 @@
                   <button type="button" class="sr-hero-btn" id="srHeroNewDraw">Crear sorteo</button>
                 </div>
                 <div class="sr-rule-strip" aria-label="Reglas predeterminadas">
-                  <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+1 a +5</b> según nivel</span>
+                  <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>Sin bonos</b> por nivel</span>
                 </div>
               </div>
               <div class="sr-hero-art" aria-hidden="true"><img src="/assets/portal-icono-sorteos-premios-transparent.png" alt=""></div>
@@ -262,6 +262,7 @@
     const canSpin=!winner&&draw.estado==='cerrado';
     const canBackfill=!winner&&draw.estado==='activo'&&['general','club_vip','oro'].includes(draw.categoria);
     const canDelete=!winner&&draw.estado!=='finalizado';
+    const canAudit=!winner&&['activo','cerrado'].includes(draw.estado);
     const cardColor=safeHex(draw.color,themeAccent());
     return `<article class="sr-draw-card" style="--sr-item-accent:${esc(cardColor)}">
       <header><div><span class="sr-state ${esc(draw.estado||'borrador')}">${esc(ESTADOS[draw.estado]||draw.estado)}</span><span class="sr-scope">${esc(ALCANCES[draw.alcance]||draw.alcance)}</span></div><b class="sr-ticket-total">${Number(draw.totalBoletos)||0} <small>boletos</small></b></header>
@@ -273,6 +274,7 @@
         <button type="button" class="sr-btn ghost" data-sr-tickets="${esc(draw.id)}">Ver boletos</button>
         ${canEdit?`<button type="button" class="sr-btn ghost" data-sr-edit-draw="${esc(draw.id)}">Editar</button>`:''}
         ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar desde agosto 2026</button>`:''}
+        ${canAudit?`<button type="button" class="sr-btn ghost" data-sr-audit="${esc(draw.id)}">✅ Recalcular boletos</button>`:''}
         ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
         ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
         ${canDelete?`<button type="button" class="sr-btn danger" data-sr-delete="${esc(draw.id)}">🗑 Eliminar</button>`:''}
@@ -286,6 +288,7 @@
     byId('srNewDraw')?.addEventListener('click',()=>openDraw(''));
     body.querySelectorAll('[data-sr-edit-draw]').forEach(button=>button.addEventListener('click',()=>openDraw(button.dataset.srEditDraw)));
     body.querySelectorAll('[data-sr-backfill]').forEach(button=>button.addEventListener('click',()=>backfillAugust(button.dataset.srBackfill,button)));
+    body.querySelectorAll('[data-sr-audit]').forEach(button=>button.addEventListener('click',()=>auditTickets(button.dataset.srAudit,button)));
     body.querySelectorAll('[data-sr-close]').forEach(button=>button.addEventListener('click',()=>closeDraw(button.dataset.srClose)));
     body.querySelectorAll('[data-sr-spin]').forEach(button=>button.addEventListener('click',()=>openWheel(button.dataset.srSpin)));
     body.querySelectorAll('[data-sr-tickets]').forEach(button=>button.addEventListener('click',()=>openTickets(button.dataset.srTickets)));
@@ -390,8 +393,8 @@
     const current=state.sorteos.find(item=>item.id===id);
     if(!current&&state.premios.filter(item=>item.activo!==false).length<1){state.tab='premios';syncTab();render();status('Cree al menos un premio antes de publicar un sorteo.','bad');return;}
     const accent=themeAccent();
-    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30},color:accent};
-    const rules={compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30,...(draw.reglas||{})};
+    const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,bonoNivel:false,limitePorCliente:30},color:accent};
+    const rules={compra:1,renovacion:2,bonoNivel:false,limitePorCliente:30,...(draw.reglas||{})};
     const modal=byId('srModal');if(!modal)return;modal.hidden=false;
     modal.innerHTML=`<form class="sr-sheet wide" id="srDrawForm"><div class="sr-modal-head"><div><small>CAMPAÑA DE FIDELIDAD</small><h3>${current?'Editar sorteo':'Nuevo sorteo'}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
       <div class="sr-form">
@@ -404,10 +407,10 @@
         <label class="sr-field">Publicación<select id="srDrawState"><option value="activo" ${draw.estado==='activo'?'selected':''}>Publicar ahora</option><option value="borrador" ${draw.estado==='borrador'?'selected':''}>Guardar borrador</option></select></label>
         <label class="sr-field color">Color<input id="srDrawColor" type="color" value="${esc(safeHex(draw.color,accent))}"></label>
         <div class="sr-form-section"><b>Boletos automáticos</b><span>La misma compra o renovación nunca se cuenta dos veces.</span></div>
-        <label class="sr-field">Compra nueva<input id="srRuleBuy" type="number" min="0" max="20" value="${Number(rules.compra)}"></label>
-        <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" min="0" max="20" value="${Number(rules.renovacion)}"></label>
-        <label class="sr-field">Bonos por nivel<select id="srRuleLevelBonus"><option value="si" ${rules.bonoNivel!==false?'selected':''}>Activados</option><option value="no" ${rules.bonoNivel===false?'selected':''}>Desactivados</option></select></label>
-        <div class="sr-form-section"><b>6 niveles de fidelidad</b><span>Inicial, Bronce, Plata, Oro, Diamante y Élite. Cada mes renovado sube un ciclo.</span></div>
+        <label class="sr-field">Compra nueva<input id="srRuleBuy" type="number" value="1" disabled></label>
+        <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" value="2" disabled></label>
+        <label class="sr-field">Bonos por nivel<input type="text" value="No aplican" disabled></label>
+        <div class="sr-form-section"><b>6 niveles de fidelidad</b><span>Los niveles conservan sus beneficios y acceso Club VIP, pero no agregan boletos.</span></div>
         <div class="sr-vip-conditions wide" id="srVipConditions" ${['club_vip','oro'].includes(draw.categoria)?'':'hidden'}><b>👑 Condiciones Club VIP</b><span>Solo participan clientes Oro, Diamante y Élite que estén vigentes. El premio debe reclamarse en 72 horas, no se cambia por efectivo, no es transferible ni acumulable con otras promociones. Un ganador no repite durante 60 días.</span></div>
         <label class="sr-field">Máximo por cliente<input id="srRuleLimit" type="number" min="1" max="200" value="${Number(rules.limitePorCliente)}"></label>
         <div></div>
@@ -429,8 +432,8 @@
       const startValue=byId('srDrawStart').value,endValue=byId('srDrawEnd').value;
       const payload={titulo:byId('srDrawTitle').value.trim(),descripcion:byId('srDrawDesc').value.trim(),categoria:byId('srDrawCategory').value,
         alcance:byId('srDrawScope').value,estado:byId('srDrawState').value,fechaInicio:startValue?new Date(startValue).toISOString():'',fechaFin:endValue?new Date(endValue).toISOString():'',
-        color:byId('srDrawColor').value,premioIds:selected,reglas:{compra:Number(byId('srRuleBuy').value),renovacion:Number(byId('srRuleRenew').value),
-          bonoNivel:byId('srRuleLevelBonus').value==='si',limitePorCliente:Number(byId('srRuleLimit').value)}};
+        color:byId('srDrawColor').value,premioIds:selected,reglas:{compra:1,renovacion:2,
+          bonoNivel:false,limitePorCliente:Number(byId('srRuleLimit').value)}};
       try{await api({accion:'guardar_sorteo',id:current?.id||'',sorteo:payload});closeModal();await load(true);state.tab='sorteos';render();status('Sorteo guardado. Los próximos eventos válidos generarán boletos automáticamente.','good');}
       catch(error){status(error.message,'bad');if(button)button.disabled=false;}
     });
@@ -467,6 +470,18 @@
     status('Cerrando participación…');
     try{await api({accion:'cerrar_sorteo',id});await load(true);status('Participación cerrada. La ruleta ya está lista.','good');}
     catch(error){status(error.message,'bad');}
+  }
+  async function auditTickets(id,button){
+    const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
+    if(!confirm(`Se reconstruirán todos los boletos de “${draw.titulo}” usando únicamente operaciones comprobadas desde agosto: 1 por compra y 2 por renovación, sin bonos por nivel. ¿Continuar?`))return;
+    if(button)button.disabled=true;status('Corrigiendo boletos con la regla estricta…');
+    try{
+      const result=await api({accion:'corregir_boletos',id,reiniciar:true});let reset=true,last=null;
+      do{last=await api({accion:'cargar_agosto_2026',id,reiniciar:reset});reset=false;status(`Recalculando: ${Number(last.procesados)||0} de ${Number(last.totalTareas)||0} operaciones…`);}while(last&&!last.completado);
+      await load(true);status(`Boletos reconstruidos: ${Number(result.antes)||0} anteriores eliminados · ${Number(last?.boletosCreados)||0} boletos estrictos creados.`,'good');
+    }
+    catch(error){status(error.message,'bad');}
+    finally{if(button&&document.body.contains(button))button.disabled=false;}
   }
   async function deleteDraw(id){
     const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
