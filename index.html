@@ -1610,7 +1610,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <section class="screen" id="screen-clientes">
     <div class="card clientes-crm-card">
       <h2><span class="ico clientes-title-icon"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c.4-4.1 2.5-6.2 6-6.2s5.6 2.1 6 6.2M14 14c3.8-.8 6.3 1 7 5"/></svg></span><span>Clientes <small id="clientesTitleCount">0</small><em>Cartera y renovaciones</em></span></h2>
-      <div class="clientes-controlbar"><div class="search">⌕ <input id="q" type="text" placeholder="Buscar cliente…"></div><div class="clientes-tabs" aria-label="Filtrar por renovación"><button type="button" class="active" data-client-status="vigente">Vigentes</button><button type="button" data-client-status="due">Hoy</button><button type="button" data-client-status="soon">Próximos</button><button type="button" data-client-status="exp">Vencidos</button></div></div>
+      <div class="clientes-controlbar"><div class="search">⌕ <input id="q" type="text" placeholder="Buscar cliente…"></div><div class="clientes-tabs" aria-label="Filtrar por renovación"><button type="button" class="active" data-client-status="vigente">Vigentes</button><button type="button" data-client-status="due">Hoy</button><button type="button" data-client-status="soon">Próximos</button><button type="button" data-client-status="exp">Vencidos</button><button type="button" data-client-status="recover">🎯 Recuperar</button></div></div>
       <div class="toolbar clientes-filters">
         <select id="fPlat"><option value="">Plataformas</option></select>
         <select id="fVend"><option value="">Socios</option></select>
@@ -1618,7 +1618,14 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
           <option value="vigente" selected>Vigentes</option>
           <option value="">Todos los registros</option>
           <option value="due">Renueva hoy</option><option value="soon">Próx. 7 días</option>
-          <option value="ok">Al día</option><option value="exp">Vencidos</option>
+          <option value="ok">Al día</option><option value="exp">Vencidos</option><option value="recover">Recuperar cartera</option>
+        </select>
+        <select id="fRecPeriodo" aria-label="Antigüedad de cartera" hidden>
+          <option value="30">Últimos 30 días</option>
+          <option value="60" selected>Últimos 60 días</option>
+          <option value="90">Últimos 90 días</option>
+          <option value="180">Últimos 6 meses</option>
+          <option value="99999">Todo el historial</option>
         </select>
         <select id="fCantidad">
           <option value="100">Ver 100</option>
@@ -1629,6 +1636,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         </select>
       </div>
       <div class="count" id="count"></div>
+      <div id="recuperacionResumen" class="recuperacion-resumen" hidden></div>
       <div class="cartera-audit-box" id="carteraAuditBox" style="margin:14px 0 18px;padding:16px;border:1px solid #dce7ef;border-radius:20px;background:linear-gradient(135deg,#f8fcff,#fff);box-shadow:0 8px 24px rgba(17,67,104,.06)">
         <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
           <div><b style="font-size:18px;color:#123b61">🧾 Auditoría de cartera</b><div style="font-size:13px;color:#6d8294;margin-top:3px">Recalcula Firebase y concilia clientes, servicios, fechas y posibles duplicados.</div></div>
@@ -1924,7 +1932,7 @@ const DEMO = [
   {nombrePerfil:"Geisell Valle", servicios:[{plataforma:"netflix", precio:150, fechaRenovacion:offset(-2)}]}
 ];
 
-let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[];
+let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
 let clientesLiveUnsubscribe=null, clientesLiveStarted=false;
 const fmt = n => "Lps " + Number(n||0).toLocaleString("es-HN");
 const daysTo = d => Math.round((d - today)/86400000);
@@ -2188,7 +2196,7 @@ function render(){
   const sel=document.getElementById("fPlat");
   if(sel&&sel.options.length<=1)Object.keys(byP).sort((a,b)=>platLabel(a).localeCompare(platLabel(b))).forEach(p=>{const o=document.createElement("option");o.value=p;o.textContent=platLabel(p);sel.appendChild(o);});
   const selV=document.getElementById("fVend");
-  if(selV&&selV.options.length<=1)[...new Set(DATA.map(c=>c.vendedor))].filter(Boolean).sort().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;selV.appendChild(o);});
+  if(selV&&selV.options.length<=1)[...new Set([...DATA.map(c=>c.vendedor),...RECUPERACION_EVENTOS.map(e=>e.vendedor)])].filter(Boolean).sort().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;selV.appendChild(o);});
 
   const inMonth=(d,off)=>{if(!d)return false;const r=new Date(today.getFullYear(),today.getMonth()+off,1);return d.getFullYear()===r.getFullYear()&&d.getMonth()===r.getMonth();};
   const mes=DATA.filter(c=>inMonth(c.fecha,0)).reduce((s,c)=>s+c.precio,0);
@@ -2339,6 +2347,107 @@ function descargarAuditoriaCarteraCSV(){
 }
 window.ejecutarAuditoriaCartera=ejecutarAuditoriaCartera;window.mostrarDetalleAuditoria=mostrarDetalleAuditoria;window.descargarAuditoriaCarteraCSV=descargarAuditoriaCarteraCSV;
 
+let recuperacionLoaded=false,recuperacionLoading=null;
+async function loadRecuperacionData(force=false){
+  if(recuperacionLoaded&&!force)return;
+  if(recuperacionLoading)return recuperacionLoading;
+  recuperacionLoading=(async()=>{
+    try{
+      const response=await fetch(`/api/recuperacion${force?`?t=${Date.now()}`:""}`,{cache:"no-store"});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.ok)throw new Error(data.error||"No se pudo cargar la cartera.");
+      RECUPERACION_EVENTOS=Array.isArray(data.eventos)?data.eventos:[];
+      HISTORIAL_CLIENTES=Array.isArray(data.historial)?data.historial:[];
+      recuperacionLoaded=true;
+      const sel=document.getElementById("fVend"),actuales=new Set([...sel.options].map(o=>o.value));
+      [...new Set(RECUPERACION_EVENTOS.map(e=>e.vendedor).filter(Boolean))].sort().forEach(v=>{if(!actuales.has(v)){const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);}});
+    }catch(e){console.error("recuperación",e);if(typeof mostrarToast==="function")mostrarToast("⚠️ No se pudo cargar todo el historial; se muestran los vencidos actuales.");}
+    finally{recuperacionLoading=null;}
+  })();
+  return recuperacionLoading;
+}
+
+function recFecha(value){const d=parseDate(value);return d instanceof Date&&!isNaN(d)?d:null;}
+function recPlatKey(value){return clienteSearchNorm(platLabel(String(value||""))).replace(/[^a-z0-9]+/g,"");}
+function recClienteKey(x={}){
+  const tel=String(x.telefono||"").replace(/\D/g,"");
+  if(tel.length>=8)return `tel:${tel.slice(-8)}`;
+  return x.clienteId?`id:${x.clienteId}`:`legacy:${clienteSearchNorm(x.nombre||x.cliente||"")}`;
+}
+function carteraRecuperable(){
+  const items=[];
+  DATA.filter(c=>c.fecha&&daysTo(c.fecha)<0).forEach(c=>items.push({
+    fuente:"vencido",clienteId:c.clienteId||"",nombre:c.nombre||"Cliente",telefono:c.telefono||"",vendedor:c.vendedor||"",
+    vendedorTelefono:c.vendedorTelefono||"",plataforma:c.plataforma||platLabel(c.plataformaRaw),plataformaRaw:c.plataformaRaw||c.plataforma,
+    precio:Number(c.precio)||0,fecha:c.fecha,fechaRaw:c.fechaRaw||"",compraId:c.compraId||"",correo:c.correo||"",servicioActual:c
+  }));
+  RECUPERACION_EVENTOS.forEach(e=>{
+    const s=e.servicio||{};
+    const relacionado=DATA.find(c=>String(e.clienteId||"")&&String(c.clienteId||"")===String(e.clienteId));
+    items.push({fuente:"archivado",eventoId:e.id||"",clienteId:e.clienteId||"",nombre:e.cliente||e.nombre||relacionado?.nombre||"Cliente",
+      telefono:e.telefono||relacionado?.telefono||"",vendedor:e.vendedor||s.vendedor||relacionado?.vendedor||"",
+      vendedorTelefono:e.vendedorTelefono||s.vendedorTelefono||relacionado?.vendedorTelefono||"",
+      plataforma:platLabel(e.plataforma||s.plataforma||""),plataformaRaw:e.plataforma||s.plataforma||"",precio:Number(e.precio||s.precio||0),
+      fecha:recFecha(e.fechaRenovacion||s.fechaRenovacion||e.createdAt),fechaRaw:e.fechaRenovacion||s.fechaRenovacion||"",
+      compraId:e.compraId||s.compraId||"",correo:e.correo||s.correo||""});
+  });
+  const activos=DATA.filter(servicioEstaVigente);
+  const sinRenovados=items.filter(item=>{
+    const itemKey=recClienteKey(item),plat=recPlatKey(item.plataformaRaw||item.plataforma),fecha=item.fecha?+item.fecha:0;
+    return !activos.some(a=>recClienteKey(a)===itemKey&&recPlatKey(a.plataformaRaw||a.plataforma)===plat&&(!fecha||!a.fecha||+a.fecha>=fecha));
+  });
+  const unicos=new Map();
+  sinRenovados.forEach(item=>{
+    const key=`${recClienteKey(item)}|${item.compraId||recPlatKey(item.plataformaRaw||item.plataforma)}`;
+    const previo=unicos.get(key);
+    const itemTime=item.fecha?+item.fecha:0,prevTime=previo?.fecha?+previo.fecha:0;
+    if(!previo||itemTime>=prevTime)unicos.set(key,{...(previo||{}),...item,telefono:item.telefono||previo?.telefono||"",precio:item.precio||previo?.precio||0});
+  });
+  return [...unicos.values()];
+}
+function mensajeRecuperacion(g){
+  const plataformas=[...new Set((g.servicios||[]).map(s=>s.plataforma).filter(Boolean))].join(", ");
+  return `Hola, ${g.nombre||""} 👋 Esperamos que se encuentre bien. Notamos que su servicio de ${plataformas||"entretenimiento"} finalizó. ¿Desea renovarlo y recuperar su acceso? Con gusto le ayudamos.`;
+}
+function abrirWhatsAppRecuperacion(g){
+  const tel=String(g?.telefono||"").replace(/\D/g,"");
+  if(!tel){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene teléfono histórico.");return;}
+  const num=tel.startsWith("504")?tel:`504${tel}`;
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensajeRecuperacion(g))}`,"_blank","noopener");
+}
+function verHistorialRecuperacion(g){
+  const key=recClienteKey(g);
+  const movimientos=HISTORIAL_CLIENTES.filter(h=>(String(h.clientId||"")&&String(h.clientId)===String(g.clienteId||""))||(!h.clientId&&recClienteKey(h)===key));
+  const servicios=[...(g.servicios||[])].sort((a,b)=>(b.fecha?+b.fecha:0)-(a.fecha?+a.fecha:0));
+  let modal=document.getElementById("recHistorialModal");
+  if(!modal){modal=document.createElement("div");modal.id="recHistorialModal";modal.className="rec-history-modal";document.body.appendChild(modal);}
+  const filasServicios=servicios.map(s=>`<div class="rec-history-row"><b>${clienteEsc(s.plataforma||"Servicio")}</b><span>Venció: ${s.fecha?s.fecha.toLocaleDateString("es-HN"):"Sin fecha"} · ${fmt(s.precio||0)} · ${clienteEsc(s.vendedor||"Sin socio")}</span></div>`).join("");
+  const filasHist=movimientos.slice().sort((a,b)=>(recFecha(b.createdAt)?+recFecha(b.createdAt):0)-(recFecha(a.createdAt)?+recFecha(a.createdAt):0)).slice(0,30).map(h=>`<div class="rec-history-row"><b>${clienteEsc(h.descripcion||h.tipo||"Movimiento")}</b><span>${clienteEsc(h.plataforma||"")} ${h.fechaRenovacion?`· ${clienteEsc(h.fechaRenovacion)}`:""}</span></div>`).join("");
+  modal.innerHTML=`<div class="rec-history-card"><button type="button" class="rec-history-close" aria-label="Cerrar">×</button><h3>Historial de ${clienteEsc(g.nombre||"Cliente")}</h3><p>${clienteEsc(g.telefono||"Sin teléfono")} · ${clienteEsc(g.vendedor||"Sin socio")}</p><h4>Servicios sin renovar</h4>${filasServicios||'<div class="empty">Sin servicios.</div>'}<h4>Movimientos registrados</h4>${filasHist||'<div class="empty">No hay movimientos anteriores guardados.</div>'}</div>`;
+  modal.classList.add("show");modal.querySelector(".rec-history-close").onclick=()=>modal.classList.remove("show");modal.onclick=e=>{if(e.target===modal)modal.classList.remove("show");};
+}
+function renderRecuperacion(){
+  const qRaw=document.getElementById("q").value||"",q=clienteSearchNorm(qRaw),qDigits=qRaw.replace(/\D/g,"");
+  const fp=document.getElementById("fPlat").value,fv=document.getElementById("fVend").value;
+  const periodo=Number(document.getElementById("fRecPeriodo")?.value||60);
+  let items=carteraRecuperable().filter(x=>{
+    const dias=x.fecha?Math.max(0,-daysTo(x.fecha)):0;
+    const texto=clienteSearchNorm([x.nombre,x.telefono,x.vendedor,x.plataforma,x.correo].join(" "));
+    return (!q||texto.includes(q)||(qDigits&&String(x.telefono||"").replace(/\D/g,"").includes(qDigits)))&&(!fp||x.plataforma===fp)&&(!fv||x.vendedor===fv)&&(!x.fecha||dias<=periodo);
+  });
+  const grupos={};items.forEach(x=>{const key=recClienteKey(x);if(!grupos[key])grupos[key]={clienteId:x.clienteId,nombre:x.nombre,telefono:x.telefono,vendedor:x.vendedor,vendedorTelefono:x.vendedorTelefono,servicios:[]};grupos[key].servicios.push(x);});
+  const rows=Object.values(grupos).map(g=>{g.servicios.sort((a,b)=>(b.fecha?+b.fecha:0)-(a.fecha?+a.fecha:0));g.ultima=g.servicios[0]?.fecha||null;g.dias=g.ultima?Math.max(0,-daysTo(g.ultima)):0;g.total=g.servicios.reduce((s,x)=>s+Number(x.precio||0),0);g.plataformas=[...new Set(g.servicios.map(x=>x.plataforma).filter(Boolean))];g.socios=[...new Set(g.servicios.map(x=>x.vendedor).filter(Boolean))];g.vendedor=g.socios.join(" + ")||g.vendedor||"";return g;}).sort((a,b)=>b.total-a.total||b.dias-a.dias);
+  const potencial=rows.reduce((s,g)=>s+g.total,0),conTelefono=rows.filter(g=>String(g.telefono||"").replace(/\D/g,"").length>=8).length;
+  const resumen=document.getElementById("recuperacionResumen");resumen.hidden=false;resumen.innerHTML=`<div><b>${rows.length}</b><span>Clientes recuperables</span></div><div><b>${items.length}</b><span>Servicios vencidos</span></div><div><b>${fmt(potencial)}</b><span>Ingreso mensual posible</span></div><div><b>${conTelefono}</b><span>Con WhatsApp</span></div>`;
+  const renewHead=document.querySelector("#screen-clientes .client-renew-head"),actionsHead=document.querySelector("#screen-clientes .client-actions-head");if(renewHead)renewHead.textContent="Sin renovar";if(actionsHead)actionsHead.textContent="Detalle";
+  const MAX_ROWS=parseInt(document.getElementById("fCantidad").value,10)||100,shown=rows.slice(0,MAX_ROWS);window._shownRecoveryRows=shown;
+  document.getElementById("count").textContent=`${rows.length} cliente${rows.length===1?"":"s"} para recuperar · ordenados por valor de cartera`;
+  const titleCount=document.getElementById("clientesTitleCount");if(titleCount)titleCount.textContent=rows.length;
+  document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>`<tr><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><span><b>${clienteEsc(g.nombre)}</b><small class="rec-socio">Socio: ${clienteEsc(g.vendedor||"—")}</small></span></div></td><td><span class="client-platform">${clienteEsc(g.plataformas.join(", ")||"—")}</span></td><td>${g.ultima?g.ultima.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill exp">Sin renovar</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><b class="rec-days">${g.dias} días</b></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-rec-wa="${i}" title="Mensaje de recuperación">💬</button></td><td class="client-actions-cell"><button type="button" class="rec-history-btn" data-rec-history="${i}">Historial</button></td></tr>`).join(""):`<tr><td colspan="8"><div class="empty">No hay clientes pendientes de recuperación con estos filtros.</div></td></tr>`;
+  document.querySelectorAll("[data-rec-wa]").forEach(b=>b.onclick=()=>abrirWhatsAppRecuperacion(shown[+b.dataset.recWa]));
+  document.querySelectorAll("[data-rec-history]").forEach(b=>b.onclick=()=>verHistorialRecuperacion(shown[+b.dataset.recHistory]));
+}
+
 function renderTable(){
   const MAX_ROWS=parseInt(document.getElementById("fCantidad").value,10)||100;
   const qRaw=document.getElementById("q").value||"";
@@ -2346,6 +2455,11 @@ function renderTable(){
   const qDigits=String(qRaw).replace(/\D/g,"");
   const fp=document.getElementById("fPlat").value, fv=document.getElementById("fVend").value, fe=document.getElementById("fEstado").value;
   document.querySelectorAll("[data-client-status]").forEach(btn=>btn.classList.toggle("active",(btn.dataset.clientStatus||"")===fe));
+  const recPeriodo=document.getElementById("fRecPeriodo"),recResumen=document.getElementById("recuperacionResumen");
+  if(recPeriodo)recPeriodo.hidden=fe!=="recover";
+  if(fe==="recover"){renderRecuperacion();return;}
+  if(recResumen)recResumen.hidden=true;
+  const renewHead=document.querySelector("#screen-clientes .client-renew-head"),actionsHead=document.querySelector("#screen-clientes .client-actions-head");if(renewHead)renewHead.textContent="Renovar";if(actionsHead)actionsHead.textContent="Acciones";
   // 1) aplicar filtros sobre cada servicio
   const filtrados=DATA.map(c=>({...c,st:statusOf(c.fecha)}))
     .filter(c=>{
@@ -2419,14 +2533,15 @@ async function noRenovoCliente(g){
       body:JSON.stringify({accion:"no_renovo",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||""})});
     const j=await r.json();
     if(j.ok){
+      recuperacionLoaded=false;
       const ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:"";
       if(typeof mostrarToast==="function")mostrarToast(j.clienteEliminado?`❌ ${g.nombre} eliminado (no renovó)${ex}`:`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}`);
       await load({forceServer:true});
     }else if(typeof mostrarToast==="function")mostrarToast("⚠️ "+(j.error||"No se pudo dar de baja."));
   }catch(e){if(typeof mostrarToast==="function")mostrarToast("⚠️ No pude conectar.");}
 }
-["q","fPlat","fVend","fEstado","fCantidad"].forEach(id=>{const el=document.getElementById(id);el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
-document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll("[data-client-status]").forEach(x=>x.classList.toggle("active",x===btn));document.getElementById("fEstado").value=btn.dataset.clientStatus||"";renderTable();}));
+["q","fPlat","fVend","fEstado","fCantidad","fRecPeriodo"].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener("input",renderTable);el.addEventListener("change",renderTable);});
+document.querySelectorAll("[data-client-status]").forEach(btn=>btn.addEventListener("click",async()=>{document.querySelectorAll("[data-client-status]").forEach(x=>x.classList.toggle("active",x===btn));document.getElementById("fEstado").value=btn.dataset.clientStatus||"";if(btn.dataset.clientStatus==="recover"){const original=btn.textContent;btn.textContent="Cargando…";btn.disabled=true;await loadRecuperacionData();btn.textContent=original;btn.disabled=false;}renderTable();}));
 const auditBtn=document.getElementById("runCarteraAudit");if(auditBtn)auditBtn.addEventListener("click",async()=>{auditBtn.disabled=true;const old=auditBtn.textContent;auditBtn.textContent="Auditando Firebase…";try{await load({forceServer:true,requireServer:true});ejecutarAuditoriaCartera();if(typeof mostrarToast==="function")mostrarToast("✓ Auditoría completada con datos del servidor");}catch(e){console.error(e);if(typeof mostrarToast==="function")mostrarToast("⚠ No se pudo confirmar Firebase: "+(e.message||e));}finally{auditBtn.disabled=false;auditBtn.textContent=old;}});
 
 /* ===== INVENTARIO: agregar plataforma/correo nuevo (misma lógica del bot) ===== */
@@ -12126,6 +12241,21 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 #screen-clientes .client-actions-menu button:hover{background:var(--client-soft);color:var(--client-blue)}
 #screen-clientes .client-actions-menu button.danger{color:var(--danger)!important}
 #screen-clientes .client-actions-menu button.danger:hover{background:rgba(255,63,110,.12)!important;color:var(--danger)!important}
+#screen-clientes .recuperacion-resumen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}
+#screen-clientes .recuperacion-resumen[hidden]{display:none!important}
+#screen-clientes .recuperacion-resumen>div{padding:14px;border:1px solid color-mix(in srgb,#f59e0b 34%,var(--line));border-radius:15px;background:color-mix(in srgb,#f59e0b 9%,var(--card))}
+#screen-clientes .recuperacion-resumen b{display:block;color:var(--txt);font-size:20px;line-height:1.1}
+#screen-clientes .recuperacion-resumen span{display:block;margin-top:5px;color:var(--txt2);font-size:11px;font-weight:800}
+#screen-clientes .rec-socio{display:block;margin-top:3px;color:var(--txt2);font-size:10px}
+#screen-clientes .rec-days{display:inline-block;padding:6px 9px;border-radius:9px;background:rgba(245,158,11,.13);color:#b46600;font-size:11px;white-space:nowrap}
+#screen-clientes .rec-history-btn{min-height:34px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--client-blue);font-size:11px;font-weight:900;cursor:pointer}
+.rec-history-modal{position:fixed;inset:0;z-index:99999;display:none;place-items:center;padding:18px;background:rgba(5,12,24,.68);backdrop-filter:blur(5px)}
+.rec-history-modal.show{display:grid}
+.rec-history-card{position:relative;width:min(620px,100%);max-height:82vh;overflow:auto;padding:24px;border-radius:22px;background:var(--card);color:var(--txt);box-shadow:0 24px 70px rgba(0,0,0,.3)}
+.rec-history-card h3{margin:0 38px 4px 0;font-size:22px}.rec-history-card>p{margin:0 0 18px;color:var(--txt2)}.rec-history-card h4{margin:18px 0 8px}
+.rec-history-close{position:absolute;right:16px;top:14px;width:34px;height:34px;border:0;border-radius:50%;background:var(--surface);color:var(--txt);font-size:22px;cursor:pointer}
+.rec-history-row{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:7px;background:var(--surface)}
+.rec-history-row b{font-size:13px}.rec-history-row span{color:var(--txt2);font-size:11.5px}
 @media(max-width:980px){
  #screen-clientes .clientes-crm-card>h2{padding-right:0!important;margin-bottom:80px!important}
  #screen-clientes #clientesNuevaFicha{left:26px!important;right:auto!important;top:91px!important}
@@ -12135,6 +12265,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
  #screen-clientes .clientes-filters{grid-template-columns:1fr 1fr!important}
  #screen-clientes .clientes-table-wrap{overflow-x:auto!important}
  #screen-clientes table{min-width:1060px!important}
+ #screen-clientes .recuperacion-resumen{grid-template-columns:1fr 1fr}
 }
 @media(max-width:520px){
  #screen-clientes>.clientes-crm-card{padding:18px 14px 24px!important}
@@ -12143,6 +12274,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
  #screen-clientes .web-home-back{right:14px!important;top:84px!important}
  #screen-clientes .clientes-tabs button{min-width:78px!important;padding:0 12px!important}
  #screen-clientes .clientes-filters{grid-template-columns:1fr!important}
+ #screen-clientes .recuperacion-resumen{grid-template-columns:1fr 1fr}
 }
 </style>
 <style id="licMovilInicioFlujoAjustable20260720">
