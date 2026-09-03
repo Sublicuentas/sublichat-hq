@@ -261,6 +261,7 @@
     const canClose=!winner&&draw.estado==='activo';
     const canSpin=!winner&&draw.estado==='cerrado';
     const canBackfill=!winner&&draw.estado==='activo'&&draw.categoria==='general';
+    const canDelete=!winner&&draw.estado!=='finalizado';
     const cardColor=safeHex(draw.color,themeAccent());
     return `<article class="sr-draw-card" style="--sr-item-accent:${esc(cardColor)}">
       <header><div><span class="sr-state ${esc(draw.estado||'borrador')}">${esc(ESTADOS[draw.estado]||draw.estado)}</span><span class="sr-scope">${esc(ALCANCES[draw.alcance]||draw.alcance)}</span></div><b class="sr-ticket-total">${Number(draw.totalBoletos)||0} <small>boletos</small></b></header>
@@ -274,6 +275,7 @@
         ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar desde agosto 2026</button>`:''}
         ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
         ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
+        ${canDelete?`<button type="button" class="sr-btn danger" data-sr-delete="${esc(draw.id)}">🗑 Eliminar</button>`:''}
       </footer>
     </article>`;
   }
@@ -287,6 +289,7 @@
     body.querySelectorAll('[data-sr-close]').forEach(button=>button.addEventListener('click',()=>closeDraw(button.dataset.srClose)));
     body.querySelectorAll('[data-sr-spin]').forEach(button=>button.addEventListener('click',()=>openWheel(button.dataset.srSpin)));
     body.querySelectorAll('[data-sr-tickets]').forEach(button=>button.addEventListener('click',()=>openTickets(button.dataset.srTickets)));
+    body.querySelectorAll('[data-sr-delete]').forEach(button=>button.addEventListener('click',()=>deleteDraw(button.dataset.srDelete)));
   }
 
   function prizeCard(prize){
@@ -446,6 +449,14 @@
     if(!confirm(`¿Cerrar la participación de “${draw.titulo}”? Después podrá girar la ruleta.`))return;
     status('Cerrando participación…');
     try{await api({accion:'cerrar_sorteo',id});await load(true);status('Participación cerrada. La ruleta ya está lista.','good');}
+    catch(error){status(error.message,'bad');}
+  }
+  async function deleteDraw(id){
+    const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
+    const total=Number(draw.totalBoletos)||0;
+    if(!confirm(`¿Eliminar definitivamente “${draw.titulo}”?\n\nSe borrarán también sus ${total} boleto(s). Esta acción no se puede deshacer.`))return;
+    status('Eliminando sorteo de prueba y sus registros…');
+    try{const result=await api({accion:'eliminar_sorteo',id});await load(true);status(`Sorteo eliminado. Se limpiaron ${Number(result.registrosEliminados)||0} registros relacionados.`,'good');}
     catch(error){status(error.message,'bad');}
   }
   function openWheel(id){

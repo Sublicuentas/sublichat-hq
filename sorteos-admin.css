@@ -40,6 +40,8 @@
 .sr-hero-btn{border:1px solid var(--sr-line);border-radius:12px;padding:9px 15px;background:var(--sr-surface);color:var(--sr-text);font:inherit;font-size:11.5px;font-weight:900;cursor:pointer;box-shadow:0 5px 12px color-mix(in srgb,var(--sr-text) 7%,transparent)}
 .sr-hero-btn.primary{border-color:var(--sr-accent);background:var(--sr-accent);color:var(--sr-on-accent)}
 .sr-hero-btn:hover{transform:translateY(-1px)}
+.sr-btn.danger{border-color:color-mix(in srgb,#d93636 45%,var(--sr-line));background:color-mix(in srgb,#d93636 9%,var(--sr-card));color:#c52c2c}
+.sr-btn.danger:hover{border-color:#d93636;background:#d93636;color:#fff}
 .sr-rule-strip{position:relative;z-index:1;display:flex;gap:6px;margin-top:13px;flex-wrap:wrap}
 .sr-rule-strip span{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--sr-line);background:color-mix(in srgb,var(--sr-surface) 82%,transparent);color:var(--sr-text-2);font-size:10.5px;font-weight:750;white-space:nowrap}
 .sr-rule-strip b{color:var(--sr-accent);font-size:12px;font-weight:950}
