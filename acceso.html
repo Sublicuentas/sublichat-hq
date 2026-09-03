@@ -117,6 +117,8 @@
   .terms ul{ display:grid; gap:7px; margin:0; padding:0; list-style:none; }
   .terms li{ display:flex; align-items:flex-start; gap:9px; font-size:12px; color:#4a453b; line-height:1.4; }
   .term-icon{ width:18px; flex:0 0 18px; display:inline-flex; justify-content:center; font-size:14px; line-height:1.25; }
+  .netflix-code-alert{ margin-top:12px; border:1.5px solid #efb04a; border-left:5px solid #e58a00; border-radius:16px; padding:13px 15px; background:#fff5d9; color:#5f3b00; font-size:12.5px; line-height:1.55; }
+  .netflix-code-alert b{ display:block; margin-bottom:4px; color:#9a5100; font-size:13px; }
   .vendor-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:#F8F4EC; border-radius:14px; padding:11px 15px; margin-top:18px; }
   .vendor-name{ font-size:13px; font-weight:700; }
   .vendor-phone{ font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:700; background:var(--black); color:#fff; padding:6px 12px; border-radius:999px; }
@@ -477,10 +479,14 @@
     }
     const termsHtml=(d.terminos||[]).map((t,i)=>`<li><span class="term-icon" aria-hidden="true">${iconoCondicion(t,i)}</span><span>${esc(t)}</span></li>`).join("");
     const perfiles=perfilesDelServicio(d);
+    const avisoCodigoNetflix=platKey(d.plataforma)==="netflix"
+      ? `<div class="netflix-code-alert" role="note"><b>⚠️ Aviso importante de Netflix</b>Es posible que en aproximadamente 15 días Netflix solicite un código temporal. Cuando le aparezca, comuníquese con su vendedor para recibirlo al instante.</div>`
+      : "";
     return `${datosPerfilHtml(d,index)}
       ${perfiles.length>1?"":notaModo(d,perfiles[0])}
       <div class="section-title">Condiciones del servicio</div>
-      <div class="terms"><ul>${termsHtml}</ul></div>`;
+      <div class="terms"><ul>${termsHtml}</ul></div>
+      ${avisoCodigoNetflix}`;
   }
 
   function tarjetaServicio(d,index,total,soporte=""){
