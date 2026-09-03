@@ -1,7 +1,7 @@
 import admin from "firebase-admin";
 import { randomInt, randomBytes, createHash } from "node:crypto";
 import {
-  reglasSorteo, nivelFidelidad, NIVELES_FIDELIDAD, sorteoClean, sorteoNorm, sorteoSafeId,
+  reglasSorteo, nivelFidelidad, NIVELES_FIDELIDAD, sorteoClean, sorteoNorm, sorteoSafeId, sorteoFechaKey,
   sorteoVendorElegible, sorteoVendorGroup
 } from "./sorteos-lib.js";
 import { registrarEventoSorteosSeguro } from "./sorteos-eventos.js";
@@ -106,6 +106,30 @@ function historicalPaidMonths(start, end) {
   const a = historicalDateMs(start), b = historicalDateMs(end);
   if (!a || !b || b <= a) return 1;
   return Math.max(1, Math.min(24, Math.round((b - a) / 2592000000)));
+}
+
+function hondurasDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const get = type => parts.find(part => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function serviceIsCurrent(service = {}, today = hondurasDateKey()) {
+  const state = sorteoNorm(service.estado || service.status);
+  if (["inactivo", "vencido", "eliminado", "baja", "cancelado", "archivado"].includes(state)) return false;
+  const date = sorteoFechaKey(service.fechaRenovacion || service.renovacion || service.vence || service.fechaVencimiento);
+  return Boolean(date && date >= today);
+}
+
+function clientCurrentForDraw(cliente = {}, draw = {}) {
+  const services = Array.isArray(cliente.servicios) ? cliente.servicios : [];
+  return services.some(service => serviceIsCurrent(service) && scopeMatches(draw,
+    service?.vendedor_norm || service?.vendedor || cliente.vendedor_norm || cliente.vendedor));
+}
+
+async function currentClientIds(db, draw) {
+  const snap = await db.collection("clientes").limit(5000).get();
+  return new Set(snap.docs.filter(doc => clientCurrentForDraw(doc.data() || {}, draw)).map(doc => doc.id));
 }
 
 function historicalEventType(record = {}) {
@@ -265,20 +289,23 @@ function prizeVisibleToEditor(prize, editor) {
 }
 
 async function adminLoad(db, editor) {
-  const [drawSnap, prizeSnap, ticketSnap, deliverySnap] = await Promise.all([
+  const [drawSnap, prizeSnap, ticketSnap, deliverySnap, clientsSnap] = await Promise.all([
     db.collection(SORTEOS_COLLECTION).limit(150).get(),
     db.collection(PREMIOS_COLLECTION).limit(300).get(),
     db.collection(BOLETOS_COLLECTION).orderBy("createdAt", "desc").limit(10000).get(),
-    db.collection(ENTREGAS_COLLECTION).limit(1000).get()
+    db.collection(ENTREGAS_COLLECTION).limit(1000).get(),
+    db.collection("clientes").limit(5000).get()
   ]);
   const sorteos = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(draw => drawVisibleToEditor(draw, editor));
   const allowed = new Set(sorteos.map(draw => draw.id));
   const drawMap = new Map(sorteos.map(draw => [draw.id, draw]));
+  const clients = new Map(clientsSnap.docs.map(doc => [doc.id, doc.data() || {}]));
   const boletos = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(ticket => {
       const draw = drawMap.get(String(ticket.sorteoId || ""));
-      return Boolean(draw) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor);
+      const client = clients.get(String(ticket.clientId || ""));
+      return Boolean(draw && client) && clientCurrentForDraw(client, draw) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor);
     });
   const countByDraw = {};
   boletos.forEach(ticket => { countByDraw[ticket.sorteoId] = (countByDraw[ticket.sorteoId] || 0) + 1; });
@@ -289,7 +316,7 @@ async function adminLoad(db, editor) {
   const entregas = deliverySnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(item => allowed.has(String(item.sorteoId || "")))
     .map(item => ({ ...item, codigo: item.codigo ? "••••••••" : "" }));
-  const participantes = boletos.slice(0, 500).map(ticket => ({
+  const participantes = boletos.map(ticket => ({
     id: ticket.id, sorteoId: ticket.sorteoId, codigo: ticket.codigo,
     clientId: ticket.clientId, clienteNombre: ticket.clienteNombre,
     telefono: ticket.telefono, tipo: ticket.tipo, createdAt: ticket.createdAt
@@ -384,7 +411,7 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
   clientsSnap.docs.forEach(doc => {
     const data = doc.data() || {};
     const vendors = clientVendorGroups(data).filter(vendor => scopeMatches(draw, vendor));
-    if (!vendors.length) return;
+    if (!vendors.length || !clientCurrentForDraw(data, draw)) return;
     clients.set(doc.id, { id: doc.id, data, vendor: vendors[0], vendors });
   });
 
@@ -738,6 +765,26 @@ async function savePrize(db, editor, body) {
   return { ok: true, id: ref.id };
 }
 
+async function deletePrize(db, editor, id) {
+  const premioId = sorteoSafeId(id);
+  if (!premioId) throw Object.assign(new Error("Premio inválido."), { status: 400 });
+  const ref = db.collection(PREMIOS_COLLECTION).doc(premioId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error("Premio no encontrado."), { status: 404 });
+  const prize = snap.data() || {};
+  if (!prizeVisibleToEditor(prize, editor)) throw Object.assign(new Error("No puede eliminar este premio."), { status: 403 });
+  const draws = await db.collection(SORTEOS_COLLECTION).where("premioIds", "array-contains", premioId).limit(20).get();
+  if (!draws.empty) throw new Error("Este premio está ligado a un sorteo. Quite el premio del sorteo o elimine primero la campaña de prueba.");
+  const deliveries = await db.collection(ENTREGAS_COLLECTION).where("premioId", "==", premioId).limit(1).get();
+  if (!deliveries.empty) throw new Error("Este premio ya tiene historial de entrega y no puede eliminarse.");
+  await ref.delete();
+  await db.collection("auditoria_eventos").add({
+    tipo: "premio_sorteo_eliminado", premioId, nombre: sorteoClean(prize.nombre, 120),
+    usuario: editor.actor, createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return { ok: true, id: premioId };
+}
+
 async function saveDraw(db, editor, body) {
   const id = sorteoSafeId(body.id);
   const ref = id ? db.collection(SORTEOS_COLLECTION).doc(id) : db.collection(SORTEOS_COLLECTION).doc();
@@ -764,8 +811,9 @@ async function closeDraw(db, editor, id) {
   if (draw.ganador) throw new Error("El sorteo ya tiene ganador.");
   if (draw.estado !== "activo") throw new Error("Solo un sorteo activo puede cerrar su participación.");
   const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", ref.id).get();
+  const currentIds = await currentClientIds(db, draw);
   const validTickets = ticketSnap.docs.map(doc => doc.data() || {}).filter(ticket =>
-    ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+    currentIds.has(String(ticket.clientId || "")) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
   );
   if (!validTickets.length) throw new Error("Todavía no hay boletos válidos de Sublicuentas o Relojes para cerrar.");
   await ref.set({ estado: "cerrado", cerradoAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
@@ -814,8 +862,9 @@ async function spinDraw(db, editor, id) {
   if (draw.estado !== "cerrado") throw new Error("Cierre la participación antes de girar la ruleta.");
   if (draw.ganador) return { ok: true, id: sorteoId, ganador: draw.ganador, repetido: true };
   const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get();
+  const currentIds = await currentClientIds(db, draw);
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(ticket =>
-    ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+    currentIds.has(String(ticket.clientId || "")) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
   ).sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0) || a.id.localeCompare(b.id));
   if (!tickets.length) throw new Error("Este sorteo no tiene boletos participantes.");
   const selectedIndex = randomInt(tickets.length);
@@ -915,6 +964,7 @@ export default async function handler(req, res) {
     if (!editor) return;
     if (action === "cargar") return res.status(200).json(await adminLoad(db, editor));
     if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
+    if (action === "eliminar_premio") return res.status(200).json(await deletePrize(db, editor, body.id));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
     if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));
     if (action === "eliminar_sorteo") return res.status(200).json(await deleteDraw(db, editor, body.id));

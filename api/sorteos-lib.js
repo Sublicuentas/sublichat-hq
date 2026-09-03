@@ -40,8 +40,9 @@ export function sorteoVendorGroup(value) {
   const normalized = sorteoNorm(value);
   if (["relojes", "reloj", "libni"].includes(normalized)) return "relojes";
   if (["sublicuentas", "sublicuenta", "naara"].includes(normalized)) return "sublicuentas";
-  // Los nombres de socios son vendedores de Sublicuentas, no negocios aparte.
-  return normalized ? "sublicuentas" : "";
+  // Los socios conservan su identidad: únicamente ventas registradas como
+  // Sublicuentas o Relojes participan en el programa de sorteos.
+  return normalized;
 }
 
 export function sorteoVendorElegible(value) {
