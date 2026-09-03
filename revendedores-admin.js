@@ -31,6 +31,19 @@ async function api(method,ruta,body,params){
 function shell(){
   const h=host(); if(!h||h.dataset.ready) return; h.dataset.ready='1';
   h.innerHTML=`
+    <style>
+      #rbac-revendedores .promo-grid{grid-template-columns:repeat(auto-fill,minmax(300px,420px));align-items:start}
+      #rbac-revendedores .promo-card{min-width:0}
+      #rbac-revendedores .promo-summary{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;align-items:start}
+      #rbac-revendedores .promo-thumb{display:block;width:112px;height:112px;object-fit:contain;background:#f7f7f8;border:1px solid #ececf0;border-radius:14px}
+      #rbac-revendedores .promo-copy{min-width:0;display:grid;gap:7px}
+      #rbac-revendedores .promo-copy p{margin:0;overflow-wrap:anywhere}
+      @media(max-width:600px){
+        #rbac-revendedores .promo-grid{grid-template-columns:1fr}
+        #rbac-revendedores .promo-summary{grid-template-columns:88px minmax(0,1fr)}
+        #rbac-revendedores .promo-thumb{width:88px;height:88px}
+      }
+    </style>
     <div class="cr-admin">
       <div class="cr-hero">
         <div><b>🤝 Catálogo Socios</b><span>Precios, vendedores y clientes de toda la red — conectado al Panel de Socios.</span></div>
@@ -70,7 +83,7 @@ function promoStatus(p){return p.estado==='publicada'?`Enviada a ${Number(p.envi
 function renderPromociones(){
   const b=$('#revBody');if(!state.promociones)return loadPromociones();
   b.innerHTML=`<div class="cr-tools"><div><b>Campañas para revendedores</b><br><small>La misma promoción aparecerá en el Panel de Socios y puede enviarse con imagen por Telegram.</small></div><button class="cr-btn red" id="promoNueva">＋ Nueva promoción</button></div>
-    <div class="cr-grid">${state.promociones.map(p=>`<article class="cr-card">${p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;margin-bottom:10px">`:''}<div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p><div class="cr-row"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318">⚠️ ${Number(p.fallidos)} no recibieron Telegram. Revise su ID.</small>`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
+    <div class="cr-grid promo-grid">${state.promociones.map(p=>`<article class="cr-card promo-card"><div class="promo-summary">${p.imagenUrl?`<a href="${esc(p.imagenUrl)}" target="_blank" rel="noopener" title="Abrir imagen completa"><img class="promo-thumb" src="${esc(p.imagenUrl)}" alt="Imagen de ${esc(p.titulo)}"></a>`:'<div class="promo-thumb" aria-hidden="true"></div>'}<div class="promo-copy"><div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p></div></div><div class="cr-row" style="flex-wrap:wrap"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318">⚠️ ${Number(p.fallidos)} no recibieron Telegram. Revise su ID.</small>`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
   $('#promoNueva').onclick=nuevaPromocion;
   b.querySelectorAll('[data-promo-send]').forEach(x=>x.onclick=()=>enviarPromocion(x.dataset.promoSend,x));
   b.querySelectorAll('[data-promo-del]').forEach(x=>x.onclick=()=>eliminarPromocion(x.dataset.promoDel));
