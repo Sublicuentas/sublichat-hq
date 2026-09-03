@@ -1341,6 +1341,7 @@ export default async function handler(req, res) {
     }
 
     const docRef = elegido.ref;
+    const noRenovoAuditRef = acc === "no_renovo" ? db.collection("auditoria_eventos").doc() : null;
     const mutation = await db.runTransaction(async transaction => {
       const latest = await transaction.get(docRef);
       if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
@@ -1508,6 +1509,26 @@ export default async function handler(req, res) {
         tokenTitularAnterior: data.tokenAcceso
       });
       const serviciosLimpios = servicios.map(limpiarServicioCRM);
+      if (noRenovoAuditRef && inventarioPlan?.anterior) {
+        const servicioArchivado = limpiarServicioCRM(inventarioPlan.anterior);
+        transaction.set(noRenovoAuditRef, {
+          tipo: "cliente_no_renovo", clienteId: docRef.id,
+          cliente: String(data.nombrePerfil || data.nombre || nombreTitular || ""),
+          telefono: String(data.telefono || data.whatsapp || ""),
+          vendedor: String(servicioArchivado.vendedor || data.vendedor || ""),
+          vendedorTelefono: String(servicioArchivado.vendedorTelefono || data.vendedorTelefono || ""),
+          plataforma: String(servicioArchivado.plataforma || plataforma || ""),
+          correo: String(servicioArchivado.correo || correo || ""),
+          compraId: String(servicioArchivado.compraId || touchedCompraId || ""),
+          precio: Number(servicioArchivado.precio || 0),
+          fechaRenovacion: String(servicioArchivado.fechaRenovacion || ""),
+          perfiles: Array.isArray(servicioArchivado.perfiles) ? servicioArchivado.perfiles : [],
+          servicio: servicioArchivado, clienteEliminado: !!eliminarClienteCompleto,
+          totalServiciosRestantes: serviciosLimpios.length,
+          usuario: String(authUser.usuario || authUser.uid || "sublichat"), rol: String(authUser.role || ""),
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
       if (eliminarClienteCompleto) {
         transaction.delete(docRef);
       } else {
@@ -1521,7 +1542,16 @@ export default async function handler(req, res) {
       }
       return {
         serviciosLimpios, accesos, nombreTitular, inventarioPlan, perfilEliminado,
-        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto
+        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto,
+        clienteMeta: {
+          nombre: String(data.nombrePerfil || data.nombre || nombreTitular || ""),
+          telefono: String(data.telefono || data.whatsapp || ""),
+          vendedor: String(inventarioPlan?.anterior?.vendedor || data.vendedor || ""),
+          vendedorTelefono: String(inventarioPlan?.anterior?.vendedorTelefono || data.vendedorTelefono || "")
+        },
+        servicioNoRenovado: acc === "no_renovo" && inventarioPlan?.anterior
+          ? limpiarServicioCRM(inventarioPlan.anterior)
+          : null
       };
     });
 
@@ -1546,18 +1576,24 @@ export default async function handler(req, res) {
       // hoy; esta acción sí queda registrada, tanto si solo se quitó un
       // servicio como si se borró el cliente entero.
       try {
-        await db.collection("auditoria_eventos").add({
+        const servicioArchivado = mutation.servicioNoRenovado || mutation.inventarioPlan?.anterior || {};
+        if (noRenovoAuditRef) {
+          await noRenovoAuditRef.set({ inventario: invResult || null, archivedAt: isoNow() }, { merge: true });
+        }
+        await db.collection("historial_clientes").add({
+          clientId: docRef.id,
           tipo: "cliente_no_renovo",
-          clienteId: docRef.id,
-          cliente: String(mutation.nombreTitular || ""),
-          plataforma: String(mutation.inventarioPlan?.anterior?.plataforma || plataforma || ""),
-          correo: String(mutation.inventarioPlan?.anterior?.correo || correo || ""),
-          clienteEliminado: !!mutation.eliminarClienteCompleto,
-          totalServiciosRestantes: mutation.serviciosLimpios.length,
-          inventario: invResult,
-          usuario: String(authUser.usuario || authUser.uid || "sublicuentas"),
-          rol: String(authUser.role || ""),
-          createdAt: isoNow()
+          compraId: String(servicioArchivado.compraId || mutation.touchedCompraId || ""),
+          descripcion: `No renovó ${servicioArchivado.plataforma || plataforma || "servicio"}`,
+          cliente: String(mutation.clienteMeta?.nombre || mutation.nombreTitular || ""),
+          telefono: String(mutation.clienteMeta?.telefono || ""),
+          plataforma: String(servicioArchivado.plataforma || plataforma || ""),
+          precio: Number(servicioArchivado.precio || 0),
+          fechaRenovacion: String(servicioArchivado.fechaRenovacion || ""),
+          vendedor: String(servicioArchivado.vendedor || mutation.clienteMeta?.vendedor || ""),
+          procesadoPor: String(authUser.usuario || authUser.uid || "sublichat"),
+          origen: "Sublichat",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
       } catch (e) {
         // La auditoría nunca debe tumbar una baja ya confirmada en Firestore.
