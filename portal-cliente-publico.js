@@ -228,6 +228,7 @@
   function selectPanel(panel,scrollToPanel=true){
     if(panel==='pagos'&&!paymentsVisible())panel='cuentas';
     state.activePanel=panel;
+    document.body.classList.toggle('portal-promo-view',panel==='promociones');
     document.querySelectorAll('[data-portal-panel]').forEach(button=>{
       const selected=button.dataset.portalPanel===panel;
       button.classList.toggle('active',selected);
@@ -251,8 +252,7 @@
   function renderPromotions(){
     const panel=document.getElementById('portal-panel-promociones');
     if(!panel)return;
-    const old=panel.querySelector('.portal-promo-grid, .portal-empty');
-    if(old)old.remove();
+    panel.querySelectorAll('.portal-promo-overview, .portal-promo-grid, .portal-empty').forEach(node=>node.remove());
     if(!state.data){
       panel.append(emptyState(state.error?'Promociones no disponibles':'Cargando promociones…',state.error?' Sus cuentas continúan disponibles con normalidad.':' Un momento por favor.'));
       return;
@@ -262,6 +262,18 @@
       panel.append(emptyState('No hay promociones activas',' Cuando publiquemos una oferta para usted, aparecerá en esta sección.'));
       return;
     }
+    const overview=element('div','portal-promo-overview');
+    const activeMetric=element('div','portal-promo-metric is-primary');
+    const activeIcon=element('img','portal-promo-metric-icon');activeIcon.src=PORTAL_ICONS.promociones;activeIcon.alt='';
+    const activeCopy=element('span','');activeCopy.append(element('strong','',String(promotions.length)),element('small','',`oferta${promotions.length===1?'':'s'} activa${promotions.length===1?'':'s'}`));
+    activeMetric.append(activeIcon,activeCopy);
+    const exclusiveMetric=element('div','portal-promo-metric');
+    exclusiveMetric.append(element('span','portal-promo-metric-symbol','★'),element('span',''));
+    exclusiveMetric.lastChild.append(element('strong','','Exclusivas'),element('small','','Seleccionadas para usted'));
+    const supportMetric=element('div','portal-promo-metric');
+    supportMetric.append(element('span','portal-promo-metric-symbol','✓'),element('span',''));
+    supportMetric.lastChild.append(element('strong','','Atención directa'),element('small','','Solicite con su vendedor'));
+    overview.append(activeMetric,exclusiveMetric,supportMetric);
     const grid=element('div','portal-promo-grid');
     promotions.forEach(promo=>{
       const card=element('article','portal-promo-card');
@@ -270,8 +282,8 @@
       const imageSrc=safeImage(promo.imagen);
       if(imageSrc){
         const image=element('img');image.src=imageSrc;image.alt=String(promo.titulo||'Promoción');image.loading='lazy';
-        image.style.setProperty('--promo-fit',promo.imagenModo==='contain'?'contain':'cover');
-        image.style.setProperty('--promo-zoom',String(clampLogoValue(promo.imagenZoom,100,250,100)/100));
+        image.style.setProperty('--promo-fit','contain');
+        image.style.setProperty('--promo-zoom',String(clampLogoValue(promo.imagenZoom,100,130,100)/100));
         image.style.setProperty('--promo-x',`${clampLogoValue(promo.imagenX,0,100,50)}%`);
         image.style.setProperty('--promo-y',`${clampLogoValue(promo.imagenY,0,100,50)}%`);
         visual.append(image);
@@ -303,7 +315,7 @@
       }
       card.append(visual,body);grid.append(card);
     });
-    panel.append(grid);
+    panel.append(overview,grid);
   }
 
   function paymentLogo(method){
@@ -562,7 +574,7 @@
     const accounts=element('section','portal-panel portal-account-panel');accounts.id='portal-panel-cuentas';accounts.dataset.panel='cuentas';accounts.role='tabpanel';
     accounts.append(panelTitle(PORTAL_ICONS.cuentas,'Mis cuentas activas',`(${count} acceso${count===1?'':'s'})`),accessList);
     const promos=element('section','portal-panel');promos.id='portal-panel-promociones';promos.dataset.panel='promociones';promos.role='tabpanel';promos.hidden=true;
-    promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
+    promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones exclusivas'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
     const raffles=element('section','portal-panel');raffles.id='portal-panel-sorteos';raffles.dataset.panel='sorteos';raffles.role='tabpanel';raffles.hidden=true;
     raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Cada compra o renovación puede darle nuevas oportunidades de ganar.'));
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;

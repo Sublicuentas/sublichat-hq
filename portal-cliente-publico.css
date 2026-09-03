@@ -222,3 +222,98 @@ body.portal-ready{
   .portal-promo-title-wrap.is-deslizante .portal-promo-title{white-space:normal}
 }
 .portal-vip-conditions{display:grid;gap:4px;margin:10px 0;padding:11px 12px;border:1px solid #CDBCF3;border-radius:14px;background:linear-gradient(135deg,#F4EFFF,#FFF9E9)}.portal-vip-conditions b{color:#6840C2;font-size:10.5px}.portal-vip-conditions span{color:#6C6375;font-size:8.8px;line-height:1.5}
+
+/* Promociones públicas · composición inspirada en la vista Sorteos 2026. */
+body.portal-promo-view{padding:18px;background:#F5F6FA}
+body.portal-promo-view .stage.portal-enhanced{width:min(1380px,calc(100% - 8px));max-width:none;overflow:visible;border:1px solid #ECEEF3;border-radius:28px;background:#fff;box-shadow:0 18px 60px rgba(22,30,55,.08)}
+body.portal-promo-view .portal-brand{display:none}
+body.portal-promo-view .portal-existing-intro{position:relative;padding:36px 40px 0}
+body.portal-promo-view .portal-existing-intro .live-row,body.portal-promo-view .portal-existing-intro .sub{display:none}
+body.portal-promo-view .portal-existing-intro .h1{margin:0 0 8px;font-size:38px;color:#111B3B}
+body.portal-promo-view .portal-existing-intro .hello{margin:0;color:#313A58;font-size:18px;font-weight:700}
+body.portal-promo-view .portal-categories{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding:25px 40px 32px}
+body.portal-promo-view .portal-category{min-height:142px;display:grid;grid-template-columns:105px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;align-items:center;justify-items:start;column-gap:13px;padding:19px 20px;border-color:#DDE1E9;border-radius:18px;background:#fff;text-align:left;box-shadow:0 4px 14px rgba(21,31,55,.025)}
+body.portal-promo-view .portal-category:hover,body.portal-promo-view .portal-category.active{border-color:var(--portal-red);box-shadow:0 8px 22px rgba(226,35,26,.08)}
+body.portal-promo-view .portal-category-icon{grid-row:1/3;width:96px;height:86px;margin:0}
+body.portal-promo-view .portal-category-icon.is-rewards{width:100px;height:88px;margin:0}
+body.portal-promo-view .portal-category b{align-self:end;font-size:17px;color:#131A34}
+body.portal-promo-view .portal-category.active b{color:var(--portal-red)}
+body.portal-promo-view .portal-category small{align-self:start;margin-top:7px;font-size:12px;line-height:1.45}
+body.portal-promo-view .portal-panels{padding:0 40px 40px}
+body.portal-promo-view #portal-panel-promociones>.portal-panel-title{margin:0 0 6px;font-size:31px;color:#111B3B}
+body.portal-promo-view #portal-panel-promociones>.portal-panel-title:before,body.portal-promo-view #portal-panel-promociones>.portal-panel-title .portal-panel-title-icon{display:none}
+body.portal-promo-view #portal-panel-promociones>.portal-panel-sub{margin:0 0 20px;font-size:14px}
+.portal-promo-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:18px;overflow:hidden;border:1px solid #E3E6ED;border-radius:20px;background:#fff}
+.portal-promo-metric{min-width:0;display:flex;align-items:center;gap:14px;padding:18px 22px;border-left:1px solid #E8EAF0;color:#18213E}
+.portal-promo-metric:first-child{border-left:0}
+.portal-promo-metric>span:last-child{min-width:0;display:grid;gap:3px}
+.portal-promo-metric strong,.portal-promo-metric small{display:block}
+.portal-promo-metric strong{font-size:15px;line-height:1.15}
+.portal-promo-metric small{color:#6F7890;font-size:11px;line-height:1.3}
+.portal-promo-metric.is-primary strong{color:var(--portal-red);font-size:24px}
+.portal-promo-metric-icon{width:55px;height:55px;object-fit:contain;filter:drop-shadow(0 7px 8px rgba(70,25,22,.15))}
+.portal-promo-metric-symbol{width:48px;height:48px;flex:0 0 48px;display:grid;place-items:center;border-radius:15px;background:#FFF1F0;color:var(--portal-red);font-size:24px;font-weight:900}
+body.portal-promo-view .portal-promo-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+body.portal-promo-view .portal-promo-card{min-height:315px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(190px,.65fr);grid-template-areas:"body visual";border-color:#E1E4EB;border-radius:24px;background:linear-gradient(135deg,#fff 0%,#fff 62%,color-mix(in srgb,var(--promo-color,#E2231A) 7%,#fff) 100%);box-shadow:0 10px 28px rgba(24,31,52,.06)}
+body.portal-promo-view .portal-promo-image{grid-area:visual;align-self:stretch;height:auto;min-height:315px;padding:23px 20px;background:transparent;font-size:76px}
+body.portal-promo-view .portal-promo-image img{width:100%;height:100%;max-height:268px;object-fit:contain!important;filter:drop-shadow(0 13px 18px rgba(34,25,22,.14))}
+body.portal-promo-view .portal-promo-body{grid-area:body;min-width:0;display:flex;flex-direction:column;align-items:flex-start;padding:27px 10px 25px 27px}
+body.portal-promo-view .portal-promo-tag{padding:7px 11px;font-size:10px}
+body.portal-promo-view .portal-promo-title-wrap{width:100%;margin:15px 0 8px}
+body.portal-promo-view .portal-promo-title{font-size:25px;line-height:1.12;color:#111B3B}
+body.portal-promo-view .portal-promo-card p{min-height:0;margin:0;color:#626B82;font-size:13px;line-height:1.55}
+body.portal-promo-view .portal-promo-price{margin:19px 0 13px}
+body.portal-promo-view .portal-promo-price strong{font-size:28px}
+body.portal-promo-view .portal-promo-price del{font-size:13px}
+body.portal-promo-view .portal-promo-valid{margin:0 0 13px;font-size:11px}
+body.portal-promo-view .portal-promo-cta{width:auto;min-width:205px;min-height:48px;margin-top:auto;padding:0 22px;border-radius:13px;background:linear-gradient(90deg,#E2231A,#F20D42);font-size:13px;box-shadow:0 8px 18px rgba(226,35,26,.2)}
+
+@media(max-width:900px){
+  body.portal-promo-view .stage.portal-enhanced{width:100%}
+  body.portal-promo-view .portal-category{grid-template-columns:74px minmax(0,1fr);padding:15px}
+  body.portal-promo-view .portal-category-icon,body.portal-promo-view .portal-category-icon.is-rewards{width:70px;height:66px}
+  body.portal-promo-view .portal-category b{font-size:14px}
+  body.portal-promo-view .portal-category small{font-size:10px}
+  body.portal-promo-view .portal-promo-grid{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  body.portal-promo-view{padding:0;background:#fff}
+  body.portal-promo-view .stage.portal-enhanced{border:0;border-radius:0;box-shadow:none}
+  body.portal-promo-view .portal-existing-intro{padding:27px 20px 0}
+  body.portal-promo-view .portal-existing-intro .h1{margin-bottom:5px;font-size:31px}
+  body.portal-promo-view .portal-existing-intro .hello{font-size:16px}
+  body.portal-promo-view .portal-categories,body.portal-promo-view .portal-categories.four-categories{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:22px 12px 30px}
+  body.portal-promo-view .portal-category{min-height:142px;display:flex;align-items:center;justify-content:flex-start;padding:10px 4px 12px;border-radius:17px;text-align:center}
+  body.portal-promo-view .portal-category-icon,body.portal-promo-view .portal-category-icon.is-rewards{width:64px;height:66px;margin:0 0 5px}
+  body.portal-promo-view .portal-category b{font-size:10.5px;line-height:1.15}
+  body.portal-promo-view .portal-category small{display:none}
+  body.portal-promo-view .portal-panels{padding:0 14px 26px}
+  body.portal-promo-view #portal-panel-promociones>.portal-panel-title{font-size:27px}
+  body.portal-promo-view #portal-panel-promociones>.portal-panel-sub{font-size:12px}
+  .portal-promo-overview{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px;border-radius:17px}
+  .portal-promo-metric{display:grid;justify-items:center;gap:6px;padding:12px 5px;text-align:center}
+  .portal-promo-metric-icon{width:42px;height:42px}
+  .portal-promo-metric-symbol{width:38px;height:38px;flex-basis:38px;border-radius:12px;font-size:19px}
+  .portal-promo-metric strong{font-size:11px}
+  .portal-promo-metric.is-primary strong{font-size:18px}
+  .portal-promo-metric small{font-size:8px}
+  body.portal-promo-view .portal-promo-card{min-height:285px;grid-template-columns:minmax(0,1fr) 126px;border-radius:22px}
+  body.portal-promo-view .portal-promo-image{min-height:285px;padding:18px 10px;font-size:54px}
+  body.portal-promo-view .portal-promo-image img{max-height:210px}
+  body.portal-promo-view .portal-promo-body{padding:22px 5px 20px 18px}
+  body.portal-promo-view .portal-promo-tag{padding:6px 8px;font-size:8px}
+  body.portal-promo-view .portal-promo-title-wrap{margin:12px 0 7px}
+  body.portal-promo-view .portal-promo-title{font-size:20px}
+  body.portal-promo-view .portal-promo-card p{font-size:11px;line-height:1.45}
+  body.portal-promo-view .portal-promo-price{margin:14px 0 9px}
+  body.portal-promo-view .portal-promo-price strong{font-size:23px}
+  body.portal-promo-view .portal-promo-price del{font-size:10px}
+  body.portal-promo-view .portal-promo-valid{font-size:9px}
+  body.portal-promo-view .portal-promo-cta{width:100%;min-width:0;min-height:43px;padding:0 8px;font-size:11px}
+}
+@media(max-width:380px){
+  body.portal-promo-view .portal-category-icon,body.portal-promo-view .portal-category-icon.is-rewards{width:53px;height:57px}
+  body.portal-promo-view .portal-category b{font-size:9.5px}
+  body.portal-promo-view .portal-promo-card{grid-template-columns:minmax(0,1fr) 104px}
+  body.portal-promo-view .portal-promo-body{padding-left:15px}
+}
