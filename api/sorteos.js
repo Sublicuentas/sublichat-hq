@@ -772,6 +772,38 @@ async function closeDraw(db, editor, id) {
   return { ok: true, id: ref.id, estado: "cerrado" };
 }
 
+async function deleteDraw(db, editor, id) {
+  const sorteoId = sorteoSafeId(id);
+  if (!sorteoId) throw Object.assign(new Error("Sorteo inválido."), { status: 400 });
+  const ref = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = snap.data() || {};
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede eliminar este sorteo."), { status: 403 });
+  if (draw.ganador || sorteoNorm(draw.estado) === "finalizado") {
+    throw new Error("Un sorteo con ganador no puede eliminarse porque forma parte del historial auditable.");
+  }
+
+  const collections = [BOLETOS_COLLECTION, "sorteo_eventos", "sorteo_contadores", CARGAS_COLLECTION, ENTREGAS_COLLECTION];
+  let removed = 0;
+  for (const collection of collections) {
+    const related = await db.collection(collection).where("sorteoId", "==", sorteoId).get();
+    for (let offset = 0; offset < related.docs.length; offset += 400) {
+      const batch = db.batch();
+      related.docs.slice(offset, offset + 400).forEach(document => batch.delete(document.ref));
+      await batch.commit();
+    }
+    removed += related.docs.length;
+  }
+  await ref.delete();
+  await db.collection("auditoria_eventos").add({
+    tipo: "sorteo_eliminado", sorteoId, titulo: sorteoClean(draw.titulo, 140),
+    registrosEliminados: removed, usuario: editor.actor,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return { ok: true, id: sorteoId, registrosEliminados: removed };
+}
+
 async function spinDraw(db, editor, id) {
   const sorteoId = sorteoSafeId(id);
   const ref = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
@@ -885,6 +917,7 @@ export default async function handler(req, res) {
     if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
     if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));
+    if (action === "eliminar_sorteo") return res.status(200).json(await deleteDraw(db, editor, body.id));
     if (action === "cerrar_sorteo") return res.status(200).json(await closeDraw(db, editor, body.id));
     if (action === "girar_ruleta") return res.status(200).json(await spinDraw(db, editor, body.id));
     if (action === "marcar_entregado") return res.status(200).json(await markDelivered(db, editor, body));
