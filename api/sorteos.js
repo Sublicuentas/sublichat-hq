@@ -18,7 +18,7 @@ const TIPOS_PREMIO = new Set([
   "recarga", "dias_extra", "personalizado"
 ]);
 const ESTADOS_SORTEO = new Set(["borrador", "activo", "cerrado", "finalizado"]);
-const CATEGORIAS = new Set(["general", "compras", "renovaciones", "oro"]);
+const CATEGORIAS = new Set(["general", "compras", "renovaciones", "club_vip"]);
 const ALCANCES = new Set(["sublicuentas", "relojes", "ambos"]);
 
 function getApp() {
@@ -195,7 +195,8 @@ function normalizeDraw(raw = {}, previous = {}, editor = {}) {
   if (!titulo) throw new Error("Escriba el nombre del sorteo.");
   const premioIds = uniqueIds(raw.premioIds, 5);
   if (premioIds.length < 1) throw new Error("Seleccione al menos un premio para el ganador.");
-  const categoria = CATEGORIAS.has(sorteoNorm(raw.categoria)) ? sorteoNorm(raw.categoria) : "general";
+  const requestedCategory = sorteoNorm(raw.categoria) === "oro" ? "club_vip" : sorteoNorm(raw.categoria);
+  const categoria = CATEGORIAS.has(requestedCategory) ? requestedCategory : "general";
   let alcance = ALCANCES.has(sorteoNorm(raw.alcance)) ? sorteoNorm(raw.alcance) : "sublicuentas";
   if (editor.kind === "relojes") alcance = "relojes";
   const estado = ESTADOS_SORTEO.has(sorteoNorm(raw.estado)) ? sorteoNorm(raw.estado) : "borrador";
@@ -301,11 +302,14 @@ async function adminLoad(db, editor) {
   const allowed = new Set(sorteos.map(draw => draw.id));
   const drawMap = new Map(sorteos.map(draw => [draw.id, draw]));
   const clients = new Map(clientsSnap.docs.map(doc => [doc.id, doc.data() || {}]));
+  const vipCutoff = Date.now() - 60 * 86400000;
+  const recentVipWinners = new Set(sorteos.filter(draw => ["club_vip","oro"].includes(sorteoNorm(draw.categoria)) && timeMs(draw.sorteadoAt) >= vipCutoff && draw.ganador?.clientId).map(draw => String(draw.ganador.clientId)));
   const boletos = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(ticket => {
       const draw = drawMap.get(String(ticket.sorteoId || ""));
       const client = clients.get(String(ticket.clientId || ""));
-      return Boolean(draw && client) && clientCurrentForDraw(client, draw) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor);
+      const blockedVipWinner = draw && ["club_vip","oro"].includes(sorteoNorm(draw.categoria)) && !draw.ganador && recentVipWinners.has(String(ticket.clientId || ""));
+      return Boolean(draw && client) && !blockedVipWinner && clientCurrentForDraw(client, draw) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor);
     });
   const countByDraw = {};
   boletos.forEach(ticket => { countByDraw[ticket.sorteoId] = (countByDraw[ticket.sorteoId] || 0) + 1; });
@@ -505,7 +509,7 @@ async function backfillAugust2026(db, editor, body) {
   if (!drawSnap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
   const draw = { id: drawSnap.id, ...(drawSnap.data() || {}) };
   if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede cargar clientes en este sorteo."), { status: 403 });
-  if (sorteoNorm(draw.categoria) !== "general") throw new Error("Use un sorteo de categoría General para incluir compras y renovaciones de agosto.");
+  if (!["general", "club_vip", "oro"].includes(sorteoNorm(draw.categoria))) throw new Error("La carga histórica está disponible para sorteos Generales y Club VIP.");
   const rules = reglasSorteo(draw.reglas || {});
   if (rules.compra < 1 || rules.renovacion < 1) throw new Error("Configure al menos un boleto para compra y uno para renovación antes de cargar agosto.");
   if (body.previsualizar === true) {
@@ -612,6 +616,12 @@ async function publicLoad(db, token) {
   if (!vendors.length) {
     return { ok: true, habilitado: false, cliente: { clientId, nivel: "inicial", nivelNombre: "Inicial", ciclos: 0, bono: 0 }, sorteos: [] };
   }
+  const hoyMes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit" }).format(new Date()).slice(0,7);
+  const asegurados = [...new Set(Array.isArray(cliente.fidelidadMesesAsegurados) ? cliente.fidelidadMesesAsegurados.filter(item => /^\d{4}-\d{2}$/.test(item)) : [])];
+  const legacyBase = !cliente.fidelidadNivelNombre && sorteoNorm(cliente.nivelCliente) === "oro" ? 3 : 0;
+  const ciclos = Math.max(legacyBase, Number(cliente.fidelidadCiclos) || 0) + asegurados.filter(item => item <= hoyMes).length;
+  const nivel = nivelFidelidad(ciclos), vipEligible = ["oro", "diamante", "elite"].includes(nivel.id);
+  const siguiente = NIVELES_FIDELIDAD.find(item => item.desde > ciclos) || null;
   const [drawSnap, ticketSnap, prizeSnap, deliveriesSnap] = await Promise.all([
     db.collection(SORTEOS_COLLECTION).limit(150).get(),
     db.collection(BOLETOS_COLLECTION).where("clientId", "==", clientId).get(),
@@ -620,7 +630,12 @@ async function publicLoad(db, token) {
   ]);
   const now = Date.now();
   const draws = drawSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(draw => vendors.some(vendor => scopeMatches(draw, vendor)) && draw.estado !== "borrador" && (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now));
+    .filter(draw => {
+      const category = sorteoNorm(draw.categoria);
+      return vendors.some(vendor => scopeMatches(draw, vendor)) && draw.estado !== "borrador" &&
+        (!draw.fechaInicio || new Date(draw.fechaInicio).getTime() <= now) &&
+        (!["club_vip", "oro"].includes(category) || vipEligible);
+    });
   const drawIds = new Set(draws.map(draw => draw.id));
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
     .filter(ticket => drawIds.has(String(ticket.sorteoId || "")) && vendors.includes(sorteoVendorGroup(ticket.vendedorNorm || ticket.vendedor)));
@@ -652,12 +667,6 @@ async function publicLoad(db, token) {
       } : null
     };
   }).sort((a, b) => String(b.fechaInicio).localeCompare(String(a.fechaInicio)));
-  const hoyMes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit" }).format(new Date()).slice(0,7);
-  const asegurados = [...new Set(Array.isArray(cliente.fidelidadMesesAsegurados) ? cliente.fidelidadMesesAsegurados.filter(item => /^\d{4}-\d{2}$/.test(item)) : [])];
-  const legacyBase = !cliente.fidelidadNivelNombre && sorteoNorm(cliente.nivelCliente) === "oro" ? 3 : 0;
-  const ciclos = Math.max(legacyBase, Number(cliente.fidelidadCiclos) || 0) + asegurados.filter(item => item <= hoyMes).length;
-  const nivel = nivelFidelidad(ciclos);
-  const siguiente = NIVELES_FIDELIDAD.find(item => item.desde > ciclos) || null;
   return { ok: true, habilitado: true, cliente: { clientId, nivel: nivel.id, nivelNombre: nivel.nombre, bono: nivel.bono, ciclos, mesesAsegurados: asegurados.filter(item => item > hoyMes).sort(), siguiente }, sorteos: resultado };
 }
 
@@ -679,6 +688,7 @@ async function choosePrize(db, body) {
     ]);
     if (!drawSnap.exists || String((drawSnap.data() || {}).ganador?.clientId || "") !== clientId) throw Object.assign(new Error("Este cliente no es el ganador del sorteo."), { status: 403 });
     const draw = drawSnap.data() || {};
+    if (timeMs(draw.sorteadoAt) && Date.now() - timeMs(draw.sorteadoAt) > 72 * 3600000) throw new Error("El plazo de 72 horas para reclamar este premio ya venció. Contacte a soporte.");
     if (!vendors.some(vendor => scopeMatches(draw, vendor))) throw Object.assign(new Error("Este sorteo no pertenece a este enlace."), { status: 403 });
     const winnerVendor = sorteoVendorGroup(draw.ganador?.vendedorNorm || draw.ganador?.vendedor);
     if (winnerVendor && !vendors.includes(winnerVendor)) throw Object.assign(new Error("Este premio no pertenece a este enlace."), { status: 403 });
@@ -763,6 +773,24 @@ async function savePrize(db, editor, body) {
     updatedBy: editor.actor
   }, { merge: false });
   return { ok: true, id: ref.id };
+}
+
+async function prepareClubVip(db, editor) {
+  const ownerVendor = editor.kind === "relojes" ? "relojes" : "sublicuentas";
+  const presets = [
+    { suffix:"combo50", nombre:"L50 de descuento en su próximo combo", tipo:"descuento_fijo", valor:50, unidad:"Lps.", entregaModo:"cupon", stock:9999, descripcion:"Descuento aplicable en la contratación o renovación conjunta de dos o más plataformas.", instrucciones:"Válido para un combo de 2 o más plataformas. No acumulable con otras promociones." },
+    { suffix:"renovacion20", nombre:"20% de descuento en la próxima renovación", tipo:"descuento_porcentaje", valor:20, unidad:"%", entregaModo:"cupon", stock:9999, descripcion:"Descuento del 20% en la próxima renovación, con un máximo de L100.", instrucciones:"Descuento máximo L100. No acumulable con otras promociones." },
+    { suffix:"renovacion_gratis", nombre:"Renovación gratis de una plataforma", tipo:"perfil", valor:130, unidad:"Lps. máximo", entregaModo:"manual", stock:20, descripcion:"Renovación completa de una plataforma hasta el precio máximo configurado.", instrucciones:"Precio máximo L130. Si la plataforma cuesta más, el cliente paga la diferencia." }
+  ];
+  const now = admin.firestore.FieldValue.serverTimestamp(), ids = [];
+  for (const preset of presets) {
+    const id = `club_vip_${ownerVendor}_${preset.suffix}`, ref = db.collection(PREMIOS_COLLECTION).doc(id);
+    const previousSnap = await ref.get(), previous = previousSnap.exists ? previousSnap.data() || {} : {};
+    const normalized = normalizePrize({ ...preset, activo:true, color:"#7A56D8" }, previous);
+    await ref.set({ ...normalized, ownerVendor, clubVip:true, createdAt:previous.createdAt||now, updatedAt:now, updatedBy:editor.actor }, { merge:false });
+    ids.push(id);
+  }
+  return { ok:true, premioIds:ids };
 }
 
 async function deletePrize(db, editor, id) {
@@ -863,8 +891,17 @@ async function spinDraw(db, editor, id) {
   if (draw.ganador) return { ok: true, id: sorteoId, ganador: draw.ganador, repetido: true };
   const ticketSnap = await db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get();
   const currentIds = await currentClientIds(db, draw);
+  const category = sorteoNorm(draw.categoria), recentVipWinners = new Set();
+  if (["club_vip", "oro"].includes(category)) {
+    const previousDraws = await db.collection(SORTEOS_COLLECTION).limit(150).get(), cutoff = Date.now() - 60 * 86400000;
+    previousDraws.docs.forEach(document => {
+      if (document.id === sorteoId) return;
+      const previous = document.data() || {}, previousCategory = sorteoNorm(previous.categoria);
+      if (["club_vip", "oro"].includes(previousCategory) && timeMs(previous.sorteadoAt) >= cutoff && previous.ganador?.clientId) recentVipWinners.add(String(previous.ganador.clientId));
+    });
+  }
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) })).filter(ticket =>
-    currentIds.has(String(ticket.clientId || "")) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
+    currentIds.has(String(ticket.clientId || "")) && !recentVipWinners.has(String(ticket.clientId || "")) && ticket.activo !== false && sorteoVendorElegible(ticket.vendedorNorm || ticket.vendedor) && scopeMatches(draw, ticket.vendedorNorm || ticket.vendedor)
   ).sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0) || a.id.localeCompare(b.id));
   if (!tickets.length) throw new Error("Este sorteo no tiene boletos participantes.");
   const selectedIndex = randomInt(tickets.length);
@@ -964,6 +1001,7 @@ export default async function handler(req, res) {
     if (!editor) return;
     if (action === "cargar") return res.status(200).json(await adminLoad(db, editor));
     if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
+    if (action === "preparar_club_vip") return res.status(200).json(await prepareClubVip(db, editor));
     if (action === "eliminar_premio") return res.status(200).json(await deletePrize(db, editor, body.id));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
     if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));

@@ -63,9 +63,10 @@ function scopeAllows(scope, vendor) {
 }
 
 function categoryAllows(category, eventType) {
-  const target = sorteoNorm(category || "general");
-  if (["oro", "nivel"].includes(eventType)) return target === "oro" || target === "general";
+  const raw = sorteoNorm(category || "general"), target = raw === "oro" ? "club_vip" : raw;
+  if (eventType === "nivel") return target === "club_vip" || target === "general";
   if (target === "general") return ["compra", "renovacion"].includes(eventType);
+  if (target === "club_vip") return ["compra", "renovacion"].includes(eventType);
   return target === eventType || (target === "compras" && eventType === "compra") || (target === "renovaciones" && eventType === "renovacion");
 }
 
@@ -178,6 +179,8 @@ export async function registrarEventoSorteos(rawEvent = {}) {
   const results = [];
   for (const draw of draws) {
     const drawRules = reglasSorteo(draw.reglas || {});
+    const category = sorteoNorm(draw.categoria) === "oro" ? "club_vip" : sorteoNorm(draw.categoria);
+    if (category === "club_vip" && !["oro", "diamante", "elite"].includes(loyalty.nivel)) continue;
     if (categoryAllows(draw.categoria, type)) results.push({ sorteoId: draw.id, tipo: type, ...await createEventTickets(db, draw, event, type === "compra" ? drawRules.compra : drawRules.renovacion) });
     if (drawRules.bonoNivel && loyalty.bono > 0 && categoryAllows(draw.categoria, "nivel")) results.push({ sorteoId: draw.id, tipo: "nivel", ...await createEventTickets(db, draw, { ...event, tipo: "nivel", eventoId: `nivel:${event.eventoId}:${loyalty.nivel}`, origen: `Bono nivel ${loyalty.nivelNombre}` }, loyalty.bono) });
   }
