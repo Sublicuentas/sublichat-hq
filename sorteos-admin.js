@@ -116,11 +116,7 @@
                   <span><b>+1</b> compra</span><span><b>+2</b> renovación</span><span><b>+1 a +5</b> según nivel</span>
                 </div>
               </div>
-              <div class="sr-hero-art" aria-hidden="true">
-                <span class="sr-art-ticket">🎟️</span><span class="sr-art-star">★</span>
-                <span class="sr-art-gift">🎁</span><span class="sr-art-trophy">🏆</span>
-                <i></i><b></b>
-              </div>
+              <div class="sr-hero-art" aria-hidden="true"><img src="/assets/portal-icono-sorteos-premios-transparent.png" alt=""></div>
             </section>
             <section class="sr-metrics" id="srMetrics"></section>
             <nav class="sr-tabs" aria-label="Administración de sorteos">
@@ -275,7 +271,7 @@
       <footer>
         <button type="button" class="sr-btn ghost" data-sr-tickets="${esc(draw.id)}">Ver boletos</button>
         ${canEdit?`<button type="button" class="sr-btn ghost" data-sr-edit-draw="${esc(draw.id)}">Editar</button>`:''}
-        ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar agosto 2026</button>`:''}
+        ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar desde agosto 2026</button>`:''}
         ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
         ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
       </footer>
@@ -283,8 +279,8 @@
   }
   function renderDraws(){
     const body=byId('srBody');if(!body)return;
-    body.innerHTML=`<div class="sr-toolbar"><div><b>Campañas de premios</b><span>El ganador elige uno de 2 a 5 premios digitales.</span></div><button type="button" class="sr-btn primary" id="srNewDraw">＋ Nuevo sorteo</button></div>
-      <div class="sr-draw-grid">${state.sorteos.map(drawCard).join('')||'<div class="sr-empty"><b>Todavía no hay sorteos.</b><br>Cree primero dos premios y después publique su primera campaña.</div>'}</div>`;
+    body.innerHTML=`<div class="sr-toolbar"><div><b>Campañas de premios</b><span>El ganador recibe o elige entre 1 y 5 premios digitales.</span></div><button type="button" class="sr-btn primary" id="srNewDraw">＋ Nuevo sorteo</button></div>
+      <div class="sr-draw-grid">${state.sorteos.map(drawCard).join('')||'<div class="sr-empty"><b>Todavía no hay sorteos.</b><br>Cree al menos un premio y publique su primera campaña.</div>'}</div>`;
     byId('srNewDraw')?.addEventListener('click',()=>openDraw(''));
     body.querySelectorAll('[data-sr-edit-draw]').forEach(button=>button.addEventListener('click',()=>openDraw(button.dataset.srEditDraw)));
     body.querySelectorAll('[data-sr-backfill]').forEach(button=>button.addEventListener('click',()=>backfillAugust(button.dataset.srBackfill,button)));
@@ -306,7 +302,7 @@
   function renderPrizes(){
     const body=byId('srBody');if(!body)return;
     body.innerHTML=`<div class="sr-toolbar"><div><b>Catálogo de premios digitales</b><span>Perfiles, descuentos, cine, recargas, días extra o una opción personalizada.</span></div><button type="button" class="sr-btn primary" id="srNewPrize">＋ Nuevo premio</button></div>
-      <div class="sr-prize-grid">${state.premios.map(prizeCard).join('')||'<div class="sr-empty"><b>No hay premios todavía.</b><br>Agregue al menos dos para habilitar “Elegir mi premio”.</div>'}</div>`;
+      <div class="sr-prize-grid">${state.premios.map(prizeCard).join('')||'<div class="sr-empty"><b>No hay premios todavía.</b><br>Agregue al menos uno para crear un sorteo.</div>'}</div>`;
     byId('srNewPrize')?.addEventListener('click',()=>openPrize(''));
     body.querySelectorAll('[data-sr-edit-prize]').forEach(button=>button.addEventListener('click',()=>openPrize(button.dataset.srEditPrize)));
   }
@@ -374,7 +370,7 @@
   }
   function openDraw(id){
     const current=state.sorteos.find(item=>item.id===id);
-    if(!current&&state.premios.filter(item=>item.activo!==false).length<2){state.tab='premios';syncTab();render();status('Cree al menos dos premios antes de publicar un sorteo.','bad');return;}
+    if(!current&&state.premios.filter(item=>item.activo!==false).length<1){state.tab='premios';syncTab();render();status('Cree al menos un premio antes de publicar un sorteo.','bad');return;}
     const accent=themeAccent();
     const draw=current?{...current}:{titulo:'',descripcion:'',categoria:'general',alcance:state.permisos.alcance==='relojes'?'relojes':'sublicuentas',estado:'activo',fechaInicio:defaultLocal(),fechaFin:defaultLocal(7),premioIds:[],reglas:{compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30},color:accent};
     const rules={compra:1,renovacion:2,bonoNivel:true,limitePorCliente:30,...(draw.reglas||{})};
@@ -396,9 +392,9 @@
         <div class="sr-form-section"><b>6 niveles de fidelidad</b><span>Inicial, Bronce, Plata, Oro, Diamante y Élite. Cada mes renovado sube un ciclo.</span></div>
         <label class="sr-field">Máximo por cliente<input id="srRuleLimit" type="number" min="1" max="200" value="${Number(rules.limitePorCliente)}"></label>
         <div></div>
-        <div class="sr-form-section"><b>Elegir mi premio</b><span>Seleccione de 2 a 5 opciones para que el ganador escoja una.</span></div>
+        <div class="sr-form-section"><b>Premio del ganador</b><span>Seleccione de 1 a 5 opciones. Con una opción, ese será el premio directo.</span></div>
         <div class="sr-prize-picker wide">${state.premios.filter(item=>item.activo!==false||(draw.premioIds||[]).includes(item.id)).map(prize=>`<label><input type="checkbox" data-sr-prize-choice value="${esc(prize.id)}" ${(draw.premioIds||[]).includes(prize.id)?'checked':''}><span class="sr-picker-icon">${(TIPO_PREMIO[prize.tipo]||TIPO_PREMIO.personalizado)[0]}</span><b>${esc(prize.nombre)}</b><small>${esc(stockText(prize))}</small></label>`).join('')}</div>
-      </div><div class="sr-modal-actions"><span id="srDrawHint">Elija entre 2 y 5 premios.</span><button type="button" class="sr-btn ghost" id="srDrawCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar sorteo</button></div></form>`;
+      </div><div class="sr-modal-actions"><span id="srDrawHint">Elija entre 1 y 5 premios.</span><button type="button" class="sr-btn ghost" id="srDrawCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar sorteo</button></div></form>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srDrawCancel').onclick=closeModal;
     const choices=[...modal.querySelectorAll('[data-sr-prize-choice]')];
     choices.forEach(choice=>choice.addEventListener('change',()=>{
@@ -408,7 +404,7 @@
     }));
     byId('srDrawForm').addEventListener('submit',async event=>{
       event.preventDefault();const selected=choices.filter(item=>item.checked).map(item=>item.value);
-      if(selected.length<2||selected.length>5){status('Seleccione entre 2 y 5 premios para el ganador.','bad');return;}
+      if(selected.length<1||selected.length>5){status('Seleccione entre 1 y 5 premios para el ganador.','bad');return;}
       const button=event.submitter||event.currentTarget.querySelector('[type="submit"]');if(button)button.disabled=true;status('Guardando sorteo…');
       const startValue=byId('srDrawStart').value,endValue=byId('srDrawEnd').value;
       const payload={titulo:byId('srDrawTitle').value.trim(),descripcion:byId('srDrawDesc').value.trim(),categoria:byId('srDrawCategory').value,
@@ -430,7 +426,7 @@
     let reset=true,last=null;
     try{
       const preview=await api({accion:'cargar_agosto_2026',id,previsualizar:true});
-      const approved=confirm(`AUDITORÍA PREVIA · AGOSTO 2026\n\nClientes detectados: ${Number(preview.clientesDetectados)||0}\nCompras: ${Number(preview.compras)||0}\nRenovaciones por servicio: ${Number(preview.renovaciones)||0}\nBoletos estimados: ${Number(preview.boletosEstimados)||0}\n\n¿Autoriza emitir estos boletos en “${draw.titulo}”?`);
+      const approved=confirm(`AUDITORÍA PREVIA · DESDE AGOSTO 2026\n\nClientes detectados: ${Number(preview.clientesDetectados)||0}\nCompras: ${Number(preview.compras)||0}\nRenovaciones por servicio: ${Number(preview.renovaciones)||0}\nBoletos estimados: ${Number(preview.boletosEstimados)||0}\n\n¿Autoriza emitir estos boletos en “${draw.titulo}”?`);
       if(!approved)return;
       status('Emitiendo boletos auditados de agosto…');
       do{
@@ -455,8 +451,9 @@
   function openWheel(id){
     const draw=state.sorteos.find(item=>item.id===id),modal=byId('srModal');if(!draw||!modal)return;
     modal.hidden=false;modal.innerHTML=`<div class="sr-sheet sr-wheel-sheet"><div class="sr-modal-head"><div><small>SORTEO AUDITABLE</small><h3>${esc(draw.titulo)}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
-      <p class="sr-wheel-note">Participan ${Number(draw.totalBoletos)||0} boletos. La selección aleatoria se realiza una sola vez y queda guardada.</p>
+      <p class="sr-wheel-note">Participan TODOS los ${Number(draw.totalBoletos)||0} boletos. Cada boleto ocupa una posición real; la selección criptográfica se realiza una sola vez y queda auditada.</p>
       <div class="sr-wheel-stage"><span class="sr-wheel-pointer">▼</span><div class="sr-wheel" id="srWheel"><div><b>🎟️</b><span>${Number(draw.totalBoletos)||0}<small>boletos</small></span></div></div></div>
+      <div class="sr-wheel-live" id="srWheelLive">Al girar verá pasar los boletos participantes.</div>
       <div class="sr-wheel-result" id="srWheelResult"><span>Todo listo para conocer al ganador.</span></div>
       <div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srWheelCancel">Cancelar</button><button type="button" class="sr-btn primary pulse" id="srWheelGo">🎡 Girar ahora</button></div></div>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srWheelCancel').onclick=closeModal;
@@ -464,9 +461,12 @@
       event.currentTarget.disabled=true;byId('srWheelCancel').disabled=true;byId('srWheel').classList.add('spinning');
       byId('srWheelResult').innerHTML='<span>Mezclando todos los boletos…</span>';status('Realizando sorteo seguro…');
       try{
-        const [data]=await Promise.all([api({accion:'girar_ruleta',id}),sleep(2600)]);const winner=data.ganador||{};
+        const data=await api({accion:'girar_ruleta',id}),winner=data.ganador||{},pool=Array.isArray(data.ruleta)?data.ruleta:[];
+        let pos=0;const live=byId('srWheelLive');
+        await new Promise(resolve=>{const timer=setInterval(()=>{const ticket=pool[pos%Math.max(1,pool.length)];if(ticket&&live)live.innerHTML=`<b>${esc(ticket.codigo)}</b><span>${esc(ticket.clienteNombre)}</span>`;pos+=1;if(pos>=Math.max(pool.length,36)){clearInterval(timer);resolve();}},Math.max(28,Math.min(75,2200/Math.max(1,pool.length))));});
         byId('srWheel').classList.remove('spinning');byId('srWheel').classList.add('done');
-        byId('srWheelResult').innerHTML=`<small>🏆 GANADOR</small><b>${esc(winner.clienteNombre||'Cliente')}</b><strong>${esc(winner.codigo||'')}</strong><span>Ahora podrá entrar a su URL y tocar “Elegir mi premio”.</span>`;
+        if(live)live.innerHTML=`<b>${esc(winner.codigo||'')}</b><span>${esc(winner.clienteNombre||'Cliente')}</span>`;
+        byId('srWheelResult').innerHTML=`<small>🏆 GANADOR</small><b>${esc(winner.clienteNombre||'Cliente')}</b><strong>${esc(winner.codigo||'')}</strong><span>${Number(data.totalParticipantes)||pool.length} boletos incluidos · prueba ${esc((data.auditoria?.hashParticipantes||'').slice(0,12))}</span>`;
         event.currentTarget.hidden=true;byId('srWheelCancel').disabled=false;byId('srWheelCancel').textContent='Cerrar';await load(true);status('Ganador guardado correctamente.','good');
       }catch(error){byId('srWheel').classList.remove('spinning');event.currentTarget.disabled=false;byId('srWheelCancel').disabled=false;byId('srWheelResult').innerHTML=`<span>${esc(error.message)}</span>`;status(error.message,'bad');}
     };

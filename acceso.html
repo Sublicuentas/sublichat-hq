@@ -31,6 +31,8 @@
   .h1 span{ display:inline; color:var(--red); }
   .hello{ font-size:17px; font-weight:800; margin:0 0 3px; }
   .sub{ font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:22px; }
+  .fidelity-card{--level:#B68110;display:flex;align-items:center;gap:11px;margin:0 0 20px;padding:12px 14px;border:1.5px solid color-mix(in srgb,var(--level) 45%,#eee);border-radius:16px;background:color-mix(in srgb,var(--level) 8%,#fff)}
+  .fidelity-card i{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:var(--level);color:#fff;font-style:normal;font-size:21px}.fidelity-card div{display:grid;gap:2px}.fidelity-card small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.09em}.fidelity-card b{color:var(--level);font-size:14px}.fidelity-card span{color:var(--muted);font-size:10px}.fidelity-card.level-bronce{--level:#A96538}.fidelity-card.level-plata{--level:#7E8D9F}.fidelity-card.level-oro{--level:#D39A09}.fidelity-card.level-diamante{--level:#218FC9}.fidelity-card.level-elite{--level:#6840C2}
   .card{ background:transparent; border:0; border-radius:0; padding:0; box-shadow:none; }
   .access-list{ display:grid; gap:20px; }
   .service-card{ position:relative; min-width:0; }
@@ -589,6 +591,8 @@
     // cliente vea primero la lista completa y elija cuál desea consultar.
     const primerAbierto=-1;
     const contenido=`<div class="multi-list${multiple?"":" single-access-list"}">${servicios.map((s,i)=>filaServicioMultiple({...s,_mostrarSoporte:soportePorServicio},i,servicios.length,false)).join("")}</div>${soporte}`;
+    const fid=d.fidelidad||{},nivel=String(fid.nivel||'inicial'),nivelTexto=esc(fid.nivelNombre||'Inicial');
+    const fidelidad=`<div class="fidelity-card level-${esc(nivel)}"><i>★</i><div><small>NIVEL DE FIDELIDAD</small><b>${nivelTexto}</b><span>${fid.siguiente?`${Number(fid.ciclos)||0} ciclos · faltan ${Number(fid.siguiente.faltan)||0} para ${esc(fid.siguiente.nombre)}`:'Nivel máximo alcanzado'}</span></div></div>`;
     const stageEl=document.getElementById('stage');
     stageEl.dataset.portalVendedor=String(d.vendedor||(vendedores.length===1?servicios[0]?.vendedor:"")||"");
     stageEl.innerHTML=`
@@ -596,6 +600,7 @@
       <h1 class="h1">¡Todo <span>listo!</span></h1>
       <div class="hello">Hola, ${esc(d.titular||"Cliente")}</div>
       <div class="sub">Su acceso ya está disponible. Guarde este enlace para consultar sus cuentas, promociones y premios cuando lo necesite.</div>
+      ${fidelidad}
       <div class="access-list">${contenido}</div>
     `;
     activarAccesosMultiples();

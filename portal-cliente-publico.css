@@ -101,9 +101,13 @@ body.portal-ready{
 
 /* Sorteos y premios: la cuarta categoría del portal del cliente. */
 .portal-loyalty{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px 13px;align-items:center;overflow:hidden;margin-bottom:15px;padding:15px 16px;border:1px solid #E8DDD4;border-radius:19px;background:linear-gradient(135deg,#fff,#F8F3ED);box-shadow:0 8px 22px rgba(57,35,24,.055)}
-.portal-loyalty.is-gold{border-color:#E8CE78;background:linear-gradient(135deg,#FFF9DE,#FFFDF5);box-shadow:0 8px 22px rgba(148,103,0,.08)}
+.portal-loyalty.level-bronce{border-color:#C88C5B;background:linear-gradient(135deg,#FFF4EA,#fff)}
+.portal-loyalty.level-plata{border-color:#AAB5C2;background:linear-gradient(135deg,#F0F5FA,#fff)}
+.portal-loyalty.level-oro{border-color:#E8CE78;background:linear-gradient(135deg,#FFF9DE,#FFFDF5)}
+.portal-loyalty.level-diamante{border-color:#57B9E9;background:linear-gradient(135deg,#EAF9FF,#fff)}
+.portal-loyalty.level-elite{border-color:#7A56D8;background:linear-gradient(135deg,#F1EBFF,#FFF8FD);box-shadow:0 8px 22px rgba(90,55,170,.12)}
 .portal-loyalty-badge{width:50px;height:50px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(145deg,#FFF2D3,#F3E5C6);color:#B68110;font-size:27px;font-weight:900}
-.portal-loyalty.is-gold .portal-loyalty-badge{background:linear-gradient(145deg,#FFD65D,#E9A91A);color:#fff;box-shadow:0 8px 16px rgba(177,118,0,.2)}
+.portal-loyalty.level-bronce .portal-loyalty-badge{background:linear-gradient(145deg,#D99A66,#9B5B32);color:#fff}.portal-loyalty.level-plata .portal-loyalty-badge{background:linear-gradient(145deg,#DCE4EC,#8997A7);color:#fff}.portal-loyalty.level-oro .portal-loyalty-badge{background:linear-gradient(145deg,#FFD65D,#E9A91A);color:#fff}.portal-loyalty.level-diamante .portal-loyalty-badge{background:linear-gradient(145deg,#8DE1FF,#3298D1);color:#fff}.portal-loyalty.level-elite .portal-loyalty-badge{background:linear-gradient(145deg,#A379FF,#5B35B7);color:#fff}
 .portal-loyalty-copy{min-width:0}
 .portal-loyalty-kicker{font-size:8px;letter-spacing:.11em;font-weight:950;color:#9B6F00}
 .portal-loyalty-title{margin:3px 0 2px;color:#2A241E;font-size:14px;font-weight:900;line-height:1.2}

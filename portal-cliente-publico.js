@@ -383,7 +383,7 @@
     const cycles=Math.max(0,Number(customer.ciclos)||0);
     const levelName=customer.nivelNombre||({inicial:'Inicial',bronce:'Bronce',plata:'Plata',oro:'Oro',diamante:'Diamante',elite:'Élite'}[customer.nivel]||'Inicial');
     const isMax=customer.nivel==='elite';
-    const summary=element('section',`portal-loyalty ${['oro','diamante','elite'].includes(customer.nivel)?'is-gold':''}`);
+    const summary=element('section',`portal-loyalty level-${customer.nivel||'inicial'}`);
     const badge=element('span','portal-loyalty-badge',isMax?'★':'☆');
     const copy=element('div','portal-loyalty-copy');
     copy.append(
