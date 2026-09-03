@@ -79,7 +79,7 @@ async function getRevAdminToken(force = false) {
 
 // Solo estos recursos existen bajo /rev/admin/ — evita que esto se use
 // como proxy abierto hacia cualquier URL.
-const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas", "actualizaciones"]);
+const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas", "actualizaciones", "promociones"]);
 
 async function reenviar(pathSegments, queryParams, method, body, token) {
   const target = pathSegments.map(encodeURIComponent).join("/");
