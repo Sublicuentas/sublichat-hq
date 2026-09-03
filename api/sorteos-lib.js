@@ -3,7 +3,7 @@
    para que los boletos y reglas queden sincronizados entre Telegram y Sublichat. */
 
 const DEFAULT_RULES = Object.freeze({
-  compra: 1, renovacion: 2, bonoNivel: true, limitePorCliente: 30
+  compra: 1, renovacion: 2, bonoNivel: false, limitePorCliente: 30
 });
 
 export const NIVELES_FIDELIDAD = Object.freeze([
@@ -78,9 +78,11 @@ function integer(value, min, max, fallback) {
 
 export function reglasSorteo(raw = {}) {
   return {
-    compra: integer(raw.compra, 0, 20, DEFAULT_RULES.compra),
-    renovacion: integer(raw.renovacion, 0, 20, DEFAULT_RULES.renovacion),
-    bonoNivel: raw.bonoNivel !== false,
+    // Regla comercial estricta: los niveles son reconocimiento y acceso VIP,
+    // nunca multiplicadores de boletos.
+    compra: 1,
+    renovacion: 2,
+    bonoNivel: false,
     limitePorCliente: integer(raw.limitePorCliente, 1, 200, DEFAULT_RULES.limitePorCliente)
   };
 }

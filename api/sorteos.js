@@ -455,7 +455,7 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
       data.fechaAlta, data.fechaInicio, data.createdAt, data.created_at
     ], month) && !hasRecordedType(id, "compra")) mark(id, "compra", "fichas", "ficha", data.vendedor);
     if (valuesContainHistoricalMonth([
-      data.ultimaRenovacionAt, data.renovadoAt, data.fechaUltimaRenovacion, data.updatedAt
+      data.ultimaRenovacionAt, data.renovadoAt, data.fechaUltimaRenovacion
     ], month) && !hasRecordedType(id, "renovacion")) mark(id, "renovacion", "fichas", "ficha", data.vendedor);
     services.forEach((service, serviceIndex) => {
       const item = service || {};
@@ -466,7 +466,7 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
         item.fecha_inicio, item.createdAt, item.created_at
       ], month) && !hasRecordedType(id, "compra")) mark(id, "compra", "fichas", eventKey, vendor);
       if (valuesContainHistoricalMonth([
-        item.ultimaRenovacionAt, item.renovadoAt, item.fechaUltimaRenovacion, item.updatedAt
+        item.ultimaRenovacionAt, item.renovadoAt, item.fechaUltimaRenovacion
       ], month) && !hasRecordedType(id, "renovacion")) mark(id, "renovacion", "fichas", eventKey, vendor);
     });
   });
@@ -880,6 +880,96 @@ async function deleteDraw(db, editor, id) {
   return { ok: true, id: sorteoId, registrosEliminados: removed };
 }
 
+async function reconcileStrictTickets(db, editor, id, resetTotal = false) {
+  const sorteoId = sorteoSafeId(id);
+  const drawRef = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
+  const drawSnap = await drawRef.get();
+  if (!drawSnap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = drawSnap.data() || {};
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede corregir este sorteo."), { status: 403 });
+  if (draw.ganador || sorteoNorm(draw.estado) === "finalizado") throw new Error("No se alteran boletos de un sorteo que ya tiene ganador.");
+
+  const [ticketSnap, eventSnap, counterSnap] = await Promise.all([
+    db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get(),
+    db.collection("sorteo_eventos").where("sorteoId", "==", sorteoId).get(),
+    db.collection("sorteo_contadores").where("sorteoId", "==", sorteoId).get()
+  ]);
+  // La reparación total vuelve a generar el padrón desde las operaciones
+  // verificables. Así también desaparecen renovaciones falsas inferidas antes
+  // desde un simple updatedAt de la ficha.
+  if (resetTotal) {
+    const loadSnap = await db.collection(CARGAS_COLLECTION).where("sorteoId", "==", sorteoId).get();
+    const allDelete = [...ticketSnap.docs, ...eventSnap.docs, ...counterSnap.docs, ...loadSnap.docs];
+    for (let offset = 0; offset < allDelete.length; offset += 350) {
+      const batch = db.batch();
+      allDelete.slice(offset, offset + 350).forEach(document => batch.delete(document.ref));
+      await batch.commit();
+    }
+    await drawRef.set({ reglas: { compra: 1, renovacion: 2, bonoNivel: false, limitePorCliente: reglasSorteo(draw.reglas || {}).limitePorCliente }, totalBoletos: 0, ultimoNumero: 0, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection("auditoria_eventos").add({ tipo: "boletos_regla_estricta_reinicio", sorteoId, antes: ticketSnap.size, despues: 0, eliminados: ticketSnap.size, usuario: editor.actor, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    return { ok: true, id: sorteoId, antes: ticketSnap.size, despues: 0, eliminados: ticketSnap.size, requiereRecarga: true };
+  }
+  const groups = new Map();
+  ticketSnap.docs.forEach(document => {
+    const ticket = document.data() || {}, type = sorteoNorm(ticket.tipo);
+    const key = `${ticket.clientId || ""}|${type}|${ticket.eventoId || document.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ document, ticket, type });
+  });
+  const keep = [], remove = [];
+  groups.forEach(items => {
+    items.sort((a, b) => Number(a.ticket.numero || 0) - Number(b.ticket.numero || 0) || a.document.id.localeCompare(b.document.id));
+    const type = items[0]?.type, allowed = type === "compra" ? 1 : type === "renovacion" ? 2 : 0;
+    keep.push(...items.slice(0, allowed));
+    remove.push(...items.slice(allowed));
+  });
+
+  for (let offset = 0; offset < remove.length; offset += 350) {
+    const batch = db.batch();
+    remove.slice(offset, offset + 350).forEach(item => batch.delete(item.document.ref));
+    await batch.commit();
+  }
+  for (let offset = 0; offset < counterSnap.docs.length; offset += 350) {
+    const batch = db.batch();
+    counterSnap.docs.slice(offset, offset + 350).forEach(document => batch.delete(document.ref));
+    await batch.commit();
+  }
+  const totals = new Map();
+  keep.forEach(item => totals.set(String(item.ticket.clientId || ""), (totals.get(String(item.ticket.clientId || "")) || 0) + 1));
+  const counterWrites = [...totals.entries()].filter(([clientId]) => clientId);
+  for (let offset = 0; offset < counterWrites.length; offset += 350) {
+    const batch = db.batch();
+    counterWrites.slice(offset, offset + 350).forEach(([clientId, total]) => {
+      batch.set(db.collection("sorteo_contadores").doc(createHash("sha256").update(`${sorteoId}|${clientId}`).digest("hex").slice(0, 40)), {
+        sorteoId, clientId, total, updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+  }
+  const keptByEvent = new Map();
+  keep.forEach(item => {
+    const key = `${item.ticket.clientId || ""}|${item.type}|${item.ticket.eventoId || ""}`;
+    if (!keptByEvent.has(key)) keptByEvent.set(key, []);
+    keptByEvent.get(key).push(item.ticket.codigo);
+  });
+  for (let offset = 0; offset < eventSnap.docs.length; offset += 300) {
+    const batch = db.batch();
+    eventSnap.docs.slice(offset, offset + 300).forEach(document => {
+      const event = document.data() || {}, type = sorteoNorm(event.tipo);
+      if (!["compra", "renovacion"].includes(type)) return batch.delete(document.ref);
+      const codes = keptByEvent.get(`${event.clientId || ""}|${type}|${event.eventoId || ""}`) || [];
+      batch.set(document.ref, { cantidad: codes.length, codigos: codes, corregidoReglaEstricta: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    });
+    await batch.commit();
+  }
+  await drawRef.set({ reglas: { compra: 1, renovacion: 2, bonoNivel: false, limitePorCliente: reglasSorteo(draw.reglas || {}).limitePorCliente }, totalBoletos: keep.length, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await db.collection("auditoria_eventos").add({
+    tipo: "boletos_regla_estricta", sorteoId, antes: ticketSnap.size, despues: keep.length,
+    eliminados: remove.length, usuario: editor.actor, createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return { ok: true, id: sorteoId, antes: ticketSnap.size, despues: keep.length, eliminados: remove.length };
+}
+
 async function spinDraw(db, editor, id) {
   const sorteoId = sorteoSafeId(id);
   const ref = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
@@ -1005,6 +1095,7 @@ export default async function handler(req, res) {
     if (action === "eliminar_premio") return res.status(200).json(await deletePrize(db, editor, body.id));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
     if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));
+    if (action === "corregir_boletos") return res.status(200).json(await reconcileStrictTickets(db, editor, body.id, body.reiniciar === true));
     if (action === "eliminar_sorteo") return res.status(200).json(await deleteDraw(db, editor, body.id));
     if (action === "cerrar_sorteo") return res.status(200).json(await closeDraw(db, editor, body.id));
     if (action === "girar_ruleta") return res.status(200).json(await spinDraw(db, editor, body.id));
