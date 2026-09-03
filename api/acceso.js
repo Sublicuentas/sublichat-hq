@@ -12,6 +12,19 @@ import admin from "firebase-admin";
 
 const accessUsage = new Map();
 
+const LOYALTY_LEVELS = [
+  { id:"inicial", nombre:"Inicial", desde:0 }, { id:"bronce", nombre:"Bronce", desde:1 },
+  { id:"plata", nombre:"Plata", desde:2 }, { id:"oro", nombre:"Oro", desde:3 },
+  { id:"diamante", nombre:"Diamante", desde:4 }, { id:"elite", nombre:"Élite", desde:6 }
+];
+function loyaltyPublic(cliente = {}) {
+  const legacy = String(cliente.nivelCliente || "").toLowerCase() === "oro" ? 3 : 0;
+  const cycles = Math.max(legacy, Math.max(0, Math.floor(Number(cliente.fidelidadCiclos) || 0)));
+  const level = [...LOYALTY_LEVELS].reverse().find(item => cycles >= item.desde) || LOYALTY_LEVELS[0];
+  const next = LOYALTY_LEVELS.find(item => item.desde > cycles) || null;
+  return { nivel: level.id, nivelNombre: level.nombre, ciclos: cycles, siguiente: next ? { nombre: next.nombre, faltan: next.desde - cycles } : null };
+}
+
 function setPublicSecretHeaders(res) {
   res.setHeader("Cache-Control", "private, no-store, max-age=0, must-revalidate");
   res.setHeader("Surrogate-Control", "no-store");
@@ -503,7 +516,8 @@ export default async function handler(req, res) {
         vendedores,
         clienteCompartido: vendedores.length > 1,
         vendedor: vendedores.length === 1 ? vendedores[0].vendedor : "",
-        vendedorTelefono: vendedores.length === 1 ? vendedores[0].vendedorTelefono : ""
+        vendedorTelefono: vendedores.length === 1 ? vendedores[0].vendedorTelefono : "",
+        fidelidad: loyaltyPublic(cliente)
       });
     }
 
@@ -522,7 +536,7 @@ export default async function handler(req, res) {
         error: "Este servicio está vencido. Renueve con su vendedor para reactivar el mismo enlace."
       });
     }
-    return res.status(200).json({ ok: true, ...publico });
+    return res.status(200).json({ ok: true, ...publico, fidelidad: loyaltyPublic(cliente) });
   } catch (e) {
     console.error("ACCESO_ERROR", e);
     return res.status(500).json({ ok: false, error: "Error del servidor. Intente de nuevo." });

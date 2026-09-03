@@ -40,7 +40,8 @@ export function sorteoVendorGroup(value) {
   const normalized = sorteoNorm(value);
   if (["relojes", "reloj", "libni"].includes(normalized)) return "relojes";
   if (["sublicuentas", "sublicuenta", "naara"].includes(normalized)) return "sublicuentas";
-  return normalized;
+  // Los nombres de socios son vendedores de Sublicuentas, no negocios aparte.
+  return normalized ? "sublicuentas" : "";
 }
 
 export function sorteoVendorElegible(value) {
