@@ -299,7 +299,7 @@
       <div class="sr-prize-top"><span class="sr-state ${prize.activo!==false?'activo':'borrador'}">${prize.activo!==false?'Disponible':'Oculto'}</span><span class="sr-scope">${esc(prize.ownerVendor==='relojes'?'Relojes':'Sublicuentas')}</span></div>
       <div class="sr-prize-icon" aria-hidden="true">${type[0]}</div>
       <div class="sr-prize-copy"><h4>${esc(prize.nombre)}</h4><p>${esc(prize.descripcion||prizeLabel(prize))}</p><small>${esc(stockText(prize))} · ${esc(type[1])}</small></div>
-      <button type="button" class="sr-btn ghost" data-sr-edit-prize="${esc(prize.id)}">Editar premio</button>
+      <div class="sr-prize-actions"><button type="button" class="sr-btn ghost" data-sr-edit-prize="${esc(prize.id)}">Editar premio</button><button type="button" class="sr-btn danger" data-sr-delete-prize="${esc(prize.id)}">🗑 Eliminar</button></div>
     </article>`;
   }
   function renderPrizes(){
@@ -308,6 +308,7 @@
       <div class="sr-prize-grid">${state.premios.map(prizeCard).join('')||'<div class="sr-empty"><b>No hay premios todavía.</b><br>Agregue al menos uno para crear un sorteo.</div>'}</div>`;
     byId('srNewPrize')?.addEventListener('click',()=>openPrize(''));
     body.querySelectorAll('[data-sr-edit-prize]').forEach(button=>button.addEventListener('click',()=>openPrize(button.dataset.srEditPrize)));
+    body.querySelectorAll('[data-sr-delete-prize]').forEach(button=>button.addEventListener('click',()=>deletePrize(button.dataset.srDeletePrize)));
   }
 
   function deliveryFor(draw){return state.entregas.find(item=>String(item.sorteoId||'')===String(draw.id||''));}
@@ -365,6 +366,13 @@
       try{await api({accion:'guardar_premio',id:current?.id||'',premio:payload});closeModal();await load(true);state.tab='premios';render();status('Premio guardado y disponible para futuros sorteos.','good');}
       catch(error){status(error.message,'bad');if(button)button.disabled=false;}
     });
+  }
+  async function deletePrize(id){
+    const prize=state.premios.find(item=>item.id===id);if(!prize)return;
+    if(!confirm(`¿Eliminar el premio “${prize.nombre}”?\n\nSolo se permitirá si no está ligado a ningún sorteo ni entrega.`))return;
+    status('Eliminando premio…');
+    try{await api({accion:'eliminar_premio',id});await load(true);state.tab='premios';render();status('Premio eliminado correctamente.','good');}
+    catch(error){status(error.message,'bad');}
   }
 
   function scopeOptions(selected){
@@ -461,12 +469,13 @@
   }
   function openWheel(id){
     const draw=state.sorteos.find(item=>item.id===id),modal=byId('srModal');if(!draw||!modal)return;
-    modal.hidden=false;modal.innerHTML=`<div class="sr-sheet sr-wheel-sheet"><div class="sr-modal-head"><div><small>SORTEO AUDITABLE</small><h3>${esc(draw.titulo)}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
-      <p class="sr-wheel-note">Participan TODOS los ${Number(draw.totalBoletos)||0} boletos. Cada boleto ocupa una posición real; la selección criptográfica se realiza una sola vez y queda auditada.</p>
-      <div class="sr-wheel-stage"><span class="sr-wheel-pointer">▼</span><div class="sr-wheel" id="srWheel"><div><b>🎟️</b><span>${Number(draw.totalBoletos)||0}<small>boletos</small></span></div></div></div>
-      <div class="sr-wheel-live" id="srWheelLive">Al girar verá pasar los boletos participantes.</div>
-      <div class="sr-wheel-result" id="srWheelResult"><span>Todo listo para conocer al ganador.</span></div>
-      <div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srWheelCancel">Cancelar</button><button type="button" class="sr-btn primary pulse" id="srWheelGo">🎡 Girar ahora</button></div></div>`;
+    const tickets=state.participantes.filter(item=>String(item.sorteoId)===String(id));
+    const people=new Map();tickets.forEach(ticket=>{const key=String(ticket.clientId||ticket.clienteNombre||ticket.id);const person=people.get(key)||{nombre:ticket.clienteNombre||'Cliente',boletos:0,codigos:[]};person.boletos+=1;person.codigos.push(ticket.codigo);people.set(key,person);});
+    const rows=[...people.values()].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map((person,index)=>`<article><i>${index+1}</i><div><b>${esc(person.nombre)}</b><span>${person.boletos} boleto${person.boletos===1?'':'s'}</span></div><small>${esc(person.codigos.join(', '))}</small></article>`).join('');
+    modal.hidden=false;modal.innerHTML=`<div class="sr-sheet sr-wheel-sheet"><div class="sr-modal-head"><div><small>🔴 SORTEO EN VIVO · AUDITABLE</small><h3>${esc(draw.titulo)}</h3></div><button type="button" class="sr-close" aria-label="Cerrar">×</button></div>
+      <div class="sr-wheel-layout"><section class="sr-wheel-visual"><div class="sr-wheel-stage"><span class="sr-wheel-pointer">▼</span><div class="sr-wheel" id="srWheel"><div><b>${tickets.length}</b><span>boletos<small>participan</small></span></div></div></div><div class="sr-wheel-live" id="srWheelLive">Al girar verá pasar cada boleto participante.</div></section>
+      <section class="sr-wheel-panel"><p class="sr-wheel-note">Todos los boletos vigentes participan. La elección es aleatoria, se realiza una sola vez y queda registrada.</p><div class="sr-wheel-facts"><span>👥 <b>${people.size}</b> clientes vigentes</span><span>🎟️ <b>${tickets.length}</b> boletos</span><span>🔀 Selección <b>aleatoria</b></span></div>
+      <details class="sr-participants" open><summary>Ver lista completa de participantes <b>${people.size}</b></summary><div class="sr-participant-list">${rows||'<div class="sr-empty">No hay participantes vigentes.</div>'}</div></details><div class="sr-wheel-result" id="srWheelResult"><span>🏆 Todo listo para conocer al ganador.</span></div><div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srWheelCancel">Cancelar</button><button type="button" class="sr-btn primary pulse" id="srWheelGo">🎡 INICIAR SORTEO</button></div></section></div></div>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srWheelCancel').onclick=closeModal;
     byId('srWheelGo').onclick=async event=>{
       event.currentTarget.disabled=true;byId('srWheelCancel').disabled=true;byId('srWheel').classList.add('spinning');
