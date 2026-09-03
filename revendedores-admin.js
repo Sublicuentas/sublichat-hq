@@ -11,7 +11,7 @@
 
 const API='/api/revendedores-admin';
 const TARIFA_ESPECIAL='propietarios_2026';
-const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,clienteQ:'',clienteSel:null,loading:false};
+const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,promociones:null,clienteQ:'',clienteSel:null,loading:false};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
@@ -39,6 +39,7 @@ function shell(){
         <button class="cr-tab on" data-rtab="precios">Precios</button>
         <button class="cr-tab" data-rtab="vendedores">Vendedores</button>
         <button class="cr-tab" data-rtab="clientes">Clientes</button>
+        <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
       </div>
       <div id="revBody"></div>
@@ -56,8 +57,48 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,promociones:renderPromociones,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
 }
+
+/* ═══════════ PROMOCIONES PARA SOCIOS ═══════════ */
+async function loadPromociones(force){
+  if(state.promociones&&!force)return renderPromociones();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando promociones…</div>';
+  try{const d=await api('GET','promociones');state.promociones=d.promociones||[];renderPromociones()}catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+function promoStatus(p){return p.estado==='publicada'?`Enviada a ${Number(p.enviados)||0}`:'Borrador'}
+function renderPromociones(){
+  const b=$('#revBody');if(!state.promociones)return loadPromociones();
+  b.innerHTML=`<div class="cr-tools"><div><b>Campañas para revendedores</b><br><small>La misma promoción aparecerá en el Panel de Socios y puede enviarse con imagen por Telegram.</small></div><button class="cr-btn red" id="promoNueva">＋ Nueva promoción</button></div>
+    <div class="cr-grid">${state.promociones.map(p=>`<article class="cr-card">${p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;margin-bottom:10px">`:''}<div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p><div class="cr-row"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318">⚠️ ${Number(p.fallidos)} no recibieron Telegram. Revise su ID.</small>`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
+  $('#promoNueva').onclick=nuevaPromocion;
+  b.querySelectorAll('[data-promo-send]').forEach(x=>x.onclick=()=>enviarPromocion(x.dataset.promoSend,x));
+  b.querySelectorAll('[data-promo-del]').forEach(x=>x.onclick=()=>eliminarPromocion(x.dataset.promoDel));
+}
+async function imageData(file){
+  if(!file)return'';if(!/^image\/(jpeg|png|webp)$/i.test(file.type))throw new Error('Use una imagen JPG, PNG o WEBP.');
+  const url=URL.createObjectURL(file),img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+  const max=1600,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);
+  const data=canvas.toDataURL('image/jpeg',.84);if(data.length>4700000)throw new Error('La imagen sigue demasiado pesada. Use una menor de 3 MB.');return data;
+}
+async function nuevaPromocion(){
+  if(!state.vendedores){try{const d=await api('GET','revendedores');state.vendedores=Array.isArray(d)?d:(d.revendedores||[])}catch(e){return status(e.message,'bad')}}
+  const activos=(state.vendedores||[]).filter(v=>v.activo!==false);
+  const m=modal(`<h2>🔥 Nueva promoción para socios</h2><div class="cr-form">
+    <label class="cr-field wide">Imagen promocional<input id="prImagen" type="file" accept="image/jpeg,image/png,image/webp"><small>Se ajustará automáticamente para el panel y Telegram.</small></label>
+    <label class="cr-field wide">Título<input id="prTitulo" maxlength="120" placeholder="Ej. Oferta relámpago para socios"></label>
+    <label class="cr-field wide">Plataforma<input id="prPlataforma" maxlength="100" placeholder="Ej. Disney+ Premium"></label>
+    <label class="cr-field">Precio normal<input id="prNormal" type="number" min="0"></label><label class="cr-field">Precio promocional<input id="prPromo" type="number" min="0"></label>
+    <label class="cr-field">Precio sugerido de venta<input id="prSugerido" type="number" min="0"></label><label class="cr-field">Cupos<input id="prCupos" type="number" min="0"></label>
+    <label class="cr-field wide">Vigente hasta<input id="prVigencia" type="datetime-local"></label>
+    <label class="cr-field wide">Mensaje<textarea id="prTexto" rows="4" maxlength="1200" placeholder="Condiciones, garantía y llamado a comprar…"></textarea></label>
+    <div class="cr-field wide"><b>Destinatarios</b><small>Sin marcar nombres se enviará a todos los socios activos.</small><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px">${activos.map(v=>`<label class="cr-check"><input type="checkbox" data-pr-dest value="${esc(v.nombre_norm||v.id)}"> ${esc(v.nombre)}</label>`).join('')}</div></div>
+    <label class="cr-check wide"><input type="checkbox" id="prEnviar" checked> Publicar en el Panel de Socios y enviar ahora por Telegram</label>
+  </div><div class="cr-actions"><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prGuardar">Guardar promoción</button></div>`);
+  $('#prCancel').onclick=()=>m.remove();$('#prGuardar').onclick=async()=>{const btn=$('#prGuardar');btn.disabled=true;btn.textContent='Procesando…';try{const titulo=$('#prTitulo').value.trim(),plataforma=$('#prPlataforma').value.trim();if(!titulo||!plataforma)throw new Error('Complete título y plataforma.');const imagenData=await imageData($('#prImagen').files[0]);const d=await api('POST','promociones',{titulo,plataforma,precioNormal:Number($('#prNormal').value)||0,precioPromo:Number($('#prPromo').value)||0,precioSugerido:Number($('#prSugerido').value)||0,cupos:Number($('#prCupos').value)||0,vigencia:$('#prVigencia').value?new Date($('#prVigencia').value).toISOString():'',texto:$('#prTexto').value.trim(),destinatarios:[...m.querySelectorAll('[data-pr-dest]:checked')].map(x=>x.value),imagenData});if($('#prEnviar').checked){const sent=await api('POST',`promociones/${d.id}/enviar`,{});alert(`Promoción publicada.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}`)}m.remove();await loadPromociones(true)}catch(e){alert(e.message);btn.disabled=false;btn.textContent='Guardar promoción'}};
+}
+async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
+async function eliminarPromocion(id){if(!confirm('¿Eliminar esta promoción? Dejará de aparecer en el Panel de Socios.'))return;try{await api('DELETE',`promociones/${id}`);await loadPromociones(true)}catch(e){alert(e.message)}}
 
 /* ═══════════ PRECIOS ═══════════ */
 async function loadPrecios(force){
