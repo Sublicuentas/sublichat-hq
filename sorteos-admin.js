@@ -11,7 +11,7 @@
     descuento_fijo:['🏷️','Descuento fijo'],cine:['🎬','Boleto de cine'],recarga:['📱','Recarga telefónica'],
     dias_extra:['🗓️','Días extra de servicio'],personalizado:['✨','Premio digital personalizado']
   };
-  const CATEGORIAS={general:'Todos los clientes',compras:'Compras nuevas',renovaciones:'Renovaciones',oro:'Club Oro'};
+  const CATEGORIAS={general:'Todos los clientes',compras:'Compras nuevas',renovaciones:'Renovaciones',club_vip:'👑 Club VIP',oro:'👑 Club VIP'};
   const ESTADOS={borrador:'Borrador',activo:'Activo',cerrado:'Participación cerrada',finalizado:'Finalizado'};
   const ALCANCES={sublicuentas:'Sublicuentas',relojes:'Relojes',ambos:'Ambos negocios'};
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({
@@ -260,7 +260,7 @@
     const canEdit=!winner&&['borrador','activo'].includes(draw.estado);
     const canClose=!winner&&draw.estado==='activo';
     const canSpin=!winner&&draw.estado==='cerrado';
-    const canBackfill=!winner&&draw.estado==='activo'&&draw.categoria==='general';
+    const canBackfill=!winner&&draw.estado==='activo'&&['general','club_vip','oro'].includes(draw.categoria);
     const canDelete=!winner&&draw.estado!=='finalizado';
     const cardColor=safeHex(draw.color,themeAccent());
     return `<article class="sr-draw-card" style="--sr-item-accent:${esc(cardColor)}">
@@ -304,9 +304,10 @@
   }
   function renderPrizes(){
     const body=byId('srBody');if(!body)return;
-    body.innerHTML=`<div class="sr-toolbar"><div><b>Catálogo de premios digitales</b><span>Perfiles, descuentos, cine, recargas, días extra o una opción personalizada.</span></div><button type="button" class="sr-btn primary" id="srNewPrize">＋ Nuevo premio</button></div>
+    body.innerHTML=`<div class="sr-toolbar"><div><b>Catálogo de premios digitales</b><span>Perfiles, descuentos, cine, recargas, días extra o una opción personalizada.</span></div><div class="sr-toolbar-actions"><button type="button" class="sr-btn vip" id="srPrepareVip">👑 Preparar Club VIP</button><button type="button" class="sr-btn primary" id="srNewPrize">＋ Nuevo premio</button></div></div>
       <div class="sr-prize-grid">${state.premios.map(prizeCard).join('')||'<div class="sr-empty"><b>No hay premios todavía.</b><br>Agregue al menos uno para crear un sorteo.</div>'}</div>`;
     byId('srNewPrize')?.addEventListener('click',()=>openPrize(''));
+    byId('srPrepareVip')?.addEventListener('click',prepareClubVip);
     body.querySelectorAll('[data-sr-edit-prize]').forEach(button=>button.addEventListener('click',()=>openPrize(button.dataset.srEditPrize)));
     body.querySelectorAll('[data-sr-delete-prize]').forEach(button=>button.addEventListener('click',()=>deletePrize(button.dataset.srDeletePrize)));
   }
@@ -374,6 +375,12 @@
     try{await api({accion:'eliminar_premio',id});await load(true);state.tab='premios';render();status('Premio eliminado correctamente.','good');}
     catch(error){status(error.message,'bad');}
   }
+  async function prepareClubVip(){
+    if(!confirm('¿Crear o actualizar los 3 premios oficiales del Club VIP?'))return;
+    status('Preparando premios Club VIP…');
+    try{await api({accion:'preparar_club_vip'});await load(true);state.tab='premios';render();status('Club VIP preparado con sus 3 premios oficiales.','good');}
+    catch(error){status(error.message,'bad');}
+  }
 
   function scopeOptions(selected){
     if(state.permisos.alcance==='relojes')return '<option value="relojes">Relojes</option>';
@@ -390,7 +397,7 @@
       <div class="sr-form">
         <label class="sr-field wide">Nombre del sorteo<input id="srDrawTitle" maxlength="140" required value="${esc(draw.titulo)}" placeholder="Ej. Gran sorteo de septiembre"></label>
         <label class="sr-field wide">Mensaje para los clientes<textarea id="srDrawDesc" maxlength="600" placeholder="Renueva a tiempo y gana más oportunidades…">${esc(draw.descripcion||'')}</textarea></label>
-        <label class="sr-field">Categoría<select id="srDrawCategory">${Object.entries(CATEGORIAS).map(([value,label])=>`<option value="${value}" ${value===draw.categoria?'selected':''}>${esc(label)}</option>`).join('')}</select></label>
+        <label class="sr-field">Categoría<select id="srDrawCategory">${Object.entries(CATEGORIAS).filter(([value])=>value!=='oro').map(([value,label])=>`<option value="${value}" ${value===(draw.categoria==='oro'?'club_vip':draw.categoria)?'selected':''}>${esc(label)}</option>`).join('')}</select></label>
         <label class="sr-field">Clientes de<select id="srDrawScope">${scopeOptions(draw.alcance)}</select></label>
         <label class="sr-field">Inicio<input id="srDrawStart" type="datetime-local" required value="${esc(localInput(draw.fechaInicio)||draw.fechaInicio||defaultLocal())}"></label>
         <label class="sr-field">Cierre<input id="srDrawEnd" type="datetime-local" required value="${esc(localInput(draw.fechaFin)||draw.fechaFin||defaultLocal(7))}"></label>
@@ -401,12 +408,14 @@
         <label class="sr-field">Renovación puntual<input id="srRuleRenew" type="number" min="0" max="20" value="${Number(rules.renovacion)}"></label>
         <label class="sr-field">Bonos por nivel<select id="srRuleLevelBonus"><option value="si" ${rules.bonoNivel!==false?'selected':''}>Activados</option><option value="no" ${rules.bonoNivel===false?'selected':''}>Desactivados</option></select></label>
         <div class="sr-form-section"><b>6 niveles de fidelidad</b><span>Inicial, Bronce, Plata, Oro, Diamante y Élite. Cada mes renovado sube un ciclo.</span></div>
+        <div class="sr-vip-conditions wide" id="srVipConditions" ${['club_vip','oro'].includes(draw.categoria)?'':'hidden'}><b>👑 Condiciones Club VIP</b><span>Solo participan clientes Oro, Diamante y Élite que estén vigentes. El premio debe reclamarse en 72 horas, no se cambia por efectivo, no es transferible ni acumulable con otras promociones. Un ganador no repite durante 60 días.</span></div>
         <label class="sr-field">Máximo por cliente<input id="srRuleLimit" type="number" min="1" max="200" value="${Number(rules.limitePorCliente)}"></label>
         <div></div>
         <div class="sr-form-section"><b>Premio del ganador</b><span>Seleccione de 1 a 5 opciones. Con una opción, ese será el premio directo.</span></div>
         <div class="sr-prize-picker wide">${state.premios.filter(item=>item.activo!==false||(draw.premioIds||[]).includes(item.id)).map(prize=>`<label><input type="checkbox" data-sr-prize-choice value="${esc(prize.id)}" ${(draw.premioIds||[]).includes(prize.id)?'checked':''}><span class="sr-picker-icon">${(TIPO_PREMIO[prize.tipo]||TIPO_PREMIO.personalizado)[0]}</span><b>${esc(prize.nombre)}</b><small>${esc(stockText(prize))}</small></label>`).join('')}</div>
       </div><div class="sr-modal-actions"><span id="srDrawHint">Elija entre 1 y 5 premios.</span><button type="button" class="sr-btn ghost" id="srDrawCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar sorteo</button></div></form>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srDrawCancel').onclick=closeModal;
+    byId('srDrawCategory').addEventListener('change',event=>{byId('srVipConditions').hidden=event.target.value!=='club_vip';});
     const choices=[...modal.querySelectorAll('[data-sr-prize-choice]')];
     choices.forEach(choice=>choice.addEventListener('change',()=>{
       const selected=choices.filter(item=>item.checked);

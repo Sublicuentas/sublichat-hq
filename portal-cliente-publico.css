@@ -221,3 +221,4 @@ body.portal-ready{
   .portal-promo-title-wrap.is-deslizante .portal-promo-title-track{animation:none}
   .portal-promo-title-wrap.is-deslizante .portal-promo-title{white-space:normal}
 }
+.portal-vip-conditions{display:grid;gap:4px;margin:10px 0;padding:11px 12px;border:1px solid #CDBCF3;border-radius:14px;background:linear-gradient(135deg,#F4EFFF,#FFF9E9)}.portal-vip-conditions b{color:#6840C2;font-size:10.5px}.portal-vip-conditions span{color:#6C6375;font-size:8.8px;line-height:1.5}

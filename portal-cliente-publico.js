@@ -365,7 +365,7 @@
   }
 
   function raffleCategory(value){
-    return {general:'Todos participan',compras:'Compras nuevas',renovaciones:'Renovaciones',oro:'Club Oro'}[value]||'Sorteo especial';
+    return {general:'Todos participan',compras:'Compras nuevas',renovaciones:'Renovaciones',oro:'👑 Club VIP',club_vip:'👑 Club VIP'}[value]||'Sorteo especial';
   }
 
   function rafflePrizeIcon(type){
@@ -464,6 +464,11 @@
     header.append(labels,count);
     const body=element('div','portal-raffle-body');
     body.append(element('h3','',draw.titulo||'Sorteo especial'),element('p','',draw.descripcion||'Participa automáticamente con tus compras y renovaciones.'));
+    if(['club_vip','oro'].includes(draw.categoria)){
+      const vip=element('div','portal-vip-conditions');
+      vip.append(element('b','','👑 Condiciones Club VIP'),element('span','','Exclusivo para niveles Oro, Diamante y Élite. Premio personal, no transferible ni canjeable por efectivo. Debe reclamarse en 72 horas y no se acumula con otras promociones.'));
+      body.append(vip);
+    }
     renderTicketCodes(draw,body);renderPrizeChoices(draw,body);renderWinner(draw,body);
     if(draw.estado==='cerrado'&&!draw.ganador)body.append(element('div','portal-raffle-wait','🎡 La participación cerró. Muy pronto giraremos la ruleta.'));
     card.append(header,body);return card;
