@@ -89,6 +89,8 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
 .cm-btn.primary{border-color:var(--accent);background:var(--accent);color:#fff}
 .cm-btn.good{border-color:var(--good);background:var(--good);color:#fff}
 .cm-btn.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:var(--warnSoft);color:var(--warn)}
+.cm-btn.danger{border-color:#dc4b55;background:#fff1f2;color:#b4232e}
+.cm-btn.danger:hover{border-color:#c83240;background:#dc4b55;color:#fff}
 .cm-btn:disabled,.cm-file-btn.off{opacity:.5;pointer-events:none}
 .cm-file-btn input{display:none}
 .cm-hint{margin-top:10px;color:var(--txt2);font-size:11px;font-weight:700;line-height:1.45}
@@ -256,6 +258,6 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-accounts-panel{padding:14px}.cm-account-toolbar{margin-top:4px}.cm-account-head{grid-template-columns:1fr}.cm-review-state{max-width:none;align-items:flex-start;text-align:left}
   .cm-credentials{grid-template-columns:1fr}.cm-account-capacity{grid-template-columns:1fr 1fr}.cm-roster-head{align-items:flex-start}.cm-roster-head .cm-btn{flex:none}
   .cm-ledger-detail-head{display:block}.cm-ledger-detail-side{align-items:flex-start;margin-top:10px}.cm-account-tools{justify-content:flex-start}
-  .cm-roster-row{grid-template-columns:1fr 1fr;gap:8px}.cm-roster-status,.cm-roster-actions{grid-column:1/-1}.cm-roster-actions{justify-content:flex-start}.cm-account-review{grid-template-columns:1fr}.cm-account-review-actions{display:grid;grid-template-columns:1fr 1fr}.cm-account-review-actions .cm-btn{white-space:normal}
+  .cm-roster-row{grid-template-columns:1fr 1fr;gap:8px}.cm-roster-status,.cm-roster-actions{grid-column:1/-1}.cm-roster-actions{justify-content:flex-start}.cm-account-review{grid-template-columns:1fr}.cm-account-review-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}.cm-account-review-actions .cm-btn{white-space:normal}
   .cm-details>summary{align-items:flex-start}.cm-details>summary i{white-space:normal;text-align:right}.cm-details-body{padding:13px}
 }

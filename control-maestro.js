@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-AUDITORIA-INTEGRAL-20260831-41-FORMULAS';
+  const BUILD='CONTROL-MAESTRO-INCIDENCIAS-FULLSCREEN-CLAVES-20260904-42';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -1043,6 +1043,7 @@
     const reviewTone=reviewSchedule.tone;
     const inventoryIds=a.accountIds.filter(Boolean);
     const editableAccount=inventoryIds.length===1;
+    const excelOnlyAccount=!a.inventoryAccounts.length&&!a.services.length&&!a.excelRows.length&&a.excelAccountHeaders.length>0;
     const password=a.clave?revealed?esc(a.clave):'••••••••':(a.requiresPassword?'Sin clave guardada':'No usa clave');
     const identity=a.email||(a.requiresEmail?'CUENTA SIN CORREO':'LICENCIA / SERIAL');
     const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,a,i,j)).join(''):'';
@@ -1056,7 +1057,7 @@
         <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
       ${expanded?`<div class="cm-ledger-detail">
-        <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount?`<div class="cm-account-tools"><button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button></div>`:''}</div></div>
+        <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount||excelOnlyAccount?`<div class="cm-account-tools">${editableAccount?`<button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button>`:''}${excelOnlyAccount?`<button class="cm-row-action delete" data-cm-delete-excel-account="${i}">🗑️ Borrar del Excel</button>`:''}</div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
           <div class="cm-credential"><span>${a.requiresEmail?'Correo de acceso':'Tipo de acceso'}</span><code>${esc(a.email||(a.requiresEmail?'—':'Licencia / serial'))}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
@@ -1066,7 +1067,7 @@
         <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
         ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
         ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
-        <div class="cm-account-review"><div><b>Revisión real del proveedor</b><small>Entre a la cuenta y compare. Se guarda en Firebase.</small></div><div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button></div></div>
+        <div class="cm-account-review"><div><b>Revisión real del proveedor</b><small>Entre a la cuenta y compare. Se guarda en Firebase.</small></div><div class="cm-account-review-actions"><button class="cm-btn good" data-cm-review-ok="${esc(a.key)}" ${state.busy?'disabled':''}>${okLabel}</button><button class="cm-btn warn" data-cm-review-issue="${esc(a.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button>${review?.resultado==='incidencia'?`<button class="cm-btn danger" data-cm-review-delete="${esc(a.key)}" ${state.busy?'disabled':''}>🗑️ Eliminar incidencia</button>`:''}</div></div>
       </div>`:''}
     </article>`;
   }
@@ -1209,8 +1210,10 @@
     container.querySelectorAll('[data-cm-edit-inventory-client]').forEach(b=>b.onclick=()=>editAuditInventoryClient(b.dataset.cmEditInventoryClient));
     container.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
+    container.querySelectorAll('[data-cm-delete-excel-account]').forEach(b=>b.onclick=()=>deleteExcelOnlyAccount(Number(b.dataset.cmDeleteExcelAccount)));
     container.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
     container.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
+    container.querySelectorAll('[data-cm-review-delete]').forEach(b=>b.onclick=()=>deleteAccountIncident(b.dataset.cmReviewDelete));
     container.querySelectorAll('[data-cm-note-toggle]').forEach(b=>b.onclick=()=>toggleRosterNote(b.dataset.cmNoteToggle));
     container.querySelectorAll('[data-cm-note-save]').forEach(b=>b.onclick=()=>saveRosterNote(b.dataset.cmNoteSave));
     container.querySelectorAll('[data-cm-note-cancel]').forEach(b=>b.onclick=()=>cancelRosterNote());
@@ -1501,6 +1504,55 @@
     }
   }
 
+  async function deleteExcelOnlyAccount(index){
+    const account=state.accountVisible[index];if(!account||state.busy)return;
+    const headers=Array.isArray(account.excelAccountHeaders)?account.excelAccountHeaders:[];
+    if(account.inventoryAccounts.length||account.services.length||account.excelRows.length||!headers.length){
+      return alert('Esta cuenta ya tiene clientes o registros activos. Abra sus filas para corregirlas individualmente.');
+    }
+    if(!confirm(`¿Borrar esta cuenta vacía únicamente del respaldo Excel?\n\n${account.platform}\n${account.email||'Sin correo'}\n\nNo se eliminará nada de Clientes ni de Bodega.`))return;
+    const view=captureControlView();
+    state.busy=true;mutationMessage('Borrando cuenta vacía del respaldo Excel…','');render();restoreControlView(view);
+    try{
+      if(!window.ExcelJS)throw new Error('No cargó el lector de Excel. Recargue la página.');
+      const originalBase64=await loadTemplateBase64(false);
+      const workbook=new ExcelJS.Workbook();
+      await workbook.xlsx.load(base64ToBuffer(originalBase64));
+      normalizeSharedFormulas(workbook);
+      let cleared=0;
+      for(const item of headers){
+        const ws=workbook.getWorksheet(String(item.sheet||''));
+        const rowNumber=Number(item.row);
+        if(!ws||!Number.isInteger(rowNumber)||rowNumber<1)continue;
+        const header=findHeader(ws);if(!header?.email)continue;
+        const row=ws.getRow(rowNumber);
+        const current=excelEmail(valueText(row.getCell(header.email).value));
+        if(current!==email(account.email))continue;
+        row.getCell(header.email).value=null;
+        if(header.password)row.getCell(header.password).value=null;
+        cleared++;
+      }
+      if(!cleared)throw new Error('La cuenta cambió de fila. Presione “Actualizar base” e intente nuevamente.');
+      const repairedAnalysis=parseWorkbook(workbook,{servicios:[],cuentas:[]});
+      rebuildConditionalFormatting(repairedAnalysis);
+      let backupCreated=false;
+      try{
+        const before=await api({accion:'control_guardar_respaldo',filename:`ANTES-DE-BORRAR-CUENTA-${state.meta?.plantilla?.filename||'Sublicuentas.xlsx'}`,size:base64ToBuffer(originalBase64).byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:originalBase64,motivo:'antes_eliminar_cuenta_excel',metricas:state.analysis?.metrics||{}});
+        backupCreated=!before.skipped;
+      }catch(_){}
+      const buffer=await workbook.xlsx.writeBuffer();
+      const base64=bufferToBase64(buffer);
+      const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
+      await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_solo_excel',metricas:state.analysis?.metrics||{}});
+      state.templateBase64=base64;state.analysis=null;state.accountAudit=null;
+      let reloadWarning='';
+      try{await refreshMeta();await analyze(true);}catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar.';}
+      mutationMessage(`✅ ${account.email||'La cuenta'} fue borrada únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
+    }catch(e){
+      const text='⚠️ '+(e.message||'No se pudo borrar la cuenta del Excel.');mutationMessage(text,'error');alert(text);
+    }finally{state.busy=false;render();restoreControlView(view);}
+  }
+
   async function removeAuditAssignment(payload,feedbackHost=null){
     if(!payload?.docId||state.busy)return {ok:false,message:'Esta asignación ya no está disponible.'};
     const view=feedbackHost?._cmView||captureControlView();
@@ -1624,6 +1676,30 @@
       const text='⚠️ '+(e.message||'No se pudo guardar la revisión.');
       state.accountFeedback={key:a.key,type:'err',text};state.status=text;state.statusType='error';
     }finally{state.busy=false;state.reviewSavingKey='';render();}
+  }
+
+  async function deleteAccountIncident(accountKey){
+    const a=accountByKey(accountKey);if(!a||state.busy)return;
+    if(a.revision?.resultado!=='incidencia')return setStatus('Esta cuenta ya no tiene una incidencia registrada.','error');
+    if(!a.revisionKey)return setStatus('Esta cuenta todavía no tiene una identificación válida.','error');
+    if(!confirm(`¿Eliminar únicamente la incidencia registrada?\n\n${a.platform}\n${a.email||'Sin correo'}\n\nLa cuenta, sus clientes y sus accesos NO se eliminarán.`))return;
+    const view=captureControlView();
+    state.busy=true;state.reviewSavingKey=a.key;
+    state.accountFeedback={key:a.key,type:'saving',text:'Eliminando únicamente la incidencia…'};
+    state.status=state.accountFeedback.text;state.statusType='';render();restoreControlView(view);
+    try{
+      const result=await api({accion:'control_eliminar_incidencia_cuenta',accountKey:a.revisionKey});
+      if(!result.ok)throw new Error(result.error||'Firebase no confirmó la eliminación.');
+      const revisionKey=String(a.revisionKey||'');
+      const anteriores=Array.isArray(state.meta?.revisiones)?state.meta.revisiones:[];
+      state.meta={...(state.meta||{}),revisiones:anteriores.filter((r)=>String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`)!==revisionKey)};
+      state.accountAudit=null;
+      state.accountFeedback={key:a.key,type:'good',text:'✅ Incidencia eliminada. La cuenta y sus clientes permanecen intactos.'};
+      state.status=state.accountFeedback.text;state.statusType='good';
+    }catch(e){
+      const text='⚠️ '+(e.message||'No se pudo eliminar la incidencia.');
+      state.accountFeedback={key:a.key,type:'err',text};state.status=text;state.statusType='error';
+    }finally{state.busy=false;state.reviewSavingKey='';render();restoreControlView(view);}
   }
 
   async function refreshMeta(){
@@ -1859,19 +1935,16 @@
   async function toggleFullscreen(){
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
     if(document.fullscreenElement===screen){
-      try{await document.exitFullscreen();}catch(e){setStatus('No se pudo salir de pantalla completa. Presione ESC.','error');}
-      syncFullscreenButton();return;
+      // Si quedó una sesión nativa de una versión anterior, salimos primero y
+      // continuamos con la vista ampliada estable que no se cierra con prompts.
+      try{await document.exitFullscreen();}catch(_){}
     }
     if(screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
     state.fullscreenReturnY=window.scrollY||0;
     if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
-    if(typeof screen.requestFullscreen==='function'){
-      try{
-        await screen.requestFullscreen();
-        screen.scrollTop=0;syncFullscreenButton();return;
-      }catch(e){console.warn('[Control Maestro] El navegador rechazó pantalla completa nativa; se usará la vista ampliada.',e);}
-    }
-    // Respaldo para navegadores que no ofrecen Fullscreen API.
+    // No usamos Fullscreen API nativa: los diálogos confirm/prompt del
+    // navegador pueden cerrarla. Esta vista CSS ocupa todo el viewport y
+    // permanece abierta durante editar, revisar, eliminar y actualizar.
     screen.classList.add('cm-control-expanded');document.body.classList.add('cm-control-no-scroll');
     screen.scrollTop=0;syncFullscreenButton();
   }
