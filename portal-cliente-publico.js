@@ -228,7 +228,6 @@
   function selectPanel(panel,scrollToPanel=true){
     if(panel==='pagos'&&!paymentsVisible())panel='cuentas';
     state.activePanel=panel;
-    document.body.classList.toggle('portal-promo-view',panel==='promociones');
     document.querySelectorAll('[data-portal-panel]').forEach(button=>{
       const selected=button.dataset.portalPanel===panel;
       button.classList.toggle('active',selected);
@@ -390,27 +389,61 @@
     return `Cierra ${raffleDate(draw.fechaFin)}`;
   }
 
-  function renderGoldSummary(panel){
+  const LOYALTY_STEPS=[
+    {id:'inicial',nombre:'Inicial',desde:0},
+    {id:'bronce',nombre:'Bronce',desde:1},
+    {id:'plata',nombre:'Plata',desde:2},
+    {id:'oro',nombre:'Oro',desde:3},
+    {id:'diamante',nombre:'Diamante',desde:4},
+    {id:'elite',nombre:'Élite',desde:6}
+  ];
+
+  function loyaltyStep(id){
+    return LOYALTY_STEPS.find(item=>item.id===String(id||''))||LOYALTY_STEPS[0];
+  }
+
+  function renderRaffleSummary(panel,draws){
     const customer=state.sorteosData?.cliente||{};
-    const cycles=Math.max(0,Number(customer.ciclos)||0);
-    const levelName=customer.nivelNombre||({inicial:'Inicial',bronce:'Bronce',plata:'Plata',oro:'Oro',diamante:'Diamante',elite:'Élite'}[customer.nivel]||'Inicial');
-    const isMax=customer.nivel==='elite';
-    const summary=element('section',`portal-loyalty level-${customer.nivel||'inicial'}`);
-    const badge=element('span','portal-loyalty-badge',isMax?'★':'☆');
-    const copy=element('div','portal-loyalty-copy');
-    copy.append(
-      element('div','portal-loyalty-kicker',customer.bono>0?'BENEFICIO ACTIVO':'PROGRAMA DE FIDELIDAD'),
-      element('div','portal-loyalty-title',`Nivel ${levelName}`),
-      element('div','portal-loyalty-detail',isMax?`Nivel máximo · recibe +${Number(customer.bono)||5} boletos extra.`:`${cycles} ciclos · Nivel ${levelName}${customer.siguiente?.nombre?` · próximo: ${customer.siguiente.nombre}`:''}${customer.mesesAsegurados?.length?` · ${customer.mesesAsegurados.length} mes(es) asegurado(s)`:''}`)
+    const cycles=Math.max(0,Math.floor(Number(customer.ciclos)||0));
+    const current=loyaltyStep(customer.nivel);
+    const currentName=customer.nivelNombre||current.nombre;
+    const nextFromSteps=LOYALTY_STEPS.find(item=>item.desde>cycles)||null;
+    const next=customer.siguiente||nextFromSteps;
+    const nextName=next?.nombre||nextFromSteps?.nombre||'';
+    const nextStart=Math.max(current.desde+1,Number(next?.desde)||Number(nextFromSteps?.desde)||current.desde+1);
+    const remaining=next?Math.max(0,Number(next.faltan)||nextStart-cycles):0;
+    const span=Math.max(1,nextStart-current.desde);
+    const progress=next?Math.max(0,Math.min(100,((cycles-current.desde)/span)*100)):100;
+    const activeDraws=draws.filter(draw=>draw.estado==='activo');
+    const countedDraws=activeDraws.length?activeDraws:draws;
+    const ticketTotal=countedDraws.reduce((total,draw)=>total+(Array.isArray(draw.boletos)?draw.boletos.length:0),0);
+
+    const summary=element('section','portal-raffle-summary');
+    const tickets=element('div','portal-raffle-summary-item is-tickets');
+    tickets.append(
+      element('span','portal-raffle-summary-icon','🎟'),
+      element('strong','',String(ticketTotal)),
+      element('b','',ticketTotal===1?'boleto activo':'boletos activos'),
+      element('small','',ticketTotal?'Listos para participar':'Aún no tiene boletos')
     );
-    const progress=element('div','portal-loyalty-progress');
-    progress.setAttribute('role','progressbar');
-    progress.setAttribute('aria-label','Progreso de fidelidad');
-    progress.setAttribute('aria-valuemin','0');
-    progress.setAttribute('aria-valuemax','6');
-    progress.setAttribute('aria-valuenow',String(Math.min(cycles,6)));
-    const bar=element('i');bar.style.width=`${isMax?100:Math.min(100,(cycles/6)*100)}%`;progress.append(bar);
-    summary.append(badge,copy,progress);panel.append(summary);
+
+    const currentLevel=element('div',`portal-raffle-summary-item is-level level-${current.id}`);
+    const currentCopy=element('span','portal-raffle-summary-copy');
+    currentCopy.append(element('b','',`Nivel ${currentName}`),element('small','',`${cycles} ciclo${cycles===1?'':'s'} completado${cycles===1?'':'s'}`));
+    const currentBar=element('span','portal-raffle-summary-progress');
+    const currentFill=element('i');currentFill.style.width=`${progress}%`;currentBar.append(currentFill);
+    currentLevel.append(element('span','portal-level-medal','★'),currentCopy,currentBar);
+
+    const nextLevel=element('div',`portal-raffle-summary-item is-level is-next level-${nextFromSteps?.id||'elite'}`);
+    const nextCopy=element('span','portal-raffle-summary-copy');
+    nextCopy.append(
+      element('b','',nextName?`Próximo: ${nextName}`:'Nivel máximo'),
+      element('small','',nextName?`Faltan ${remaining} ciclo${remaining===1?'':'s'}`:'Máximo nivel alcanzado')
+    );
+    const nextBar=element('span','portal-raffle-summary-progress');
+    const nextFill=element('i');nextFill.style.width=`${progress}%`;nextBar.append(nextFill);
+    nextLevel.append(element('span','portal-level-medal','★'),nextCopy,nextBar);
+    summary.append(tickets,currentLevel,nextLevel);panel.append(summary);
   }
 
   function renderTicketCodes(draw,body){
@@ -432,7 +465,7 @@
     const prizes=Array.isArray(draw.premios)?draw.premios:[];
     if(!prizes.length)return;
     const section=element('div','portal-raffle-prizes');
-    section.append(element('small','portal-raffle-label','SI GANAS, PODRÁS ELEGIR UNO'));
+    section.append(element('small','portal-raffle-label',prizes.length===1?'PREMIO DEL SORTEO':'SI GANAS, PODRÁS ELEGIR UNO'));
     const grid=element('div','portal-raffle-prize-grid');
     prizes.forEach(prize=>{
       const item=element('div','portal-raffle-prize');item.style.setProperty('--raffle-prize-color',safeColor(prize.color));
@@ -469,32 +502,81 @@
   }
 
   function raffleCard(draw){
-    const card=element('article','portal-raffle-card');card.style.setProperty('--raffle-color',safeColor(draw.color));
-    const header=element('header','portal-raffle-head');
-    const labels=element('div');labels.append(element('span','portal-raffle-tag',raffleCategory(draw.categoria)),element('small','portal-raffle-state',raffleStatus(draw)));
-    const count=element('div','portal-raffle-count');count.append(element('b','',String(Number(draw.totalBoletos)||0)),element('small','',Number(draw.totalBoletos)===1?'boleto':'boletos'));
-    header.append(labels,count);
-    const body=element('div','portal-raffle-body');
-    body.append(element('h3','',draw.titulo||'Sorteo especial'),element('p','',draw.descripcion||'Participa automáticamente con tus compras y renovaciones.'));
+    const tickets=Array.isArray(draw.boletos)?draw.boletos:[];
+    const prizes=Array.isArray(draw.premios)?draw.premios:[];
+    const firstPrize=prizes[0]||null;
+    const card=element('article','portal-raffle-showcase');card.style.setProperty('--raffle-color',safeColor(draw.color));
+    const layout=element('div','portal-raffle-layout');
+
+    const feature=element('section','portal-raffle-feature');
+    const tag=element('span','portal-raffle-feature-tag',raffleCategory(draw.categoria));
+    const title=element('h3','',draw.titulo||'Sorteo especial');
+    const date=element('div','portal-raffle-feature-date',`▣ ${raffleStatus(draw)}`);
+    const gift=element('img','portal-raffle-feature-gift');gift.src=PORTAL_ICONS.sorteos;gift.alt='Premio del sorteo';gift.loading='lazy';gift.decoding='async';
+    const ticketBox=element('div','portal-raffle-ticket-preview');
+    const ticketCopy=element('div','');
+    ticketCopy.append(
+      element('small','',tickets.length===1?'Su boleto':'Sus boletos'),
+      element('strong','',tickets[0]?.codigo||(tickets.length?`${tickets.length} boletos activos`:'Aún sin boleto'))
+    );
+    const ticketNote=element('span','',tickets.length?'Cada número participa de forma individual.':'Compre o renueve para participar.');
+    const openLabel=tickets.length>1?'Abrir mis boletos':(tickets.length===1?'Abrir mi boleto':'Ver detalles');
+    const open=element('button','portal-raffle-open',openLabel);open.type='button';
+    ticketBox.append(ticketCopy,ticketNote,open);
+    feature.append(tag,title,date,gift,ticketBox);
+
+    const side=element('aside','portal-raffle-side');
+    const prize=element('section','portal-raffle-prize-summary');
+    prize.append(element('h4','','Premio del sorteo'));
+    const prizeRow=element('div','');
+    prizeRow.append(
+      element('span','portal-raffle-prize-icon',rafflePrizeIcon(firstPrize?.tipo)),
+      element('span','portal-raffle-prize-copy')
+    );
+    prizeRow.lastChild.append(
+      element('b','',firstPrize?.nombre||(prizes.length?'Premios digitales':'Premio por confirmar')),
+      element('small','',prizes.length>1?`El ganador elige 1 de ${prizes.length} opciones`:(firstPrize?.descripcion||'Un solo ganador'))
+    );
+    prize.append(prizeRow);
+
+    const how=element('section','portal-raffle-how');
+    how.append(
+      element('h4','','¿Cómo obtiene más boletos?'),
+      element('div','portal-raffle-rule','🛍️ Compra nueva = 1 boleto'),
+      element('div','portal-raffle-rule','🔄 Renovación = 2 boletos'),
+      element('small','','Los niveles reconocen fidelidad; no multiplican boletos.')
+    );
+    side.append(prize,how);layout.append(feature,side);
+
+    const details=element('section','portal-raffle-details');details.hidden=!draw.ganador;
+    if(draw.descripcion)details.append(element('p','portal-raffle-description',draw.descripcion));
     if(['club_vip','oro'].includes(draw.categoria)){
       const vip=element('div','portal-vip-conditions');
       vip.append(element('b','','👑 Condiciones Club VIP'),element('span','','Exclusivo para niveles Oro, Diamante y Élite. Premio personal, no transferible ni canjeable por efectivo. Debe reclamarse en 72 horas y no se acumula con otras promociones.'));
-      body.append(vip);
+      details.append(vip);
     }
-    renderTicketCodes(draw,body);renderPrizeChoices(draw,body);renderWinner(draw,body);
-    if(draw.estado==='cerrado'&&!draw.ganador)body.append(element('div','portal-raffle-wait','🎡 La participación cerró. Muy pronto giraremos la ruleta.'));
-    card.append(header,body);return card;
+    renderTicketCodes(draw,details);renderPrizeChoices(draw,details);renderWinner(draw,details);
+    if(draw.estado==='cerrado'&&!draw.ganador)details.append(element('div','portal-raffle-wait','🎡 La participación cerró. Muy pronto giraremos la ruleta.'));
+    open.setAttribute('aria-expanded',details.hidden?'false':'true');
+    if(!details.hidden)open.textContent='Ocultar detalle';
+    open.addEventListener('click',()=>{
+      details.hidden=!details.hidden;
+      open.setAttribute('aria-expanded',details.hidden?'false':'true');
+      open.textContent=details.hidden?openLabel:'Ocultar detalle';
+      if(!details.hidden&&window.matchMedia('(max-width: 620px)').matches)details.scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
+    card.append(layout,details);return card;
   }
 
   function renderRaffles(){
     const panel=document.getElementById('portal-panel-sorteos');if(!panel)return;
-    panel.querySelectorAll('.portal-loyalty,.portal-raffle-list,.portal-empty').forEach(node=>node.remove());
+    panel.querySelectorAll('.portal-raffle-summary,.portal-raffle-list,.portal-empty').forEach(node=>node.remove());
     if(!state.sorteosData){
       panel.append(emptyState(state.sorteosError?'Sorteos no disponibles':'Cargando sus boletos…',state.sorteosError?' Intente nuevamente más tarde.':' Estamos buscando sus números.'));
       return;
     }
-    renderGoldSummary(panel);
     const draws=Array.isArray(state.sorteosData.sorteos)?state.sorteosData.sorteos:[];
+    renderRaffleSummary(panel,draws);
     if(!draws.length){panel.append(emptyState('No hay sorteos activos',' Cuando publiquemos el próximo, sus boletos aparecerán aquí automáticamente.'));return;}
     const list=element('div','portal-raffle-list');draws.forEach(draw=>list.append(raffleCard(draw)));panel.append(list);
   }
