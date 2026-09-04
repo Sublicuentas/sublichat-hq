@@ -1,4 +1,4 @@
-// api/inventario.js  ·  VERSION 6  ·  Sacar asignaciones de forma segura
+// api/inventario.js  ·  VERSION 7  ·  Sacar seguro + claves enlazadas a clientes
 //
 // Usa la misma cuenta de servicio que renovar.js (mismas env vars en Vercel):
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -120,20 +120,37 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
   const oldEmail = normEmail(options.oldEmail);
   if (!platform || !oldEmail) return { references: 0, documents: 0, updated: 0 };
   if (!options.countOnly && !options.emailProvided && !options.passwordProvided) return { references: 0, documents: 0, updated: 0 };
+  const assignments = (Array.isArray(options.assignments) ? options.assignments : []).map((item) => ({
+    clientId: String(item?.clienteId || item?.clientId || "").trim(),
+    compraId: String(item?.compraId || "").trim(),
+    perfilId: String(item?.perfilId || "").trim()
+  })).filter((item) => item.clientId || item.compraId || item.perfilId);
   const snap = await db.collection("clientes").limit(5000).get();
   let references = 0, documents = 0, updated = 0, operations = 0;
   let batch = db.batch();
   for (const doc of snap.docs) {
     const data = doc.data() || {};
     const services = Array.isArray(data.servicios) ? data.servicios : [];
+    const linkedToClient = assignments.filter((item) => !item.clientId || item.clientId === doc.id);
     let changed = false;
     const next = services.map((service) => {
       if (canonPlatform(service && service.plataforma) !== platform) return service;
       const perfiles = Array.isArray(service?.perfiles) ? service.perfiles : [];
+      const compraId = String(service?.compraId || "").trim();
+      const serviceLinked = linkedToClient.some((item) =>
+        (item.compraId && compraId && item.compraId === compraId) ||
+        (item.perfilId && perfiles.some((perfil) => String(perfil?.perfilId || perfil?.id || "").trim() === item.perfilId))
+      );
       if (perfiles.length) {
         let profileChanged = false;
         const nextProfiles = perfiles.map((perfil) => {
-          if (normEmail(perfil?.correo ?? service?.correo) !== oldEmail) return perfil;
+          // En fichas antiguas `perfil.correo` suele existir como cadena vacía.
+          // Con `??` esa cadena impedía heredar `service.correo`, por lo que la
+          // clave cambiaba en Bodega pero nunca llegaba a la URL del cliente.
+          const inheritedEmail = perfil?.correo || service?.correo || "";
+          const perfilId = String(perfil?.perfilId || perfil?.id || "").trim();
+          const profileLinked = serviceLinked || linkedToClient.some((item) => item.perfilId && perfilId && item.perfilId === perfilId);
+          if (!profileLinked && normEmail(inheritedEmail) !== oldEmail) return perfil;
           references++;
           if (options.countOnly) return perfil;
           const copy = { ...(perfil || {}) };
@@ -150,7 +167,7 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
         changed = true;
         return copy;
       }
-      const matches = normEmail(service && service.correo) === oldEmail;
+      const matches = serviceLinked || normEmail(service && service.correo) === oldEmail;
       if (!matches) return service;
       references++;
       if (options.countOnly) return service;
@@ -173,7 +190,7 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST")
-    return res.status(200).json({ ok: true, version: 6, msg: "inventario v6 activo (Sacar seguro + sincronización multiperfil + Stella TV). Usá POST." });
+    return res.status(200).json({ ok: true, version: 7, msg: "inventario v7 activo (Sacar seguro + claves enlazadas a fichas + Stella TV). Usá POST." });
 
   const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono } = req.body || {};
 
@@ -231,6 +248,8 @@ export default async function handler(req, res) {
       const sync = await inspectOrUpdateAccountServices(db, {
         platform: current.plataforma,
         oldEmail: current.correo,
+        accountId: docId,
+        assignments: clients,
         emailProvided: correo != null && normEmail(correo) !== normEmail(current.correo),
         newEmail: correo,
         passwordProvided: clave != null && String(clave) !== String(current.clave || ""),

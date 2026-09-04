@@ -715,6 +715,46 @@ async function controlGuardarRevisionCuenta(db, body) {
   return { status: 200, json: { ok: true, revision: controlRevisionMeta(id, data) } };
 }
 
+async function controlEliminarIncidenciaCuenta(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const accountKey = String(body.accountKey || "").trim().slice(0, 500);
+  if (!accountKey) return { status: 400, json: { ok: false, error: "Falta la identificación de la cuenta." } };
+  const id = crypto.createHash("sha256").update(accountKey).digest("hex");
+  const ref = db.collection(CONTROL_REVISIONES_COL).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { status: 200, json: { ok: true, eliminada: false, accountKey } };
+  const anterior = snap.data() || {};
+  // Esta acción existe únicamente para borrar una marca de incidencia. Nunca
+  // puede usarse como atajo para eliminar una cuenta, una ficha o una revisión
+  // correcta del proveedor.
+  if (anterior.resultado !== "incidencia") {
+    return { status: 409, json: { ok: false, error: "La revisión actual no es una incidencia y no se eliminó." } };
+  }
+  const now = new Date().toISOString();
+  const usuario = String(body.usuario || body.editor || "sublicuentas").trim();
+  await db.runTransaction(async (transaction) => {
+    const latest = await transaction.get(ref);
+    if (!latest.exists) return;
+    const data = latest.data() || {};
+    if (data.resultado !== "incidencia") throw new Error("La incidencia cambió antes de eliminarse. Actualice la pantalla.");
+    transaction.delete(ref);
+    transaction.set(db.collection("auditoria_eventos").doc(), {
+      tipo: "control_maestro_incidencia_eliminada",
+      cuentaRevisionId: id,
+      accountKey,
+      accountId: String(data.accountId || ""),
+      plataforma: String(data.plataforma || ""),
+      correo: String(data.correo || ""),
+      notaAnterior: String(data.nota || "").slice(0, 500),
+      revisadoPorAnterior: String(data.revisadoPor || ""),
+      usuario,
+      rol: "sublicuentas",
+      createdAt: now
+    });
+  });
+  return { status: 200, json: { ok: true, eliminada: true, accountKey } };
+}
+
 function controlMetricas(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const keys = ["clientes", "servicios", "cuentas", "filasExcel", "correctos", "revision", "soloExcel", "soloSublichat", "fechaDistinta", "cuentaDistinta"];
@@ -1448,6 +1488,10 @@ async function handler(req, res) {
     }
     if (accion === "control_guardar_revision_cuenta") {
       const out = await controlGuardarRevisionCuenta(db, body);
+      return res.status(out.status).json(out.json);
+    }
+    if (accion === "control_eliminar_incidencia_cuenta") {
+      const out = await controlEliminarIncidenciaCuenta(db, body);
       return res.status(out.status).json(out.json);
     }
     if (accion === "control_guardar_plantilla") {

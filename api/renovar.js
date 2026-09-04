@@ -1,4 +1,4 @@
-// api/renovar.js  ·  VERSION 27  ·  conciliación segura + soporte Stella TV
+// api/renovar.js  ·  VERSION 28  ·  identidad telefónica canónica + Stella TV
 //
 // Usa Firebase Admin con una cuenta de servicio (clave privada), NO el config público.
 // Variables en Vercel:
@@ -346,7 +346,10 @@ function clienteTieneVendedor(cliente = {}, vendedor = "") {
 }
 
 function normPhone(v) {
-  return String(v || "").replace(/\D/g, "");
+  let digits = String(v || "").replace(/\D/g, "");
+  // Honduras: +504 8777-7777 y 87777777 representan el mismo número.
+  if (digits.length === 11 && digits.startsWith("504")) digits = digits.slice(3);
+  return digits;
 }
 
 function safeDocId(v) {
@@ -744,6 +747,19 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil, vendedorNo
   return candidatos.length === 1 ? candidatos[0] : null;
 }
 
+async function findClienteExactoPorNombreTelefono(db, nombreNorm, telefonoNorm) {
+  const n = normName(nombreNorm || "");
+  const t = normPhone(telefonoNorm || "");
+  if (!n || t.length !== 8) return { doc: null, duplicados: [] };
+  const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(50).get();
+  const matches = snap.docs.filter((item) => {
+    const data = item.data() || {};
+    if (String(data.consolidadoEn || "").trim()) return false;
+    return normPhone(data.telefono_norm || data.telefono || "") === t;
+  });
+  return { doc: matches.length === 1 ? matches[0] : null, duplicados: matches };
+}
+
 const VISIBILIDAD_URL_MODOS = new Set(["plataforma", "todos", "correo_clave", "solo_correo", "solo_pin", "personalizado"]);
 function normalizarVisibilidadUrl(raw, anterior = null) {
   const valor = raw != null ? raw : anterior;
@@ -1026,7 +1042,7 @@ export default async function handler(req, res) {
       const cliente = body.cliente || {};
       const servicio = body.servicio || {};
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
-      const tel = cliente.telefono || telefono || ""; // se guarda tal cual, solo para mostrar — ya no identifica al cliente
+      const tel = cliente.telefono || telefono || "";
       const vendedor = canonicalVendedor(servicio.vendedor || cliente.vendedor || body.vendedor || "");
       const vendedorTelefono = servicio.vendedorTelefono || cliente.vendedorTelefono || body.vendedorTelefono || "";
       const nNorm = cliente.nombre_norm || clienteNorm || normName(nombrePerfil);
@@ -1041,17 +1057,29 @@ export default async function handler(req, res) {
       if (clienteId && !exactId) return res.status(200).json({ error: "El identificador del cliente no es válido." });
       let doc = null;
       if (exactId) {
-        const exactDoc = await db.collection("clientes").doc(exactId).get();
+        let exactDoc = await db.collection("clientes").doc(exactId).get();
         if (!exactDoc.exists) return res.status(200).json({ error: "La ficha seleccionada ya no existe. Recargue la lista." });
+        const consolidadoEn = cleanExistingDocId(exactDoc.data()?.consolidadoEn);
+        if (consolidadoEn) {
+          exactDoc = await db.collection("clientes").doc(consolidadoEn).get();
+          if (!exactDoc.exists) return res.status(200).json({ error: "La ficha consolidada ya no existe. Recargue la lista." });
+        }
         doc = exactDoc;
+      } else if (nNorm && tNorm) {
+        // Regla solicitada: el mismo nombre exacto y el mismo teléfono
+        // hondureño (con o sin guion/+504) representan una sola ficha.
+        const identidad = await findClienteExactoPorNombreTelefono(db, nNorm, tNorm);
+        if (identidad.duplicados.length > 1) {
+          return res.status(409).json({ error: "Ya existen varias fichas con ese mismo nombre y teléfono. Reinicie el bot para ejecutar la consolidación segura y vuelva a intentarlo." });
+        }
+        doc = identidad.doc;
       }
       let docRef;
       if (doc) {
         docRef = doc.ref;
       } else {
-        // REGLA DE IDENTIDAD: una ficha NUEVA siempre recibe un ID aleatorio de
-        // Firestore. Jamás se deriva el documento del nombre/teléfono/vendedor.
-        // Para agregar otra cuenta al mismo cliente, la UI debe enviar clienteId.
+        // El ID sigue siendo aleatorio; nombre+teléfono solo evita crear una
+        // segunda ficha cuando la identidad exacta ya existe.
         docRef = db.collection("clientes").doc();
       }
 
@@ -1060,7 +1088,7 @@ export default async function handler(req, res) {
       // ocurre dentro de UNA transacción sobre la versión más reciente de Firebase.
       const fichaResultado = await db.runTransaction(async transaction => {
         const latest = await transaction.get(docRef);
-        if (exactId && !latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
+        if (doc && !latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
         const data = latest.exists ? (latest.data() || {}) : {};
         const created = !latest.exists;
         let servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
@@ -1156,7 +1184,7 @@ export default async function handler(req, res) {
           nombrePerfil: nombreFinal,
           nombre: nombreFinal,
           nombre_norm: nNorm || data.nombre_norm || normName(nombrePerfil),
-          telefono: tel || data.telefono || "",
+          telefono: tNorm || normPhone(data.telefono_norm || data.telefono || "") || tel || data.telefono || "",
           telefono_norm: tNorm || data.telefono_norm || "",
           ...resumenVendedores,
           servicios: serviciosLimpios,
