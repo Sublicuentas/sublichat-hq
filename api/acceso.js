@@ -260,8 +260,9 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
   const usaDispositivo = servicioUsaSelectorDispositivo(servicio.plataforma);
   return lista.map((p, index) => {
     const dispositivoRaw = p?.dispositivo != null ? p.dispositivo : servicio.dispositivo;
-    const dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || ""))
-      ? String(dispositivoRaw)
+    const dispositivoNormalizado = String(dispositivoRaw || "").trim().toLowerCase();
+    const dispositivo = usaDispositivo && ["tv", "cel"].includes(dispositivoNormalizado)
+      ? dispositivoNormalizado
       : "";
     const esRokuRaw = p?.esRoku != null ? p.esRoku : servicio.esRoku;
     return {
@@ -427,6 +428,8 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     clave: principal.clave || "",
     pin: principal.pin || "",
     usaPin: principal.usaPin === true,
+    dispositivo: principal.dispositivo || "",
+    esRoku: principal.dispositivo === "tv" && principal.esRoku === true,
     visibilidadModo: principal.visibilidadModo || "plataforma",
     perfiles: perfilesPublicos,
     fechaRenovacion,
