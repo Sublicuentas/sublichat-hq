@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Su acceso — Sublicuentas</title>
-<meta name="sublicuentas-access-ui-version" content="20260904-legibilidad-vix-v3">
+<meta name="sublicuentas-access-ui-version" content="20260904-destino-visible-v4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portal-cliente-publico.css?v=20260904-legibilidad-vix-3">
@@ -54,6 +54,11 @@
   .access-open-hint{color:var(--red);font-size:10px;font-weight:800;white-space:nowrap;} .multi-date{ color:var(--muted); font-size:10.5px; font-weight:700; white-space:nowrap; }
   .multi-date b{ color:var(--ink); }
   .multi-meta .pill{ padding:4px 8px; font-size:9.5px; }
+  .access-device-badge{display:inline-flex;align-items:center;gap:4px;min-height:23px;padding:3px 8px;border:1px solid #BFD5F3;border-radius:999px;background:#EAF3FF;color:#164E86;font-size:9.5px;font-weight:900;line-height:1;white-space:nowrap;}
+  .access-device-badge.is-tv{border-color:#C9BDF3;background:#F1EDFF;color:#4A2C92;}
+  .access-device-badge.is-cel{border-color:#BFD5F3;background:#EAF3FF;color:#164E86;}
+  .access-device-badge.is-mixed{border-color:#C9BDF3;background:linear-gradient(90deg,#F1EDFF,#EAF3FF);color:#263E73;}
+  .access-device-badge.is-pending{border-color:#E6C77A;background:#FFF6D8;color:#745000;}
   .multi-chevron{ width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:#F6F2EA; color:var(--ink); font-size:18px; line-height:1; transition:transform .18s ease, background .18s ease; }
   .multi-service.open .multi-chevron{ transform:rotate(180deg); background:var(--red-soft); color:var(--red); }
   .multi-details{ border-top:1px solid var(--edge); background:#FFFEFC; }
@@ -393,18 +398,42 @@
 
   function perfilesDelServicio(d){
     if(Array.isArray(d.perfiles) && d.perfiles.length) return d.perfiles;
-    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",usaPin:d.usaPin===true,modo:d.modo||""}];
+    return [{nombre:d.titular||"Cliente",perfil:d.perfil||"",correo:d.correo||"",clave:d.clave||"",pin:d.pin||"",usaPin:d.usaPin===true,modo:d.modo||"",dispositivo:d.dispositivo||"",esRoku:d.esRoku===true}];
   }
 
-  function resumenDestinoPerfil(p,modo){
-    const dispositivo=String(p&&p.dispositivo||"").toLowerCase();
+  function servicioUsaSelectorDispositivo(plataforma){
+    const p=platKey(plataforma);
+    return p==="netflix"||p==="disneyp"||p==="disneys"||p==="hbomax"||p==="vix"||p==="universal"||p==="primevideo";
+  }
+
+  function resumenDestinoPerfil(p,modo,servicio=null){
+    const dispositivo=String((p&&p.dispositivo)||(servicio&&servicio.dispositivo)||"").trim().toLowerCase();
+    const esRoku=(p&&p.esRoku===true)||(servicio&&servicio.esRoku===true);
     if(dispositivo==="cel"||(!dispositivo&&modo==="codigo")){
-      return {icon:"📱",label:"Celular"};
+      return {icon:"📱",label:"Celular",kind:"cel"};
     }
     if(dispositivo==="tv"||(!dispositivo&&modo==="perfil")){
-      return {icon:"📺",label:p&&p.esRoku===true?"TV Roku":"TV"};
+      return {icon:"📺",label:esRoku?"TV Roku":"TV",kind:"tv"};
     }
-    return {icon:"👤",label:"Acceso"};
+    if(modo==="pendiente")return {icon:"⚙️",label:"Por configurar",kind:"pending"};
+    return {icon:"👤",label:"Acceso",kind:"default"};
+  }
+
+  function resumenDestinoServicio(d){
+    if(!servicioUsaSelectorDispositivo(d.plataforma))return null;
+    const destinos=perfilesDelServicio(d).map(p=>resumenDestinoPerfil(p,p.modo||d.modo,d));
+    const concretos=destinos.filter(destino=>destino.kind!=="default"&&destino.kind!=="pending");
+    if(!concretos.length)return {icon:"⚙️",label:"Por configurar",kind:"pending"};
+    const tipos=[...new Set(concretos.map(destino=>destino.kind))];
+    if(tipos.length>1)return {icon:"📺📱",label:"TV y celular",kind:"mixed"};
+    const tipo=tipos[0];
+    if(tipo==="tv"&&concretos.some(destino=>destino.label==="TV Roku"))return {icon:"📺",label:"TV Roku",kind:"tv"};
+    return tipo==="tv"?{icon:"📺",label:"TV",kind:"tv"}:{icon:"📱",label:"Celular",kind:"cel"};
+  }
+
+  function etiquetaDestinoHtml(destino){
+    if(!destino)return "";
+    return `<span class="access-device-badge is-${esc(destino.kind)}"><span aria-hidden="true">${destino.icon}</span>${esc(destino.label)}</span>`;
   }
 
   function datosPerfilHtml(d, serviceIndex){
@@ -418,6 +447,8 @@
       const perfilAcceso=String(p.perfil||p.nombre||"").trim();
       const usaPin=p.usaPin===true||!!p.pin;
       const mostrarPerfil=!!perfilAcceso;
+      const destinoVisible=servicioUsaSelectorDispositivo(d.plataforma)?resumenDestinoPerfil(p,modo,d):null;
+      if(destinoVisible)campos+=infoRow("Acceso configurado para",destinoVisible.label,destinoVisible.icon);
       if(mostrarPerfil&&perfilAcceso)campos+=infoRow("Perfil de acceso",perfilAcceso);
       if(modo==="serial"){
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
@@ -430,7 +461,7 @@
       if(perfiles.length>1){
         const panelId=`detalle-perfil-${serviceIndex}-${profileIndex}`;
         const nombre=String(p.nombre||p.perfil||"Asignado").trim()||"Asignado";
-        const destino=resumenDestinoPerfil(p,modo);
+        const destino=resumenDestinoPerfil(p,modo,d);
         const abierto=false;
         return `<section class="profile-accordion${abierto?" open":""}" data-profile-index="${profileIndex}">
           <button class="profile-trigger" type="button" aria-expanded="${abierto?"true":"false"}" aria-controls="${panelId}" aria-label="Abrir perfil ${profileIndex+1}: ${esc(nombre)}, ${esc(destino.label)}">
@@ -510,6 +541,7 @@
 
   function filaServicioMultiple(d,index,total,abierto){
     const estado=estadoServicio(d);
+    const destino=resumenDestinoServicio(d);
     const panelId=`detalle-acceso-${index}`;
     const platActual=platKey(d.plataforma);
     const estrella=platActual==="vipnetflix"?`<span class="plat-star" aria-hidden="true">⭐</span>`:(platActual==="appletv"?`<span class="plat-star" aria-hidden="true">🍎</span>`:(platActual.startsWith("stellatv")?`<span class="plat-star" aria-hidden="true">🔥</span>`:""));
@@ -518,7 +550,7 @@
         ${platLogo(d.plataforma,nombrePlataforma(d))}
         <span class="multi-summary">
           <span class="multi-name">${estrella}<span class="multi-platform">${esc(nombrePlataforma(d))}</span><span class="multi-separator">-</span><span class="multi-access-name">${esc(nombreAcceso(d))}</span></span>
-          <span class="multi-meta"><span class="pill ${estado.kind}"><i></i>${estado.label}</span><span class="multi-date">📅 ${estado.dateLabel}: <b>${esc(d.fechaRenovacion||"—")}</b></span><span class="access-open-hint">Ver acceso</span></span>
+          <span class="multi-meta"><span class="pill ${estado.kind}"><i></i>${estado.label}</span>${etiquetaDestinoHtml(destino)}<span class="multi-date">📅 ${estado.dateLabel}: <b>${esc(d.fechaRenovacion||"—")}</b></span><span class="access-open-hint">Ver acceso</span></span>
         </span>
         <span class="multi-chevron" aria-hidden="true">⌄</span>
       </button>
