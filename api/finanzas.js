@@ -1,4 +1,4 @@
-// api/finanzas.js · VERSION 1 · Movimientos financieros para Sublichat RBAC
+// api/finanzas.js · VERSION 2 · Movimientos financieros para Sublichat RBAC
 // Guarda cobros, egresos y cierres en Firebase para que Sublichat y el bot de Telegram
 // lean la misma base.
 //
@@ -62,6 +62,31 @@ function cleanMoney(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function canonicalFinanceDate(raw, fallbackIso) {
+  const value = cleanText(raw || fallbackIso);
+  let yyyy, mm, dd;
+  let match = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) [, yyyy, mm, dd] = match;
+  else {
+    match = value.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (match) [, dd, mm, yyyy] = match;
+  }
+  yyyy = Number(yyyy); mm = Number(mm); dd = Number(dd);
+  const check = new Date(Date.UTC(yyyy, mm - 1, dd, 12));
+  if (!yyyy || !mm || !dd || check.getUTCFullYear() !== yyyy || check.getUTCMonth() !== mm - 1 || check.getUTCDate() !== dd) {
+    throw new Error("Fecha financiera inválida.");
+  }
+  const d = String(dd).padStart(2, "0");
+  const m = String(mm).padStart(2, "0");
+  return {
+    fecha: `${d}/${m}/${yyyy}`,
+    fechaPago: `${yyyy}-${m}-${d}`,
+    fechaTS: admin.firestore.Timestamp.fromDate(check),
+    mesKey: `${yyyy}-${m}`,
+    monthKey: `${yyyy}-${m}`
+  };
+}
+
 function normName(s) {
   return String(s || "")
     .toLowerCase()
@@ -81,7 +106,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ ok: true, version: 1, msg: "finanzas v1 activo. Usá POST." });
+  if (req.method === "GET") return res.status(200).json({ ok: true, version: 2, msg: "finanzas v2 activo. Usá POST." });
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
 
   try {
@@ -101,6 +126,7 @@ export default async function handler(req, res) {
       const monto = cleanMoney(body.monto);
       if (!monto) return res.status(200).json({ ok: false, error: "Falta el monto del cobro." });
 
+      const financeDate = canonicalFinanceDate(body.fechaPago || body.fecha, now.slice(0, 10));
       const movimiento = {
         tipo: "ingreso",
         subtipo: "cobro_cliente",
@@ -114,7 +140,7 @@ export default async function handler(req, res) {
         cobradoPor: identity.usuario,
         vendedor: cleanText(body.vendedor),
         rol: identity.role,
-        fechaPago: cleanText(body.fechaPago) || now.slice(0, 10),
+        ...financeDate,
         createdAt: now,
         updatedAt: now
       };
@@ -129,6 +155,7 @@ export default async function handler(req, res) {
       const motivo = cleanText(body.motivo || body.descripcion);
       if (!motivo || !monto) return res.status(200).json({ ok: false, error: "Falta motivo o monto del egreso." });
 
+      const financeDate = canonicalFinanceDate(body.fecha || body.fechaPago, now.slice(0, 10));
       const movimiento = {
         tipo: "egreso",
         subtipo: cleanText(body.subtipo || "egreso_operativo"),
@@ -138,7 +165,7 @@ export default async function handler(req, res) {
         banco: cleanText(body.banco),
         registradoPor: identity.usuario,
         rol: identity.role,
-        fecha: cleanText(body.fecha) || now.slice(0, 10),
+        ...financeDate,
         createdAt: now,
         updatedAt: now
       };
