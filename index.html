@@ -2507,7 +2507,7 @@ function renderTable(){
   document.getElementById("tbody").innerHTML=shown.length?shown.map((g,i)=>{
     const platTxt=g.plats.length>1?`${g.plats[0]} +${g.plats.length-1}`:g.plats[0];
     const fechaRenovacion=g.fecha?`del ${g.fecha.toLocaleDateString("es-HN")}`:"sin fecha";
-    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><span><b>${clienteEsc(g.nombre)}</b>${g.clienteCompartido?`<small style="display:block;color:var(--muted);margin-top:3px">🔀 Compartido: ${clienteEsc(g.vendedor)}</small>`:""}</span></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 4 variantes</button><button type="button" class="danger" data-client-action="no-renovo" data-client-index="${i}">❌ No renovó</button></div></td></tr>`;
+    return `<tr data-idx="${i}"><td><div class="client-person"><span class="client-avatar">${clienteEsc(clienteIniciales(g.nombre))}</span><span><b>${clienteEsc(g.nombre)}</b>${g.clienteCompartido?`<small style="display:block;color:var(--muted);margin-top:3px">🔀 Compartido: ${clienteEsc(g.vendedor)}</small>`:""}</span></div></td><td><span class="client-platform">${clienteEsc(platTxt||"—")}</span></td><td>${g.fecha?g.fecha.toLocaleDateString("es-HN"):"—"}</td><td><span class="pill ${g.st.k}">${clienteEsc(g.st.t)}</span></td><td style="text-align:right"><span class="money">${fmt(g.total)}</span></td><td class="client-renew-cell"><button type="button" class="client-renew-btn" data-client-renew="${i}" aria-label="Renovar servicios ${clienteEsc(fechaRenovacion)} de ${clienteEsc(g.nombre)}" title="Renovar únicamente los servicios ${clienteEsc(fechaRenovacion)}"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19.2 12a7.5 7.5 0 1 1-2.1-5.2L20 9"/></svg><span>Renovar</span></button></td><td class="client-wa-cell"><button type="button" class="client-wa-btn" data-client-wa="${i}" aria-label="Abrir WhatsApp de ${clienteEsc(g.nombre)}" title="Abrir WhatsApp"><svg viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z"/><path d="M9 8.3c.2 2.9 2 4.8 4.9 5.4l1.1-1.1 2 .9c-.4 1.7-1.5 2.4-3.1 2.2-4.1-.7-6.8-3.4-7.5-7.4C6.2 6.7 7 5.6 8.6 5.2l.9 2Z"/></svg></button></td><td class="client-actions-cell"><button type="button" class="client-actions-btn" data-client-menu="${i}" aria-label="Acciones para ${clienteEsc(g.nombre)}" title="Acciones">⋮</button><div class="client-actions-menu" data-client-menu-panel="${i}"><button type="button" data-client-action="add-account" data-client-index="${i}">➕ Agregar otra cuenta al mismo cliente</button><button type="button" data-client-action="edit" data-client-index="${i}">✏️ Editar cliente / ficha CRM</button><button type="button" data-client-action="access" data-client-index="${i}">🔗 Acceso URL y 6 variantes</button><button type="button" class="danger" data-client-action="no-renovo" data-client-index="${i}">❌ No renovó</button></div></td></tr>`;
   }).join(""):`<tr><td colspan="8"><div class="empty">Sin resultados</div></td></tr>`;
   document.querySelectorAll("[data-client-renew]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientRenew];if(g)abrirCobro(g);}));
   document.querySelectorAll("[data-client-wa]").forEach(btn=>btn.addEventListener("click",e=>{e.stopPropagation();const g=window._shownRows[+btn.dataset.clientWa];if(g)abrirWhatsAppCliente(g);}));
@@ -5388,11 +5388,11 @@ function gCaminoBombas(){
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", sublicuentas2:"89464328", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
 
-// VERSION 27 · Cuatro variantes URL con el mismo acabado visual y sin pie de
+// VERSION 28 · Seis variantes URL con el mismo acabado visual y sin pie de
 // vendedor. La ficha tradicional conserva por separado el teléfono del
 // cliente y el vendedor; la página /c/{token} conserva su soporte directo.
 //
-// Cuatro variantes elegibles para la URL y dos entregas
+// Seis variantes elegibles para la URL y dos entregas
   // independientes: ficha tradicional o ficha URL. Solo se abre la opción que
   // el vendedor toca expresamente.
   // Formato WhatsApp real: *negrita*, _cursiva_, con líneas en
@@ -5401,16 +5401,16 @@ function gCaminoBombas(){
   const FICHA_MENSAJES_CLIENTE=[
     {
       cuerpo:
-`🍿 ¡Es hora de disfrutar de {servicio}!
+`🚀 ¡Todo su entretenimiento centralizado en un solo lugar!
 
-Hola, *{nombre}*. Hemos generado sus datos de acceso de manera segura.
+Hola, *{nombre}*. Hemos enlazado su servicio a nuestro panel inteligente para que su experiencia sea rápida, privada y segura.
 
-_👉 Toque el enlace para ingresar a su panel de acceso:_
+*🎯 Acceda a su plataforma tocando su enlace personal:*
 
 {link}
 
 *⚡ Su servicio incluye soporte prioritario activo.*`,
-      despedida: "¡Agradecemos su preferencia en Sublicuentas!"
+      despedida: "¡Conectamos emociones, creamos experiencias con Sublicuentas!"
     },
     {
       cuerpo:
@@ -5418,7 +5418,7 @@ _👉 Toque el enlace para ingresar a su panel de acceso:_
 
 Le damos la bienvenida a su servicio de {servicio}.
 
-_📲 Abra el siguiente enlace para ver sus credenciales:_
+*📲 Abra el siguiente enlace para ver sus credenciales:*
 
 {link}
 
@@ -5431,7 +5431,7 @@ _📲 Abra el siguiente enlace para ver sus credenciales:_
 
 Estimado(a) *{nombre}*, su suscripción a {servicio} se encuentra activa y lista para ser utilizada.
 
-_🔑 Consulte los datos de su cuenta aquí:_
+*🔑 Consulte los datos de su cuenta aquí:*
 
 {link}
 
@@ -5444,12 +5444,38 @@ _🔑 Consulte los datos de su cuenta aquí:_
 
 Ya puede disfrutar de {servicio} sin contratiempos.
 
-_🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
+*🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:*
 
 {link}
 
 *📞 Soporte disponible durante toda su vigencia.*`,
       despedida: "¡Gracias por elegir Sublicuentas!"
+    },
+    {
+      cuerpo:
+`🍿 ¡Su pase directo al mejor entretenimiento está listo!
+
+Hola, *{nombre}*. Hemos preparado su experiencia para que desconecte de la rutina y disfrute sin interrupciones.
+
+*👉 Desbloquee su entretenimiento tocando su enlace VIP seguro:*
+
+{link}
+
+*⚡ Su servicio incluye soporte prioritario activo.*`,
+      despedida: "¡Gracias por elegir a Sublicuentas! Conectamos emociones, creamos experiencias."
+    },
+    {
+      cuerpo:
+`🌟 ¡Bienvenido a su espacio VIP de diversión!
+
+Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor seguridad para brindarle una experiencia fluida.
+
+*🚀 Ingrese a su panel personal tocando el siguiente enlace:*
+
+{link}
+
+*⚡ Su servicio incluye soporte prioritario activo.*`,
+      despedida: "¡Agradecemos su confianza! Conectamos tu entretenimiento."
     }
   ];
   function fichaConstruirMensajeCliente({nombre,servicioLabel,link,variante=0}){
@@ -5489,7 +5515,7 @@ _🔐 Ingrese al siguiente enlace para ver los datos de su cuenta:_
     const msg=fichaConstruirMensajeCliente({nombre,servicioLabel,link:fichaLinkActual,variante:fichaVarianteMensajeActual});
     fichaMensajeClienteActual=msg;
     const view=fichaQ("fichaMensajeClienteView");
-    // Las cuatro variantes usan la misma vista visual actualizada. El texto
+    // Las seis variantes usan la misma vista visual actualizada. El texto
     // crudo con asteriscos se conserva aparte para copiarlo a WhatsApp.
     if(view) view.innerHTML=fichaMarkdownToHtml(msg);
     document.querySelectorAll("[data-ficha-variante]").forEach(btn=>{
@@ -7108,7 +7134,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       });
       fichaMostrarDatosCliente(j.linkPublico);
       fichaRenderServicePicker();
-      fichaStatus("✅ URL permanente recuperada. Ya puede copiar el enlace o cualquiera de las 4 variantes.","ok");
+      fichaStatus(`✅ URL permanente recuperada. Ya puede copiar el enlace o cualquiera de las ${FICHA_MENSAJES_CLIENTE.length} variantes.`,"ok");
       return j.linkPublico;
     }catch(e){
       fichaStatus("⚠️ No se pudo conectar para recuperar la URL.","err");
@@ -7416,7 +7442,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .ficha-btn.crm{background:rgba(47,155,224,.16);border-color:rgba(47,155,224,.44)}
       .ficha-btn.wa{background:#25d366;color:#062b16;border-color:#25d366}
       .ficha-btn.tg{background:#2a6df4;color:white;border-color:#2a6df4}
-      .ficha-variant-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0}
+      .ficha-variant-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0}
       .ficha-variant-tab{border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:11px;padding:9px 6px;font-size:11px;font-weight:900;cursor:pointer}
       .ficha-variant-tab.active{background:rgba(37,211,102,.16);border-color:#25d366;color:#179447;box-shadow:0 0 0 2px rgba(37,211,102,.1)}
       .ficha-message-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
@@ -7526,7 +7552,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           </div>
         </label>
         <label class="ficha-field" id="fichaMensajeClienteBox" style="display:none">
-          <span>💬 Elija una de las 4 variantes para entregar la URL</span>
+          <span>💬 Elija una de las ${FICHA_MENSAJES_CLIENTE.length} variantes para entregar la URL</span>
           <div class="ficha-variant-tabs" aria-label="Variantes del mensaje para el cliente">
             ${FICHA_MENSAJES_CLIENTE.map((_,i)=>`<button class="ficha-variant-tab${i===0?" active":""}" type="button" data-ficha-variante="${i}" aria-pressed="${i===0?"true":"false"}">Variante ${i+1}</button>`).join("")}
           </div>
@@ -7808,7 +7834,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   const PROFILE_DEFAULTS={
     finanzas:{nombre:'Relojes',cargo:'Finanzas · Cobros · Atención al cliente',area:'Caja y cartera final',emoji:'⌚',color:'#8B1538',funciones:['Cobrar clientes finales','Crear y actualizar CRM','Generar ficha WhatsApp','Marcar pagado y renovar','Registrar egresos','Preparar cierre semanal']},
-    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Generar URL + 4 variantes','Administrar inventario y compras','Revisar Control Maestro','Supervisar finanzas','Configurar sistema y bot']},
+    admin:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀',color:'#1CA7EC',funciones:['Crear y actualizar clientes','Generar URL + 6 variantes','Administrar inventario y compras','Revisar Control Maestro','Supervisar finanzas','Configurar sistema y bot']},
     auditor:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Control y rendimiento',emoji:'📊',color:'#6C5CE7',funciones:['Revisar CRM master','Auditar cobros y renovaciones','Detectar servicios sin pago','Ver métricas por vendedor','Medir retención','Controlar fugas de dinero']}
   };
   const USER_PROFILE_DEFAULTS={
