@@ -2138,10 +2138,17 @@ async function load(options={}){
       // cambios del bot; se omite en su actualización rápida.
       if(!controlOnly){
         try{
-          let fSnap;
-          try{fSnap=await readCollection("finanzas_movimientos");}catch(_){fSnap=null;}
-          if(!fSnap||fSnap.empty){try{fSnap=await readCollection("finanzas");}catch(_){fSnap=null;}}
-          FINANZAS=fSnap?fSnap.docs.map(d=>({id:d.id,...d.data()})):[];
+          // El bot conserva movimientos actuales en finanzas_movimientos y puede
+          // tener históricos en finanzas. Leemos ambas fuentes y unificamos por
+          // ID, igual que el reporte de Telegram, para no omitir ni duplicar filas.
+          let finActual=null,finHistorico=null,finActualError=null,finHistoricoError=null;
+          try{finActual=await readCollection("finanzas_movimientos");}catch(e){finActualError=e;}
+          try{finHistorico=await readCollection("finanzas");}catch(e){finHistoricoError=e;}
+          if(!finActual&&!finHistorico)throw(finActualError||finHistoricoError||new Error("No se pudo leer finanzas"));
+          const finPorId=new Map();
+          if(finHistorico)finHistorico.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas",...d.data()}));
+          if(finActual)finActual.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas_movimientos",...d.data()}));
+          FINANZAS=[...finPorId.values()];
           window._finError="";
         }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
       }
@@ -2736,16 +2743,79 @@ async function invEditar(c){
 
 /* ===== FINANZAS (reportes con gráficos interactivos) ===== */
 let _finCharts=[];
+function finMoney(v){
+  if(typeof v==="number")return Number.isFinite(v)?Math.abs(v):0;
+  const n=Number(String(v??"0").replace(/[^0-9.,-]/g,"").replace(/,/g,""));
+  return Number.isFinite(n)?Math.abs(n):0;
+}
+function finCalendarDate(v){
+  if(v===null||v===undefined||v==="")return null;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  let y,mo,d;
+  if(m){d=+m[1];mo=+m[2];y=+m[3];}
+  else{
+    m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|T)/);
+    if(!m)return null;
+    y=+m[1];mo=+m[2];d=+m[3];
+  }
+  const out=new Date(y,mo-1,d,12,0,0,0);
+  return out.getFullYear()===y&&out.getMonth()===mo-1&&out.getDate()===d?out:null;
+}
+function finTimestampDate(v){
+  if(!v)return null;
+  let raw=null;
+  try{
+    if(typeof v.toDate==="function")raw=v.toDate();
+    else if(v instanceof Date)raw=v;
+    else if(typeof v==="number"&&Number.isFinite(v))raw=new Date(v<1e12?v*1000:v);
+    else if(typeof v==="object"&&Number.isFinite(v.seconds??v._seconds))raw=new Date(Number(v.seconds??v._seconds)*1000);
+    else raw=new Date(String(v));
+  }catch(_){return null;}
+  if(!raw||Number.isNaN(raw.getTime()))return null;
+  // Un timestamp es un instante; se convierte al día comercial de Honduras.
+  // Así la medianoche UTC no mueve una venta al día siguiente en Sublichat.
+  try{
+    const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/Tegucigalpa",year:"numeric",month:"numeric",day:"numeric"}).formatToParts(raw);
+    const pick=t=>Number(parts.find(p=>p.type===t)?.value||0);
+    const y=pick("year"),mo=pick("month"),d=pick("day");
+    if(y&&mo&&d)return new Date(y,mo-1,d,12,0,0,0);
+  }catch(_){}
+  return new Date(raw.getFullYear(),raw.getMonth(),raw.getDate(),12,0,0,0);
+}
+function finBusinessDate(m){
+  // Mismo orden del bot: primero la fecha escrita de la operación; los
+  // timestamps técnicos solamente son respaldo.
+  const business=[m.fecha,m.fechaPago,m.fecha_pago,m.fecha_dmy,m.fechaMovimiento,m.date];
+  for(const value of business){const parsed=finCalendarDate(value);if(parsed)return parsed;}
+  const fallback=[m.fechaTS,m.fecha_ts,m.timestamp,m.ts,m.createdAt,m.created_at,m.updatedAt,m.updated_at];
+  for(const value of fallback){const parsed=finTimestampDate(value);if(parsed)return parsed;}
+  return null;
+}
+function finText(v){return String(v??"").trim();}
+function finKey(v){return finText(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function finEscape(v){return finText(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function finBank(m){
+  const raw=finText(m.banco||m.metodoPago||m.metodo_pago||m.metodo||m.cuenta||m.bank);
+  if(!raw||["no especificado","ninguno","n/a","—","-"].includes(finKey(raw)))return "Sin banco";
+  return raw;
+}
 function finParse(m){
-  const tipo=(m.tipo||m.type||"").toLowerCase();
-  const esIngreso = tipo.includes("ingreso")||tipo==="in"||tipo==="ingreso";
-  const esEgreso = tipo.includes("egreso")||tipo.includes("gasto")||tipo==="out";
+  const tipo=finText(m.tipo||m.type||m.movimiento||"ingreso").toLowerCase();
+  const esEgreso=tipo.includes("egreso")||tipo.includes("gasto")||tipo.includes("salida")||tipo==="out";
+  const esIngreso=!esEgreso;
+  const plataforma=finText(m.plataforma||m.servicio||m.producto||m.platform);
+  const detalle=finText(m.detalle||m.descripcion||m.nota||m.observacion);
+  const conceptoIngreso=plataforma?platLabel(plataforma):finText(m.concepto||m.descripcion||m.concept||m.clienteNombre||m.nombre||detalle);
+  const conceptoEgreso=finText(m.motivo||m.concepto||m.descripcion||m.concept||m.detalle||m.nota||m.observacion);
   return {
-    tipo: esEgreso?"egreso":(esIngreso?"ingreso":(tipo||"otro")),
-    monto: Number(m.monto||m.cantidad||m.amount||0),
-    fecha: parseDate(m.fecha||m.date||m.createdAt),
-    banco: m.banco||m.bank||m.metodo||"—",
-    concepto: m.concepto||m.descripcion||m.concept||m.detalle||"—"
+    tipo:esIngreso?"ingreso":"egreso",
+    monto:finMoney(m.monto??m.cantidad??m.valor??m.amount??m.total),
+    fecha:finBusinessDate(m),
+    banco:finBank(m),
+    concepto:(esIngreso?conceptoIngreso:conceptoEgreso)||"Movimiento",
+    plataforma,
+    detalle
   };
 }
 function renderFinanzas(){
@@ -2762,8 +2832,8 @@ function renderFinanzas(){
   const recientes=[...movs].sort((a,b)=>b.fecha-a.fecha).slice(0,40);
   const mv=document.getElementById("finMovs");
   if(mv)mv.innerHTML=recientes.length?recientes.map(m=>`
-    <div class="fin-mov"><div class="fm-c"><div class="fm-concept">${m.concepto}</div>
-    <div class="fm-meta">${m.fecha.toLocaleDateString("es-HN")} · ${m.banco}</div></div>
+    <div class="fin-mov"><div class="fm-c"><div class="fm-concept">${finEscape(m.concepto)}</div>
+    <div class="fm-meta">${m.fecha.toLocaleDateString("es-HN")} · ${finEscape(m.banco)}</div></div>
     <div class="fm-monto ${m.tipo==="ingreso"?"ing":"egr"}">${m.tipo==="ingreso"?"+":"−"}${fmt(m.monto)}</div></div>`).join(""):`<div class="empty">Sin movimientos</div>`;
   window._finMovs=movs;
 }
