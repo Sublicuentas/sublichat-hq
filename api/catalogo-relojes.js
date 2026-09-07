@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 function credentialFrom(prefix=''){
   const projectId=process.env[prefix+'FIREBASE_PROJECT_ID'];
@@ -13,16 +14,22 @@ function getAuthApp(){
   const cred=credentialFrom('');if(!cred)throw new Error('Faltan variables Firebase de Sublichat.');
   return admin.initializeApp({credential:admin.credential.cert(cred)});
 }
-function getCatalogDb(){
+function getCatalogApp(){
   const dedicated=credentialFrom('CATALOGO_');
   if(!dedicated){
-    if(String(process.env.CATALOGO_USE_SUBLICHAT_FIREBASE||'')==='1'){getAuthApp();return admin.firestore();}
+    if(String(process.env.CATALOGO_USE_SUBLICHAT_FIREBASE||'')==='1')return getAuthApp();
     throw new Error('Catálogo Relojes no está enlazado. Configure CATALOGO_REMOTE_URL + CATALOGO_SYNC_SECRET (recomendado) o las credenciales CATALOGO_FIREBASE_* del catálogo.');
   }
   let app=admin.apps.find(a=>a.name==='catalogo-relojes');
-  if(!app)app=admin.initializeApp({credential:admin.credential.cert(dedicated)},'catalogo-relojes');
-  return app.firestore();
+  if(!app){
+    const options={credential:admin.credential.cert(dedicated)};
+    const configuredBucket=String(process.env.CATALOGO_FIREBASE_STORAGE_BUCKET||process.env.CATALOGO_STORAGE_BUCKET||'').trim();
+    if(configuredBucket)options.storageBucket=configuredBucket;
+    app=admin.initializeApp(options,'catalogo-relojes');
+  }
+  return app;
 }
+function getCatalogDb(){return getCatalogApp().firestore();}
 const clean=(v,max=500)=>String(v==null?'':v).replace(/[\u0000-\u001F]/g,' ').trim().slice(0,max);
 const norm=v=>clean(v,120).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
 function editorKind(user){const u=norm(user&&(user.usuario||user.name||''));if(['sublicuentas','naara'].includes(u))return'admin';if(['relojes','libni'].includes(u))return'relojes';return'';}
@@ -87,6 +94,42 @@ async function remoteCall(action,payload={}){
   if(!r.ok||!data.ok)throw new Error(data.error||`Catálogo remoto HTTP ${r.status}`);
   return data;
 }
+
+function storageBucketCandidates(projectId,explicit=''){
+  const values=[explicit,process.env.CATALOGO_FIREBASE_STORAGE_BUCKET,process.env.CATALOGO_STORAGE_BUCKET];
+  if(projectId){values.push(`${projectId}.firebasestorage.app`,`${projectId}.appspot.com`);}
+  return [...new Set(values.map(x=>String(x||'').trim()).filter(Boolean))];
+}
+function uploadExtension(mime){return mime==='image/png'?'png':mime==='image/webp'?'webp':'jpg';}
+async function uploadCatalogImageDirect(payload={}){
+  const mime=clean(payload.mime,80).toLowerCase();
+  if(!['image/jpeg','image/png','image/webp'].includes(mime))throw new Error('Formato de imagen no permitido. Use JPG, PNG o WebP.');
+  const raw=String(payload.base64||'').replace(/^data:[^;]+;base64,/, '').replace(/\s+/g,'');
+  if(!raw)throw new Error('La imagen llegó vacía.');
+  const buffer=Buffer.from(raw,'base64');
+  if(!buffer.length||buffer.length>3*1024*1024)throw new Error('La imagen debe pesar menos de 3 MB después de optimizarse.');
+  const kind=clean(payload.kind,30)==='product'?'productos':'carrusel';
+  const token=crypto.randomBytes(18).toString('hex');
+  const ext=uploadExtension(mime);
+  const path=`catalogo/${kind}/${Date.now()}-${token.slice(0,12)}.${ext}`;
+  const app=getCatalogApp();
+  const dedicated=credentialFrom('CATALOGO_');
+  const projectId=dedicated?.projectId||process.env.FIREBASE_PROJECT_ID||'';
+  const explicit=String(app.options?.storageBucket||'').trim();
+  const candidates=storageBucketCandidates(projectId,explicit);
+  if(!candidates.length)throw new Error('Falta configurar FIREBASE_STORAGE_BUCKET del catálogo.');
+  let lastError=null;
+  for(const bucketName of candidates){
+    try{
+      const bucket=admin.storage(app).bucket(bucketName);
+      const file=bucket.file(path);
+      await file.save(buffer,{resumable:false,validation:false,metadata:{contentType:mime,cacheControl:'public,max-age=31536000,immutable',metadata:{firebaseStorageDownloadTokens:token}}});
+      const imageUrl=`https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(path)}?alt=media&token=${encodeURIComponent(token)}`;
+      return {imageUrl,bucket:bucket.name,path};
+    }catch(error){lastError=error;}
+  }
+  throw new Error(`No se pudo subir la imagen a Firebase Storage. ${String(lastError&&lastError.message||'Revise el bucket configurado.')}`);
+}
 function validate(c){
   const errors=[];const cats=new Set();const prod=new Set();const slides=new Set();
   c.categories.forEach(x=>{if(cats.has(x.id))errors.push(`Categoría duplicada: ${x.id}`);cats.add(x.id);});
@@ -102,6 +145,10 @@ async function handler(req,res){
     getAuthApp();const editor=await requireEditor(req,res);if(!editor)return;
     const body=typeof req.body==='string'?JSON.parse(req.body||'{}'):(req.body||{}),action=clean(body.accion||body.action,40);
     const remote=remoteConfig();
+    if(action==='subir_imagen'&&remote){
+      const data=await remoteCall('upload_image',{kind:clean(body.kind,30),filename:clean(body.filename,180),mime:clean(body.mime,80),base64:String(body.base64||'')});
+      return res.status(200).json({ok:true,imageUrl:data.imageUrl||'',source:'remote'});
+    }
     if(action==='cargar'&&remote){
       const data=await remoteCall('load');
       return res.status(200).json({ok:true,catalog:normalizeCatalog(data.catalog||{}),exists:true,editor:editor.kind,history:data.history||[],source:'remote'});
@@ -110,6 +157,10 @@ async function handler(req,res){
       const catalog=normalizeCatalog(body.catalog||{}),errors=validate(catalog);if(errors.length)return res.status(400).json({ok:false,error:errors.join('\n')});
       const data=await remoteCall('save',{catalog,actor:editor.actor||editor.kind});
       return res.status(200).json({ok:true,catalog:normalizeCatalog(data.catalog||catalog),message:data.message||'Catálogo remoto publicado.',source:'remote'});
+    }
+    if(action==='subir_imagen'){
+      const uploaded=await uploadCatalogImageDirect(body);
+      return res.status(200).json({ok:true,...uploaded,source:'storage'});
     }
     const db=getCatalogDb(),ref=db.collection(process.env.CATALOG_COLLECTION||'catalogo').doc(process.env.CATALOG_DOCUMENT||'publico');
     if(action==='cargar'){
