@@ -1937,6 +1937,8 @@ const DEMO = [
 ];
 
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
+let CONTROL_DATA_VERSION=0; // cambia cada vez que Clientes/Bodega reciben una lectura nueva
+function bumpControlDataVersion(){ CONTROL_DATA_VERSION=(CONTROL_DATA_VERSION+1)%1000000000; return CONTROL_DATA_VERSION; }
 let clientesLiveUnsubscribe=null, clientesLiveStarted=false;
 const fmt = n => "Lps " + Number(n||0).toLocaleString("es-HN");
 const daysTo = d => Math.round((d - today)/86400000);
@@ -2081,6 +2083,7 @@ function activarClientesEnVivo(db,collection,onSnapshot){
     // Los cambios del bot llegan aquí apenas Firebase confirma el servidor.
     if(snap.metadata&&snap.metadata.fromCache)return;
     DATA=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+    bumpControlDataVersion();
     const src=document.getElementById("srcLabel");
     if(src)src.textContent=`Firebase en vivo · ${DATA.length} servicios`;
     render();
@@ -2133,6 +2136,15 @@ async function load(options={}){
       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       DATA=nextData;INVENTARIO=nextInventory;
+      bumpControlDataVersion();
+      // Control Maestro puede abrirse antes de que termine la primera lectura de
+      // Bodega. Avisamos inmediatamente cuando la lectura atómica de Clientes +
+      // Inventario ya está lista para que descarte cualquier mesa calculada con
+      // INVENTARIO vacío o anterior.
+      try{
+        if(typeof window.sublichatControlSyncLoadedData==="function")
+          window.sublichatControlSyncLoadedData("✅ Clientes y Bodega sincronizados desde Firebase.");
+      }catch(_){ }
       document.getElementById("srcLabel").textContent=`Firebase · ${DATA.length} servicios`;
       activarClientesEnVivo(db,collection,onSnapshot);
       window._invError=invError?((invError&&invError.code)||(invError&&invError.message)||"error"):"";
@@ -2182,6 +2194,7 @@ async function load(options={}){
 // cargada dentro de la sesión actual; el módulo y su API vuelven a validar que
 // el usuario sea Sublicuentas antes de permitir plantillas o respaldos.
 window.sublichatControlData=()=>({
+  version:CONTROL_DATA_VERSION,
   servicios:DATA.flatMap(c=>(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre)).map((p,perfilIndex)=>({
     clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
     cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),titular:c.nombre||'',
@@ -2192,7 +2205,15 @@ window.sublichatControlData=()=>({
   }))),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
-    disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({clienteId:p.clienteId||p.clientId||'',compraId:p.compraId||'',perfilId:p.perfilId||p.profileId||'',nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??'',telefono:p.telefono||''})):[]
+    disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
+      clienteId:p.clienteId||p.clientId||p.idCliente||'',
+      compraId:p.compraId||p.servicioId||'',
+      perfilId:p.perfilId||p.profileId||p.idPerfil||'',
+      nombre:p.nombre||p.nombreCliente||p.cliente||p.titular||p.name||'',
+      pin:p.pin||p.pinPerfil||'',
+      slot:p.slot??p.perfil??p.profile??p.cupo??'',
+      telefono:p.telefono||p.celular||p.phone||p.whatsapp||''
+    })):[]
   }))
 });
 window.sublichatControlReload=()=>load({forceServer:true,requireServer:true,controlOnly:true});
@@ -9920,7 +9941,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20260907-49"></script>
+<script defer src="./control-maestro.js?v=20260907-51"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

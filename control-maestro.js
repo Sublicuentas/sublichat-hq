@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-ASIGNACION-ROBUSTA-20260907-49';
+  const BUILD='CONTROL-MAESTRO-FULLSCREEN-PERSISTENTE-20260907-51';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -117,8 +117,8 @@
   function source(){
     try{
       const x=typeof window.sublichatControlData==='function'?window.sublichatControlData():{};
-      return {servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
-    }catch(_){return {servicios:[],cuentas:[]};}
+      return {version:Number(x.version)||0,servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
+    }catch(_){return {version:0,servicios:[],cuentas:[]};}
   }
 
   async function api(payload,endpoint=API){
@@ -268,6 +268,13 @@
       magis:'magis',magistv:'magis',stellatv:'stellatv',stella:'stellatv',oleada:'oleada',oleadatv:'oleada',latintv:'latintv',liontv:'liontv',iptv:'iptv'
     };
     if(aliases[k])return aliases[k];
+    // Compatibilidad con códigos históricos o etiquetas extendidas de Bodega.
+    // La cuenta no debe separarse de Clientes solo porque una versión antigua
+    // guardó, por ejemplo, primevideo5 / primepremium / hbomaxpremium.
+    if(k.startsWith('prime'))return 'primevideo';
+    if(k.startsWith('hbomax')||k==='hbo'||k==='max')return 'hbomax';
+    if(k.startsWith('paramount'))return 'paramount';
+    if(k.startsWith('crunch'))return 'crunchyroll';
     if(k.startsWith('canva'))return 'canva';
     if(k.startsWith('office2021'))return 'office2021';
     if(k.startsWith('office')||k.startsWith('microsoft365'))return 'office';
@@ -395,10 +402,10 @@
       clienteId:auditStable(x?.clienteId||x?.clientId),
       compraId:auditStable(x?.compraId),
       perfilId:auditStable(x?.perfilId||x?.profileId),
-      name:auditPersonKey(x?.nombre),
-      phone:phone(x?.telefono),
-      pin:norm(fieldText(service?x?.pinPerfil:x?.pin)),
-      profile:auditPersonKey(fieldText(service?x?.perfil:x?.slot))
+      name:auditPersonKey(x?.nombre||x?.nombreCliente||x?.cliente||x?.titular||x?.name),
+      phone:phone(x?.telefono||x?.celular||x?.phone||x?.whatsapp),
+      pin:norm(fieldText(service?(x?.pinPerfil||x?.pin):(x?.pin||x?.pinPerfil))),
+      profile:auditPersonKey(fieldText(service?(x?.perfil||x?.slot):(x?.slot??x?.perfil??x?.profile??x?.cupo)))
     };
   }
   function auditIdentityScore(invRow,service){
@@ -1326,9 +1333,15 @@
     // memoria y no se volvía a calcular — se quedaba mal hasta que alguien
     // tocaba "Actualizar datos" a la fuerza. Ahora se vuelve a calcular
     // automáticamente en cuanto el análisis del Excel cambia de verdad.
-    if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis){
-      state.accountAudit=buildAccountAudit(source(),state.analysis);
+    const liveSource=source();
+    // La mesa también depende de Bodega, no solo del Excel. Antes podía abrirse
+    // durante el arranque con INVENTARIO todavía vacío y quedar cacheada así
+    // aunque Firebase cargara la cuenta segundos después. El versionado de la
+    // fuente obliga a reconstruirla en cuanto cambia Clientes o Bodega.
+    if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis||state.accountAudit._sourceVersion!==liveSource.version){
+      state.accountAudit=buildAccountAudit(liveSource,state.analysis);
       state.accountAudit._forAnalysis=state.analysis;
+      state.accountAudit._sourceVersion=liveSource.version;
     }
     const controlScreen=document.getElementById('screen-control-cuentas');
     const expanded=state.controlExpanded||document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
@@ -1338,7 +1351,11 @@
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
-    if(expanded)requestAnimationFrame(ensureControlExpanded);
+    if(expanded){
+      state.controlExpanded=true;
+      requestAnimationFrame(persistControlExpanded);
+      setTimeout(persistControlExpanded,60);
+    }
   }
 
   // Vuelve a atar únicamente los botones que viven dentro de la mesa de cuentas
@@ -2067,9 +2084,12 @@
     const screen=document.getElementById('screen-control-cuentas');
     const button=root()?.querySelector?.('[data-cm-action="toggle-fullscreen"]');
     if(!button)return;
-    const active=state.controlExpanded||document.fullscreenElement===screen||screen?.classList.contains('cm-control-expanded');
+    // La pantalla completa del Control Maestro es un modo propio de Sublichat.
+    // No depende del Fullscreen API del navegador porque Opera/Chrome pueden
+    // cancelarlo al abrir selectores, confirmaciones, modales o file-pickers.
+    const active=!!state.controlExpanded&&!!screen?.classList.contains('active');
     button.textContent=active?'↙️ Salir de pantalla completa':'⛶ Pantalla completa';
-    button.setAttribute?.('aria-pressed',String(!!active));
+    button.setAttribute?.('aria-pressed',String(active));
   }
 
   function controlWrap(){
@@ -2109,15 +2129,25 @@
   function ensureControlExpanded(){
     const screen=document.getElementById('screen-control-cuentas');
     if(!screen||!state.controlExpanded||!screen.classList.contains('active'))return;
-    // No volver a sacar la pantalla de .wrap. El reparentado fue la causa del
-    // estado blanco/pegado al salir de pantalla completa. El CSS desactiva el
-    // backdrop-filter del marco mientras está expandido, por lo que position:fixed
-    // vuelve a usar el viewport real sin mover nodos del DOM.
+    // No volver a sacar la pantalla de .wrap. El modo completo es 100% CSS y
+    // queda independiente de cualquier acción interna (filtros, editar, borrar,
+    // revisar, abrir clientes, modales, confirmaciones, etc.).
     restoreControlHome(false);
-    screen.classList.add('cm-control-expanded');
-    document.body.classList.add('cm-control-no-scroll');
-    document.documentElement.classList.add('cm-control-no-scroll');
+    if(!screen.classList.contains('cm-control-expanded'))screen.classList.add('cm-control-expanded');
+    if(!document.body.classList.contains('cm-control-no-scroll'))document.body.classList.add('cm-control-no-scroll');
+    if(!document.documentElement.classList.contains('cm-control-no-scroll'))document.documentElement.classList.add('cm-control-no-scroll');
     syncFullscreenButton();
+  }
+
+  function persistControlExpanded(){
+    if(!state.controlExpanded)return;
+    const screen=document.getElementById('screen-control-cuentas');
+    if(!screen?.classList.contains('active'))return;
+    ensureControlExpanded();
+    // Algunos componentes vuelven a pintar DOM en el mismo clic. Reafirmamos el
+    // modo después de ese repaint sin reconstruir ni mover el módulo.
+    requestAnimationFrame(ensureControlExpanded);
+    setTimeout(ensureControlExpanded,40);
   }
 
   function closeControlExpanded(options={}){
@@ -2160,15 +2190,10 @@
     state.controlExpanded=true;
     ensureControlExpanded();
     screen.scrollTop=0;syncFullscreenButton();
-    // Se solicita pantalla completa real cuando el navegador lo permite. La
-    // capa CSS queda activa como respaldo: si Chrome sale del modo nativo al
-    // abrir un prompt, editar o eliminar, el Control Maestro NO se minimiza.
-    if(!document.fullscreenElement&&screen.requestFullscreen){
-      try{
-        const request=screen.requestFullscreen({navigationUI:'hide'});
-        if(request?.catch)request.catch(()=>{ensureControlExpanded();syncFullscreenButton();});
-      }catch(_){ensureControlExpanded();}
-    }
+    // IMPORTANTE: NO usamos requestFullscreen(). El navegador puede salir del
+    // fullscreen nativo por razones ajenas a Sublichat. El modo CSS ocupa el
+    // viewport completo y sólo se cierra con el botón o con Esc.
+    persistControlExpanded();
   }
 
   async function refreshControlData(){
@@ -2318,16 +2343,19 @@
 
     document.addEventListener('fullscreenchange',()=>{
       if(!screen)return;
-      if(document.fullscreenElement===screen){
-        state.controlExpanded=true;
-        ensureControlExpanded();
-        requestAnimationFrame(()=>{screen.scrollTop=0;syncFullscreenButton();});
-      }else if(state.controlExpanded){
-        // Si el navegador sale del fullscreen nativo, se conserva la vista CSS
-        // sin reparentar el módulo ni bloquear la navegación.
-        ensureControlExpanded();syncFullscreenButton();
-      }else syncFullscreenButton();
+      // Compatibilidad con sesiones antiguas que pudieron quedar en fullscreen
+      // nativo. Nuestro estado manda: si Control Maestro debía seguir completo,
+      // se mantiene el modo CSS aunque el navegador salga del nativo.
+      if(state.controlExpanded){persistControlExpanded();}
+      else syncFullscreenButton();
     });
+
+    // Persistencia extra: cualquier acción dentro del Control Maestro puede
+    // cambiar filtros, abrir/cerrar filas o volver a renderizar. Ninguna debe
+    // cambiar el modo completo. Se reafirma después del evento sin interferir
+    // con el onclick original.
+    screen.addEventListener('click',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);
+    screen.addEventListener('change',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
     window.addEventListener('pageshow',()=>{if(!state.controlExpanded)repairControlNavigation();});
     window.addEventListener('pagehide',()=>{if(!state.controlExpanded)repairControlNavigation();});
