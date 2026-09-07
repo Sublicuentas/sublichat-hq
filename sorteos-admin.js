@@ -274,7 +274,7 @@
         <button type="button" class="sr-btn ghost" data-sr-tickets="${esc(draw.id)}">Ver boletos</button>
         ${canEdit?`<button type="button" class="sr-btn ghost" data-sr-edit-draw="${esc(draw.id)}">Editar</button>`:''}
         ${canBackfill?`<button type="button" class="sr-btn ghost" data-sr-backfill="${esc(draw.id)}">Cargar desde agosto 2026</button>`:''}
-        ${canAudit?`<button type="button" class="sr-btn ghost" data-sr-audit="${esc(draw.id)}">✅ Recalcular boletos</button>`:''}
+        ${canAudit?`<button type="button" class="sr-btn ghost" data-sr-audit="${esc(draw.id)}">🔍 Auditar boletos</button>`:''}
         ${canClose?`<button type="button" class="sr-btn dark" data-sr-close="${esc(draw.id)}">Cerrar participación</button>`:''}
         ${canSpin?`<button type="button" class="sr-btn primary pulse" data-sr-spin="${esc(draw.id)}">🎡 Girar ruleta</button>`:''}
         ${canDelete?`<button type="button" class="sr-btn danger" data-sr-delete="${esc(draw.id)}">🗑 Eliminar</button>`:''}
@@ -449,7 +449,7 @@
     let reset=true,last=null;
     try{
       const preview=await api({accion:'cargar_agosto_2026',id,previsualizar:true});
-      const approved=confirm(`AUDITORÍA PREVIA · DESDE AGOSTO 2026\n\nClientes detectados: ${Number(preview.clientesDetectados)||0}\nCompras: ${Number(preview.compras)||0}\nRenovaciones por servicio: ${Number(preview.renovaciones)||0}\nBoletos estimados: ${Number(preview.boletosEstimados)||0}\n\n¿Autoriza emitir estos boletos en “${draw.titulo}”?`);
+      const approved=confirm(`AUDITORÍA PREVIA · DESDE 01/08/2026\n\nClientes vigentes detectados: ${Number(preview.clientesDetectados)||0}\nCompras verificadas: ${Number(preview.compras)||0}\nRenovaciones verificadas por servicio: ${Number(preview.renovaciones)||0}\nBoletos estimados: ${Number(preview.boletosEstimados)||0}\nRegistros ambiguos sin emitir: ${Number(preview.ambiguos)||0}\n\nLos meses y niveles no multiplican boletos.\n\n¿Autoriza emitir únicamente estos boletos comprobados en “${draw.titulo}”?`);
       if(!approved)return;
       status('Emitiendo boletos auditados de agosto…');
       do{
@@ -473,12 +473,36 @@
   }
   async function auditTickets(id,button){
     const draw=state.sorteos.find(item=>item.id===id);if(!draw)return;
-    if(!confirm(`Se reconstruirán todos los boletos de “${draw.titulo}” usando únicamente operaciones comprobadas desde agosto: 1 por compra y 2 por renovación, sin bonos por nivel. ¿Continuar?`))return;
-    if(button)button.disabled=true;status('Corrigiendo boletos con la regla estricta…');
+    if(button)button.disabled=true;status('Auditando sin cambiar ningún boleto…');
     try{
-      const result=await api({accion:'corregir_boletos',id,reiniciar:true});let reset=true,last=null;
+      const report=await api({accion:'auditar_boletos',id});
+      const summary=report.resumen||{},differences=Array.isArray(report.diferencias)?report.diferencias:[];
+      const examples=differences.slice(0,8).map(item=>{
+        const parts=[];
+        if(Number(item.faltantes))parts.push(`faltan ${Number(item.faltantes)}`);
+        if(Number(item.sobrantes)+Number(item.sinRespaldo))parts.push(`sobran/sin respaldo ${Number(item.sobrantes)+Number(item.sinRespaldo)}`);
+        if(Number(item.ambiguos))parts.push(`${Number(item.ambiguos)} para revisión manual`);
+        return `• ${item.nombre||'Cliente'}${item.telefono?` (${item.telefono})`:''}: ${parts.join(', ')||'sin diferencia'}`;
+      }).join('\n');
+      const message=`AUDITORÍA REAL · SOLO LECTURA · DESDE 01/08/2026\n\nOperaciones verificadas: ${Number(summary.operacionesVerificadas)||0}\nBoletos correctos esperados: ${Number(summary.boletosEsperados)||0}\nBoletos guardados: ${Number(summary.boletosGuardados)||0}\nFaltantes: ${Number(summary.faltantes)||0}\nSobrantes o sin respaldo: ${Number(summary.sobrantesOSinRespaldo)||0}\nRegistros ambiguos sin contar: ${Number(summary.registrosAmbiguos)||0}\nClientes con diferencias: ${Number(summary.clientesConDiferencias)||0}${examples?`\n\nPrimeros casos:\n${examples}`:''}`;
+      const needsRepair=(Number(summary.faltantes)||0)>0||(Number(summary.sobrantesOSinRespaldo)||0)>0;
+      if(!needsRepair){
+        alert(`${message}\n\nNo se modificó nada. Los boletos comprobables ya cumplen la regla estricta.`);
+        status(`Auditoría lista: ${Number(summary.boletosEsperados)||0} boletos comprobados; no hay faltantes ni sobrantes.${Number(summary.registrosAmbiguos)?` ${Number(summary.registrosAmbiguos)} registro(s) requieren revisión manual.`:''}`,Number(summary.registrosAmbiguos)?'bad':'good');
+        return;
+      }
+      if(draw.estado!=='activo'){
+        alert(`${message}\n\nNo se modificó nada. Este sorteo ya tiene la participación cerrada; la corrección solo se permite mientras esté activo y antes de girar la ruleta.`);
+        status('Auditoría terminada sin cambios: el sorteo está cerrado. Corrija siempre antes de cerrar la participación.','bad');
+        return;
+      }
+      const approved=confirm(`${message}\n\n¿Autoriza reconstruir el padrón?\n\nSe eliminarán los boletos actuales de este sorteo y se crearán solo los respaldados por operaciones exactas: compra = 1, renovación = 2. Los ambiguos quedarán sin emitir para no inflar números.`);
+      if(!approved){status('Auditoría terminada sin modificar boletos.','good');return;}
+      status('Reconstruyendo únicamente desde operaciones verificadas…');
+      const result=await api({accion:'corregir_boletos',id,reiniciar:true});let reset=false,last=null;
       do{last=await api({accion:'cargar_agosto_2026',id,reiniciar:reset});reset=false;status(`Recalculando: ${Number(last.procesados)||0} de ${Number(last.totalTareas)||0} operaciones…`);}while(last&&!last.completado);
-      await load(true);status(`Boletos reconstruidos: ${Number(result.antes)||0} anteriores eliminados · ${Number(last?.boletosCreados)||0} boletos estrictos creados.`,'good');
+      const after=await api({accion:'auditar_boletos',id});
+      await load(true);status(`Boletos reconstruidos: ${Number(result.antes)||0} anteriores retirados · ${Number(last?.boletosCreados)||0} boletos estrictos creados · ${Number(after?.resumen?.faltantes)||0} faltante(s) después de verificar.${Number(after?.resumen?.registrosAmbiguos)?` ${Number(after.resumen.registrosAmbiguos)} registro(s) siguen en revisión manual.`:''}`,Number(after?.resumen?.faltantes)||Number(after?.resumen?.sobrantesOSinRespaldo)?'bad':'good');
     }
     catch(error){status(error.message,'bad');}
     finally{if(button&&document.body.contains(button))button.disabled=false;}
