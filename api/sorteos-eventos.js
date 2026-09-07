@@ -103,7 +103,10 @@ async function updateLoyalty(db, event) {
 
 async function currentTicketCount(db, drawId, clientId) {
   const snap = await db.collection("sorteo_boletos").where("clientId", "==", clientId).get();
-  return snap.docs.reduce((sum, doc) => sum + (String((doc.data() || {}).sorteoId) === drawId ? 1 : 0), 0);
+  return snap.docs.reduce((sum, doc) => {
+    const ticket = doc.data() || {};
+    return sum + (String(ticket.sorteoId) === drawId && ticket.activo !== false ? 1 : 0);
+  }, 0);
 }
 
 async function createEventTickets(db, draw, event, quantity) {
@@ -122,7 +125,9 @@ async function createEventTickets(db, draw, event, quantity) {
     const counted = counterSnap.exists ? Math.max(0, Number((counterSnap.data() || {}).total) || 0) : existing;
     const total = Math.min(Math.max(0, Number(quantity) || 0), Math.max(0, drawRules.limitePorCliente - counted));
     if (!total) {
-      transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId, cantidad: 0, limitado: true, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId,
+        vendedor: event.vendedor, vendedorNorm: event.vendedorNorm, origen: event.origen,
+        cantidad: 0, limitado: true, createdAt: admin.firestore.FieldValue.serverTimestamp() });
       transaction.set(counterRef, { sorteoId: drawId, clientId, total: counted, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       return { creados: 0, limite: true };
     }
@@ -136,7 +141,9 @@ async function createEventTickets(db, draw, event, quantity) {
       });
       codes.push(code);
     }
-    transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId, cantidad: total, codigos: codes, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.set(eventRef, { sorteoId: drawId, clientId, tipo: event.tipo, eventoId: eventId,
+      vendedor: event.vendedor, vendedorNorm: event.vendedorNorm, origen: event.origen,
+      cantidad: total, codigos: codes, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     transaction.set(counterRef, { sorteoId: drawId, clientId, total: counted + total, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     transaction.set(drawRef, { ultimoNumero: start + total - 1, totalBoletos: admin.firestore.FieldValue.increment(total), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     return { creados: total, codigos: codes, duplicado: false };

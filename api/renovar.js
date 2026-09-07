@@ -1256,6 +1256,35 @@ export default async function handler(req, res) {
         sorteoResult = { ok: false, creados: 0, error: String(error?.message || error || "No se generaron boletos.") };
       }
 
+      // Evidencia exacta para la auditoría de sorteos. Antes esta ruta dejaba
+      // únicamente crm_ficha_upsert; ese rastro confirma que se editó la ficha,
+      // pero no cuál servicio renovó ni cuál fue su nueva fecha.
+      try {
+        const compraEvento = String(servicioGuardado?.compraId || "");
+        const fechaAnterior = String(servicioAnterior?.fechaRenovacion || "");
+        const fechaRenovacion = String(servicioGuardado?.fechaRenovacion || "");
+        const esRenovacionReal = compraEvento && servicioActualizado && fechaRenovacion && fechaRenovacion !== fechaAnterior;
+        if (esRenovacionReal) {
+          await db.collection("historial_clientes").add({
+            clientId: docRef.id,
+            tipo: "servicio_renovado",
+            compraId: compraEvento,
+            servicioIndex: idx,
+            descripcion: `Renovación confirmada: ${fechaAnterior || "-"} → ${fechaRenovacion}`,
+            plataforma: String(servicioGuardado?.plataforma || ""),
+            fechaAnterior,
+            fechaRenovacion,
+            meses: mesesPagadosEntre(fechaAnterior, fechaRenovacion),
+            vendedor: String(servicioGuardado?.vendedor || vendedor || ""),
+            procesadoPor: String(authUser.usuario || authUser.uid || "sublichat"),
+            origen: "Sublichat",
+            sorteoOk: sorteoResult?.ok !== false,
+            boletosCreados: Math.max(0, Number(sorteoResult?.creados) || 0),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      } catch (_) {}
+
       // Crea una URL permanente por beneficiario y conserva, como enlaces
       // puntuales, los tokens antiguos que no fueron elegidos para la fusión.
       try {
@@ -1701,13 +1730,17 @@ export default async function handler(req, res) {
           clientId: docRef.id,
           tipo: "servicio_renovado",
           compraId: compraEvento,
+          servicioIndex: mutation.touchedIndex,
           descripcion: `Renovación confirmada: ${mutation.fechaAnterior || "-"} → ${mutation.fechaNueva || "-"}`,
-          plataforma: plataforma || "",
+          plataforma: servicioPersistido?.plataforma || plataforma || "",
           fechaAnterior: mutation.fechaAnterior || "",
           fechaRenovacion: mutation.fechaNueva || "",
-          vendedor: servicioPersistido?.vendedor || "",
+          meses: mesesPagadosEntre(mutation.fechaAnterior, mutation.fechaNueva),
+          vendedor: servicioPersistido?.vendedor || clientePersistido.vendedor || body.vendedor || "",
           procesadoPor: String(authUser.usuario || authUser.uid || "sublichat"),
           origen: "Sublichat",
+          sorteoOk: sorteoResult?.ok !== false,
+          boletosCreados: Math.max(0, Number(sorteoResult?.creados) || 0),
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
       } catch (_) {}

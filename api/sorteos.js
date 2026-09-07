@@ -405,58 +405,210 @@ function valuesContainHistoricalMonth(values = [], month = CARGA_AGOSTO_2026) {
   return values.some(value => { const found = historicalMonth(value); return found && found >= month; });
 }
 
+function historicalDateKey(value) {
+  const milliseconds = historicalDateMs(value);
+  if (!milliseconds) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date(milliseconds));
+  const get = type => parts.find(part => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function firstDateKey(...values) {
+  for (const value of values) {
+    const key = sorteoFechaKey(value);
+    if (key) return key;
+  }
+  return "";
+}
+
+function raffleClientVipEligible(cliente = {}) {
+  const month = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit"
+  }).format(new Date()).slice(0, 7);
+  const secured = [...new Set(Array.isArray(cliente.fidelidadMesesAsegurados)
+    ? cliente.fidelidadMesesAsegurados.filter(item => /^\d{4}-\d{2}$/.test(item)) : [])];
+  const legacy = !cliente.fidelidadNivelNombre && sorteoNorm(cliente.nivelCliente) === "oro" ? 3 : 0;
+  const cycles = Math.max(legacy, Number(cliente.fidelidadCiclos) || 0) + secured.filter(item => item <= month).length;
+  return ["oro", "diamante", "elite"].includes(nivelFidelidad(cycles).id);
+}
+
+function historicalCategoryAllows(draw = {}, type = "") {
+  const raw = sorteoNorm(draw.categoria || "general");
+  const category = raw === "oro" ? "club_vip" : raw;
+  if (["general", "club_vip"].includes(category)) return ["compra", "renovacion"].includes(type);
+  if (category === "compras") return type === "compra";
+  if (category === "renovaciones") return type === "renovacion";
+  return false;
+}
+
+function servicePlatformKey(value) {
+  return sorteoNorm(value).replace(/[^a-z0-9]/g, "")
+    .replace(/premium|standard|estandar|video|plus/g, "");
+}
+
 async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) {
-  const [clientsSnap, historySnap, auditSnap] = await Promise.all([
+  const [clientsSnap, historySnap, auditSnap, renewalsSnap, raffleEventsSnap] = await Promise.all([
     db.collection("clientes").limit(5000).get(),
     db.collection("historial_clientes").limit(20000).get(),
-    db.collection("auditoria_eventos").limit(20000).get()
+    db.collection("auditoria_eventos").limit(20000).get(),
+    db.collection("renovaciones").limit(20000).get(),
+    db.collection("sorteo_eventos").where("sorteoId", "==", draw.id).get()
   ]);
   const clients = new Map();
   clientsSnap.docs.forEach(doc => {
     const data = doc.data() || {};
     const vendors = clientVendorGroups(data).filter(vendor => scopeMatches(draw, vendor));
     if (!vendors.length || !clientCurrentForDraw(data, draw)) return;
+    const category = sorteoNorm(draw.categoria) === "oro" ? "club_vip" : sorteoNorm(draw.categoria);
+    if (category === "club_vip" && !raffleClientVipEligible(data)) return;
     clients.set(doc.id, { id: doc.id, data, vendor: vendors[0], vendors });
   });
 
   const flags = new Map();
-  const sources = { historial: 0, auditoria: 0, fichas: 0 };
-  const mark = (clientIdValue, type, source, eventKey = "", vendor = "", months = 1) => {
-    const clientId = sorteoSafeId(clientIdValue);
-    if (!clients.has(clientId) || !["compra", "renovacion"].includes(type)) return;
-    const stable = sorteoSafeId(eventKey) || `${type}-cliente`;
-    const key = `${clientId}|${type}|${stable}`;
-    if (flags.has(key)) return;
-    sources[source] += 1;
-    flags.set(key, { clientId, tipo: type, eventoKey: stable, vendedor: sorteoClean(vendor, 80), meses: Math.max(1, Math.min(24, Number(months) || 1)) });
+  const ambiguities = [];
+  const sources = { historial: 0, auditoria: 0, renovaciones: 0, eventos: 0, fichas: 0 };
+  const findService = (client, purchaseId = "", serviceIndex = null, platform = "") => {
+    const services = Array.isArray(client?.data?.servicios) ? client.data.servicios : [];
+    const purchase = sorteoSafeId(purchaseId);
+    if (purchase) {
+      const exact = services.find(service => sorteoSafeId(service?.compraId || service?.servicioId) === purchase);
+      if (exact) return exact;
+    }
+    const wanted = servicePlatformKey(platform);
+    const hasIndex = serviceIndex !== null && serviceIndex !== undefined && serviceIndex !== "";
+    const index = hasIndex ? Number(serviceIndex) : Number.NaN;
+    if (Number.isInteger(index) && index >= 0 && index < services.length) {
+      const indexed = services[index] || {};
+      const found = servicePlatformKey(indexed.plataforma || indexed.servicio || indexed.nombre);
+      if (!wanted || !found || wanted === found || wanted.includes(found) || found.includes(wanted)) return indexed;
+    }
+    if (wanted) {
+      const matches = services.filter(service => {
+        const found = servicePlatformKey(service?.plataforma || service?.servicio || service?.nombre);
+        return found && (wanted === found || wanted.includes(found) || found.includes(wanted));
+      });
+      if (matches.length === 1) return matches[0];
+    }
+    return null;
+  };
+  const markAmbiguous = (clientId, source, evidenceId, reason) => {
+    const safeClientId = sorteoSafeId(clientId);
+    if (!clients.has(safeClientId)) return;
+    const key = `${safeClientId}|${source}|${evidenceId}|${reason}`;
+    if (ambiguities.some(item => item.key === key)) return;
+    const client = clients.get(safeClientId);
+    ambiguities.push({ key, clientId: safeClientId, clienteNombre: sorteoClean(client?.data?.nombrePerfil || client?.data?.nombre || "Cliente", 120), fuente: source, evidenciaId: sorteoClean(evidenceId, 120), motivo: reason });
+  };
+  const mark = ({ clientId: clientIdValue, tipo, fuente, evidenciaId = "", compraId = "", servicioIndex = null,
+    plataforma = "", vendedor = "", meses = 1, fechaOperacion = "", fechaAnterior = "", fechaObjetivo = "" } = {}) => {
+    const clientId = sorteoSafeId(clientIdValue), type = sorteoNorm(tipo);
+    const client = clients.get(clientId);
+    if (!client || !["compra", "renovacion"].includes(type) || !historicalCategoryAllows(draw, type)) return;
+    const service = findService(client, compraId, servicioIndex, plataforma);
+    const stable = sorteoSafeId(compraId || service?.compraId || service?.servicioId || (type === "compra" ? evidenciaId : ""));
+    if (!stable) return markAmbiguous(clientId, fuente, evidenciaId, "No se pudo identificar la compra o plataforma exacta.");
+    const targetDate = type === "renovacion" ? firstDateKey(fechaObjetivo) : "";
+    if (type === "renovacion" && !targetDate) return markAmbiguous(clientId, fuente, evidenciaId, "La renovación no conserva su nueva fecha; no se emitieron boletos automáticamente.");
+    const previousDate = type === "renovacion" ? firstDateKey(fechaAnterior) : "";
+    if (type === "renovacion" && previousDate && previousDate === targetDate) return;
+    const vendorRaw = vendedor || service?.vendedor || service?.vendedor_norm || client.data?.vendedor || client.vendor;
+    const vendorGroup = sorteoVendorGroup(vendorRaw);
+    if (!sorteoVendorElegible(vendorGroup) || !scopeMatches(draw, vendorGroup)) return;
+    const eventId = type === "compra" ? `compra:${stable}` : `renov:${stable}:${targetDate}`;
+    const key = `${clientId}|${type}|${eventId}`;
+    const evidence = `${fuente}:${sorteoClean(evidenciaId, 120)}`;
+    if (flags.has(key)) {
+      const previous = flags.get(key);
+      if (evidence && !previous.evidencias.includes(evidence)) previous.evidencias.push(evidence);
+      if (!previous.vendedor && vendorRaw) previous.vendedor = sorteoClean(vendorRaw, 80);
+      return;
+    }
+    sources[fuente] = (sources[fuente] || 0) + 1;
+    flags.set(key, {
+      clientId, tipo: type, eventoKey: stable, eventoId: eventId,
+      fechaEvento: targetDate, fechaOperacion: historicalDateKey(fechaOperacion),
+      vendedor: sorteoClean(vendorRaw, 80),
+      meses: Math.max(1, Math.min(24, Math.round(Number(meses) || 1))),
+      clienteNombre: sorteoClean(client.data?.nombrePerfil || client.data?.nombre || "Cliente", 120),
+      telefono: sorteoClean(client.data?.telefono || "", 40), evidencias: evidence ? [evidence] : []
+    });
   };
 
   historySnap.docs.forEach(doc => {
     const data = doc.data() || {};
     if (!recordInHistoricalMonth(data, month)) return;
-    if (Array.isArray(data.cambios) && historicalEventType(data) === "renovacion") {
-      data.cambios.forEach((item, index) => mark(data.clientId, "renovacion", "historial", item?.compraId || `${doc.id}-${index}`, item?.vendedor || data.vendedor, historicalPaidMonths(item?.fechaAnterior, item?.fechaRenovacion)));
+    const type = historicalEventType(data);
+    if (Array.isArray(data.cambios) && type === "renovacion") {
+      data.cambios.forEach((item, index) => mark({
+        clientId: data.clientId, tipo: "renovacion", fuente: "historial", evidenciaId: `${doc.id}-${index}`,
+        compraId: item?.compraId, servicioIndex: item?.servicioIndex, plataforma: item?.plataforma,
+        vendedor: item?.vendedor || data.vendedor, meses: historicalPaidMonths(item?.fechaAnterior, item?.fechaRenovacion || item?.fechaNueva),
+        fechaOperacion: data.fechaTS || data.createdAt || data.fecha, fechaAnterior: item?.fechaAnterior,
+        fechaObjetivo: item?.fechaRenovacion || item?.fechaNueva
+      }));
       return;
     }
-    mark(data.clientId, historicalEventType(data), "historial", data.compraId || data.servicioId || doc.id, data.vendedor, historicalPaidMonths(data.fechaAnterior, data.fechaRenovacion));
+    mark({
+      clientId: data.clientId, tipo: type, fuente: "historial", evidenciaId: doc.id,
+      compraId: data.compraId || data.servicioId || (type === "compra" ? doc.id : ""), servicioIndex: data.servicioIndex,
+      plataforma: data.plataforma || data.servicio, vendedor: data.vendedor,
+      meses: data.meses || historicalPaidMonths(data.fechaAnterior, data.fechaRenovacion || data.fechaNueva || data.nuevaFecha),
+      fechaOperacion: data.fechaTS || data.createdAt || data.fecha, fechaAnterior: data.fechaAnterior,
+      fechaObjetivo: data.fechaRenovacion || data.fechaNueva || data.nuevaFecha
+    });
   });
   auditSnap.docs.forEach(doc => {
     const data = doc.data() || {};
     if (!recordInHistoricalMonth(data, month)) return;
-    mark(data.clienteId || data.clientId, historicalEventType(data), "auditoria", data.compraId || data.servicioId || doc.id, data.vendedor);
+    const type = historicalEventType(data);
+    mark({
+      clientId: data.clienteId || data.clientId, tipo: type, fuente: "auditoria", evidenciaId: doc.id,
+      compraId: data.compraId || data.servicioId || (type === "compra" ? doc.id : ""), servicioIndex: data.servicioIndex,
+      plataforma: data.plataforma || data.servicio, vendedor: data.vendedor,
+      meses: data.meses || historicalPaidMonths(data.fechaAnterior, data.fechaRenovacion || data.fechaNueva || data.nuevaFecha),
+      fechaOperacion: data.createdAt || data.fechaTS || data.fecha, fechaAnterior: data.fechaAnterior,
+      fechaObjetivo: data.fechaRenovacion || data.fechaNueva || data.nuevaFecha
+    });
   });
 
-  const hasRecordedType = (clientId, type) => [...flags.values()].some(item => item.clientId === clientId && item.tipo === type);
+  // El panel de socios guarda aquí el comprobante real de cada renovación. Esta
+  // colección antes no se auditaba, por eso una renovación de Relojes podía
+  // estar confirmada y vigente en Sublichat, pero quedar con cero boletos.
+  renewalsSnap.docs.forEach(doc => {
+    const data = doc.data() || {};
+    if (!recordInHistoricalMonth(data, month)) return;
+    if (data.renovado !== true && !(Number(data.renovadosCantidad) > 0)) return;
+    const items = Array.isArray(data.servicios) && data.servicios.length ? data.servicios : [data];
+    items.forEach((item, index) => mark({
+      clientId: data.clienteId || data.clientId, tipo: "renovacion", fuente: "renovaciones", evidenciaId: `${doc.id}-${index}`,
+      compraId: item?.compraId || data.compraId, servicioIndex: item?.servicioIndex ?? data.servicioIndex,
+      plataforma: item?.servicio || data.servicio, vendedor: data.socio_norm || data.socio || item?.vendedor,
+      meses: item?.meses || data.meses || historicalPaidMonths(item?.fechaAnterior || data.fechaAnterior, item?.nuevaFecha || data.nuevaFecha),
+      fechaOperacion: data.createdAt || data.fechaTS || data.fecha,
+      fechaAnterior: item?.fechaAnterior || data.fechaAnterior,
+      fechaObjetivo: item?.nuevaFecha || data.nuevaFecha
+    }));
+  });
+
+  // Un evento canónico de compra/renovación ya escrito por Telegram o
+  // Sublichat también es evidencia. Los eventos retro antiguos no se aceptan
+  // solos porque algunos se infirieron desde updatedAt y podían inflar cifras.
+  raffleEventsSnap.docs.forEach(doc => {
+    const data = doc.data() || {}, type = sorteoNorm(data.tipo), eventId = sorteoClean(data.eventoId, 500);
+    if (!recordInHistoricalMonth(data, month) || !["compra", "renovacion"].includes(type)) return;
+    const purchase = type === "compra" ? eventId.match(/^compra:([A-Za-z0-9_-]+)$/) : eventId.match(/^renov:([A-Za-z0-9_-]+):(\d{4}-\d{2}-\d{2})$/);
+    if (!purchase) return;
+    mark({
+      clientId: data.clientId, tipo: type, fuente: "eventos", evidenciaId: doc.id,
+      compraId: purchase[1], vendedor: data.vendedor || data.vendedorNorm,
+      fechaOperacion: data.createdAt, fechaObjetivo: type === "renovacion" ? purchase[2] : ""
+    });
+  });
 
   clients.forEach(({ id, data }) => {
     const services = Array.isArray(data.servicios) ? data.servicios : [];
-    if (services.length && valuesContainHistoricalMonth([
-      data.fechaCompra, data.fechaVenta, data.fechaContratacion, data.fechaRegistro,
-      data.fechaAlta, data.fechaInicio, data.createdAt, data.created_at
-    ], month) && !hasRecordedType(id, "compra")) mark(id, "compra", "fichas", "ficha", data.vendedor);
-    if (valuesContainHistoricalMonth([
-      data.ultimaRenovacionAt, data.renovadoAt, data.fechaUltimaRenovacion
-    ], month) && !hasRecordedType(id, "renovacion")) mark(id, "renovacion", "fichas", "ficha", data.vendedor);
     services.forEach((service, serviceIndex) => {
       const item = service || {};
       const eventKey = item.compraId || item.servicioId || `servicio-${serviceIndex}`;
@@ -464,15 +616,42 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
       if (valuesContainHistoricalMonth([
         item.fechaCompra, item.fechaVenta, item.fechaContratacion, item.fechaInicio,
         item.fecha_inicio, item.createdAt, item.created_at
-      ], month) && !hasRecordedType(id, "compra")) mark(id, "compra", "fichas", eventKey, vendor);
+      ], month)) mark({
+        clientId: id, tipo: "compra", fuente: "fichas", evidenciaId: `servicio-${serviceIndex}`,
+        compraId: eventKey, servicioIndex, plataforma: item.plataforma, vendedor: vendor,
+        fechaOperacion: item.fechaCompra || item.fechaVenta || item.fechaContratacion || item.fechaInicio || item.fecha_inicio || item.createdAt || item.created_at
+      });
       if (valuesContainHistoricalMonth([
         item.ultimaRenovacionAt, item.renovadoAt, item.fechaUltimaRenovacion
-      ], month) && !hasRecordedType(id, "renovacion")) mark(id, "renovacion", "fichas", eventKey, vendor);
+      ], month)) mark({
+        clientId: id, tipo: "renovacion", fuente: "fichas", evidenciaId: `servicio-${serviceIndex}`,
+        compraId: eventKey, servicioIndex, plataforma: item.plataforma, vendedor: vendor,
+        fechaOperacion: item.ultimaRenovacionAt || item.renovadoAt || item.fechaUltimaRenovacion,
+        fechaObjetivo: item.fechaRenovacion || item.renovacion || item.vence || item.fechaVencimiento
+      });
     });
+    const clientRenewed = valuesContainHistoricalMonth([data.ultimaRenovacionAt, data.renovadoAt, data.fechaUltimaRenovacion], month);
+    if (clientRenewed && !services.some(item => valuesContainHistoricalMonth([item?.ultimaRenovacionAt, item?.renovadoAt, item?.fechaUltimaRenovacion], month))) {
+      markAmbiguous(id, "fichas", "cliente", "La ficha dice que hubo renovación, pero no identifica cuál servicio; se dejó para revisión manual.");
+    }
   });
 
-  const tasks = [...flags.values()].sort((a, b) => `${a.clientId}|${a.tipo}|${a.eventoKey}`.localeCompare(`${b.clientId}|${b.tipo}|${b.eventoKey}`));
-  return { tasks, clients: new Set(tasks.map(item => item.clientId)).size, sources };
+  const tasks = [...flags.values()].sort((a, b) =>
+    `${a.clientId}|${a.fechaOperacion || ""}|${a.eventoId || ""}`.localeCompare(`${b.clientId}|${b.fechaOperacion || ""}|${b.eventoId || ""}`)
+  );
+  const clientMeta = [...clients.values()].map(item => ({
+    clientId: item.id,
+    nombre: sorteoClean(item.data?.nombrePerfil || item.data?.nombre || "Cliente", 120),
+    telefono: sorteoClean(item.data?.telefono || "", 40),
+    vendedores: item.vendors
+  }));
+  const warnings = [];
+  if (clientsSnap.size >= 5000) warnings.push("La colección clientes alcanzó el límite de lectura de 5,000 registros.");
+  if (historySnap.size >= 20000) warnings.push("El historial alcanzó el límite de lectura de 20,000 registros.");
+  if (auditSnap.size >= 20000) warnings.push("La auditoría alcanzó el límite de lectura de 20,000 registros.");
+  if (renewalsSnap.size >= 20000) warnings.push("Las renovaciones alcanzaron el límite de lectura de 20,000 registros.");
+  return { tasks, clients: new Set(tasks.map(item => item.clientId)).size, sources,
+    ambiguities: ambiguities.map(({ key, ...item }) => item), clientMeta, warnings };
 }
 
 async function loadHistoricalJob(db, draw, editor, reset = false) {
@@ -488,6 +667,7 @@ async function loadHistoricalJob(db, draw, editor, reset = false) {
     tareas: candidates.tasks,
     clientesDetectados: candidates.clients,
     fuentes: candidates.sources,
+    ambiguos: candidates.ambiguities,
     cursor: 0,
     totalCreados: 0,
     totalOmitidos: 0,
@@ -514,10 +694,13 @@ async function backfillAugust2026(db, editor, body) {
   if (rules.compra < 1 || rules.renovacion < 1) throw new Error("Configure al menos un boleto para compra y uno para renovación antes de cargar agosto.");
   if (body.previsualizar === true) {
     const preview = await collectHistoricalCandidates(db, draw, CARGA_AGOSTO_2026);
+    const plan = expectedTicketPlan(preview.tasks, rules);
     return { ok: true, previsualizacion: true, periodo: CARGA_AGOSTO_2026, clientesDetectados: preview.clients,
       totalTareas: preview.tasks.length, compras: preview.tasks.filter(item => item.tipo === "compra").length,
       renovaciones: preview.tasks.filter(item => item.tipo === "renovacion").length,
-      boletosEstimados: preview.tasks.reduce((sum,item)=>sum+(item.tipo==='compra'?rules.compra:rules.renovacion),0), fuentes: preview.sources };
+      boletosEstimados: plan.reduce((sum, item) => sum + item.cantidadEsperada, 0),
+      fuentes: preview.sources, ambiguos: preview.ambiguities.length, registrosAmbiguos: preview.ambiguities.slice(0, 100),
+      advertencias: preview.warnings };
   }
   if (draw.estado !== "activo") throw new Error("La emisión de boletos de agosto solo puede hacerse en un sorteo activo.");
   const now = Date.now(), starts = timeMs(draw.fechaInicio), ends = timeMs(draw.fechaFin);
@@ -533,7 +716,8 @@ async function backfillAugust2026(db, editor, body) {
       totalTareas: tasks.length, procesados: cursor,
       boletosCreados: Number(job.totalCreados) || 0,
       omitidos: Number(job.totalOmitidos) || 0,
-      errores: Array.isArray(job.errores) ? job.errores.length : 0
+      errores: Array.isArray(job.errores) ? job.errores.length : 0,
+      ambiguos: Array.isArray(job.ambiguos) ? job.ambiguos.length : 0
     };
   }
 
@@ -546,9 +730,9 @@ async function backfillAugust2026(db, editor, body) {
   const errors = Array.isArray(job.errores) ? [...job.errores].slice(-40) : [];
   for (const task of chunk) {
     const clientId = sorteoSafeId(task.clientId), type = sorteoNorm(task.tipo), eventKey = sorteoSafeId(task.eventoKey) || "cliente";
-    const retroEventId = type === "compra" ? `compra:${eventKey}` : `retro:${CARGA_AGOSTO_2026}:${type}:${clientId}:${eventKey}`;
-    const key = `${clientId}|${type}|${retroEventId}`;
-    if (!clientId || !["compra", "renovacion"].includes(type) || existing.has(key)) {
+    const verifiedEventId = sorteoClean(task.eventoId, 500) || (type === "compra" ? `compra:${eventKey}` : "");
+    const key = `${clientId}|${type}|${verifiedEventId}`;
+    if (!clientId || !["compra", "renovacion"].includes(type) || !verifiedEventId || existing.has(key)) {
       omitted += 1;
       continue;
     }
@@ -556,12 +740,14 @@ async function backfillAugust2026(db, editor, body) {
       tipo: type,
       clientId,
       compraId: eventKey,
-      eventoId: retroEventId,
+      eventoId: verifiedEventId,
+      fechaEvento: task.fechaEvento || "",
       sorteoId: drawId,
       mesFidelidad: CARGA_AGOSTO_2026,
       meses: task.meses || 1,
+      omitirFidelidad: type === "compra",
       vendedor: task.vendedor || "",
-      origen: "Carga agosto 2026"
+      origen: "Auditoría desde 01/08/2026"
     });
     created += Math.max(0, Number(result.creados) || 0);
     if (result.ok === false) errors.push({ clientId, tipo: type, error: sorteoClean(result.error || result.omitido || "No procesado", 180) });
@@ -599,7 +785,141 @@ async function backfillAugust2026(db, editor, body) {
     clientesDetectados: Number(job.clientesDetectados) || 0,
     totalTareas: tasks.length, procesados: nextCursor,
     boletosCreados: totalCreated, creadosEnEstePaso: created,
-    omitidos: totalOmitted, errores: errors.length
+    omitidos: totalOmitted, errores: errors.length,
+    ambiguos: Array.isArray(job.ambiguos) ? job.ambiguos.length : 0
+  };
+}
+
+function expectedTicketPlan(tasks = [], rules = {}) {
+  const limit = Math.max(1, Number(rules.limitePorCliente) || 30);
+  const used = new Map();
+  return [...tasks]
+    .sort((a, b) => `${a.clientId}|${a.fechaOperacion || ""}|${a.eventoId || ""}`.localeCompare(`${b.clientId}|${b.fechaOperacion || ""}|${b.eventoId || ""}`))
+    .map(task => {
+      const clientId = sorteoSafeId(task.clientId);
+      const base = task.tipo === "compra" ? 1 : task.tipo === "renovacion" ? 2 : 0;
+      const previous = used.get(clientId) || 0;
+      const expected = Math.max(0, Math.min(base, limit - previous));
+      used.set(clientId, previous + expected);
+      return { ...task, cantidadEsperada: expected };
+    }).filter(task => task.cantidadEsperada > 0);
+}
+
+function normalizeExistingEventId(type, rawEventId) {
+  const eventId = sorteoClean(rawEventId, 500);
+  if (type === "compra") {
+    const match = eventId.match(/^compra:([A-Za-z0-9_-]+)$/);
+    return match ? `compra:${match[1]}` : eventId;
+  }
+  if (type === "renovacion") {
+    const match = eventId.match(/^renov:([A-Za-z0-9_-]+):(.+)$/);
+    if (match) {
+      const date = sorteoFechaKey(match[2]);
+      if (date) return `renov:${match[1]}:${date}`;
+    }
+  }
+  return eventId;
+}
+
+async function auditStrictTickets(db, editor, id) {
+  const sorteoId = sorteoSafeId(id);
+  if (!sorteoId) throw Object.assign(new Error("Sorteo inválido."), { status: 400 });
+  const drawSnap = await db.collection(SORTEOS_COLLECTION).doc(sorteoId).get();
+  if (!drawSnap.exists) throw Object.assign(new Error("Sorteo no encontrado."), { status: 404 });
+  const draw = { id: drawSnap.id, ...(drawSnap.data() || {}) };
+  if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede auditar este sorteo."), { status: 403 });
+
+  const [candidates, ticketSnap] = await Promise.all([
+    collectHistoricalCandidates(db, draw, CARGA_AGOSTO_2026),
+    db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get()
+  ]);
+  const rules = reglasSorteo(draw.reglas || {});
+  const plan = expectedTicketPlan(candidates.tasks, rules);
+  const expected = new Map(plan.map(task => [`${task.clientId}|${task.tipo}|${task.eventoId}`, task]));
+  const expectedByPurchase = new Map();
+  plan.forEach(task => {
+    const key = `${task.clientId}|${task.tipo}|${task.eventoKey}`;
+    if (!expectedByPurchase.has(key)) expectedByPurchase.set(key, []);
+    expectedByPurchase.get(key).push(task);
+  });
+  const assigned = new Map(), unbacked = [], inactive = [];
+  ticketSnap.docs.forEach(document => {
+    const ticket = { id: document.id, ...(document.data() || {}) };
+    if (ticket.activo === false) { inactive.push(ticket); return; }
+    const clientId = sorteoSafeId(ticket.clientId), type = sorteoNorm(ticket.tipo);
+    if (!["compra", "renovacion"].includes(type)) {
+      unbacked.push({ ...ticket, motivoAuditoria: type === "nivel" ? "bono_de_nivel_no_permitido" : "tipo_no_permitido" });
+      return;
+    }
+    const normalizedEvent = normalizeExistingEventId(type, ticket.eventoId);
+    let expectedKey = `${clientId}|${type}|${normalizedEvent}`;
+    let task = expected.get(expectedKey);
+    if (!task && type === "renovacion") {
+      const legacy = sorteoClean(ticket.eventoId, 500).match(/^retro:[^:]+:renovacion:[^:]+:([A-Za-z0-9_-]+)$/);
+      const matches = legacy ? expectedByPurchase.get(`${clientId}|${type}|${legacy[1]}`) || [] : [];
+      if (matches.length === 1) {
+        task = matches[0];
+        expectedKey = `${task.clientId}|${task.tipo}|${task.eventoId}`;
+      }
+    }
+    if (!task) { unbacked.push({ ...ticket, motivoAuditoria: "sin_operacion_verificada" }); return; }
+    const vendor = sorteoVendorGroup(ticket.vendedorNorm || ticket.vendedor);
+    if (!sorteoVendorElegible(vendor) || !scopeMatches(draw, vendor)) {
+      unbacked.push({ ...ticket, motivoAuditoria: "vendedor_no_visible" });
+      return;
+    }
+    if (!assigned.has(expectedKey)) assigned.set(expectedKey, []);
+    assigned.get(expectedKey).push(ticket);
+  });
+
+  const meta = new Map(candidates.clientMeta.map(item => [item.clientId, item]));
+  const byClient = new Map();
+  const getClient = clientId => {
+    if (!byClient.has(clientId)) {
+      const info = meta.get(clientId) || {};
+      byClient.set(clientId, { clientId, nombre: info.nombre || "Cliente", telefono: info.telefono || "", vendedores: info.vendedores || [],
+        operaciones: 0, esperados: 0, emitidos: 0, faltantes: 0, sobrantes: 0, sinRespaldo: 0, ambiguos: 0, detalle: [] });
+    }
+    return byClient.get(clientId);
+  };
+  plan.forEach(task => {
+    const key = `${task.clientId}|${task.tipo}|${task.eventoId}`;
+    const tickets = (assigned.get(key) || []).sort((a, b) => Number(a.numero || 0) - Number(b.numero || 0));
+    const issued = tickets.length, missing = Math.max(0, task.cantidadEsperada - issued), extra = Math.max(0, issued - task.cantidadEsperada);
+    const client = getClient(task.clientId);
+    client.operaciones += 1; client.esperados += task.cantidadEsperada; client.emitidos += Math.min(issued, task.cantidadEsperada);
+    client.faltantes += missing; client.sobrantes += extra;
+    if (missing || extra) client.detalle.push({ tipo: task.tipo, compraId: task.eventoKey, fechaOperacion: task.fechaOperacion,
+      fechaObjetivo: task.fechaEvento, esperado: task.cantidadEsperada, emitido: issued, faltante: missing, sobrante: extra, evidencias: task.evidencias });
+  });
+  unbacked.forEach(ticket => {
+    const client = getClient(sorteoSafeId(ticket.clientId));
+    client.sinRespaldo += 1;
+    client.detalle.push({ tipo: sorteoNorm(ticket.tipo) || "desconocido", codigo: sorteoClean(ticket.codigo, 80), esperado: 0, emitido: 1, faltante: 0, sobrante: 1, motivo: ticket.motivoAuditoria });
+  });
+  candidates.ambiguities.forEach(item => {
+    const client = getClient(item.clientId); client.ambiguos += 1;
+    client.detalle.push({ tipo: "revision_manual", esperado: 0, emitido: 0, faltante: 0, sobrante: 0, motivo: item.motivo, fuente: item.fuente });
+  });
+  const clients = [...byClient.values()];
+  const anomalies = clients.filter(item => item.faltantes || item.sobrantes || item.sinRespaldo || item.ambiguos)
+    .sort((a, b) => b.faltantes - a.faltantes || b.sinRespaldo - a.sinRespaldo || a.nombre.localeCompare(b.nombre, "es"));
+  const expectedTotal = plan.reduce((sum, task) => sum + task.cantidadEsperada, 0);
+  const missingTotal = clients.reduce((sum, item) => sum + item.faltantes, 0);
+  const extraTotal = clients.reduce((sum, item) => sum + item.sobrantes + item.sinRespaldo, 0);
+  return {
+    ok: true, auditoria: true, soloLectura: true, sorteoId, titulo: sorteoClean(draw.titulo, 140), desde: "2026-08-01",
+    regla: { compra: 1, renovacion: 2, mesesMultiplican: false, bonoNivel: false, limitePorCliente: rules.limitePorCliente },
+    resumen: {
+      clientesVigentesConOperacion: candidates.clients, operacionesVerificadas: plan.length,
+      boletosEsperados: expectedTotal, boletosGuardados: ticketSnap.docs.filter(doc => (doc.data() || {}).activo !== false).length,
+      boletosRespaldados: expectedTotal - missingTotal, faltantes: missingTotal, sobrantesOSinRespaldo: extraTotal,
+      registrosAmbiguos: candidates.ambiguities.length, clientesConDiferencias: anomalies.length
+    },
+    fuentes: candidates.sources,
+    diferencias: anomalies.slice(0, 500),
+    ambiguos: candidates.ambiguities.slice(0, 200),
+    advertencias: candidates.warnings
   };
 }
 
@@ -638,7 +958,7 @@ async function publicLoad(db, token) {
     });
   const drawIds = new Set(draws.map(draw => draw.id));
   const tickets = ticketSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }))
-    .filter(ticket => drawIds.has(String(ticket.sorteoId || "")) && vendors.includes(sorteoVendorGroup(ticket.vendedorNorm || ticket.vendedor)));
+    .filter(ticket => ticket.activo !== false && drawIds.has(String(ticket.sorteoId || "")) && vendors.includes(sorteoVendorGroup(ticket.vendedorNorm || ticket.vendedor)));
   const premiosMap = new Map(prizeSnap.docs.filter(doc => prizeAvailable(doc.data() || {})).map(doc => [doc.id, publicPrize(doc)]));
   const entregas = deliveriesSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
   const entregasMap = new Map(entregas.map(item => [String(item.sorteoId || ""), item]));
@@ -889,6 +1209,13 @@ async function reconcileStrictTickets(db, editor, id, resetTotal = false) {
   if (!drawVisibleToEditor(draw, editor)) throw Object.assign(new Error("No puede corregir este sorteo."), { status: 403 });
   if (draw.ganador || sorteoNorm(draw.estado) === "finalizado") throw new Error("No se alteran boletos de un sorteo que ya tiene ganador.");
 
+  // Toma la fotografía de evidencia ANTES de borrar. Algunos registros viejos
+  // solo conservan el evento canónico de sorteo; si se leyera después del
+  // reinicio, una operación auténtica podría desaparecer de la reconstrucción.
+  const verifiedSnapshot = resetTotal
+    ? await collectHistoricalCandidates(db, { id: sorteoId, ...draw }, CARGA_AGOSTO_2026)
+    : null;
+
   const [ticketSnap, eventSnap, counterSnap] = await Promise.all([
     db.collection(BOLETOS_COLLECTION).where("sorteoId", "==", sorteoId).get(),
     db.collection("sorteo_eventos").where("sorteoId", "==", sorteoId).get(),
@@ -906,8 +1233,27 @@ async function reconcileStrictTickets(db, editor, id, resetTotal = false) {
       await batch.commit();
     }
     await drawRef.set({ reglas: { compra: 1, renovacion: 2, bonoNivel: false, limitePorCliente: reglasSorteo(draw.reglas || {}).limitePorCliente }, totalBoletos: 0, ultimoNumero: 0, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    const loadRef = db.collection(CARGAS_COLLECTION).doc(sorteoSafeId(`${sorteoId}_${CARGA_AGOSTO_2026}`));
+    const preparedJob = {
+      sorteoId,
+      periodo: CARGA_AGOSTO_2026,
+      tareas: verifiedSnapshot?.tasks || [],
+      clientesDetectados: Number(verifiedSnapshot?.clients) || 0,
+      fuentes: verifiedSnapshot?.sources || {},
+      ambiguos: verifiedSnapshot?.ambiguities || [],
+      cursor: 0,
+      totalCreados: 0,
+      totalOmitidos: 0,
+      errores: [],
+      completado: !(verifiedSnapshot?.tasks || []).length,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: editor.actor
+    };
+    await loadRef.set(preparedJob, { merge: false });
     await db.collection("auditoria_eventos").add({ tipo: "boletos_regla_estricta_reinicio", sorteoId, antes: ticketSnap.size, despues: 0, eliminados: ticketSnap.size, usuario: editor.actor, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    return { ok: true, id: sorteoId, antes: ticketSnap.size, despues: 0, eliminados: ticketSnap.size, requiereRecarga: true };
+    return { ok: true, id: sorteoId, antes: ticketSnap.size, despues: 0, eliminados: ticketSnap.size, requiereRecarga: true,
+      operacionesVerificadas: preparedJob.tareas.length, ambiguos: preparedJob.ambiguos.length };
   }
   const groups = new Map();
   ticketSnap.docs.forEach(document => {
@@ -1094,6 +1440,7 @@ export default async function handler(req, res) {
     if (action === "preparar_club_vip") return res.status(200).json(await prepareClubVip(db, editor));
     if (action === "eliminar_premio") return res.status(200).json(await deletePrize(db, editor, body.id));
     if (action === "guardar_sorteo") return res.status(200).json(await saveDraw(db, editor, body));
+    if (action === "auditar_boletos") return res.status(200).json(await auditStrictTickets(db, editor, body.id));
     if (action === "cargar_agosto_2026") return res.status(200).json(await backfillAugust2026(db, editor, body));
     if (action === "corregir_boletos") return res.status(200).json(await reconcileStrictTickets(db, editor, body.id, body.reiniciar === true));
     if (action === "eliminar_sorteo") return res.status(200).json(await deleteDraw(db, editor, body.id));
