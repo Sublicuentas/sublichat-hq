@@ -4,15 +4,19 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PANTALLA-ESTABLE-20260907-43';
-  const DEFAULT_ACCOUNT_LIMIT=5000;
+  const BUILD='CONTROL-MAESTRO-RAPIDO-FULLSCREEN-20260907-44';
+  // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
+  // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
+  // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
+  const DEFAULT_ACCOUNT_LIMIT=120;
+  const ACCOUNT_PAGE_SIZE=120;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:DEFAULT_ACCOUNT_LIMIT,revealedAccounts:new Set(),expandedAccountKey:'',
     reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',
-    controlExpanded:false,fullscreenParent:null,fullscreenNextSibling:null,pendingSyncMessage:'',
+    controlExpanded:false,fullscreenParent:null,fullscreenNextSibling:null,pendingSyncMessage:'',filteredAccountsCache:null,
     metaRetryCount:0,metaRetryTimer:0
   };
 
@@ -124,7 +128,17 @@
     return j;
   }
 
-  function setStatus(text,type){state.status=String(text||'');state.statusType=type||'';render();}
+  function paintStatus(){
+    const el=root()?.querySelector?.('.cm-status');if(!el)return false;
+    el.textContent=state.status||'';
+    el.classList.toggle('err',state.statusType==='error');
+    el.classList.toggle('good',state.statusType==='good');
+    return true;
+  }
+
+  // Un mensaje de estado no debe reconstruir 120+ filas. Antes cada "Copiar",
+  // bloque descargado o paso de guardado ejecutaba render() completo.
+  function setStatus(text,type){state.status=String(text||'');state.statusType=type||'';paintStatus();}
 
   function base64ToBuffer(raw){
     const binary=atob(String(raw||''));
@@ -780,7 +794,7 @@
       });
       if(showProgress){
         state.status=`Leyendo el Excel completo… ${Math.min(total,start+concurrency-1)} de ${total} bloques`;
-        state.statusType='';render();
+        state.statusType='';paintStatus();
       }
     }
     if(parts.filter(Boolean).length!==total)throw new Error('El Excel no llegó completo. Vuelva a intentar.');
@@ -868,13 +882,21 @@
   }
 
   function accountReviewSchedule(a){
+    if(a?._reviewScheduleCache)return a._reviewScheduleCache;
     const review=a?.revision;
-    if(!review)return {tone:'due',label:'🕒 PENDIENTE',rowText:'Nunca revisada',detail:'Esta cuenta aún no se ha revisado.',reviewed:'—',next:'—',isReviewed:false};
+    if(!review){
+      const result={tone:'due',label:'🕒 PENDIENTE',rowText:'Nunca revisada',detail:'Esta cuenta aún no se ha revisado.',reviewed:'—',next:'—',isReviewed:false};
+      if(a)a._reviewScheduleCache=result;
+      return result;
+    }
     const dates=accountReviewDates(review.revisadoAt);
-    if(review.resultado==='incidencia')return {tone:'bad',label:'⚠️ INCIDENCIA',rowText:`Revisada: ${dates.reviewed}`,detail:`Incidencia registrada el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
-    if(a.reviewDataChanged)return {tone:'due',label:'🕒 TOCA REVISAR',rowText:'Cambió la asignación',detail:`La cuenta cambió después de revisarla el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
-    if(a.reviewDue)return {tone:'due',label:'🕒 TOCA REVISAR',rowText:`Venció: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · debía revisarse: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
-    return {tone:'ok',label:'✅ REVISADA',rowText:`Próxima: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · próxima revisión: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:true};
+    let result;
+    if(review.resultado==='incidencia')result={tone:'bad',label:'⚠️ INCIDENCIA',rowText:`Revisada: ${dates.reviewed}`,detail:`Incidencia registrada el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    else if(a.reviewDataChanged)result={tone:'due',label:'🕒 TOCA REVISAR',rowText:'Cambió la asignación',detail:`La cuenta cambió después de revisarla el ${dates.reviewed}.`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    else if(a.reviewDue)result={tone:'due',label:'🕒 TOCA REVISAR',rowText:`Venció: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · debía revisarse: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:false};
+    else result={tone:'ok',label:'✅ REVISADA',rowText:`Próxima: ${dates.next}`,detail:`Revisada: ${dates.reviewed} · próxima revisión: ${dates.next}`,reviewed:dates.reviewed,next:dates.next,isReviewed:true};
+    if(a)a._reviewScheduleCache=result;
+    return result;
   }
 
   function reviewProgress(accounts){
@@ -926,6 +948,8 @@
   }
 
   function accountLifecycle(a){
+    const dayKey=serverDateKey();
+    if(a?._lifecycleCache?.dayKey===dayKey)return a._lifecycleCache.value;
     const dated=(a.roster||[]).map((r)=>({row:r,days:daysUntil(r.date),date:dateValue(r.date)})).filter((x)=>x.days!=null);
     const expired=dated.filter((x)=>x.days<0);
     const soon=dated.filter((x)=>x.days>=0&&x.days<=EXPIRY_SOON_DAYS);
@@ -939,13 +963,18 @@
     let nextText='Sin fechas registradas';
     if(future[0])nextText=`Próximo: ${dateLabel(future[0].row.date)}`;
     else if(past[0])nextText=`Último: ${dateLabel(past[0].row.date)}`;
-    return {expired:expired.length,soon:soon.length,active:active.length,noDate,tone,label,icon,nextText,nextDays:future[0]?.days??99999};
+    const value={expired:expired.length,soon:soon.length,active:active.length,noDate,tone,label,icon,nextText,nextDays:future[0]?.days??99999};
+    if(a)a._lifecycleCache={dayKey,value};
+    return value;
   }
 
   function filteredAccounts(){
+    const audit=state.accountAudit;
+    const cacheKey=[state.accountPlatform,state.accountStatus,norm(state.accountQuery)].join('\u001f');
+    if(state.filteredAccountsCache?.audit===audit&&state.filteredAccountsCache?.key===cacheKey)return state.filteredAccountsCache.items;
     const q=norm(state.accountQuery);
     const rank={expired:0,soon:1,nodate:2,active:3};
-    return (state.accountAudit?.accounts||[]).filter((a)=>{
+    const items=(audit?.accounts||[]).filter((a)=>{
       const life=accountLifecycle(a);
       if(state.accountPlatform!=='all'&&a.family!==state.accountPlatform)return false;
       if(state.accountStatus==='expired'&&life.tone!=='expired')return false;
@@ -960,6 +989,8 @@
       const la=accountLifecycle(a),lb=accountLifecycle(b);
       return (rank[la.tone]??9)-(rank[lb.tone]??9)||la.nextDays-lb.nextDays||a.platform.localeCompare(b.platform)||String(a.email).localeCompare(String(b.email));
     });
+    state.filteredAccountsCache={audit,key:cacheKey,items};
+    return items;
   }
 
   function accountIssuesHtml(a){
@@ -1079,9 +1110,11 @@
 
   function accountResultsHtml(){
     const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||DEFAULT_ACCOUNT_LIMIT));
+    const remaining=Math.max(0,all.length-state.accountVisible.length);
+    const next=Math.min(ACCOUNT_PAGE_SIZE,remaining);
     return `<div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
       <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
-      ${all.length>state.accountVisible.length?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-all-accounts">Mostrar las ${all.length} cuentas</button><small>El conteo ya incluye todas; se cargan por partes para no trabar la computadora.</small></div>`:''}`;
+      ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining}. El conteo y la búsqueda ya incluyen todas; se dibujan por bloques para mantener el panel rápido.</small></div>`:''}`;
   }
 
   function accountAuditHtml(){
@@ -1206,7 +1239,7 @@
   // toda la pantalla ni el campo de búsqueda cada vez que se filtra.
   function bindAccountResults(container){
     if(!container)return;
-    container.querySelectorAll('[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
+    container.querySelectorAll('[data-cm-action="show-more-accounts"],[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     container.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
     container.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     container.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
@@ -1944,14 +1977,18 @@
     if(screen.parentNode!==document.body)document.body.appendChild(screen);
     screen.classList.add('cm-control-expanded');
     document.body.classList.add('cm-control-no-scroll');
+    document.documentElement.classList.add('cm-control-no-scroll');
     syncFullscreenButton();
   }
 
   function closeControlExpanded(options={}){
     const screen=document.getElementById('screen-control-cuentas');
     state.controlExpanded=false;
-    if(!screen){document.body.classList.remove('cm-control-no-scroll');return;}
-    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+    if(!screen){document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');return;}
+    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');
+    if(document.fullscreenElement===screen&&document.exitFullscreen){
+      try{document.exitFullscreen().catch(()=>{});}catch(_){}
+    }
     const parent=state.fullscreenParent;
     const next=state.fullscreenNextSibling;
     if(parent?.isConnected&&screen.parentNode!==parent){
@@ -1966,22 +2003,22 @@
     });
   }
 
-  async function toggleFullscreen(){
+  function toggleFullscreen(){
     const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
-    if(document.fullscreenElement===screen){
-      // Si quedó una sesión nativa de una versión anterior, salimos primero y
-      // continuamos con la vista ampliada estable que no se cierra con prompts.
-      try{await document.exitFullscreen();}catch(_){}
-    }
     if(state.controlExpanded||screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
     state.fullscreenReturnY=window.scrollY||0;
-    if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
-    // No usamos Fullscreen API nativa: los diálogos confirm/prompt del
-    // navegador pueden cerrarla. Esta vista CSS ocupa todo el viewport y
-    // permanece abierta durante editar, revisar, eliminar y actualizar.
     state.controlExpanded=true;
     ensureControlExpanded();
     screen.scrollTop=0;syncFullscreenButton();
+    // Se solicita pantalla completa real cuando el navegador lo permite. La
+    // capa CSS queda activa como respaldo: si Chrome sale del modo nativo al
+    // abrir un prompt, editar o eliminar, el Control Maestro NO se minimiza.
+    if(!document.fullscreenElement&&screen.requestFullscreen){
+      try{
+        const request=screen.requestFullscreen({navigationUI:'hide'});
+        if(request?.catch)request.catch(()=>{ensureControlExpanded();syncFullscreenButton();});
+      }catch(_){ensureControlExpanded();}
+    }
   }
 
   async function refreshControlData(){
@@ -2027,7 +2064,10 @@
 
   async function handleAction(action){
     if(action==='toggle-fullscreen')return toggleFullscreen();
-    if(action==='show-all-accounts'){state.accountLimit=Number.MAX_SAFE_INTEGER;render();return;}
+    if(action==='show-more-accounts'||action==='show-all-accounts'){
+      state.accountLimit=Math.min(filteredAccounts().length,Math.max(DEFAULT_ACCOUNT_LIMIT,Number(state.accountLimit)||DEFAULT_ACCOUNT_LIMIT)+ACCOUNT_PAGE_SIZE);
+      updateAccountResults();return;
+    }
     if(action==='review')return runReview(true);
     if(action==='refresh-data')return refreshControlData();
     if(action==='download-template')return downloadStored(state.meta?.plantilla?.id);
@@ -2132,9 +2172,13 @@
     document.addEventListener('fullscreenchange',()=>{
       if(!screen)return;
       if(document.fullscreenElement===screen){
-        state.controlExpanded=false;
-        screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+        state.controlExpanded=true;
+        ensureControlExpanded();
         requestAnimationFrame(()=>{screen.scrollTop=0;syncFullscreenButton();});
+      }else if(state.controlExpanded){
+        // Algunos prompts del navegador cierran Fullscreen API. Conservamos la
+        // vista de trabajo CSS para que editar/eliminar no saque al usuario.
+        ensureControlExpanded();syncFullscreenButton();
       }else syncFullscreenButton();
     });
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
