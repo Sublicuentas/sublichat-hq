@@ -3,7 +3,9 @@
   display:grid;
   gap:14px;
   color:var(--txt,#151515);
+  padding-bottom:86px; /* espacio reservado para la barra fija */
 }
+
 .cr-hero{
   padding:18px;
   border:1px solid var(--line,#e5e7eb);
@@ -97,11 +99,13 @@
 }
 .cr-empty b,.cr-empty span{display:block}
 .cr-savebar{
-  position:sticky;
-  bottom:102px;
-  z-index:20;
-  background:color-mix(in srgb,var(--card,#fff) 94%,transparent);
-  backdrop-filter:blur(12px);
+  position:fixed;
+  left:var(--cr-save-left,260px);
+  right:var(--cr-save-right,18px);
+  bottom:16px;
+  z-index:2147482000;
+  background:color-mix(in srgb,var(--card,#fff) 96%,transparent);
+  backdrop-filter:blur(14px);
   border:1px solid var(--line,#ddd);
   border-radius:17px;
   padding:10px;
@@ -109,7 +113,7 @@
   justify-content:space-between;
   align-items:center;
   gap:10px;
-  box-shadow:var(--sh,0 8px 20px rgba(0,0,0,.10));
+  box-shadow:0 10px 30px rgba(12,29,61,.16);
 }
 .cr-save-actions{display:flex;gap:7px;flex:none}
 .cr-status{font-size:12px;font-weight:800;color:var(--txt2,#667085);line-height:1.35}
@@ -224,7 +228,7 @@ textarea.cr-mini{min-height:62px;resize:vertical}
   .cr-image-preview img{height:130px}
   .cr-sheet>.cr-actions{bottom:-8px}
 }
-@media(min-width:900px){.cr-savebar{bottom:18px}}
+@media(max-width:600px){.cr-savebar{padding:8px}.cr-save-actions{gap:5px}.cr-savebar .cr-btn{padding:8px 10px}.cr-status{font-size:10px}}
 
 /* Catálogo Relojes · modal auto-reparable y navegación segura 2026-09-07 */
 .cr-sheet{position:relative!important}

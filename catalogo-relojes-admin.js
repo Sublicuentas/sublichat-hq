@@ -2,9 +2,9 @@
   'use strict';
 
   const API='/api/catalogo-relojes';
-  const BUILD='20260907-7';
+  const BUILD='20260907-8';
   const state={
-    loaded:false,loading:false,saving:false,dirty:false,tab:'products',catalog:null,history:[]
+    loaded:false,loading:false,saving:false,dirty:false,tab:'products',catalog:null,history:[],baseStatus:'Catálogo listo.',savebarObserver:null
   };
   const A={
     available:'Disponible',limited:'Pocas disponibles',on_request:'Bajo pedido',
@@ -124,10 +124,14 @@
         state.tab=button.dataset.tab;
         target.querySelectorAll('[data-tab]').forEach((item)=>item.classList.toggle('on',item===button));
         render();
+        syncSavebarGeometry();
+        if(!state.dirty&&!state.saving)status(state.baseStatus,'good');
       };
     });
     $('#crSave').onclick=()=>saveCatalog({message:'Ajustes publicados.'});
     $('#crReload').onclick=()=>load(true);
+    installSavebarSync();
+    syncSavebarGeometry();
     const modal=$('#crModal');
     if(modal){
       modal.addEventListener('click',(event)=>{if(event.target===modal&&!state.saving)closeModal();});
@@ -157,38 +161,82 @@
     return value==null?'Consultar':`Lps. ${Number(value).toLocaleString('es-HN')}`;
   }
 
-  function validateCatalog(catalog){
+  function validateCatalog(catalog,options={}){
+    // Validación estructural global + validación comercial SOLO del elemento que el usuario edita.
+    // Así un producto heredado (p. ej. Mubi sin precio) no bloquea borrar una categoría,
+    // editar Netflix o guardar Apariencia/Disponibilidad.
     const errors=[];
-    const categories=new Set((catalog.categories||[]).map((item)=>item.id));
+    const strictProducts=new Set(options.productIds||[]);
+    const strictPromotions=new Set(options.promotionIds||[]);
+    const categories=new Set();
+    (catalog.categories||[]).forEach((category)=>{
+      if(categories.has(category.id))errors.push(`Categoría duplicada: ${category.id}.`);
+      categories.add(category.id);
+    });
     const productIds=new Set();
     (catalog.products||[]).forEach((product)=>{
-      if(!String(product.name||'').trim())errors.push('Hay un producto sin nombre.');
       if(productIds.has(product.id))errors.push(`Producto duplicado: ${product.name||product.id}.`);
       productIds.add(product.id);
-      if(!categories.has(product.categoryId))errors.push(`${product.name}: seleccione una categoría válida.`);
-      if(!(product.plans||[]).length)errors.push(`${product.name}: agregue al menos un plan.`);
-      (product.plans||[]).forEach((plan)=>{
-        const hasPrice=plan.price!=null&&Number.isFinite(Number(plan.price));
-        const hasOptionPrice=(plan.options||[]).some((option)=>option.price!=null&&Number.isFinite(Number(option.price)));
-        if(plan.active!==false&&!['on_request','paused','maintenance'].includes(plan.availability)&&!hasPrice&&!hasOptionPrice){
-          errors.push(`${product.name} / ${plan.name}: escriba un precio o marque “Bajo pedido”.`);
-        }
-      });
-    });
-    (catalog.promotions||[]).forEach((promotion)=>{
-      if(!String(promotion.title||'').trim())errors.push('Hay una promoción sin título.');
-      (promotion.productIds||[]).forEach((id)=>{
-        if(!productIds.has(id))errors.push(`${promotion.title}: contiene un producto que ya no existe.`);
-      });
-      const hasPrice=(promotion.options||[]).some((option)=>option.price!=null&&Number.isFinite(Number(option.price)));
-      if(promotion.active!==false&&!hasPrice)errors.push(`${promotion.title}: agregue al menos una opción con precio antes de activarla.`);
-      const starts=promotion.startsAt?Date.parse(promotion.startsAt):NaN;
-      const ends=promotion.endsAt?Date.parse(promotion.endsAt):NaN;
-      if(Number.isFinite(starts)&&Number.isFinite(ends)&&starts>=ends){
-        errors.push(`${promotion.title}: la fecha final debe ser posterior al inicio.`);
+      if(!categories.has(product.categoryId))errors.push(`${product.name||product.id}: seleccione una categoría válida.`);
+      if(strictProducts.has(product.id)){
+        if(!String(product.name||'').trim())errors.push('El producto necesita nombre.');
+        if(!(product.plans||[]).length)errors.push(`${product.name||'Producto'}: agregue al menos un plan.`);
+        (product.plans||[]).forEach((plan)=>{
+          const hasPrice=plan.price!=null&&Number.isFinite(Number(plan.price));
+          const hasOptionPrice=(plan.options||[]).some((option)=>option.price!=null&&Number.isFinite(Number(option.price)));
+          const hasPoints=plan.pointsCost!=null&&Number.isFinite(Number(plan.pointsCost))&&Number(plan.pointsCost)>0;
+          if(plan.active!==false&&!product.redemptionOnly&&!hasPoints&&!['on_request','paused','maintenance'].includes(plan.availability)&&!hasPrice&&!hasOptionPrice){
+            errors.push(`${product.name} / ${plan.name}: escriba un precio o marque “Bajo pedido”.`);
+          }
+        });
       }
     });
+    (catalog.promotions||[]).forEach((promotion)=>{
+      (promotion.productIds||[]).forEach((id)=>{
+        if(!productIds.has(id))errors.push(`${promotion.title||promotion.id}: contiene un producto que ya no existe.`);
+      });
+      if(strictPromotions.has(promotion.id)){
+        if(!String(promotion.title||'').trim())errors.push('La promoción necesita título.');
+        const hasPrice=(promotion.options||[]).some((option)=>option.price!=null&&Number.isFinite(Number(option.price)));
+        if(promotion.active!==false&&!hasPrice)errors.push(`${promotion.title||'Promoción'}: agregue al menos una opción con precio antes de activarla.`);
+        const starts=promotion.startsAt?Date.parse(promotion.startsAt):NaN;
+        const ends=promotion.endsAt?Date.parse(promotion.endsAt):NaN;
+        if(Number.isFinite(starts)&&Number.isFinite(ends)&&starts>=ends){
+          errors.push(`${promotion.title||'Promoción'}: la fecha final debe ser posterior al inicio.`);
+        }
+      }
+    });
+    const slideIds=new Set();
+    (catalog.carousel||[]).forEach((slide)=>{
+      if(slideIds.has(slide.id))errors.push(`Banner duplicado: ${slide.id}.`);
+      slideIds.add(slide.id);
+    });
     return [...new Set(errors)];
+  }
+
+  function syncSavebarGeometry(){
+    const target=host();
+    const bar=$('.cr-savebar');
+    if(!target||!bar)return;
+    const rect=target.getBoundingClientRect();
+    if(!rect.width)return;
+    const viewport=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
+    const left=Math.max(12,Math.round(rect.left));
+    const right=Math.max(12,Math.round(viewport-rect.right));
+    bar.style.setProperty('--cr-save-left',`${left}px`);
+    bar.style.setProperty('--cr-save-right',`${right}px`);
+  }
+
+  function installSavebarSync(){
+    if(document.documentElement.dataset.catalogSavebarSync==='1')return;
+    document.documentElement.dataset.catalogSavebarSync='1';
+    const sync=()=>requestAnimationFrame(syncSavebarGeometry);
+    window.addEventListener('resize',sync,{passive:true});
+    window.addEventListener('orientationchange',sync,{passive:true});
+    if(typeof ResizeObserver==='function'){
+      state.savebarObserver=new ResizeObserver(sync);
+      const target=host();if(target)state.savebarObserver.observe(target);
+    }
   }
 
   async function load(force=false){
@@ -205,9 +253,11 @@
       const version=$('#crVersion');
       if(version)version.textContent=`v${state.catalog.catalogVersion||1}`;
       render();
-      status(data.source==='remote'
+      state.baseStatus=data.source==='remote'
         ?'Conectado al catálogo público de Relojes.'
-        :(data.exists?'Conectado a Firebase.':'Catálogo listo para configurar.'),'good');
+        :(data.exists?'Conectado a Firebase.':'Catálogo listo para configurar.');
+      status(state.baseStatus,'good');
+      syncSavebarGeometry();
     }catch(error){
       status(error.message,'bad');
       const body=$('#crBody');
@@ -223,7 +273,7 @@
       products:renderProducts,promotions:renderPromotions,availability:renderAvailability,
       categories:renderCategories,carousel:renderCarousel,settings:renderSettings
     }[state.tab]||renderProducts;
-    try{renderer();}
+    try{renderer();syncSavebarGeometry();}
     catch(error){
       console.error('Catálogo Relojes render',error);
       const body=$('#crBody');
@@ -251,6 +301,7 @@
       const version=$('#crVersion');
       if(version)version.textContent=`v${state.catalog.catalogVersion||1}`;
       const message=options.message||data.message||'Catálogo publicado.';
+      state.baseStatus='Catálogo actualizado y conectado.';
       status(`✅ ${message}`,'good');
       notify(`✅ ${message}`);
       return true;
@@ -432,7 +483,7 @@
       const before=clone(state.catalog);
       const current=state.catalog.products.find((item)=>item.id===product.id);
       if(current)Object.assign(current,clone(product));else state.catalog.products.push(clone(product));
-      const errors=validateCatalog(state.catalog);
+      const errors=validateCatalog(state.catalog,{productIds:[product.id]});
       if(errors.length){
         state.catalog=before;
         const errorBox=$('#cpeError');errorBox.hidden=false;errorBox.textContent=errors[0];
@@ -625,7 +676,7 @@
       const before=clone(state.catalog);
       const current=state.catalog.promotions.find((item)=>item.id===promotion.id);
       if(current)Object.assign(current,clone(promotion));else state.catalog.promotions.push(clone(promotion));
-      const errors=validateCatalog(state.catalog);
+      const errors=validateCatalog(state.catalog,{promotionIds:[promotion.id]});
       if(errors.length){
         state.catalog=before;
         const errorBox=$('#prError');errorBox.hidden=false;errorBox.textContent=errors[0];
