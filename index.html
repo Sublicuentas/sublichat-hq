@@ -2192,7 +2192,7 @@ window.sublichatControlData=()=>({
   }))),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
-    disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??'',telefono:p.telefono||''})):[]
+    disponibles:invDisp(c),estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({clienteId:p.clienteId||p.clientId||'',compraId:p.compraId||'',perfilId:p.perfilId||p.profileId||'',nombre:p.nombre||'',pin:p.pin||'',slot:p.slot??'',telefono:p.telefono||''})):[]
   }))
 });
 window.sublichatControlReload=()=>load({forceServer:true,requireServer:true,controlOnly:true});
@@ -9920,7 +9920,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-FILTROS-POR-PLATAFORMA-20260907-48"></script>
+<script defer src="./control-maestro.js?v=20260907-49"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

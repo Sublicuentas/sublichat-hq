@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FILTROS-POR-PLATAFORMA-20260907-48';
+  const BUILD='CONTROL-MAESTRO-ASIGNACION-ROBUSTA-20260907-49';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -381,18 +381,72 @@
     };
   }
 
+  // Identidad de auditoría. Bodega histórica no siempre guarda los mismos
+  // campos que la ficha CRM: algunas filas tienen "Perfil Walter Pineda",
+  // otras solo PIN/teléfono y las más nuevas pueden traer IDs estables.
+  // Nunca se debe declarar "Solo en Clientes" por una diferencia cosmética
+  // de nombre si existe una coincidencia inequívoca dentro de la MISMA cuenta.
+  function auditPersonKey(v){
+    return norm(v).replace(/^(?:(?:perfil|cliente|titular|usuario)\s+)+/,'').trim();
+  }
+  function auditStable(v){return String(v??'').trim();}
+  function auditIdentity(x,service=false){
+    return {
+      clienteId:auditStable(x?.clienteId||x?.clientId),
+      compraId:auditStable(x?.compraId),
+      perfilId:auditStable(x?.perfilId||x?.profileId),
+      name:auditPersonKey(x?.nombre),
+      phone:phone(x?.telefono),
+      pin:norm(fieldText(service?x?.pinPerfil:x?.pin)),
+      profile:auditPersonKey(fieldText(service?x?.perfil:x?.slot))
+    };
+  }
+  function auditIdentityScore(invRow,service){
+    const a=auditIdentity(invRow,false),b=auditIdentity(service,true);
+    // Si ambos lados traen un mismo tipo de ID y no coincide, esa fila no es
+    // la persona buscada. Esto evita que un PIN repetido gane por accidente.
+    if(a.perfilId&&b.perfilId&&a.perfilId!==b.perfilId)return -1;
+    if(a.compraId&&b.compraId&&a.compraId!==b.compraId)return -1;
+    if(a.clienteId&&b.clienteId&&a.clienteId!==b.clienteId)return -1;
+    let score=0;
+    if(a.perfilId&&b.perfilId&&a.perfilId===b.perfilId)score+=1000;
+    if(a.compraId&&b.compraId&&a.compraId===b.compraId)score+=800;
+    if(a.clienteId&&b.clienteId&&a.clienteId===b.clienteId)score+=500;
+    if(a.name&&b.name&&a.name===b.name)score+=300;
+    if(a.phone&&b.phone&&a.phone===b.phone)score+=260;
+    if(a.pin&&b.pin&&a.pin===b.pin)score+=150;
+    if(a.profile&&b.profile&&a.profile===b.profile)score+=80;
+    return score;
+  }
+  function bestServiceMatch(invRow,services,used){
+    const ranked=[];
+    (services||[]).forEach((service,index)=>{
+      if(used?.has(index))return;
+      const score=auditIdentityScore(invRow,service);
+      if(score>0)ranked.push({index,score});
+    });
+    ranked.sort((a,b)=>b.score-a.score);
+    if(!ranked.length)return -1;
+    // Nombre/teléfono/ID son evidencia fuerte. PIN solo se acepta si es único.
+    if(ranked[0].score<150)return -1;
+    if(ranked[1]&&ranked[1].score===ranked[0].score)return -1;
+    return ranked[0].index;
+  }
+
   function buildInventoryMap(src){
     const byKey=new Map();
     const duplicates=new Set();
+    const rows=[];
     (src.cuentas||[]).forEach((account)=>{
       const plat=canonPlatform(account.plataforma),acc=email(account.correo);
       (account.clientes||[]).forEach((p)=>{
-        const key=`${plat}|${norm(p.nombre)}`;
-        const item={account:acc,slot:p.slot??'',pin:p.pin||'',accountId:account.id||''};
+        const key=`${plat}|${auditPersonKey(p.nombre)}`;
+        const item={...p,account:acc,slot:p.slot??'',pin:p.pin||'',accountId:account.id||'',_plat:plat};
+        rows.push(item);
         if(byKey.has(key))duplicates.add(key);else byKey.set(key,item);
       });
     });
-    return {byKey,duplicates};
+    return {byKey,duplicates,rows};
   }
 
   const AUDIT_PLATFORM_LABELS={
@@ -470,7 +524,7 @@
     (src.cuentas||[]).forEach((account)=>{
       const family=auditFamily(account.plataforma);
       (account.clientes||[]).forEach((p)=>{
-        const name=norm(p.nombre);if(!name)return;
+        const name=auditPersonKey(p.nombre);if(!name)return;
         const key=`${family}|${name}`;assignmentCounts.set(key,(assignmentCounts.get(key)||0)+1);
       });
     });
@@ -513,7 +567,7 @@
     const nameToAccountKey=new Map();
     groups.forEach((g,key)=>{
       if(!g.inventoryAccounts.length&&!g.services.length)return;
-      const names=new Set([...g.invClients.map((p)=>norm(p.nombre)),...g.services.map((s)=>s._name)]);
+      const names=new Set([...g.invClients.map((p)=>auditPersonKey(p.nombre)),...g.services.map((s)=>auditPersonKey(s.nombre))]);
       names.forEach((name)=>{
         if(!name)return;
         const k=`${g.family}|${name}`;
@@ -578,15 +632,15 @@
         if(best<0)return null;usedExcel.add(best);return g.excelRows[best];
       };
       g.invClients.forEach((p,invIndex)=>{
-        const name=norm(p.nombre),duplicate=(assignmentCounts.get(`${g.family}|${name}`)||0)>1;
-        const matchIndex=g.services.findIndex((s,i)=>!used.has(i)&&name&&s._name===name);
+        const name=auditPersonKey(p.nombre),duplicate=(assignmentCounts.get(`${g.family}|${name}`)||0)>1;
+        const matchIndex=bestServiceMatch(p,g.services,used);
         let service=null,status='solo_bodega',level='bad',detail=hasExcelAudit?'Está asignado en Bodega, pero no tiene servicio activo en Clientes ni fila coincidente en Excel.':'Está asignado en Bodega, pero no tiene servicio activo en Clientes.';
         if(matchIndex>=0){
           used.add(matchIndex);service=g.services[matchIndex];status='ok';level='ok';detail='Coincide entre Clientes y Bodega.';
           if(duplicate){status='duplicado';level='bad';detail='El cliente aparece asignado en más de una cuenta de esta plataforma.';}
           else if(isExpired(service.fecha)){status='vencido';level='warn';detail='El cliente coincide, pero su fecha está vencida.';}
         }else{
-          const other=allServices.find((s)=>s._family===g.family&&name&&s._name===name);
+          const other=allServices.find((s)=>s._family===g.family&&name&&auditPersonKey(s.nombre)===name);
           if(duplicate){status='duplicado';detail='La asignación está repetida en Bodega.';}
           else if(other){status='otra_cuenta';detail=`El servicio activo está registrado en ${other._email||'otra cuenta'}.`;service=other;}
         }
@@ -604,9 +658,22 @@
         if(used.has(i))return;
         const excel=takeExcel({name:service.nombre,phone:service._phone,profile:service.perfil});
         const expired=isExpired(service.fecha);
-        let status=expired?'vencido_sin_bodega':'falta_bodega';
-        let detail=expired?'Servicio vencido y no asignado en Bodega.':(excel?'Coincide entre Clientes y Excel, pero falta en Bodega.':(hasExcelAudit?'Cliente activo, pero falta tanto en Bodega como en el Excel cargado.':'Cliente activo en esta cuenta, pero falta en Bodega.'));
-        if(hasExcelAudit&&!excel&&!expired)status='falta_excel_bodega';
+        // La cuenta puede estar perfectamente vinculada por correo aunque la
+        // fila del cliente no esté dentro de inventario.clientes[]. Antes ambos
+        // casos se rotulaban como "Solo en Clientes/Falta en Bodega", dando a
+        // entender que la CUENTA no existía. Se separan las dos situaciones.
+        const linkedAccount=!!g.inventoryAccounts.length&&!!service._email&&service._email===g.email;
+        let status,detail;
+        if(expired){
+          status='vencido_sin_bodega';
+          detail=linkedAccount?'Servicio vencido. La cuenta sí está vinculada, pero este perfil no figura en los cupos de Bodega.':'Servicio vencido y la cuenta no está vinculada en Bodega.';
+        }else if(linkedAccount){
+          status=hasExcelAudit&&!excel?'vinculado_sin_cupo_sin_excel':'vinculado_sin_cupo';
+          detail=excel?'La cuenta está vinculada y el cliente coincide con el Excel, pero no encontré este perfil dentro de los cupos de Bodega.':'La cuenta está vinculada correctamente por correo, pero no encontré este perfil dentro de inventario.clientes[]; revise/sincronice el cupo de Bodega.';
+        }else{
+          status=hasExcelAudit&&!excel?'falta_excel_bodega':'falta_bodega';
+          detail=excel?'Coincide entre Clientes y Excel, pero no existe una cuenta vinculada en Bodega.':(hasExcelAudit?'El servicio está en Clientes, pero no existe una cuenta vinculada en Bodega ni fila coincidente en el Excel.':'El servicio está en Clientes, pero no existe una cuenta vinculada en Bodega.');
+        }
         roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',phone:service._phone||excel?.phone||'',profile:fieldText(service.perfil)||fieldText(excel?.profile),pin:fieldText(service.pinPerfil)||fieldText(excel?.pin),date:service._date||excel?.date||'',actualAccount:service._email||''});
       });
       g.excelRows.forEach((excel,i)=>{
@@ -715,9 +782,13 @@
     const inv=buildInventoryMap(src);
     const live=(src.servicios||[]).map((s,i)=>{
       const plat=canonPlatform(s.plataforma||s.plataformaLabel);
-      const invKey=`${plat}|${norm(s.nombre)}`;
-      const invItem=inv.byKey.get(invKey)||null;
-      return {...s,_index:i,_used:false,_plat:plat,_name:norm(s.nombre),_phone:phone(s.telefono),_email:email(s.correo),_date:dateKey(s.fecha),_inv:invItem,_invDuplicate:inv.duplicates.has(invKey)};
+      const invKey=`${plat}|${auditPersonKey(s.nombre)}`;
+      let invItem=inv.byKey.get(invKey)||null;
+      if(!invItem){
+        const candidates=(inv.rows||[]).filter((row)=>row._plat===plat).map((row)=>({row,score:auditIdentityScore(row,s)})).filter((x)=>x.score>=150).sort((a,b)=>b.score-a.score);
+        if(candidates.length&&(!candidates[1]||candidates[0].score!==candidates[1].score))invItem=candidates[0].row;
+      }
+      return {...s,_index:i,_used:false,_plat:plat,_name:auditPersonKey(s.nombre),_phone:phone(s.telefono),_email:email(s.correo),_date:dateKey(s.fecha),_inv:invItem,_invDuplicate:inv.duplicates.has(invKey)};
     });
     const livePhoneCount=new Map();
     live.forEach(s=>{if(s._phone){const k=`${s._plat}|${s._phone}`;livePhoneCount.set(k,(livePhoneCount.get(k)||0)+1);}});
@@ -845,7 +916,9 @@
     duplicado:{label:'Duplicado',icon:'⛔',tone:'bad'},
     solo_bodega:{label:'Solo en Bodega',icon:'📦',tone:'bad'},
     otra_cuenta:{label:'Está en otra cuenta',icon:'↔️',tone:'bad'},
-    falta_bodega:{label:'Falta en Bodega',icon:'⚠️',tone:'warn'},
+    falta_bodega:{label:'Cuenta no vinculada',icon:'⚠️',tone:'warn'},
+    vinculado_sin_cupo:{label:'Cuenta vinculada · falta cupo',icon:'🔗',tone:'warn'},
+    vinculado_sin_cupo_sin_excel:{label:'Vinculada · falta cupo/Excel',icon:'🔗',tone:'warn'},
     falta_excel:{label:'Falta en Excel',icon:'📘',tone:'warn'},
     excel_bodega:{label:'Excel + Bodega',icon:'🔄',tone:'warn'},
     falta_excel_bodega:{label:'Solo en Clientes',icon:'⚠️',tone:'warn'},
