@@ -225,3 +225,26 @@ textarea.cr-mini{min-height:62px;resize:vertical}
   .cr-sheet>.cr-actions{bottom:-8px}
 }
 @media(min-width:900px){.cr-savebar{bottom:18px}}
+
+/* Catálogo Relojes · modal auto-reparable y navegación segura 2026-09-07 */
+.cr-sheet{position:relative!important}
+.cr-modal-close{
+  position:sticky!important;
+  top:0!important;
+  z-index:30!important;
+  margin:-4px 0 4px auto!important;
+  width:38px!important;
+  height:38px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1px solid var(--line,#d9dce3)!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,var(--card,#fff) 94%,transparent)!important;
+  color:var(--txt,#171717)!important;
+  box-shadow:0 6px 18px rgba(0,0,0,.10)!important;
+  backdrop-filter:blur(12px)!important;
+  font:900 16px/1 var(--ff,'Nunito',Inter,sans-serif)!important;
+  cursor:pointer!important;
+}
+.cr-modal-close:hover{border-color:#e2231a!important;color:#e2231a!important}
+.cr-empty .cr-btn{margin-top:12px}

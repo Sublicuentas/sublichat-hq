@@ -2,7 +2,7 @@
   'use strict';
 
   const API='/api/catalogo-relojes';
-  const BUILD='20260907-6';
+  const BUILD='20260907-7';
   const state={
     loaded:false,loading:false,saving:false,dirty:false,tab:'products',catalog:null,history:[]
   };
@@ -74,9 +74,27 @@
     if(reloadButton)reloadButton.disabled=state.saving;
   }
 
+  function closeModal(){
+    const modal=$('#crModal');
+    if(!modal)return;
+    modal.hidden=true;
+  }
+
+  function enhanceModal(){
+    const modal=$('#crModal');if(!modal)return;
+    const sheet=modal.querySelector('.cr-sheet');if(!sheet||sheet.querySelector('.cr-modal-close'))return;
+    const button=document.createElement('button');
+    button.type='button';button.className='cr-modal-close';button.setAttribute('aria-label','Cerrar');button.textContent='✕';
+    button.onclick=()=>{if(!state.saving)closeModal();};
+    sheet.prepend(button);
+  }
+
   function shell(){
     const target=host();
-    if(!target||target.dataset.ready)return;
+    if(!target)return;
+    // Si otro render reconstruyó la pantalla pero dejó data-ready, se reparaba mal:
+    // el módulo creía estar montado aunque el HTML ya no existía. Se valida el shell real.
+    if(target.dataset.ready==='1'&&target.querySelector('.cr-admin'))return;
     target.dataset.ready='1';
     target.innerHTML=`<div class="cr-admin" data-build="${BUILD}">
       <div class="cr-hero">
@@ -110,6 +128,11 @@
     });
     $('#crSave').onclick=()=>saveCatalog({message:'Ajustes publicados.'});
     $('#crReload').onclick=()=>load(true);
+    const modal=$('#crModal');
+    if(modal){
+      modal.addEventListener('click',(event)=>{if(event.target===modal&&!state.saving)closeModal();});
+      new MutationObserver(()=>enhanceModal()).observe(modal,{childList:true,subtree:false});
+    }
   }
 
   function markDirty(message='Cambios generales pendientes de guardar.'){
@@ -200,7 +223,14 @@
       products:renderProducts,promotions:renderPromotions,availability:renderAvailability,
       categories:renderCategories,carousel:renderCarousel,settings:renderSettings
     }[state.tab]||renderProducts;
-    renderer();
+    try{renderer();}
+    catch(error){
+      console.error('Catálogo Relojes render',error);
+      const body=$('#crBody');
+      if(body)body.innerHTML=`<div class="cr-empty"><b>No se pudo dibujar esta sección.</b><span>${esc(error&&error.message||'Error de interfaz.')}</span><button class="cr-btn ghost" id="crRenderRetry" type="button">↻ Reintentar</button></div>`;
+      const retry=$('#crRenderRetry');if(retry)retry.onclick=()=>render();
+      status('La sección tuvo un error de interfaz. Puede reintentar sin salir del catálogo.','bad');
+    }
   }
 
   async function saveCatalog(options={}){
@@ -325,6 +355,7 @@
       <div class="cr-modal-error" id="cpeError" hidden></div>
       <div class="cr-actions"><button class="cr-btn ghost" id="cpeCancel">Cancelar</button><button class="cr-btn red" id="cpeOk">Guardar y publicar</button></div>
     </div>`;
+    enhanceModal();
 
     function renderPlans(){
       const box=$('#cpePlans');
@@ -415,7 +446,7 @@
         button.disabled=false;button.textContent='Guardar y publicar';
         return;
       }
-      modal.hidden=true;renderProducts();
+      closeModal();renderProducts();
     };
   }
 
@@ -477,6 +508,7 @@
       <div class="cr-modal-error" id="catError" hidden></div>
       <div class="cr-actions"><button class="cr-btn ghost" id="catCancel">Cancelar</button><button class="cr-btn red" id="catOk">Guardar y publicar</button></div>
     </div>`;
+    enhanceModal();
     const autoId=()=>{if($('#catId').dataset.auto==='1'){$('#catId').value=slugId($('#catName').value)||`categoria-${Date.now()}`;$('#catId').dataset.auto='1';}};
     if(!existing){$('#catId').dataset.auto='1';$('#catName').oninput=autoId;}
     $('#catId').oninput=()=>{$('#catId').dataset.auto='0';};
@@ -497,7 +529,7 @@
       const button=$('#catOk');button.disabled=true;button.textContent='Publicando…';
       const saved=await saveCatalog({progress:'Guardando categoría…',message:`Categoría “${category.name}” guardada.`});
       if(!saved){state.catalog=before;errorBox.hidden=false;errorBox.textContent=$('#crStatus')?.textContent||'No se pudo guardar.';button.disabled=false;button.textContent='Guardar y publicar';return;}
-      modal.hidden=true;renderCategories();
+      closeModal();renderCategories();
     };
   }
 
@@ -573,6 +605,7 @@
       <div class="cr-modal-error" id="prError" hidden></div>
       <div class="cr-actions"><button class="cr-btn danger" id="prDelete" ${existing?'':'hidden'}>Eliminar</button><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prOk">Guardar y publicar</button></div>
     </div>`;
+    enhanceModal();
     $('#prCancel').onclick=()=>{if(!state.saving)modal.hidden=true;};
     if(existing)$('#prDelete').onclick=async()=>{
       if(!confirm(`¿Eliminar la promoción “${promotion.title}”?`))return;
@@ -606,7 +639,7 @@
         button.disabled=false;button.textContent='Guardar y publicar';
         return;
       }
-      modal.hidden=true;renderPromotions();
+      closeModal();renderPromotions();
     };
   }
 
@@ -699,6 +732,7 @@
       <div class="cr-modal-error" id="carError" hidden></div>
       <div class="cr-actions cr-sticky-actions"><button class="cr-btn ghost" id="carCancel">Cancelar</button><button class="cr-btn red" id="carOk">Guardar y publicar</button></div>
     </div>`;
+    enhanceModal();
     const fileInput=$('#carFile');
     fileInput.onchange=async()=>{
       const file=fileInput.files&&fileInput.files[0];if(!file)return;
@@ -721,7 +755,7 @@
       const button=$('#carOk');button.disabled=true;button.textContent='Publicando…';
       const saved=await saveCatalog({progress:'Guardando carrusel…',message:'Carrusel actualizado.'});
       if(!saved){state.catalog=before;const e=$('#carError');e.hidden=false;e.textContent=$('#crStatus')?.textContent||'No se pudo guardar.';button.disabled=false;button.textContent='Guardar y publicar';return;}
-      modal.hidden=true;renderCarousel();
+      closeModal();renderCarousel();
     };
   }
 
@@ -760,12 +794,18 @@
     if(screen?.classList.contains('active'))load();
     if(screen&&!screen.dataset.catalogObserver){
       screen.dataset.catalogObserver='1';
-      new MutationObserver(()=>{if(screen.classList.contains('active')){shell();load();}})
-        .observe(screen,{attributes:true,attributeFilter:['class']});
+      new MutationObserver(()=>{
+        if(screen.classList.contains('active')){shell();load();}
+        else closeModal();
+      }).observe(screen,{attributes:true,attributeFilter:['class']});
+    }
+    if(!document.documentElement.dataset.catalogEscape){
+      document.documentElement.dataset.catalogEscape='1';
+      document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&!state.saving)closeModal();},true);
     }
   }
 
-  window.SublichatCatalogoRelojes={open:()=>{shell();load();},reload:()=>load(true)};
+  window.SublichatCatalogoRelojes={open:()=>{shell();load();},reload:()=>load(true),close:()=>closeModal()};
   window.addEventListener('beforeunload',(event)=>{
     if(!state.dirty)return;
     event.preventDefault();event.returnValue='';

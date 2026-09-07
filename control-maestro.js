@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-SCROLL-ESTABLE-20260907-45';
+  const BUILD='CONTROL-MAESTRO-NAVEGACION-ESTABLE-20260907-46';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1964,23 +1964,49 @@
     button.setAttribute?.('aria-pressed',String(!!active));
   }
 
+  function controlWrap(){
+    return document.querySelector('.wrap');
+  }
+
+  function clearControlViewportLocks(){
+    const screen=document.getElementById('screen-control-cuentas');
+    document.body.classList.remove('cm-control-no-scroll');
+    document.documentElement.classList.remove('cm-control-no-scroll');
+    if(!screen)return;
+    screen.classList.remove('cm-control-expanded');
+    screen.style.removeProperty('overflow');
+    screen.style.removeProperty('overflow-y');
+    screen.style.removeProperty('overflow-x');
+    screen.style.removeProperty('height');
+    screen.style.removeProperty('max-height');
+    screen.style.removeProperty('width');
+    screen.style.removeProperty('max-width');
+    screen.style.removeProperty('inset');
+    screen.style.removeProperty('position');
+  }
+
+  function restoreControlHome(force=false){
+    const screen=document.getElementById('screen-control-cuentas');
+    const wrap=controlWrap();
+    if(!screen||!wrap)return;
+    // Versiones anteriores movían la pantalla al <body>. Si una salida de
+    // fullscreen se interrumpía, el módulo podía quedar huérfano y toda la app
+    // aparecía blanca. Siempre devolvemos el Control Maestro a .wrap cuando no
+    // está realmente expandido (o cuando se fuerza una reparación de navegación).
+    if((force||!state.controlExpanded)&&screen.parentNode!==wrap){
+      try{wrap.appendChild(screen);}catch(_){}
+    }
+  }
+
   function ensureControlExpanded(){
     const screen=document.getElementById('screen-control-cuentas');
     if(!screen||!state.controlExpanded||!screen.classList.contains('active'))return;
-    if(!state.fullscreenParent&&screen.parentNode!==document.body){
-      state.fullscreenParent=screen.parentNode;
-      state.fullscreenNextSibling=screen.nextSibling;
-    }
-    // .wrap usa backdrop-filter y por ello puede convertir a un elemento fixed
-    // en hijo de su propio marco. Se mueve temporalmente la pantalla al body
-    // para que 100vw/100dvh sean realmente todo el monitor.
-    if(screen.parentNode!==document.body)document.body.appendChild(screen);
+    // No volver a sacar la pantalla de .wrap. El reparentado fue la causa del
+    // estado blanco/pegado al salir de pantalla completa. El CSS desactiva el
+    // backdrop-filter del marco mientras está expandido, por lo que position:fixed
+    // vuelve a usar el viewport real sin mover nodos del DOM.
+    restoreControlHome(false);
     screen.classList.add('cm-control-expanded');
-    // La pantalla, no el body, es el contenedor vertical. Así rueda del mouse,
-    // trackpad y táctil siguen funcionando tanto en Fullscreen API como en fallback.
-    screen.style.setProperty('overflow','auto','important');
-    screen.style.setProperty('height','100dvh','important');
-    screen.style.setProperty('max-height','100dvh','important');
     document.body.classList.add('cm-control-no-scroll');
     document.documentElement.classList.add('cm-control-no-scroll');
     syncFullscreenButton();
@@ -1988,40 +2014,35 @@
 
   function closeControlExpanded(options={}){
     const screen=document.getElementById('screen-control-cuentas');
+    const y=state.fullscreenReturnY||0;
     state.controlExpanded=false;
-    document.body.classList.remove('cm-control-no-scroll');
-    document.documentElement.classList.remove('cm-control-no-scroll');
-    if(!screen)return;
-    screen.classList.remove('cm-control-expanded');
-
-    // Restaurar el elemento mientras todavía es el fullscreenElement podía dejar
-    // a Chrome con un viewport sin scroll. Primero salimos del Fullscreen API y
-    // después lo devolvemos a .wrap. En el modo CSS se restaura inmediatamente.
-    const finish=()=>{
-      const parent=state.fullscreenParent;
-      const next=state.fullscreenNextSibling;
-      if(parent?.isConnected&&screen.parentNode!==parent){
-        if(next?.parentNode===parent)parent.insertBefore(screen,next);else parent.appendChild(screen);
-      }
-      state.fullscreenParent=null;state.fullscreenNextSibling=null;
-      screen.style.removeProperty('overflow');
-      screen.style.removeProperty('height');
-      screen.style.removeProperty('max-height');
-      syncFullscreenButton();
-      if(options.restoreScroll===false)return;
-      requestAnimationFrame(()=>{
-        try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
-        catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
-      });
-    };
-
+    clearControlViewportLocks();
+    // La limpieza visual es síncrona: jamás esperamos a la promesa de
+    // exitFullscreen para devolver scroll y navegación. Así no queda una página
+    // blanca aunque Chrome tarde o rechace la salida nativa.
     if(document.fullscreenElement===screen&&document.exitFullscreen){
-      try{
-        const request=document.exitFullscreen();
-        if(request&&typeof request.finally==='function'){request.finally(()=>requestAnimationFrame(finish));return;}
-      }catch(_){}
+      try{const request=document.exitFullscreen();if(request?.catch)request.catch(()=>{});}catch(_){}
     }
-    finish();
+    restoreControlHome(true);
+    state.fullscreenParent=null;state.fullscreenNextSibling=null;
+    syncFullscreenButton();
+    if(options.restoreScroll===false)return;
+    requestAnimationFrame(()=>{
+      try{window.scrollTo({left:0,top:y,behavior:'auto'});}catch(_){window.scrollTo(0,y);}
+    });
+  }
+
+  function repairControlNavigation(options={}){
+    const screen=document.getElementById('screen-control-cuentas');
+    const keepExpanded=options.keepExpanded===true&&state.controlExpanded&&screen?.classList.contains('active');
+    if(keepExpanded){ensureControlExpanded();return;}
+    state.controlExpanded=false;
+    clearControlViewportLocks();
+    restoreControlHome(true);
+    if(document.fullscreenElement===screen&&document.exitFullscreen){
+      try{const request=document.exitFullscreen();if(request?.catch)request.catch(()=>{});}catch(_){}
+    }
+    syncFullscreenButton();
   }
 
   function toggleFullscreen(){
@@ -2173,14 +2194,7 @@
       const active=screenActive();
       if(active){
         if(state.controlExpanded)ensureControlExpanded();
-        else{
-          // Si una salida anterior de fullscreen quedó interrumpida, no permita
-          // que la clase de bloqueo afecte el Control Maestro minimizado.
-          document.body.classList.remove('cm-control-no-scroll');
-          document.documentElement.classList.remove('cm-control-no-scroll');
-          screen?.classList.remove('cm-control-expanded');
-          screen?.style.removeProperty('overflow');screen?.style.removeProperty('height');screen?.style.removeProperty('max-height');
-        }
+        else repairControlNavigation();
         // Solo arranca al ENTRAR al módulo. Antes se volvía a reconstruir toda
         // la auditoría también al añadir la clase de pantalla completa, lo que
         // provocaba el salto de tamaño y un bloqueo visible en catálogos grandes.
@@ -2192,10 +2206,7 @@
         return;
       }
       wasActive=false;
-      if(state.controlExpanded||screen?.classList.contains('cm-control-expanded'))closeControlExpanded({restoreScroll:false});
-      if(document.fullscreenElement===screen){
-        document.exitFullscreen().catch(()=>{});
-      }
+      repairControlNavigation();
     });
     if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
     document.addEventListener('fullscreenchange',()=>{
@@ -2211,14 +2222,19 @@
       }else syncFullscreenButton();
     });
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
-    window.addEventListener('pageshow',()=>{
-      if(!state.controlExpanded){document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');screen?.classList.remove('cm-control-expanded');}
-    });
+    window.addEventListener('pageshow',()=>{if(!state.controlExpanded)repairControlNavigation();});
+    window.addEventListener('pagehide',()=>{if(!state.controlExpanded)repairControlNavigation();});
     if(screenActive()){
-      document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');
+      repairControlNavigation();
       boot();
-    }
+    }else repairControlNavigation();
   }
+
+  window.SublichatControlMaestro={
+    repair:()=>repairControlNavigation(),
+    close:()=>closeControlExpanded({restoreScroll:false}),
+    isExpanded:()=>!!state.controlExpanded
+  };
 
   let tries=0;
   const timer=setInterval(()=>{
