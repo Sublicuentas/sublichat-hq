@@ -36,7 +36,19 @@
 .cm-reading-bar>div:first-child b{display:block;color:var(--txt);font-size:14px;font-weight:950}.cm-reading-bar>div:first-child small{display:block;margin-top:3px;color:var(--txt2);font-size:11px;font-weight:750}
 .cm-size-options{display:flex;gap:6px;flex-wrap:wrap}.cm-size-options button{min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--txt2);font:900 12px/1.1 'Nunito',system-ui,sans-serif;cursor:pointer}.cm-size-options button:hover{border-color:var(--cm-blue);color:var(--cm-blue)}.cm-size-options button.on{border-color:var(--cm-blue);background:var(--cm-blue);color:#fff;box-shadow:0 5px 13px color-mix(in srgb,var(--cm-blue) 24%,transparent)}
 
-body.cm-control-no-scroll{overflow:hidden!important}
+body.cm-control-no-scroll{overflow:hidden!important;overscroll-behavior:none!important}
+body.ready > #screen-control-cuentas.screen.active.cm-control-expanded{
+  position:fixed!important;inset:0!important;z-index:2147483000!important;
+  width:100vw!important;max-width:100vw!important;height:100dvh!important;max-height:100dvh!important;
+  margin:0!important;padding:12px!important;box-sizing:border-box!important;
+  display:block!important;visibility:visible!important;opacity:1!important;transform:none!important;animation:none!important;
+  background:var(--bg,#edf6ff)!important;overflow-x:hidden!important;overflow-y:auto!important;
+  overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;
+}
+body.ready > #screen-control-cuentas.screen.active.cm-control-expanded > .card{
+  width:100%!important;max-width:none!important;min-height:calc(100dvh - 24px)!important;
+  margin:0!important;padding:18px!important;border-radius:18px!important;overflow:visible!important;
+}
 body.ready #screen-control-cuentas.screen.active.cm-control-expanded,
 body.ready #screen-control-cuentas.screen.active:fullscreen{
   position:fixed!important;inset:0!important;z-index:2147483000!important;display:block!important;

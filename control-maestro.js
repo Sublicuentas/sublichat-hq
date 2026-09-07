@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-INCIDENCIAS-FULLSCREEN-CLAVES-20260904-42';
+  const BUILD='CONTROL-MAESTRO-PANTALLA-ESTABLE-20260907-43';
   const DEFAULT_ACCOUNT_LIMIT=5000;
   let accountSearchTimer=null,clientSearchTimer=null;
   const state={
@@ -12,6 +12,7 @@
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
     accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:DEFAULT_ACCOUNT_LIMIT,revealedAccounts:new Set(),expandedAccountKey:'',
     reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',
+    controlExpanded:false,fullscreenParent:null,fullscreenNextSibling:null,pendingSyncMessage:'',
     metaRetryCount:0,metaRetryTimer:0
   };
 
@@ -64,7 +65,7 @@
   function captureControlView(){
     const screen=document.getElementById('screen-control-cuentas');
     const host=root();
-    const fullscreen=!!screen&&(document.fullscreenElement===screen||screen.classList.contains('cm-control-expanded'));
+    const fullscreen=!!screen&&(state.controlExpanded||document.fullscreenElement===screen||screen.classList.contains('cm-control-expanded'));
     const active=document.activeElement;
     const roster=host?.querySelector('.cm-ledger-account.is-open .cm-roster');
     return {
@@ -82,6 +83,10 @@
     state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
     state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||DEFAULT_ACCOUNT_LIMIT;
     state.expandedAccountKey=String(view.expandedAccountKey||'');
+    if(view.fullscreen&&screenActive()){
+      state.controlExpanded=true;
+      ensureControlExpanded();
+    }
     const apply=()=>{
       const screen=document.getElementById('screen-control-cuentas');const host=root();if(!host)return;
       const details=host.querySelector('.cm-details');if(details&&view.historicalOpen)details.open=true;
@@ -1165,6 +1170,10 @@
 
   function render(){
     const host=root();if(!host)return;
+    if(!state.busy&&state.pendingSyncMessage){
+      state.accountAudit=null;state.accountFeedback=null;
+      state.status=state.pendingSyncMessage;state.statusType='good';state.pendingSyncMessage='';
+    }
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
     // ⚠️ BUG REAL encontrado: la mesa se calculaba una vez y quedaba "pegada"
@@ -1181,13 +1190,14 @@
       state.accountAudit._forAnalysis=state.analysis;
     }
     const controlScreen=document.getElementById('screen-control-cuentas');
-    const expanded=document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
+    const expanded=state.controlExpanded||document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
       <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables. <span class="cm-build-tag" title="Si subís un archivo nuevo y este texto no cambia, el navegador está mostrando una copia guardada — haga Ctrl+Shift+R (o borre caché) para forzar la versión nueva.">v.${esc(BUILD.slice(-8))}</span></p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
       ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
     </div>`;
     bind();
+    if(expanded)requestAnimationFrame(ensureControlExpanded);
   }
 
   // Vuelve a atar únicamente los botones que viven dentro de la mesa de cuentas
@@ -1916,16 +1926,40 @@
     const screen=document.getElementById('screen-control-cuentas');
     const button=root()?.querySelector?.('[data-cm-action="toggle-fullscreen"]');
     if(!button)return;
-    const active=document.fullscreenElement===screen||screen?.classList.contains('cm-control-expanded');
+    const active=state.controlExpanded||document.fullscreenElement===screen||screen?.classList.contains('cm-control-expanded');
     button.textContent=active?'↙️ Salir de pantalla completa':'⛶ Pantalla completa';
     button.setAttribute?.('aria-pressed',String(!!active));
   }
 
-  function closeControlExpanded(){
-    const screen=document.getElementById('screen-control-cuentas');if(!screen)return;
-    if(!screen.classList.contains('cm-control-expanded'))return;
-    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+  function ensureControlExpanded(){
+    const screen=document.getElementById('screen-control-cuentas');
+    if(!screen||!state.controlExpanded||!screen.classList.contains('active'))return;
+    if(!state.fullscreenParent&&screen.parentNode!==document.body){
+      state.fullscreenParent=screen.parentNode;
+      state.fullscreenNextSibling=screen.nextSibling;
+    }
+    // .wrap usa backdrop-filter y por ello puede convertir a un elemento fixed
+    // en hijo de su propio marco. Se mueve temporalmente la pantalla al body
+    // para que 100vw/100dvh sean realmente todo el monitor.
+    if(screen.parentNode!==document.body)document.body.appendChild(screen);
+    screen.classList.add('cm-control-expanded');
+    document.body.classList.add('cm-control-no-scroll');
     syncFullscreenButton();
+  }
+
+  function closeControlExpanded(options={}){
+    const screen=document.getElementById('screen-control-cuentas');
+    state.controlExpanded=false;
+    if(!screen){document.body.classList.remove('cm-control-no-scroll');return;}
+    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
+    const parent=state.fullscreenParent;
+    const next=state.fullscreenNextSibling;
+    if(parent?.isConnected&&screen.parentNode!==parent){
+      if(next?.parentNode===parent)parent.insertBefore(screen,next);else parent.appendChild(screen);
+    }
+    state.fullscreenParent=null;state.fullscreenNextSibling=null;
+    syncFullscreenButton();
+    if(options.restoreScroll===false)return;
     requestAnimationFrame(()=>{
       try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
       catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
@@ -1939,13 +1973,14 @@
       // continuamos con la vista ampliada estable que no se cierra con prompts.
       try{await document.exitFullscreen();}catch(_){}
     }
-    if(screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
+    if(state.controlExpanded||screen.classList.contains('cm-control-expanded'))return closeControlExpanded();
     state.fullscreenReturnY=window.scrollY||0;
     if(document.fullscreenElement){try{await document.exitFullscreen();}catch(_){} }
     // No usamos Fullscreen API nativa: los diálogos confirm/prompt del
     // navegador pueden cerrarla. Esta vista CSS ocupa todo el viewport y
     // permanece abierta durante editar, revisar, eliminar y actualizar.
-    screen.classList.add('cm-control-expanded');document.body.classList.add('cm-control-no-scroll');
+    state.controlExpanded=true;
+    ensureControlExpanded();
     screen.scrollTop=0;syncFullscreenButton();
   }
 
@@ -2051,6 +2086,10 @@
   }
 
   window.sublichatControlSyncLoadedData=(message)=>{
+    if(state.busy){
+      state.pendingSyncMessage=message||'✅ Cambio recibido desde Firebase/Telegram.';
+      return;
+    }
     const view=captureControlView();
     state.accountAudit=null;state.accountFeedback=null;
     state.status=message||'✅ Cambio guardado. Control Maestro ya muestra los datos nuevos.';state.statusType='good';
@@ -2059,7 +2098,6 @@
 
   function install(){
     if(state.installed)return;state.installed=true;
-    document.addEventListener('click',(ev)=>{if(ev.target?.closest?.('[data-screen="control-cuentas"]')){if(!state.meta&&state.metaRetryCount>=6)state.metaRetryCount=0;setTimeout(boot,90);}},true);
     const screen=document.getElementById('screen-control-cuentas');
     // ⚠️ BUG DEL CONGELAMIENTO: cuando "Pantalla completa" usaba el respaldo
     // en CSS (celulares/navegadores que no soportan la Fullscreen API nativa),
@@ -2069,12 +2107,23 @@
     // por eso "se congelaba" y ninguna categoría del menú se veía seleccionada
     // de verdad. Ahora se cierra sola apenas Control Maestro deja de ser la
     // pantalla activa, sin importar por qué medio se salió.
+    let wasActive=screenActive();
     const observer=new MutationObserver(()=>{
-      if(screenActive()){if(!state.loading)boot();return;}
-      if(screen?.classList.contains('cm-control-expanded')){
-        screen.classList.remove('cm-control-expanded');
-        document.body.classList.remove('cm-control-no-scroll');
+      const active=screenActive();
+      if(active){
+        if(state.controlExpanded)ensureControlExpanded();
+        // Solo arranca al ENTRAR al módulo. Antes se volvía a reconstruir toda
+        // la auditoría también al añadir la clase de pantalla completa, lo que
+        // provocaba el salto de tamaño y un bloqueo visible en catálogos grandes.
+        if(!wasActive&&!state.loading){
+          if(!state.meta&&state.metaRetryCount>=6)state.metaRetryCount=0;
+          setTimeout(boot,40);
+        }
+        wasActive=true;
+        return;
       }
+      wasActive=false;
+      if(state.controlExpanded||screen?.classList.contains('cm-control-expanded'))closeControlExpanded({restoreScroll:false});
       if(document.fullscreenElement===screen){
         document.exitFullscreen().catch(()=>{});
       }
@@ -2083,6 +2132,7 @@
     document.addEventListener('fullscreenchange',()=>{
       if(!screen)return;
       if(document.fullscreenElement===screen){
+        state.controlExpanded=false;
         screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');
         requestAnimationFrame(()=>{screen.scrollTop=0;syncFullscreenButton();});
       }else syncFullscreenButton();

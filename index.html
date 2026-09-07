@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-INCIDENCIAS-FULLSCREEN-20260904-42">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-PANTALLA-ESTABLE-20260907-43">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1448,7 +1448,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 })();
 </script>
 
-<link rel="stylesheet" href="/catalogo-relojes-admin.css?v=20260822-2">
+<link rel="stylesheet" href="/catalogo-relojes-admin.css?v=20260907-3">
 <link rel="stylesheet" href="/sorteos-admin.css?v=20260826-4">
 </head>
 <body>
@@ -1874,6 +1874,10 @@ async function sublichatCurrentAuthUser(){
   return sublichatAuthWaitPromise;
 }
 
+// Los módulos administrativos cargados como archivos clásicos (catálogos,
+// sorteos, portal) pueden solicitar el mismo token sin duplicar Firebase Auth.
+window.sublichatCurrentAuthUser = sublichatCurrentAuthUser;
+
 window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
   const rawUrl = typeof input === "string"
     ? input
@@ -2162,9 +2166,15 @@ async function load(options={}){
     if(requireServer)throw new Error('Firebase no está configurado en esta sesión.');
     DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Modo demo";
   }
-  render();
-  renderInventario();
-  if(!controlOnly)renderFinanzas();
+  // Control Maestro ya vuelve a dibujar su propia mesa con DATA e INVENTARIO.
+  // Durante sacar/eliminar no reconstruimos también Clientes, Inventario y
+  // Finanzas detrás de la pantalla completa: ese trabajo duplicado era la
+  // pausa que se sentía como un congelamiento.
+  if(!controlOnly){
+    render();
+    renderInventario();
+    renderFinanzas();
+  }
   return {servicios:DATA.length,cuentas:INVENTARIO.length,forceServer};
 }
 
@@ -9910,7 +9920,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-INCIDENCIAS-FULLSCREEN-CLAVES-20260904-42"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-PANTALLA-ESTABLE-20260907-43"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
@@ -12589,7 +12599,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 })();
 </script>
 <script src="/portal-cliente-admin.js?v=20260820-1"></script>
-<script src="/catalogo-relojes-admin.js?v=20260822-2"></script>
+<script src="/catalogo-relojes-admin.js?v=20260907-3"></script>
 <script src="/revendedores-admin.js?v=20260903-promociones-socios-2"></script>
 <script src="/sorteos-admin.js?v=20260826-4"></script>
 </body>
