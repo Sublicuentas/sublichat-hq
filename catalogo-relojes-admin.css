@@ -196,3 +196,32 @@ textarea.cr-mini{min-height:62px;resize:vertical}
   .cr-card-actions .cr-btn{flex:1}
   .cr-sheet{padding:15px;border-radius:20px}
 }
+
+/* Catálogo Relojes · editor estable 2026-09-07 */
+.cr-card-badges{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.cr-badge.promo{background:color-mix(in srgb,#7c3aed 12%,var(--surface,#fff));color:#6d28d9;border:1px solid color-mix(in srgb,#7c3aed 24%,var(--line,#ddd))}
+.cr-category-icon{width:46px;height:46px;display:grid;place-items:center;flex:none;border-radius:13px;background:var(--card,#f3f4f6);font-size:23px}
+.cr-field-help{display:block;color:var(--txt2,#667085);font-size:10px;font-weight:700;line-height:1.35}
+.cr-sheet-small{width:min(560px,100%)}
+.cr-form>.wide{grid-column:1/-1}
+.cr-upload-field input[type="file"]{padding:8px;background:var(--surface,#fff);cursor:pointer}
+.cr-upload-state{display:block;color:var(--txt2,#667085);font-size:10px;font-weight:750;line-height:1.35}
+.cr-image-preview{min-height:92px;display:grid;place-items:center;overflow:hidden;border:1px dashed var(--line,#d9dce3);border-radius:14px;background:var(--surface,#f8fafc);color:var(--txt2,#667085);font-size:11px;font-weight:800}
+.cr-image-preview img{display:block;width:100%;height:150px;object-fit:contain;background:var(--surface,#fff)}
+.cr-carousel-preview{height:128px;display:grid;place-items:center;overflow:hidden;border:1px solid var(--line,#e6e6e6);border-radius:13px;background:var(--card,#f5f5f5);color:var(--txt2,#667085);font-size:11px;font-weight:850}
+.cr-carousel-preview img{width:100%;height:100%;display:block;object-fit:cover}
+.cr-carousel-large{min-height:170px}
+.cr-carousel-large img{height:min(280px,32dvh);object-fit:contain}
+
+/* El editor ya no queda cortado debajo de la pantalla ni del navbar. */
+.cr-modal{align-items:flex-start!important;padding:clamp(12px,2.2vh,24px) 14px!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
+.cr-sheet{max-height:calc(100dvh - clamp(24px,4.4vh,48px))!important;overflow-y:auto!important;overscroll-behavior:contain!important;scrollbar-gutter:stable;padding-bottom:8px!important}
+.cr-sheet>.cr-actions{position:sticky;bottom:-8px;z-index:5;margin:14px -8px -8px;padding:12px 8px 8px;background:color-mix(in srgb,var(--card,#fff) 94%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--line,#eee)}
+
+@media(max-width:600px){
+  .cr-form>.wide{grid-column:1}
+  .cr-carousel-preview{height:110px}
+  .cr-image-preview img{height:130px}
+  .cr-sheet>.cr-actions{bottom:-8px}
+}
+@media(min-width:900px){.cr-savebar{bottom:18px}}

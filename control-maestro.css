@@ -36,7 +36,7 @@
 .cm-reading-bar>div:first-child b{display:block;color:var(--txt);font-size:14px;font-weight:950}.cm-reading-bar>div:first-child small{display:block;margin-top:3px;color:var(--txt2);font-size:11px;font-weight:750}
 .cm-size-options{display:flex;gap:6px;flex-wrap:wrap}.cm-size-options button{min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--txt2);font:900 12px/1.1 'Nunito',system-ui,sans-serif;cursor:pointer}.cm-size-options button:hover{border-color:var(--cm-blue);color:var(--cm-blue)}.cm-size-options button.on{border-color:var(--cm-blue);background:var(--cm-blue);color:#fff;box-shadow:0 5px 13px color-mix(in srgb,var(--cm-blue) 24%,transparent)}
 
-html.cm-control-no-scroll,body.cm-control-no-scroll{overflow:hidden!important;overscroll-behavior:none!important}
+html.cm-control-no-scroll,body.cm-control-no-scroll{overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:auto!important}
 body.cm-control-no-scroll #sidebarWrap,
 body.cm-control-no-scroll > .nav,
 body.cm-control-no-scroll > .focus-nav{visibility:hidden!important;pointer-events:none!important}
@@ -277,3 +277,9 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-roster-row{grid-template-columns:1fr 1fr;gap:8px}.cm-roster-status,.cm-roster-actions{grid-column:1/-1}.cm-roster-actions{justify-content:flex-start}.cm-account-review{grid-template-columns:1fr}.cm-account-review-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}.cm-account-review-actions .cm-btn{white-space:normal}
   .cm-details>summary{align-items:flex-start}.cm-details>summary i{white-space:normal;text-align:right}.cm-details-body{padding:13px}
 }
+
+
+/* Control Maestro · scroll estable 2026-09-07 */
+#screen-control-cuentas.screen.active:not(.cm-control-expanded):not(:fullscreen){height:auto!important;max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important;touch-action:auto!important}
+#screen-control-cuentas.cm-control-expanded,#screen-control-cuentas:fullscreen{overflow-y:auto!important;overflow-x:hidden!important;scroll-behavior:auto!important;scrollbar-gutter:stable!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important}
+#screen-control-cuentas.cm-control-expanded .cm-ledger-scroll,#screen-control-cuentas:fullscreen .cm-ledger-scroll{touch-action:pan-x pan-y!important;overscroll-behavior:auto!important}

@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-RAPIDO-FULLSCREEN-20260907-44';
+  const BUILD='CONTROL-MAESTRO-SCROLL-ESTABLE-20260907-45';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1976,6 +1976,11 @@
     // para que 100vw/100dvh sean realmente todo el monitor.
     if(screen.parentNode!==document.body)document.body.appendChild(screen);
     screen.classList.add('cm-control-expanded');
+    // La pantalla, no el body, es el contenedor vertical. Así rueda del mouse,
+    // trackpad y táctil siguen funcionando tanto en Fullscreen API como en fallback.
+    screen.style.setProperty('overflow','auto','important');
+    screen.style.setProperty('height','100dvh','important');
+    screen.style.setProperty('max-height','100dvh','important');
     document.body.classList.add('cm-control-no-scroll');
     document.documentElement.classList.add('cm-control-no-scroll');
     syncFullscreenButton();
@@ -1984,23 +1989,39 @@
   function closeControlExpanded(options={}){
     const screen=document.getElementById('screen-control-cuentas');
     state.controlExpanded=false;
-    if(!screen){document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');return;}
-    screen.classList.remove('cm-control-expanded');document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');
+    document.body.classList.remove('cm-control-no-scroll');
+    document.documentElement.classList.remove('cm-control-no-scroll');
+    if(!screen)return;
+    screen.classList.remove('cm-control-expanded');
+
+    // Restaurar el elemento mientras todavía es el fullscreenElement podía dejar
+    // a Chrome con un viewport sin scroll. Primero salimos del Fullscreen API y
+    // después lo devolvemos a .wrap. En el modo CSS se restaura inmediatamente.
+    const finish=()=>{
+      const parent=state.fullscreenParent;
+      const next=state.fullscreenNextSibling;
+      if(parent?.isConnected&&screen.parentNode!==parent){
+        if(next?.parentNode===parent)parent.insertBefore(screen,next);else parent.appendChild(screen);
+      }
+      state.fullscreenParent=null;state.fullscreenNextSibling=null;
+      screen.style.removeProperty('overflow');
+      screen.style.removeProperty('height');
+      screen.style.removeProperty('max-height');
+      syncFullscreenButton();
+      if(options.restoreScroll===false)return;
+      requestAnimationFrame(()=>{
+        try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
+        catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
+      });
+    };
+
     if(document.fullscreenElement===screen&&document.exitFullscreen){
-      try{document.exitFullscreen().catch(()=>{});}catch(_){}
+      try{
+        const request=document.exitFullscreen();
+        if(request&&typeof request.finally==='function'){request.finally(()=>requestAnimationFrame(finish));return;}
+      }catch(_){}
     }
-    const parent=state.fullscreenParent;
-    const next=state.fullscreenNextSibling;
-    if(parent?.isConnected&&screen.parentNode!==parent){
-      if(next?.parentNode===parent)parent.insertBefore(screen,next);else parent.appendChild(screen);
-    }
-    state.fullscreenParent=null;state.fullscreenNextSibling=null;
-    syncFullscreenButton();
-    if(options.restoreScroll===false)return;
-    requestAnimationFrame(()=>{
-      try{window.scrollTo({left:0,top:state.fullscreenReturnY||0,behavior:'instant'});}
-      catch(_){window.scrollTo(0,state.fullscreenReturnY||0);}
-    });
+    finish();
   }
 
   function toggleFullscreen(){
@@ -2152,6 +2173,14 @@
       const active=screenActive();
       if(active){
         if(state.controlExpanded)ensureControlExpanded();
+        else{
+          // Si una salida anterior de fullscreen quedó interrumpida, no permita
+          // que la clase de bloqueo afecte el Control Maestro minimizado.
+          document.body.classList.remove('cm-control-no-scroll');
+          document.documentElement.classList.remove('cm-control-no-scroll');
+          screen?.classList.remove('cm-control-expanded');
+          screen?.style.removeProperty('overflow');screen?.style.removeProperty('height');screen?.style.removeProperty('max-height');
+        }
         // Solo arranca al ENTRAR al módulo. Antes se volvía a reconstruir toda
         // la auditoría también al añadir la clase de pantalla completa, lo que
         // provocaba el salto de tamaño y un bloqueo visible en catálogos grandes.
@@ -2182,7 +2211,13 @@
       }else syncFullscreenButton();
     });
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
-    if(screenActive())boot();
+    window.addEventListener('pageshow',()=>{
+      if(!state.controlExpanded){document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');screen?.classList.remove('cm-control-expanded');}
+    });
+    if(screenActive()){
+      document.body.classList.remove('cm-control-no-scroll');document.documentElement.classList.remove('cm-control-no-scroll');
+      boot();
+    }
   }
 
   let tries=0;
