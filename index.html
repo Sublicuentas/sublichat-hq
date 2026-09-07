@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-NAVEGACION-ESTABLE-20260907-46">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-AUDITADO-ESTABLE-20260907-47">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -8132,57 +8132,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(objBtn && !objBtn.dataset.wired){ objBtn.dataset.wired='1'; objBtn.addEventListener('click',()=>rbacGo('objetivos')); }
     /* relojes ya no queda atrapado en la mesa: entra en Inicio y navega libre a todas sus secciones */
   }
-  let rbacNavPaintToken=0;
-  function repairControlBeforeNavigation(nextScreen){
-    const control=document.getElementById('screen-control-cuentas');
-    const wrap=document.querySelector('.wrap');
-    // Protección adicional independiente del módulo: una versión vieja podía dejar
-    // Control Maestro como hijo directo de <body> y con el body bloqueado. Antes de
-    // cualquier navegación recuperamos el DOM para que nunca vuelva la pantalla blanca.
-    if(nextScreen!=='control-cuentas'){
-      try{window.SublichatControlMaestro?.repair?.();}catch(_){}
-      document.body.classList.remove('cm-control-no-scroll');
-      document.documentElement.classList.remove('cm-control-no-scroll');
-      control?.classList.remove('cm-control-expanded');
-      if(control){
-        ['overflow','overflow-y','overflow-x','height','max-height','width','max-width','inset','position'].forEach(k=>control.style.removeProperty(k));
-        if(wrap&&control.parentElement!==wrap){try{wrap.appendChild(control);}catch(_){}}
-      }
-      if(document.fullscreenElement===control&&document.exitFullscreen){try{const q=document.exitFullscreen();if(q?.catch)q.catch(()=>{});}catch(_){}}
-    }else{
-      // Al entrar también se sanea cualquier residuo previo; el usuario podrá activar
-      // pantalla completa otra vez desde el botón del propio Control Maestro.
-      try{window.SublichatControlMaestro?.repair?.();}catch(_){}
-      document.body.classList.remove('cm-control-no-scroll');
-      document.documentElement.classList.remove('cm-control-no-scroll');
-      control?.classList.remove('cm-control-expanded');
-      if(control&&wrap&&control.parentElement!==wrap){try{wrap.appendChild(control);}catch(_){}}
-    }
-  }
   function rbacGo(screen){
     if(!can(screen)){ mostrarToast('Este usuario no tiene permiso para abrir ese módulo.'); return; }
-    repairControlBeforeNavigation(screen);
-    if(screen!=='catalogo-relojes'){try{window.SublichatCatalogoRelojes?.close?.();}catch(_){}}
     document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.screen===screen));
     document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
     const target=document.getElementById('screen-'+screen);
     if(target) target.classList.add('active');
-    try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){window.scrollTo(0,0);}
-
-    // Dejar que el navegador pinte primero la pantalla seleccionada. Antes se ejecutaba
-    // renderRBACAll() de forma síncrona y, con cientos de clientes/cuentas, el usuario
-    // veía una página blanca mientras JavaScript terminaba todo el trabajo.
-    const token=++rbacNavPaintToken;
-    requestAnimationFrame(()=>{
-      if(token!==rbacNavPaintToken)return;
-      try{renderRBACAll();}catch(error){console.error('RBAC render',error);try{mostrarToast('⚠️ El módulo abrió, pero una sección secundaria no pudo actualizarse.');}catch(_){}}
-      try{
-        if(screen==='tickets') tkLoad();
-        if(screen==='catalogo-relojes'&&window.SublichatCatalogoRelojes)window.SublichatCatalogoRelojes.open();
-        if(screen==='revendedores'&&window.SublichatRevendedores)window.SublichatRevendedores.open();
-        if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
-      }catch(error){console.error('RBAC module open',screen,error);try{mostrarToast('⚠️ No se pudo completar la carga del módulo. Presione nuevamente o Recargar.');}catch(_){}}
-    });
+    window.scrollTo({top:0,behavior:'smooth'});
+    renderRBACAll();
+    if(screen==='tickets') tkLoad();
+    if(screen==='catalogo-relojes'&&window.SublichatCatalogoRelojes)window.SublichatCatalogoRelojes.open();
+    if(screen==='revendedores'&&window.SublichatRevendedores)window.SublichatRevendedores.open();
+    if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
   }
 
 
@@ -9959,7 +9920,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-NAVEGACION-ESTABLE-20260907-46"></script>
+<script defer src="./control-maestro.js?v=CONTROL-MAESTRO-AUDITADO-ESTABLE-20260907-47"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-NAVEGACION-ESTABLE-20260907-46';
+  const BUILD='CONTROL-MAESTRO-AUDITADO-ESTABLE-20260907-47';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1973,7 +1973,7 @@
     document.body.classList.remove('cm-control-no-scroll');
     document.documentElement.classList.remove('cm-control-no-scroll');
     if(!screen)return;
-    screen.classList.remove('cm-control-expanded');
+    if(screen.classList.contains('cm-control-expanded'))screen.classList.remove('cm-control-expanded');
     screen.style.removeProperty('overflow');
     screen.style.removeProperty('overflow-y');
     screen.style.removeProperty('overflow-x');
@@ -2181,34 +2181,33 @@
   function install(){
     if(state.installed)return;state.installed=true;
     const screen=document.getElementById('screen-control-cuentas');
-    // ⚠️ BUG DEL CONGELAMIENTO: cuando "Pantalla completa" usaba el respaldo
-    // en CSS (celulares/navegadores que no soportan la Fullscreen API nativa),
-    // esas clases quedaban pegadas si el usuario navegaba a OTRA sección desde
-    // ahí (tocando Inicio, Clientes, etc.) en vez de cerrar Control Maestro
-    // primero. document.body se quedaba sin scroll y sin poder interactuar —
-    // por eso "se congelaba" y ninguna categoría del menú se veía seleccionada
-    // de verdad. Ahora se cierra sola apenas Control Maestro deja de ser la
-    // pantalla activa, sin importar por qué medio se salió.
+
+    // Reparación inicial ANTES de observar cambios de clase. DOMTokenList.remove()
+    // puede disparar MutationObserver incluso cuando la clase no existía; observar
+    // mientras limpiábamos el mismo atributo podía formar un bucle de microtareas
+    // que bloqueaba TODO Sublichat (menú sin responder y métricas en "—").
+    if(screenActive()){
+      repairControlNavigation();
+      boot();
+    }else repairControlNavigation();
+
     let wasActive=screenActive();
     const observer=new MutationObserver(()=>{
       const active=screenActive();
+      // El observador sólo debe reaccionar a una transición real de pantalla.
+      // Cambios internos como cm-control-expanded NO vuelven a invocar repair(),
+      // evitando recursión y congelamiento del hilo principal.
+      if(active===wasActive)return;
+      wasActive=active;
       if(active){
-        if(state.controlExpanded)ensureControlExpanded();
-        else repairControlNavigation();
-        // Solo arranca al ENTRAR al módulo. Antes se volvía a reconstruir toda
-        // la auditoría también al añadir la clase de pantalla completa, lo que
-        // provocaba el salto de tamaño y un bloqueo visible en catálogos grandes.
-        if(!wasActive&&!state.loading){
-          if(!state.meta&&state.metaRetryCount>=6)state.metaRetryCount=0;
-          setTimeout(boot,40);
-        }
-        wasActive=true;
-        return;
+        if(!state.meta&&state.metaRetryCount>=6)state.metaRetryCount=0;
+        setTimeout(boot,40);
+      }else{
+        repairControlNavigation();
       }
-      wasActive=false;
-      repairControlNavigation();
     });
     if(screen)observer.observe(screen,{attributes:true,attributeFilter:['class']});
+
     document.addEventListener('fullscreenchange',()=>{
       if(!screen)return;
       if(document.fullscreenElement===screen){
@@ -2216,18 +2215,14 @@
         ensureControlExpanded();
         requestAnimationFrame(()=>{screen.scrollTop=0;syncFullscreenButton();});
       }else if(state.controlExpanded){
-        // Algunos prompts del navegador cierran Fullscreen API. Conservamos la
-        // vista de trabajo CSS para que editar/eliminar no saque al usuario.
+        // Si el navegador sale del fullscreen nativo, se conserva la vista CSS
+        // sin reparentar el módulo ni bloquear la navegación.
         ensureControlExpanded();syncFullscreenButton();
       }else syncFullscreenButton();
     });
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);
     window.addEventListener('pageshow',()=>{if(!state.controlExpanded)repairControlNavigation();});
     window.addEventListener('pagehide',()=>{if(!state.controlExpanded)repairControlNavigation();});
-    if(screenActive()){
-      repairControlNavigation();
-      boot();
-    }else repairControlNavigation();
   }
 
   window.SublichatControlMaestro={
