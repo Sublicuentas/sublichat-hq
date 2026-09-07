@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-AUDITADO-ESTABLE-20260907-47';
+  const BUILD='CONTROL-MAESTRO-FILTROS-POR-PLATAFORMA-20260907-48';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1117,18 +1117,53 @@
       ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining}. El conteo y la búsqueda ya incluyen todas; se dibujan por bloques para mantener el panel rápido.</small></div>`:''}`;
   }
 
+  function accountsForSelectedPlatform(audit=state.accountAudit){
+    const accounts=Array.isArray(audit?.accounts)?audit.accounts:[];
+    if(state.accountPlatform==='all')return accounts;
+    return accounts.filter((a)=>a.family===state.accountPlatform);
+  }
+
+  function accountStatusCounts(accounts){
+    const list=Array.isArray(accounts)?accounts:[];
+    const counts={all:list.length,expired:0,soon:0,active:0,problems:0,reviewed:0,review_due:0};
+    list.forEach((a)=>{
+      const life=accountLifecycle(a);
+      if(life.tone==='expired')counts.expired++;
+      else if(life.tone==='soon')counts.soon++;
+      else if(life.tone==='active')counts.active++;
+      if(a.issueCount)counts.problems++;
+      if(accountReviewSchedule(a).isReviewed)counts.reviewed++;
+      if(a.reviewDue)counts.review_due++;
+    });
+    return counts;
+  }
+
   function accountAuditHtml(){
     const audit=state.accountAudit;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
-    const reviewedCount=audit.accounts.filter((a)=>accountReviewSchedule(a).isReviewed).length;
-    const reviewDueCount=audit.accounts.filter((a)=>a.reviewDue).length;
-    const statuses=[['all','Todas'],['expired','🔴 Vencidos'],['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días`],['active','🟢 Vigentes'],['problems','⚠️ Diferencias'],['reviewed',`✅ Revisadas (${reviewedCount})`],['review_due',`🕒 Toca revisar (${reviewDueCount})`]];
+    // Los contadores junto a la búsqueda pertenecen EXCLUSIVAMENTE a la
+    // plataforma elegida en la columna izquierda. Antes mostraban totales
+    // globales (por ejemplo 109 revisadas / 794 por revisar) aunque se estuviera
+    // trabajando solo Prime Video, lo que hacía parecer que el filtro estaba
+    // mezclando todas las cuentas.
+    const scopedAccounts=accountsForSelectedPlatform(audit);
+    const statusCounts=accountStatusCounts(scopedAccounts);
+    const scopeName=state.accountPlatform==='all'?'Todas las plataformas':auditPlatformLabel(state.accountPlatform);
+    const statuses=[
+      ['all',`Todas (${statusCounts.all})`],
+      ['expired',`🔴 Vencidos (${statusCounts.expired})`],
+      ['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días (${statusCounts.soon})`],
+      ['active',`🟢 Vigentes (${statusCounts.active})`],
+      ['problems',`⚠️ Diferencias (${statusCounts.problems})`],
+      ['reviewed',`✅ Revisadas (${statusCounts.reviewed})`],
+      ['review_due',`🕒 Toca revisar (${statusCounts.review_due})`]
+    ];
     // Si el Excel todavía no terminó de leerse (o falló toda la serie de
     // reintentos), lo decimos claro en vez de dejar que los números se vean
     // "raros" sin explicación — así se sabe que faltan las cuentas "Solo Excel".
     const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
     return `<section class="cm-panel cm-accounts-panel">
-      <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Abra solamente la cuenta que quiera comprobar.</p></div><span class="cm-template-state ${audit.metrics.conProblemas?'':'ok'}">${audit.metrics.conProblemas?audit.metrics.conProblemas+' cuentas con diferencias':'✅ Base interna correcta'}</span></div>
+      <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Vista actual: <b>${esc(scopeName)}</b> · ${statusCounts.all} cuenta${statusCounts.all===1?'':'s'}.</p></div><span class="cm-template-state ${statusCounts.problems?'':'ok'}">${statusCounts.problems?statusCounts.problems+' cuenta'+(statusCounts.problems===1?'':'s')+' con diferencias':'✅ Sin diferencias en esta vista'}</span></div>
       <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
       ${excelNote}
       <div class="cm-split">
