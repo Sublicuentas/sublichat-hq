@@ -89,26 +89,96 @@ function renderPromociones(){
   b.querySelectorAll('[data-promo-del]').forEach(x=>x.onclick=()=>eliminarPromocion(x.dataset.promoDel));
 }
 async function imageData(file){
-  if(!file)return'';if(!/^image\/(jpeg|png|webp)$/i.test(file.type))throw new Error('Use una imagen JPG, PNG o WEBP.');
-  const url=URL.createObjectURL(file),img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
-  const max=1600,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);
-  const data=canvas.toDataURL('image/jpeg',.84);if(data.length>4700000)throw new Error('La imagen sigue demasiado pesada. Use una menor de 3 MB.');return data;
+  if(!file)return'';
+  if(!/^image\/(jpeg|png|webp)$/i.test(file.type))throw new Error('Use una imagen JPG, PNG o WEBP.');
+  const url=URL.createObjectURL(file),img=new Image();
+  try{
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('No se pudo leer la imagen seleccionada.'));img.src=url});
+    // Mantener el request muy por debajo del límite de Vercel. Antes una foto
+    // podía acercarse a 4.7 MB en base64 y el proxy la rechazaba antes de llegar
+    // al Panel de Socios, dejando el botón en “Procesando…”.
+    const maxData=1650000;
+    let maxSide=1280,quality=.82,data='';
+    for(let intento=0;intento<6;intento+=1){
+      const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
+      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('No se pudo preparar la imagen.');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      data=canvas.toDataURL('image/jpeg',quality);
+      if(data.length<=maxData)return data;
+      maxSide=Math.max(760,Math.round(maxSide*.84));quality=Math.max(.62,quality-.05);
+    }
+    throw new Error('La imagen sigue demasiado pesada. Use una imagen menor de 5 MB.');
+  }finally{URL.revokeObjectURL(url)}
+}
+function promoDestinatariosHtml(){
+  const activos=(state.vendedores||[]).filter(v=>v.activo!==false);
+  if(!activos.length)return '<small>No se encontraron socios activos. Si guarda así, se publicará para todos los socios activos.</small>';
+  return activos.map(v=>`<label class="cr-check"><input type="checkbox" data-pr-dest value="${esc(v.nombre_norm||v.id)}"> ${esc(v.nombre||v.nombre_norm||v.id)}</label>`).join('');
 }
 async function nuevaPromocion(){
-  if(!state.vendedores){try{const d=await api('GET','revendedores');state.vendedores=Array.isArray(d)?d:(d.revendedores||[])}catch(e){return status(e.message,'bad')}}
-  const activos=(state.vendedores||[]).filter(v=>v.activo!==false);
+  // Abrir primero el formulario. La lista de socios se carga después para que
+  // un cold-start del backend no congele el botón “Nueva promoción”.
   const m=modal(`<h2>🔥 Nueva promoción para socios</h2><div class="cr-form">
-    <label class="cr-field wide">Imagen promocional<input id="prImagen" type="file" accept="image/jpeg,image/png,image/webp"><small>Se ajustará automáticamente para el panel y Telegram.</small></label>
+    <label class="cr-field wide">Imagen promocional<input id="prImagen" type="file" accept="image/jpeg,image/png,image/webp"><small>Se optimizará automáticamente para el panel y Telegram.</small></label>
     <label class="cr-field wide">Título<input id="prTitulo" maxlength="120" placeholder="Ej. Oferta relámpago para socios"></label>
     <label class="cr-field wide">Plataforma<input id="prPlataforma" maxlength="100" placeholder="Ej. Disney+ Premium"></label>
     <label class="cr-field">Precio normal<input id="prNormal" type="number" min="0"></label><label class="cr-field">Precio promocional<input id="prPromo" type="number" min="0"></label>
     <label class="cr-field">Precio sugerido de venta<input id="prSugerido" type="number" min="0"></label><label class="cr-field">Cupos<input id="prCupos" type="number" min="0"></label>
     <label class="cr-field wide">Vigente hasta<input id="prVigencia" type="datetime-local"></label>
     <label class="cr-field wide">Mensaje<textarea id="prTexto" rows="4" maxlength="1200" placeholder="Condiciones, garantía y llamado a comprar…"></textarea></label>
-    <div class="cr-field wide"><b>Destinatarios</b><small>Sin marcar nombres se enviará a todos los socios activos.</small><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px">${activos.map(v=>`<label class="cr-check"><input type="checkbox" data-pr-dest value="${esc(v.nombre_norm||v.id)}"> ${esc(v.nombre)}</label>`).join('')}</div></div>
+    <div class="cr-field wide"><b>Destinatarios</b><small>Sin marcar nombres se enviará a todos los socios activos.</small><div id="prDestinatarios" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px"><small>Cargando socios…</small></div></div>
     <label class="cr-check wide"><input type="checkbox" id="prEnviar" checked> Publicar en el Panel de Socios y enviar ahora por Telegram</label>
-  </div><div class="cr-actions"><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prGuardar">Guardar promoción</button></div>`);
-  $('#prCancel').onclick=()=>m.remove();$('#prGuardar').onclick=async()=>{const btn=$('#prGuardar');btn.disabled=true;btn.textContent='Procesando…';try{const titulo=$('#prTitulo').value.trim(),plataforma=$('#prPlataforma').value.trim();if(!titulo||!plataforma)throw new Error('Complete título y plataforma.');const imagenData=await imageData($('#prImagen').files[0]);const d=await api('POST','promociones',{titulo,plataforma,precioNormal:Number($('#prNormal').value)||0,precioPromo:Number($('#prPromo').value)||0,precioSugerido:Number($('#prSugerido').value)||0,cupos:Number($('#prCupos').value)||0,vigencia:$('#prVigencia').value?new Date($('#prVigencia').value).toISOString():'',texto:$('#prTexto').value.trim(),destinatarios:[...m.querySelectorAll('[data-pr-dest]:checked')].map(x=>x.value),imagenData});if($('#prEnviar').checked){const sent=await api('POST',`promociones/${d.id}/enviar`,{});alert(`Promoción publicada.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}`)}m.remove();await loadPromociones(true)}catch(e){alert(e.message);btn.disabled=false;btn.textContent='Guardar promoción'}};
+    <div id="prEstado" class="cr-field wide" style="min-height:18px"><small></small></div>
+  </div><div class="cr-actions"><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prGuardar">Guardar y enviar</button></div>`);
+  const setEstado=(texto,tipo='')=>{const e=m.querySelector('#prEstado small');if(e){e.textContent=texto;e.style.color=tipo==='bad'?'#b42318':tipo==='good'?'#067647':'#667085'}};
+  const btn=m.querySelector('#prGuardar'),enviarCheck=m.querySelector('#prEnviar');
+  m.querySelector('#prCancel').onclick=()=>m.remove();
+  enviarCheck.onchange=()=>{btn.textContent=enviarCheck.checked?'Guardar y enviar':'Guardar promoción'};
+
+  // Carga asíncrona de socios: el formulario ya está usable mientras responde Render.
+  (async()=>{
+    const box=m.querySelector('#prDestinatarios');
+    try{
+      if(!state.vendedores){const d=await api('GET','revendedores');state.vendedores=Array.isArray(d)?d:(d.revendedores||[])}
+      if(box&&m.isConnected)box.innerHTML=promoDestinatariosHtml();
+    }catch(e){
+      if(box&&m.isConnected)box.innerHTML='<small>No se pudo cargar la lista. Puede guardar sin marcar nombres para enviar a todos los socios activos.</small>';
+      setEstado(`Aviso: ${e.message}`,'bad');
+    }
+  })();
+
+  btn.onclick=async()=>{
+    btn.disabled=true;btn.textContent='Preparando…';setEstado('Validando información…');
+    let promoId='';
+    try{
+      const titulo=m.querySelector('#prTitulo').value.trim(),plataforma=m.querySelector('#prPlataforma').value.trim();
+      if(!titulo||!plataforma)throw new Error('Complete título y plataforma.');
+      const imagenData=await imageData(m.querySelector('#prImagen').files[0]);
+      setEstado('Guardando promoción…');btn.textContent='Guardando…';
+      const d=await api('POST','promociones',{titulo,plataforma,precioNormal:Number(m.querySelector('#prNormal').value)||0,precioPromo:Number(m.querySelector('#prPromo').value)||0,precioSugerido:Number(m.querySelector('#prSugerido').value)||0,cupos:Number(m.querySelector('#prCupos').value)||0,vigencia:m.querySelector('#prVigencia').value?new Date(m.querySelector('#prVigencia').value).toISOString():'',texto:m.querySelector('#prTexto').value.trim(),destinatarios:[...m.querySelectorAll('[data-pr-dest]:checked')].map(x=>x.value),imagenData});
+      promoId=d.id;setEstado('✅ Promoción guardada.','good');
+
+      if(!enviarCheck.checked){
+        m.remove();await loadPromociones(true);return;
+      }
+
+      // Guardar y enviar son dos pasos distintos. Si Telegram falla, la promoción
+      // ya queda guardada y visible como borrador para poder reenviarla sin perderla.
+      btn.textContent='Enviando Telegram…';setEstado('Promoción guardada. Enviando a Telegram…','good');
+      try{
+        const sent=await api('POST',`promociones/${promoId}/enviar`,{});
+        m.remove();await loadPromociones(true);
+        alert(`Promoción publicada.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}`);
+      }catch(sendError){
+        m.remove();await loadPromociones(true);
+        alert(`✅ La promoción sí quedó guardada.\n⚠️ No se pudo completar el envío por Telegram: ${sendError.message}\nPuede usar “Publicar y enviar” para reintentarlo.`);
+      }
+    }catch(e){
+      alert(e.message);setEstado(e.message,'bad');btn.disabled=false;btn.textContent=enviarCheck.checked?'Guardar y enviar':'Guardar promoción';
+    }
+  };
 }
 async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
 async function eliminarPromocion(id){if(!confirm('¿Eliminar esta promoción? Dejará de aparecer en el Panel de Socios.'))return;try{await api('DELETE',`promociones/${id}`);await loadPromociones(true)}catch(e){alert(e.message)}}
