@@ -126,13 +126,12 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
 .cm-excel-pending{margin:0 0 9px;padding:8px 11px;border:1px solid color-mix(in srgb,var(--cm-yellow) 45%,var(--line));border-radius:9px;background:color-mix(in srgb,var(--cm-yellow) 14%,var(--surface));color:#8a5b00;font-size:var(--cm-text-sm);font-weight:750;line-height:1.4}
 .cm-split{display:flex;gap:12px;align-items:flex-start;margin-bottom:2px}
 .cm-split-side{flex:none;width:172px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
-.cm-split-side-scroll{display:flex;flex-direction:column;max-height:min(78vh,640px);overflow-y:auto}
+.cm-split-side-scroll{display:flex;flex-direction:column;gap:5px;max-height:min(78vh,640px);overflow-y:auto;padding:6px}
 .cm-platform-dot{flex:none;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 2px color-mix(in srgb,var(--txt) 4%,transparent)}
-.cm-split-item{--progress-color:var(--cm-yellow);display:flex;align-items:center;gap:7px;padding:9px 10px;border:none;border-bottom:1px solid var(--line);background:var(--surface);color:var(--txt2);cursor:pointer;text-align:left;font:750 var(--cm-text-xs)/1.2 'Nunito',system-ui,sans-serif}
-.cm-split-item:last-child{border-bottom:none}
-.cm-split-item:hover{background:var(--card)}
-.cm-split-item.on{background:color-mix(in srgb,var(--progress-color) 13%,var(--surface));font-weight:900;color:var(--txt);box-shadow:inset 3px 0 var(--progress-color)}
-.cm-split-item.total{font-weight:900;color:var(--txt);border-bottom:1px solid var(--line-strong,var(--line))}
+.cm-split-item{--progress-color:var(--cm-yellow);display:flex;align-items:center;gap:8px;padding:10px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--txt2);cursor:pointer;text-align:left;font:750 var(--cm-text-xs)/1.2 'Nunito',system-ui,sans-serif;box-shadow:0 1px 0 color-mix(in srgb,var(--txt) 3%,transparent)}
+.cm-split-item:hover{border-color:color-mix(in srgb,var(--progress-color) 35%,var(--line));background:var(--card)}
+.cm-split-item.on{border-color:color-mix(in srgb,var(--progress-color) 48%,var(--line));background:color-mix(in srgb,var(--progress-color) 13%,var(--surface));font-weight:900;color:var(--txt);box-shadow:inset 4px 0 var(--progress-color),0 2px 6px color-mix(in srgb,var(--txt) 7%,transparent)}
+.cm-split-item.total{font-weight:950;color:var(--txt);margin-bottom:3px;border-width:2px}
 .cm-split-item-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cm-split-item strong{flex:none;color:var(--progress-color);font-size:var(--cm-text-xs);font-weight:900}
 .cm-split-item.empty{--progress-color:var(--cm-red)}.cm-split-item.urgent{--progress-color:#f47521}.cm-split-item.partial{--progress-color:var(--cm-yellow)}.cm-split-item.complete{--progress-color:var(--cm-green)}
@@ -223,7 +222,7 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
 .cm-review-note.saving{background:color-mix(in srgb,var(--cm-blue) 11%,var(--surface));color:var(--cm-blue)}
 .cm-review-note.good{background:color-mix(in srgb,var(--cm-green) 12%,var(--surface));color:var(--cm-green)}
 .cm-review-note.err{background:color-mix(in srgb,var(--cm-red) 11%,var(--surface));color:var(--cm-red)}
-.cm-account-review{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 15px 15px}.cm-account-review>div:first-child b{display:block;color:var(--txt);font-size:10px;font-weight:950}.cm-account-review>div:first-child small{display:block;margin-top:3px;color:var(--txt2);font-size:9px;font-weight:700;line-height:1.35}.cm-account-review-actions{display:flex;gap:6px}.cm-account-review-actions .cm-btn{min-height:36px;padding:7px 9px;font-size:9px;white-space:nowrap}
+.cm-account-review{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 15px 15px}.cm-account-review>div:first-child b{display:block;color:var(--txt);font-size:10px;font-weight:950}.cm-account-review>div:first-child small{display:block;margin-top:3px;color:var(--txt2);font-size:9px;font-weight:700;line-height:1.35}.cm-account-review-actions{display:flex;gap:7px;align-items:center}.cm-account-review-actions .cm-btn{min-height:36px;padding:7px 9px;font-size:9px;white-space:nowrap}.cm-account-review-actions .cm-btn.good{min-height:46px;padding:10px 15px;font-size:12px;font-weight:950;border-radius:12px;box-shadow:0 4px 10px color-mix(in srgb,var(--good) 20%,transparent)}
 .cm-load-more{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:16px 4px 2px}.cm-load-more small{color:var(--txt2);font-size:10px;font-weight:750}
 
 .cm-details{padding:0;overflow:hidden}.cm-details>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:16px 18px;cursor:pointer}.cm-details>summary::-webkit-details-marker{display:none}.cm-details>summary span b{display:block;color:var(--txt);font:900 16px/1.2 'Fredoka','Nunito',system-ui,sans-serif}.cm-details>summary span small{display:block;margin-top:4px;color:var(--txt2);font-size:11px;font-weight:700}.cm-details>summary i{color:var(--cm-blue);font-size:10px;font-style:normal;font-weight:900;white-space:nowrap}.cm-details[open]>summary{border-bottom:1px solid var(--line);background:var(--card)}.cm-details-body{padding:16px 18px 18px}
@@ -265,8 +264,8 @@ body.ready #screen-control-cuentas#screen-control-cuentas#screen-control-cuentas
   .cm-toolbar{grid-template-columns:1fr}.cm-filters{width:100%}
   .cm-split{flex-direction:column;gap:8px}
   .cm-split-side{width:100%}
-  .cm-split-side-scroll{flex-direction:row;max-height:none;overflow-x:auto;overflow-y:hidden}
-  .cm-split-item{flex:none;white-space:nowrap;border-bottom:none;border-right:1px solid var(--line)}
+  .cm-split-side-scroll{flex-direction:row;max-height:none;overflow-x:auto;overflow-y:hidden;gap:6px;padding:6px}
+  .cm-split-item{flex:none;white-space:nowrap;border:1px solid var(--line)}
   .cm-split-item:last-child{border-right:none}
   .cm-split-item.on{box-shadow:inset 0 -3px var(--progress-color)}
   .cm-actions>.cm-btn,.cm-actions>.cm-file-btn{flex:1;min-width:135px}

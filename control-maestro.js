@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-FULLSCREEN-PERSISTENTE-20260907-51';
+  const BUILD='CONTROL-MAESTRO-ACTUALIZACION-GRANDE-20260908-52';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -72,21 +72,26 @@
     const fullscreen=!!screen&&(state.controlExpanded||document.fullscreenElement===screen||screen.classList.contains('cm-control-expanded'));
     const active=document.activeElement;
     const roster=host?.querySelector('.cm-ledger-account.is-open .cm-roster');
+    const viewportTop=fullscreen&&screen?screen.getBoundingClientRect().top:0;
+    const cards=host?[...host.querySelectorAll('.cm-ledger-account[data-cm-account-key]')]:[];
+    let anchor=state.expandedAccountKey?cards.find((el)=>el.dataset.cmAccountKey===state.expandedAccountKey):null;
+    if(!anchor)anchor=cards.find((el)=>el.getBoundingClientRect().bottom>viewportTop+70)||cards[0]||null;
     return {
       accountPlatform:state.accountPlatform,accountStatus:state.accountStatus,accountQuery:state.accountQuery,
       accountLimit:state.accountLimit,expandedAccountKey:state.expandedAccountKey,
       screenTop:screen?.scrollTop||0,windowX:window.scrollX||0,windowY:window.scrollY||0,
       ledgerLeft:host?.querySelector('.cm-ledger-scroll')?.scrollLeft||0,rosterTop:roster?.scrollTop||0,
       historicalOpen:!!host?.querySelector('.cm-details[open]'),fullscreen,
+      anchorKey:anchor?.dataset.cmAccountKey||'',anchorOffset:anchor?anchor.getBoundingClientRect().top-viewportTop:0,
       focusId:active&&host?.contains(active)?active.id||'':'',selectionStart:active?.selectionStart,selectionEnd:active?.selectionEnd
     };
   }
 
-  function restoreControlView(view){
+  function restoreControlView(view,{keepExpanded=false}={}){
     if(!view)return;
     state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
     state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||DEFAULT_ACCOUNT_LIMIT;
-    state.expandedAccountKey=String(view.expandedAccountKey||'');
+    if(!keepExpanded)state.expandedAccountKey=String(view.expandedAccountKey||'');
     if(view.fullscreen&&screenActive()){
       state.controlExpanded=true;
       ensureControlExpanded();
@@ -97,6 +102,16 @@
       const ledger=host.querySelector('.cm-ledger-scroll');if(ledger)ledger.scrollLeft=view.ledgerLeft||0;
       const roster=host.querySelector('.cm-ledger-account.is-open .cm-roster');if(roster)roster.scrollTop=view.rosterTop||0;
       if(view.fullscreen&&screen)screen.scrollTop=view.screenTop||0;else window.scrollTo(view.windowX||0,view.windowY||0);
+      if(view.anchorKey){
+        const anchor=[...host.querySelectorAll('.cm-ledger-account[data-cm-account-key]')].find((el)=>el.dataset.cmAccountKey===view.anchorKey);
+        if(anchor){
+          const viewportTop=view.fullscreen&&screen?screen.getBoundingClientRect().top:0;
+          const delta=anchor.getBoundingClientRect().top-viewportTop-Number(view.anchorOffset||0);
+          if(Math.abs(delta)>1){
+            if(view.fullscreen&&screen)screen.scrollTop+=delta;else window.scrollBy(0,delta);
+          }
+        }
+      }
       if(view.focusId){
         const field=document.getElementById(view.focusId);if(field){field.focus({preventScroll:true});
           if(typeof field.setSelectionRange==='function'&&Number.isInteger(view.selectionStart))field.setSelectionRange(view.selectionStart,Number.isInteger(view.selectionEnd)?view.selectionEnd:view.selectionStart);
@@ -105,6 +120,7 @@
     };
     requestAnimationFrame(()=>requestAnimationFrame(apply));
     setTimeout(apply,120);
+    setTimeout(apply,260);
   }
   const activeUser=()=>{
     for(const k of ['sublichat_user','subli_usuario','usuario','subli_user','active_user']){
@@ -1163,7 +1179,7 @@
     const password=a.clave?revealed?esc(a.clave):'••••••••':(a.requiresPassword?'Sin clave guardada':'No usa clave');
     const identity=a.email||(a.requiresEmail?'CUENTA SIN CORREO':'LICENCIA / SERIAL');
     const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,a,i,j)).join(''):'';
-    return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" style="--platform-color:${platformColor(a.family)}">
+    return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" data-cm-account-key="${esc(a.key)}" style="--platform-color:${platformColor(a.family)}">
       <div class="cm-ledger-row">
         <div class="cm-ledger-platform-cell"><span class="cm-ledger-platform">${esc(a.platform)}</span><span class="cm-life-state ${life.tone}">${life.icon} ${esc(life.label)}</span></div>
         <div class="cm-ledger-identity"><b title="${esc(identity)}">${esc(identity)}</b><small>🔑 ${password}</small></div>
@@ -1595,13 +1611,14 @@
     if(!confirm(multiperfil
       ?`¿Quitar solamente este perfil de la compra?\n\nPerfil: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nLa compra, su precio y los demás perfiles se conservarán. También se liberará este cupo en Bodega.`
       :`¿Eliminar este servicio de Firebase?\n\nCliente: ${row.name||'Sin nombre'}\nServicio: ${platform}\nCuenta: ${account.email||'Sin correo'}\n\nSe eliminará solo este servicio y se liberará su cupo en Bodega. Los demás servicios del cliente se conservan.`))return;
-    state.busy=true;mutationMessage('Eliminando servicio…','');render();
+    const view=captureControlView();
+    state.busy=true;mutationMessage('Eliminando servicio…','');render();restoreControlView(view);
     try{
       const out=await api({accion:multiperfil?'eliminar_perfil':'eliminar',clienteId:service.clienteId||'',clienteNorm:norm(service.titular||service.nombre||row.name),telefono:service.telefono||row.phone||'',plataforma:service.plataforma||account.family,correo:multiperfil?'':(service.correo||account.email||''),servicioIndex:Number.isInteger(Number(service.servicioIndex))?Number(service.servicioIndex):null,perfilIndex:Number.isInteger(Number(service.perfilIndex))?Number(service.perfilIndex):null,perfilId:service.perfilId||'',compraId:service.compraId||''},RENEW_API);
       const extra=out.inventario?.tocado?` Cupo liberado: ${out.inventario.disponibles} disponible${out.inventario.disponibles===1?'':'s'}.`:'';
       await reloadControlAfterMutation(multiperfil?`✅ Perfil ${row.name} retirado de la compra ${platform}.${extra}`:`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar el servicio.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();}
+    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
   }
 
   async function deleteExcelBackupRow(pointer,historicalItem=null,feedbackHost=null){
@@ -1755,12 +1772,13 @@
     if(!String(newName).trim())return alert('El nombre no puede quedar vacío.');
     const newPin=prompt('PIN de este perfil:',row.pin||fieldText(row.inv.pin)||'');if(newPin===null)return;
     const newPhone=prompt('Teléfono del cliente:',row.phone||fieldText(row.inv.telefono)||'');if(newPhone===null)return;
-    state.busy=true;mutationMessage('Actualizando cliente en Bodega…','');render();
+    const view=captureControlView();
+    state.busy=true;mutationMessage('Actualizando cliente en Bodega…','');render();restoreControlView(view);
     try{
       await api({accion:'editarCliente',docId,clienteIndex:row.invIndex,nombreCliente:row.inv.nombre||row.name||'',slot:fieldText(row.inv.slot)||row.profile||'',nuevoNombre:String(newName).trim(),nuevoPin:String(newPin).trim(),nuevoTelefono:String(newPhone).trim()},INVENTORY_API);
       await reloadControlAfterMutation(`✅ ${String(newName).trim()} actualizado en Bodega.`,account.key);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo editar el cliente en Bodega.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();}
+    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
   }
 
   async function editAuditAccount(index){
@@ -1783,7 +1801,8 @@
     const identidad=account.requiresEmail?`Correo: ${String(newEmail).trim()}`:'Cuenta por licencia / serial';
     const secreto=account.requiresPassword?`\n${account.requiresEmail?'Clave':'Serial'}: ${newPassword}`:'';
     if(!confirm(`¿Guardar estos cambios?\n\nPlataforma: ${account.platform}\n${identidad}${secreto}\nCapacidad: ${capacity}\n\nLos datos modificados también se actualizarán en los servicios ligados.`))return;
-    state.busy=true;mutationMessage('Actualizando cuenta y servicios ligados…','');render();
+    const view=captureControlView();
+    state.busy=true;mutationMessage('Actualizando cuenta y servicios ligados…','');render();restoreControlView(view);
     try{
       const payload={accion:'editarCuenta',docId:ids[0],capacidad:capacity};
       if(account.requiresEmail)payload.correo=String(newEmail).trim();
@@ -1792,7 +1811,7 @@
       const newKey=account.requiresEmail?`${account.family}|${email(newEmail)}`:account.key;
       await reloadControlAfterMutation(`✅ Cuenta actualizada.${out.serviciosActualizados?` ${out.serviciosActualizados} servicio${out.serviciosActualizados===1?'':'s'} sincronizado${out.serviciosActualizados===1?'':'s'}.`:''}`,newKey);
     }catch(e){const text='⚠️ '+(e.message||'No se pudo editar la cuenta.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();}
+    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
   }
 
   async function deleteAuditAccount(index){
@@ -1802,12 +1821,13 @@
     if(account.invClients.length)return alert(`Esta cuenta todavía tiene ${account.invClients.length} cliente${account.invClients.length===1?'':'s'} asignado${account.invClients.length===1?'':'s'}. Use “Sacar” o “Eliminar” en cada fila primero.`);
     if(account.services.length)return alert(`Esta cuenta todavía tiene ${account.services.length} servicio${account.services.length===1?'':'s'} activo${account.services.length===1?'':'s'} en Clientes. Elimínelos o edítelos primero.`);
     if(!confirm(`¿Eliminar definitivamente esta cuenta de Bodega?\n\n${account.platform}\n${account.email}\n\nEl correo ya está vacío. Esta acción no se puede deshacer.`))return;
-    state.busy=true;mutationMessage('Eliminando cuenta vacía…','');render();
+    const view=captureControlView();
+    state.busy=true;mutationMessage('Eliminando cuenta vacía…','');render();restoreControlView(view);
     try{
       await api({accion:'eliminarCuenta',docId:ids[0],confirmarCorreo:account.email},INVENTORY_API);
       await reloadControlAfterMutation(`✅ Cuenta ${account.email} eliminada de Bodega.`,'');
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();}
+    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
   }
 
   function accountByKey(key){
@@ -1831,9 +1851,10 @@
       nota=prompt('Escriba qué encontró en la cuenta (por ejemplo: “hay un perfil extra llamado Juan”):','')??'';
       if(!String(nota).trim())return;
     }
+    const view=captureControlView();
     state.busy=true;state.reviewSavingKey=a.key;
     state.accountFeedback={key:a.key,type:'saving',text:result==='incidencia'?'Guardando incidencia en Firebase…':'Guardando revisión en Firebase…'};
-    state.status=state.accountFeedback.text;state.statusType='';render();
+    state.status=state.accountFeedback.text;state.statusType='';render();restoreControlView(view);
     try{
       const saved=await api({accion:'control_guardar_revision_cuenta',accountKey:a.revisionKey,accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado:result,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
       if(!saved.revision)throw new Error('Firebase respondió sin confirmar la revisión.');
@@ -1843,7 +1864,7 @@
     }catch(e){
       const text='⚠️ '+(e.message||'No se pudo guardar la revisión.');
       state.accountFeedback={key:a.key,type:'err',text};state.status=text;state.statusType='error';
-    }finally{state.busy=false;state.reviewSavingKey='';render();}
+    }finally{state.busy=false;state.reviewSavingKey='';render();restoreControlView(view,{keepExpanded:true});}
   }
 
   async function deleteAccountIncident(accountKey){
@@ -1873,7 +1894,12 @@
   async function refreshMeta(){
     state.loading=true;render();
     try{
-      state.meta=await api({accion:'control_estado'});state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
+      const previousTemplateId=String(state.meta?.plantilla?.id||'');
+      const nextMeta=await api({accion:'control_estado'});
+      const nextTemplateId=String(nextMeta?.plantilla?.id||'');
+      state.meta=nextMeta;
+      if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId){state.templateBase64='';state.analysis=null;}
+      state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
       if(state.metaRetryTimer){clearTimeout(state.metaRetryTimer);state.metaRetryTimer=0;}
     }
     catch(e){state.status=e.message||'No se pudo cargar Control Maestro.';state.statusType='error';}
@@ -2205,7 +2231,16 @@
     try{
       const summary=await window.sublichatControlReload();
       let metaWarning='';
-      try{state.meta=await api({accion:'control_estado'});}
+      const previousTemplateId=String(state.meta?.plantilla?.id||'');
+      try{
+        const nextMeta=await api({accion:'control_estado'});
+        const nextTemplateId=String(nextMeta?.plantilla?.id||'');
+        state.meta=nextMeta;
+        // Telegram puede actualizar el Excel mientras Control Maestro está abierto.
+        // Si cambió la plantilla en Firebase, se invalida la copia del navegador
+        // para que "Actualizar datos" lea la versión nueva y no el Excel viejo.
+        if(nextTemplateId&&nextTemplateId!==previousTemplateId){state.templateBase64='';state.analysis=null;state.accountAudit=null;}
+      }
       catch(_){metaWarning=' No se pudo renovar el historial de revisiones, pero Clientes y Bodega sí se actualizaron.';}
       let excelWarning='';
       if(state.meta?.plantilla&&window.ExcelJS){
