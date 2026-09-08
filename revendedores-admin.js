@@ -24,7 +24,7 @@ async function api(method,ruta,body,params){
   const r=await fetch(API+'?'+qs.toString(),opts);
   const t=await r.text();
   let d={}; try{d=JSON.parse(t)}catch(_){d={error:t}}
-  if(!r.ok) throw new Error((d&&d.error)||`HTTP ${r.status}`);
+  if(!r.ok){const e=new Error((d&&d.error)||`HTTP ${r.status}`);e.data=d;e.status=r.status;throw e;}
   return d;
 }
 
@@ -83,7 +83,7 @@ function promoStatus(p){return p.estado==='publicada'?`Enviada a ${Number(p.envi
 function renderPromociones(){
   const b=$('#revBody');if(!state.promociones)return loadPromociones();
   b.innerHTML=`<div class="cr-tools"><div><b>Campañas para revendedores</b><br><small>La misma promoción aparecerá en el Panel de Socios y puede enviarse con imagen por Telegram.</small></div><button class="cr-btn red" id="promoNueva">＋ Nueva promoción</button></div>
-    <div class="cr-grid promo-grid">${state.promociones.map(p=>`<article class="cr-card promo-card"><div class="promo-summary">${p.imagenUrl?`<a href="${esc(p.imagenUrl)}" target="_blank" rel="noopener" title="Abrir imagen completa"><img class="promo-thumb" src="${esc(p.imagenUrl)}" alt="Imagen de ${esc(p.titulo)}"></a>`:'<div class="promo-thumb" aria-hidden="true"></div>'}<div class="promo-copy"><div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p></div></div><div class="cr-row" style="flex-wrap:wrap"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318">⚠️ ${Number(p.fallidos)} no recibieron Telegram. Revise su ID.</small>`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
+    <div class="cr-grid promo-grid">${state.promociones.map(p=>`<article class="cr-card promo-card"><div class="promo-summary">${p.imagenUrl?`<a href="${esc(p.imagenUrl)}" target="_blank" rel="noopener" title="Abrir imagen completa"><img class="promo-thumb" src="${esc(p.imagenUrl)}" alt="Imagen de ${esc(p.titulo)}"></a>`:'<div class="promo-thumb" aria-hidden="true"></div>'}<div class="promo-copy"><div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p></div></div><div class="cr-row" style="flex-wrap:wrap"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318;display:block">⚠️ ${Number(p.fallidos)} no recibieron Telegram.</small>${Array.isArray(p.erroresTelegram)&&p.erroresTelegram.length?`<div style="margin-top:6px;padding:9px 10px;border-radius:10px;background:#fff3f2;color:#912018;font-size:12px">${p.erroresTelegram.map(e=>`<b>${esc(e.nombre||'Socio')}</b> · TG ${esc(e.telegramId||'—')}<br>${esc(e.motivo||'Error Telegram')}<br><span>${esc(e.diagnostico||'')}</span>`).join('<hr style="border:0;border-top:1px solid #f1c0bc;margin:7px 0">')}</div>`:''}`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
   $('#promoNueva').onclick=nuevaPromocion;
   b.querySelectorAll('[data-promo-send]').forEach(x=>x.onclick=()=>enviarPromocion(x.dataset.promoSend,x));
   b.querySelectorAll('[data-promo-del]').forEach(x=>x.onclick=()=>eliminarPromocion(x.dataset.promoDel));
@@ -170,7 +170,7 @@ async function nuevaPromocion(){
       try{
         const sent=await api('POST',`promociones/${promoId}/enviar`,{});
         m.remove();await loadPromociones(true);
-        alert(`Promoción publicada.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}`);
+        alert(`Promoción publicada.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
       }catch(sendError){
         m.remove();await loadPromociones(true);
         alert(`✅ La promoción sí quedó guardada.\n⚠️ No se pudo completar el envío por Telegram: ${sendError.message}\nPuede usar “Publicar y enviar” para reintentarlo.`);
@@ -180,7 +180,7 @@ async function nuevaPromocion(){
     }
   };
 }
-async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
+async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}${Array.isArray(d.erroresTelegram)&&d.erroresTelegram.length?'\n\nDetalle Telegram:\n'+d.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
 async function eliminarPromocion(id){if(!confirm('¿Eliminar esta promoción? Dejará de aparecer en el Panel de Socios.'))return;try{await api('DELETE',`promociones/${id}`);await loadPromociones(true)}catch(e){alert(e.message)}}
 
 /* ═══════════ PRECIOS ═══════════ */
@@ -343,6 +343,7 @@ function renderVendedores(){
   $('#revAddVendedor').onclick=nuevoVendedor;
   b.querySelectorAll('[data-edit-vend]').forEach(x=>x.onclick=()=>editarVendedor(x.dataset.editVend));
   b.querySelectorAll('[data-pin-vend]').forEach(x=>x.onclick=()=>resetPinVendedor(x.dataset.pinVend));
+  b.querySelectorAll('[data-test-tg]').forEach(x=>x.onclick=()=>probarTelegramVendedor(x.dataset.testTg,x));
   b.querySelectorAll('[data-del-vend]').forEach(x=>x.onclick=()=>eliminarVendedor(x.dataset.delVend,x.dataset.nombre));
   b.querySelectorAll('[data-toggle-vend]').forEach(x=>x.onclick=()=>toggleActivoVendedor(x.dataset.toggleVend,x.dataset.activo==='1'));
 }
@@ -355,6 +356,7 @@ function vendedorCard(r){
     <div class="cr-row">
       <button class="cr-btn ghost" data-edit-vend="${esc(r.id)}">Editar</button>
       <button class="cr-btn ghost" data-pin-vend="${esc(r.id)}">🔐 Nuevo PIN</button>
+      <button class="cr-btn ghost" data-test-tg="${esc(r.id)}">📨 Probar TG</button>
     </div>
     <div class="cr-row">
       <button class="cr-btn ${activo?'danger':'red'}" data-toggle-vend="${esc(r.id)}" data-activo="${activo?'1':'0'}">${activo?'🔒 Desactivar acceso':'🔓 Reactivar acceso'}</button>
@@ -362,6 +364,20 @@ function vendedorCard(r){
     </div>
   </article>`;
 }
+async function probarTelegramVendedor(id,button){
+  const r=state.vendedores.find(x=>x.id===id);
+  if(!r)return;
+  if(!r.telegramId){alert(`${r.nombre} no tiene Telegram ID guardado.`);return;}
+  const original=button.textContent;button.disabled=true;button.textContent='Probando…';
+  try{
+    const d=await api('POST',`revendedores/${id}/testtelegram`,{});
+    alert(`✅ Telegram correcto para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}${d.telegramNombre?`\nCuenta: ${d.telegramNombre}`:''}${d.username?` (@${d.username})`:''}\n\n${d.diagnostico||'Puede recibir mensajes del bot.'}`);
+  }catch(e){
+    const d=e.data||{};
+    alert(`❌ Telegram de ${r.nombre} falló.\nID guardado: ${d.telegramId||r.telegramId}\n${d.error||e.message}${d.diagnostico?`\n\n${d.diagnostico}`:''}\n\nPídale escribir /id al MISMO bot de Sublicuentas y compare el número con el que aparece aquí.`);
+  }finally{button.disabled=false;button.textContent=original;}
+}
+
 async function toggleActivoVendedor(id,estabaActivo){
   const accion=estabaActivo?'desactivar':'reactivar';
   if(!confirm(estabaActivo?'¿Desactivar a este vendedor? No va a poder entrar al panel hasta que lo reactivés.':'¿Reactivar a este vendedor?')) return;
