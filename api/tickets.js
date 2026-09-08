@@ -107,6 +107,47 @@ const CHAT_IDS = {
   manuel: process.env.TELEGRAM_CHAT_ID_MANUEL || ''
 };
 
+// Los vendedores ya tienen su Telegram ID guardado en la colección `revendedores`.
+// Antes, Tickets y Avisos ignoraba ese valor y dependía únicamente de variables
+// TELEGRAM_CHAT_ID_<NOMBRE> de Vercel. Por eso Jimena podía mostrar su TG correcto
+// en Catálogo Socios y aun así los avisos fallaban. Las variables de entorno siguen
+// teniendo prioridad, pero para vendedores hacemos fallback automático a Firestore.
+const ROLES_REVENDEDORES_TG = new Set(['yami', 'jimena', 'manuel']);
+
+function telegramRoleKey(v) {
+  return String(v == null ? '' : v)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '')
+    .trim();
+}
+
+async function resolveTelegramChatId(db, role) {
+  const r = clean(role, 40).toLowerCase();
+  const envId = clean(CHAT_IDS[r] || '', 80);
+  if (envId) return { chatId: envId, source: 'env' };
+  if (!db || !ROLES_REVENDEDORES_TG.has(r)) return { chatId: '', source: 'missing' };
+
+  try {
+    const wanted = telegramRoleKey(r);
+    const snap = await db.collection('revendedores').get();
+    let found = null;
+    snap.forEach((doc) => {
+      if (found) return;
+      const data = doc.data() || {};
+      if (data.activo === false) return;
+      const aliases = [doc.id, data.nombre_norm, data.nombre, data.usuario, data.username]
+        .map(telegramRoleKey).filter(Boolean);
+      if (!aliases.includes(wanted)) return;
+      const tg = clean(data.telegramId || data.telegramID || data.userId || '', 80);
+      if (tg) found = tg;
+    });
+    return found ? { chatId: found, source: 'revendedores' } : { chatId: '', source: 'missing' };
+  } catch (e) {
+    console.error('TELEGRAM_CHAT_RESOLVE_ERROR', r, e && e.message || e);
+    return { chatId: '', source: 'error' };
+  }
+}
+
 function telegramHTML(v) {
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;')
@@ -130,22 +171,23 @@ async function sendTelegramTo(chatId, text) {
 
 // Envía el mensaje a cada chat correspondiente a los roles en `destinos`.
 // Si no hay destinos (o no matchea ningún perfil conocido), cae a TELEGRAM_CHAT_ID genérico si existe.
-async function sendTelegram(text, destinos) {
+async function sendTelegram(db, text, destinos) {
   const requested = [...new Set((Array.isArray(destinos) ? destinos : [])
     .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)))];
   const targets = new Map();
   const results = [];
 
-  requested.forEach((role) => {
-    const chatId = CHAT_IDS[role];
+  for (const role of requested) {
+    const resolved = await resolveTelegramChatId(db, role);
+    const chatId = resolved.chatId;
     if (!chatId) {
       results.push({ ok: false, skipped: true, reason: 'chat_id_missing', roles: [role] });
-      return;
+      continue;
     }
     const old = targets.get(chatId) || { roles: [] };
     old.roles.push(role);
     targets.set(chatId, old);
-  });
+  }
 
   const fallback = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_AUDIT_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
   if (!targets.size && fallback) targets.set(fallback, { roles: requested.slice(), fallback: true });
@@ -297,7 +339,7 @@ async function createTicket(db, body) {
   };
   const ref = await db.collection('tickets_auditoria').add(item);
   const msg = creationTelegramMessage(item);
-  const telegram = await sendTelegram(msg, item.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, item.destinos).catch(e => ({ ok: false, error: e.message }));
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo }, { merge: true });
   return { ok: true, id: ref.id, numero, telegramOk: !!telegram.ok, telegramInfo };
@@ -313,7 +355,7 @@ async function retryTelegramTicket(db, body) {
   if (clean(body.rol, 40).toLowerCase() !== 'sublicuentas' && !canAccessTicket(old, body.rol)) {
     return { status: 403, json: { ok: false, error: 'No tiene permiso para reenviar este aviso.' } };
   }
-  const telegram = await sendTelegram(creationTelegramMessage(old), old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, creationTelegramMessage(old), old.destinos).catch(e => ({ ok: false, error: e.message }));
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({
     telegramOk: !!telegram.ok,
@@ -349,7 +391,7 @@ async function setProcesoTicket(db, body) {
     `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
     `Lo puso en proceso: ${telegramHTML(update.procesoPor || '—')}`
   ].join('\n');
-  const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramProcessOk: !!telegram.ok, telegramProcessInfo: telegramInfo }, { merge: true });
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
@@ -381,7 +423,7 @@ async function resolveTicket(db, body) {
     `Resuelto por: ${telegramHTML(update.resueltoPor || '—')}`,
     `<b>Resolución:</b> ${telegramHTML(resolucion)}`
   ].join('\n');
-  const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramResolvedOk: !!telegram.ok, telegramResolvedInfo: telegramInfo }, { merge: true });
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
@@ -420,7 +462,7 @@ async function responderTicket(db, body) {
     `Respondió: ${telegramHTML(entry.por)}`,
     telegramHTML(respuesta)
   ].join('\n');
-  const telegram = await sendTelegram(msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegramInfo }, { merge: true });
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
