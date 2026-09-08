@@ -17,6 +17,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const host=()=>document.getElementById('rbac-revendedores');
 const money=v=>v==null?'—':`Lps. ${Number(v).toLocaleString('es-HN')}`;
 
+const fmtDate=v=>{if(!v)return'Sin vencimiento';const d=new Date(v);return Number.isNaN(d.getTime())?'Sin vencimiento':d.toLocaleString('es-HN',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})};
+function promoTextLines(v){const raw=String(v||'').replace(/\r/g,'\n').trim();if(!raw)return[];const byLine=raw.split(/\n+/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean);if(byLine.length>1)return byLine.slice(0,5);return raw.replace(/\s+/g,' ').split(/(?:\.\s+|!\s+|\?\s+|;\s+)/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean).slice(0,5)}
+function promoPreviewHtml(v){const lines=promoTextLines(v);return lines.length?`<ul class="promo-preview">${lines.map(line=>`<li>${esc(line)}</li>`).join('')}</ul>`:''}
+function promoMetaHtml(p){const profit=Math.max(0,Number(p.precioSugerido||0)-Number(p.precioPromo||0));const items=[];if(p.precioNormal)items.push(`🧾 <b>Normal:</b> ${money(p.precioNormal)}`);if(p.precioPromo)items.push(`💰 <b>Socio:</b> ${money(p.precioPromo)}`);if(p.precioSugerido)items.push(`📈 <b>Venta:</b> ${money(p.precioSugerido)}`);if(p.precioSugerido)items.push(`💵 <b>Ganancia:</b> ${money(profit)}`);if(p.cupos)items.push(`📦 <b>Cupos:</b> ${Number(p.cupos)}`);items.push(`⏳ <b>Vigencia:</b> ${esc(fmtDate(p.vigencia))}`);return `<div class="promo-meta">${items.map(item=>`<span>${item}</span>`).join('')}</div>`}
+
 async function api(method,ruta,body,params){
   const qs=new URLSearchParams({ruta,...(params||{}),_ts:String(Date.now())});
   const opts={method,cache:'no-store',headers:{'Content-Type':'application/json','Cache-Control':'no-cache'}};
@@ -32,12 +37,18 @@ function shell(){
   const h=host(); if(!h||h.dataset.ready) return; h.dataset.ready='1';
   h.innerHTML=`
     <style>
-      #rbac-revendedores .promo-grid{grid-template-columns:repeat(auto-fill,minmax(300px,420px));align-items:start}
+      #rbac-revendedores .promo-grid{grid-template-columns:repeat(auto-fill,minmax(320px,420px));align-items:start}
       #rbac-revendedores .promo-card{min-width:0}
       #rbac-revendedores .promo-summary{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;align-items:start}
       #rbac-revendedores .promo-thumb{display:block;width:112px;height:112px;object-fit:contain;background:#f7f7f8;border:1px solid #ececf0;border-radius:14px}
-      #rbac-revendedores .promo-copy{min-width:0;display:grid;gap:7px}
+      #rbac-revendedores .promo-copy{min-width:0;display:grid;gap:9px}
       #rbac-revendedores .promo-copy p{margin:0;overflow-wrap:anywhere}
+      #rbac-revendedores .promo-platform{font-weight:800;color:#182230}
+      #rbac-revendedores .promo-meta{display:grid;gap:6px}
+      #rbac-revendedores .promo-meta span{display:block;padding:8px 10px;border-radius:11px;background:#f8fafc;color:#344054;font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+      #rbac-revendedores .promo-preview{margin:0;padding-left:18px;display:grid;gap:4px;color:#475467;font-size:13px;line-height:1.45}
+      #rbac-revendedores .promo-preview li{margin:0}
+      #rbac-revendedores .promo-preview-title{font-size:12px;color:#667085;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
       @media(max-width:600px){
         #rbac-revendedores .promo-grid{grid-template-columns:1fr}
         #rbac-revendedores .promo-summary{grid-template-columns:88px minmax(0,1fr)}
@@ -83,11 +94,12 @@ function promoStatus(p){return p.estado==='publicada'?`Enviada a ${Number(p.envi
 function renderPromociones(){
   const b=$('#revBody');if(!state.promociones)return loadPromociones();
   b.innerHTML=`<div class="cr-tools"><div><b>Campañas para revendedores</b><br><small>La misma promoción aparecerá en el Panel de Socios y puede enviarse con imagen por Telegram.</small></div><button class="cr-btn red" id="promoNueva">＋ Nueva promoción</button></div>
-    <div class="cr-grid promo-grid">${state.promociones.map(p=>`<article class="cr-card promo-card"><div class="promo-summary">${p.imagenUrl?`<a href="${esc(p.imagenUrl)}" target="_blank" rel="noopener" title="Abrir imagen completa"><img class="promo-thumb" src="${esc(p.imagenUrl)}" alt="Imagen de ${esc(p.titulo)}"></a>`:'<div class="promo-thumb" aria-hidden="true"></div>'}<div class="promo-copy"><div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><b>${esc(p.plataforma)} · Lps. ${Number(p.precioPromo)||0}</b><small>${p.precioSugerido?`Venta sugerida Lps. ${Number(p.precioSugerido)} · `:''}${p.cupos?`${Number(p.cupos)} cupos · `:''}${p.vigencia?`vence ${new Date(p.vigencia).toLocaleString('es-HN')}`:'sin vencimiento'}</small><p>${esc(p.texto||'')}</p></div></div><div class="cr-row" style="flex-wrap:wrap"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318;display:block">⚠️ ${Number(p.fallidos)} no recibieron Telegram.</small>${Array.isArray(p.erroresTelegram)&&p.erroresTelegram.length?`<div style="margin-top:6px;padding:9px 10px;border-radius:10px;background:#fff3f2;color:#912018;font-size:12px">${p.erroresTelegram.map(e=>`<b>${esc(e.nombre||'Socio')}</b> · TG ${esc(e.telegramId||'—')}<br>${esc(e.motivo||'Error Telegram')}<br><span>${esc(e.diagnostico||'')}</span>`).join('<hr style="border:0;border-top:1px solid #f1c0bc;margin:7px 0">')}</div>`:''}`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
+    <div class="cr-grid promo-grid">${state.promociones.map(p=>`<article class="cr-card promo-card"><div class="promo-summary">${p.imagenUrl?`<a href="${esc(p.imagenUrl)}" target="_blank" rel="noopener" title="Abrir imagen completa"><img class="promo-thumb" src="${esc(p.imagenUrl)}" alt="Imagen de ${esc(p.titulo)}"></a>`:'<div class="promo-thumb" aria-hidden="true"></div>'}<div class="promo-copy"><div class="cr-row"><h3>🔥 ${esc(p.titulo)}</h3><span class="cr-badge ${p.estado==='publicada'?'':'paused'}">${esc(promoStatus(p))}</span></div><div class="promo-platform">🎯 ${esc(p.plataforma)}</div>${promoMetaHtml(p)}${promoTextLines(p.texto).length?`<div class="promo-preview-title">✨ Vista previa del mensaje</div>${promoPreviewHtml(p.texto)}`:''}</div></div><div class="cr-row" style="flex-wrap:wrap"><button class="cr-btn danger" data-promo-del="${esc(p.id)}">Eliminar</button><button class="cr-btn red" data-promo-send="${esc(p.id)}">${p.estado==='publicada'?'📨 Reenviar Telegram':'🚀 Publicar y enviar'}</button></div>${p.fallidos?`<small style="color:#b42318;display:block">⚠️ ${Number(p.fallidos)} no recibieron Telegram.</small>${Array.isArray(p.erroresTelegram)&&p.erroresTelegram.length?`<div style="margin-top:6px;padding:9px 10px;border-radius:10px;background:#fff3f2;color:#912018;font-size:12px">${p.erroresTelegram.map(e=>`<b>${esc(e.nombre||'Socio')}</b> · TG ${esc(e.telegramId||'—')}<br>${esc(e.motivo||'Error Telegram')}<br><span>${esc(e.diagnostico||'')}</span>`).join('<hr style="border:0;border-top:1px solid #f1c0bc;margin:7px 0">')}</div>`:''}`:''}</article>`).join('')||'<div class="cr-empty">Aún no hay promociones para socios.</div>'}</div>`;
   $('#promoNueva').onclick=nuevaPromocion;
   b.querySelectorAll('[data-promo-send]').forEach(x=>x.onclick=()=>enviarPromocion(x.dataset.promoSend,x));
   b.querySelectorAll('[data-promo-del]').forEach(x=>x.onclick=()=>eliminarPromocion(x.dataset.promoDel));
 }
+
 async function imageData(file){
   if(!file)return'';
   if(!/^image\/(jpeg|png|webp)$/i.test(file.type))throw new Error('Use una imagen JPG, PNG o WEBP.');
@@ -127,7 +139,11 @@ async function nuevaPromocion(){
     <label class="cr-field">Precio normal<input id="prNormal" type="number" min="0"></label><label class="cr-field">Precio promocional<input id="prPromo" type="number" min="0"></label>
     <label class="cr-field">Precio sugerido de venta<input id="prSugerido" type="number" min="0"></label><label class="cr-field">Cupos<input id="prCupos" type="number" min="0"></label>
     <label class="cr-field wide">Vigente hasta<input id="prVigencia" type="datetime-local"></label>
-    <label class="cr-field wide">Mensaje<textarea id="prTexto" rows="4" maxlength="1200" placeholder="Condiciones, garantía y llamado a comprar…"></textarea></label>
+    <label class="cr-field wide">Mensaje<textarea id="prTexto" rows="5" maxlength="1200" placeholder="Escriba una ventaja por línea. Ej.:
+Cuenta en correo personal
+Vidas ilimitadas
+Aprende idiomas y matemáticas
+Compra por WhatsApp o Panel de Socios"></textarea><small>Tip: si separa cada beneficio en una línea, Telegram lo mostrará como lista ordenada y más premium.</small></label>
     <div class="cr-field wide"><b>Destinatarios</b><small>Sin marcar nombres se enviará a todos los socios activos.</small><div id="prDestinatarios" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px"><small>Cargando socios…</small></div></div>
     <label class="cr-check wide"><input type="checkbox" id="prEnviar" checked> Publicar en el Panel de Socios y enviar ahora por Telegram</label>
     <div id="prEstado" class="cr-field wide" style="min-height:18px"><small></small></div>
