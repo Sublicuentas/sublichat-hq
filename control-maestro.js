@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-GEISELL-ADMIN-20260908-54';
+  const BUILD='CONTROL-MAESTRO-ICONOS-CUENTAS-20260908-55';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1207,10 +1207,63 @@
 
   function platformTileMeta(family){
     const key=auditFamily(family);
-    const map={
-      all:{label:'Todas',short:'★'},netflix:{label:'Netflix',short:'N'},vipnetflix:{label:'Netflix VIP',short:'NV'},disney:{label:'Disney+',short:'D+'},hbomax:{label:'HBO Max',short:'HBO'},primevideo:{label:'Prime Video',short:'PV'},crunchyroll:{label:'Crunchyroll',short:'CR'},spotify:{label:'Spotify',short:'SP'},youtube:{label:'YouTube',short:'YT'},vix:{label:'ViX',short:'ViX'},canva:{label:'Canva',short:'Ca'},gemini:{label:'Gemini',short:'Ge'},duolingo:{label:'Duolingo',short:'Du'},chatgpt:{label:'ChatGPT',short:'AI'},office:{label:'Office',short:'Of'},oleada:{label:'Oleada',short:'TV'},stellatv:{label:'Stella TV',short:'ST'},liontv:{label:'Lion TV',short:'LT'},latintv:{label:'Latin TV',short:'LA'},sin_plataforma:{label:'Sin plataforma',short:'?'}
+    const visuals={
+      all:{label:'Todas',short:'★',logo:''},
+      netflix:{label:'Netflix',short:'N',logo:'/assets/platformas/netflix.jpg'},
+      vipnetflix:{label:'Netflix VIP',short:'NV',logo:'/assets/platformas/netflix.jpg'},
+      disney:{label:'Disney+',short:'D+',logo:'/assets/platformas/disney.jpg'},
+      hbomax:{label:'HBO Max',short:'HBO',logo:'/assets/platformas/hbo.jpg'},
+      primevideo:{label:'Prime Video',short:'PV',logo:'/assets/platformas/prime.jpg'},
+      crunchyroll:{label:'Crunchyroll',short:'CR',logo:'/assets/platformas/crunchyroll.jpg'},
+      universal:{label:'Universal+',short:'U+',logo:'/assets/platformas/universal.jpg'},
+      vix:{label:'ViX',short:'ViX',logo:'/assets/platformas/vix.jpg'},
+      vixmix:{label:'ViX / Viki',short:'VI',logo:'/assets/platformas/vix.jpg'},
+      paramount:{label:'Paramount+',short:'P+',logo:'/assets/platformas/paramount.jpg'},
+      spotify:{label:'Spotify',short:'SP',logo:'/assets/platformas/spotify.jpg'},
+      deezer:{label:'Deezer',short:'DZ',logo:'/assets/platformas/deezer.jpg'},
+      youtube:{label:'YouTube',short:'YT',logo:'/assets/platformas/youtube.jpg'},
+      canva:{label:'Canva',short:'Ca',logo:'/assets/platformas/canva.jpg'},
+      gemini:{label:'Gemini',short:'Ge',logo:'/assets/platformas/gemini.jpg'},
+      chatgpt:{label:'ChatGPT',short:'AI',logo:'/assets/platformas/chatgpt.jpg'},
+      duolingo:{label:'Duolingo',short:'Du',logo:'/assets/platformas/duolingo.jpg'},
+      office:{label:'Office 365',short:'Of',logo:'/assets/platformas/office365.jpg'},
+      office2021:{label:'Office 2021',short:'O21',logo:'/assets/platformas/office365.jpg'},
+      windows10:{label:'Windows 10',short:'W10',logo:'/assets/platformas/windows10.jpg'},
+      windows11:{label:'Windows 11',short:'W11',logo:'/assets/platformas/windows11.jpg'},
+      adobeexpress:{label:'Adobe Express',short:'Ae',logo:'/assets/platformas/adobeexpress.jpg'},
+      eset:{label:'ESET',short:'ES',logo:'/assets/platformas/eset.jpg'},
+      viki:{label:'Viki Rakuten',short:'VK',logo:'/assets/platformas/viki.jpg'},
+      appletv:{label:'Apple TV',short:'AP',logo:'/assets/platformas/appletv.jpg'},
+      oleada:{label:'Oleada TV',short:'OL',logo:'/assets/platformas/oleada.jpg'},
+      oleadatv1:{label:'Oleada TV (1)',short:'OL',logo:'/assets/platformas/oleada.jpg'},
+      oleadatv3:{label:'Oleada TV (3)',short:'OL',logo:'/assets/platformas/oleada.jpg'},
+      stellatv:{label:'Stella TV',short:'ST',logo:'/assets/platformas/iptv.jpg'},
+      stellatv1:{label:'Stella TV (1)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
+      stellatv2:{label:'Stella TV (2)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
+      stellatv3:{label:'Stella TV (3)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
+      latintv:{label:'LatinTV',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      latintv1:{label:'LatinTV (1)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      latintv2:{label:'LatinTV (2)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      latintv3:{label:'LatinTV (3)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      latintv4:{label:'LatinTV (4)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      liontv:{label:'Lion TV',short:'LI',logo:'/assets/platformas/iptv.jpg'},
+      liontv1:{label:'Lion TV (1)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
+      liontv2:{label:'Lion TV (2)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
+      liontv3:{label:'Lion TV (3)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
+      liontv5:{label:'Lion TV (5)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
+      iptv:{label:'IPTV',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+      iptv1:{label:'IPTV (1)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+      iptv3:{label:'IPTV (3)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+      iptv4:{label:'IPTV (4)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+      magis:{label:'TV Digital',short:'TV',logo:'/assets/platformas/iptv.jpg'},
+      sin_plataforma:{label:'Sin plataforma',short:'?',logo:''}
     };
-    return map[key]||{label:auditPlatformLabel(family),short:auditPlatformLabel(family).slice(0,2).toUpperCase()};
+    return visuals[key]||{label:auditPlatformLabel(family),short:auditPlatformLabel(family).slice(0,2).toUpperCase(),logo:''};
+  }
+
+  function platformLogoHtml(meta,cls='cm-platform-tile-logo',color='#64748b'){
+    if(meta?.logo)return `<span class="${cls}" style="background:#fff"><img src="${esc(meta.logo)}" alt="${esc(meta.label||'Plataforma')}" loading="lazy" onerror="this.parentNode.classList.add('fallback');this.remove()"><i>${esc(meta.short||'')}</i></span>`;
+    return `<span class="${cls} fallback" style="background:${color}"><i>${esc(meta?.short||'')}</i></span>`;
   }
 
   function platformOrder(items){
@@ -1225,7 +1278,7 @@
     const groups=Object.keys(audit?.platforms||{}).map((family)=>{
       const accounts=(audit.accounts||[]).filter((a)=>a.family===family);
       const meta=platformTileMeta(family);
-      return {family,name:meta.label,short:meta.short,color:platformColor(family),count:accounts.length,...reviewProgress(accounts)};
+      return {family,name:meta.label,short:meta.short,logo:meta.logo,color:platformColor(family),count:accounts.length,...reviewProgress(accounts)};
     });
     return platformOrder(groups);
   }
@@ -1274,7 +1327,7 @@
     const accountIndex=state.accountVisible.findIndex((x)=>x.key===account.key);
     return (account.roster||[]).map((r,rowIndex)=>{
       const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',tone:'bad'};
-      const profile=fieldText(r.profile)?(/^perfil/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
+      const profile=fieldText(r.profile)?(/^perfil\b/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
       const pointer=`${accountIndex}:${rowIndex}`;
       return `<div class="cm-client-row ${s.tone}">
         <div class="cm-client-cell num">${rowIndex+1}</div>
@@ -1307,7 +1360,7 @@
       </div>
       <div class="cm-account-summary">
         <div class="cm-account-summary-main">
-          <div class="cm-account-logo" style="background:${platformColor(account.family)}">${esc(platformTileMeta(account.family).short)}</div>
+          ${platformLogoHtml(platformTileMeta(account.family),'cm-account-logo',platformColor(account.family))}
           <div><b>${esc(account.email||'Sin cuenta')}</b><small>${esc(account.platform||auditPlatformLabel(account.family))} · ${(account.roster||[]).length}/${account.capacity||0} perfiles</small></div>
         </div>
         <div class="cm-account-summary-metrics">
@@ -1376,7 +1429,7 @@
           </div>
         </div>
       </div>
-      <div class="cm-home-platforms">${tiles.map((it)=>`<button class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}"><span class="cm-platform-tile-logo" style="background:${it.color}">${esc(it.short)}</span><b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
+      <div class="cm-home-platforms">${tiles.map((it)=>`<button type="button" class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}" aria-label="Abrir ${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small><em>Abrir</em></button>`).join('')}</div>
       <div class="cm-home-summary">
         <div class="cm-home-stat"><b>${m.cuentas??0}</b><span>Cuentas agrupadas</span></div>
         <div class="cm-home-stat"><b>${m.conProblemas??0}</b><span>Diferencias internas</span></div>
@@ -1399,10 +1452,10 @@
         <button class="cm-btn" data-cm-go-home>← Inicio</button>
         <div class="cm-workspace-search"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
       </div>
-      <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}"><span class="cm-platform-tile-logo" style="background:${it.color}">${esc(it.short)}</span><b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
+      <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
       <div class="cm-selected-platform">
         <div class="cm-selected-platform-head">
-          <div class="cm-selected-platform-main"><span class="cm-selected-platform-logo" style="background:${selectedColor}">${esc(selectedMeta.short)}</span><div><h3>${esc(selectedName)}</h3><p>${scopedAccounts.length} cuentas totales</p></div></div>
+          <div class="cm-selected-platform-main">${platformLogoHtml(selectedMeta,'cm-selected-platform-logo',selectedColor)}<div><h3>${esc(selectedName)}</h3><p>${scopedAccounts.length} cuentas totales</p></div></div>
           <div class="cm-selected-progress"><div class="cm-selected-progress-bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>
         </div>
         <div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>
@@ -1566,18 +1619,29 @@
     bindAccountResults(results);
   }
 
+  function openWorkspace(platform='all'){
+    state.accountView='workspace';
+    state.accountPlatform=platform||'all';
+    state.accountStatus='all';
+    state.accountQuery='';
+    state.accountLimit=DEFAULT_ACCOUNT_LIMIT;
+    state.expandedAccountKey='';
+    state.filteredAccountsCache=null;
+    render();
+  }
+
   function bind(){
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
     host.querySelectorAll('[data-cm-go-home]').forEach(b=>b.onclick=()=>{state.accountView='home';render();});
-    host.querySelectorAll('[data-cm-open-workspace]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountPlatform=b.dataset.cmOpenWorkspace||'all';state.accountStatus='all';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;render();});
+    host.querySelectorAll('[data-cm-open-workspace]').forEach(b=>b.onclick=(event)=>{event.preventDefault();event.stopPropagation();openWorkspace(b.dataset.cmOpenWorkspace||'all');});
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=(event)=>{event.preventDefault();state.accountView='workspace';state.accountPlatform=b.dataset.cmAuditPlatform;state.accountStatus='all';state.accountQuery='';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=(event)=>{event.preventDefault();state.accountView='workspace';state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
     const aq=host.querySelector('#cmAccountSearch');
     if(aq)aq.oninput=()=>{
-      state.accountQuery=aq.value;
+      state.accountQuery=aq.value;state.filteredAccountsCache=null;
       clearTimeout(accountSearchTimer);
       accountSearchTimer=setTimeout(()=>{state.accountLimit=DEFAULT_ACCOUNT_LIMIT;updateAccountResults();},180);
     };

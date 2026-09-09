@@ -415,3 +415,13 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
 .cm-inline-note{display:grid;gap:8px;width:100%;margin-top:8px}.cm-inline-note input{min-width:220px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font:800 12px/1.2 'Nunito',system-ui,sans-serif}.cm-inline-note>div{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 @media(max-width:1180px){.cm-home-top,.cm-workspace-grid,.cm-selected-platform-head,.cm-account-summary,.cm-workspace-top{grid-template-columns:1fr}.cm-home-summary,.cm-status-cards,.cm-account-credentials-modern{grid-template-columns:repeat(2,1fr)}.cm-selected-progress{justify-content:flex-start}.cm-client-table-head,.cm-client-row{grid-template-columns:44px minmax(140px,.8fr) minmax(150px,1fr) minmax(120px,.8fr) minmax(120px,.8fr) minmax(180px,1fr)}}
 @media(max-width:760px){.cm-home-summary,.cm-status-cards,.cm-account-credentials-modern{grid-template-columns:1fr}.cm-home-platforms,.cm-platform-row{grid-template-columns:repeat(2,1fr)}.cm-account-list-row{grid-template-columns:34px minmax(0,1fr);}.cm-account-list-meta,.cm-account-list-state,.cm-account-list-date,.cm-account-list-arrow{display:none}.cm-client-table-head{display:none}.cm-client-row{grid-template-columns:1fr;gap:8px}.cm-client-cell.end{justify-items:start}.cm-detail-side{justify-items:start}.cm-account-list-head,.cm-account-detail-head{flex-direction:column;align-items:flex-start}}
+
+/* Fix iconos reales + entrada a cuentas (Sublicuentas / Geisell) */
+.cm-platform-tile-logo,.cm-selected-platform-logo,.cm-account-logo{position:relative;overflow:hidden;background:#fff!important;border:1px solid rgba(15,23,42,.08)}
+.cm-platform-tile-logo img,.cm-selected-platform-logo img,.cm-account-logo img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+.cm-platform-tile-logo>i,.cm-selected-platform-logo>i,.cm-account-logo>i{display:none;font-style:normal;font-weight:950;color:#fff}
+.cm-platform-tile-logo.fallback>i,.cm-selected-platform-logo.fallback>i,.cm-account-logo.fallback>i{display:block}
+.cm-platform-tile em{font-style:normal;font-size:10px;font-weight:900;color:var(--cm-blue);opacity:.78}
+.cm-platform-tile:hover em{opacity:1}
+.cm-home-platforms .cm-platform-tile{min-height:128px}
+.cm-platform-row .cm-platform-tile{min-height:118px}
