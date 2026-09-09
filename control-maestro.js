@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260908-57';
+  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-58';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1065,21 +1065,40 @@
     return value;
   }
 
+  function accountsForSelectedPlatform(audit=state.accountAudit){
+    const accounts=audit?.accounts||[];
+    return state.accountPlatform==='all'?accounts:accounts.filter((a)=>a.family===state.accountPlatform);
+  }
+
+  // La tarjeta y su filtro deben usar la misma condición, incluida una cuenta
+  // con incidencia pendiente aunque su última revisión sea reciente.
+  function accountMatchesStatus(a,status){
+    if(status==='reviewed')return accountReviewSchedule(a).isReviewed;
+    if(status==='review_due')return !accountReviewSchedule(a).isReviewed;
+    if(status==='problems')return !!a.issueCount;
+    if(['expired','soon','active'].includes(status))return accountLifecycle(a).tone===status;
+    return true;
+  }
+
+  function accountStatusCounts(accounts){
+    const list=accounts||[];
+    const counts={all:list.length,review_due:0,expired:0,reviewed:0};
+    for(const a of list){
+      for(const status of ['review_due','expired','reviewed']){
+        if(accountMatchesStatus(a,status))counts[status]++;
+      }
+    }
+    return counts;
+  }
+
   function filteredAccounts(){
     const audit=state.accountAudit;
     const cacheKey=[state.accountPlatform,state.accountStatus,norm(state.accountQuery)].join('\u001f');
     if(state.filteredAccountsCache?.audit===audit&&state.filteredAccountsCache?.key===cacheKey)return state.filteredAccountsCache.items;
     const q=norm(state.accountQuery);
     const rank={expired:0,soon:1,nodate:2,active:3};
-    const items=(audit?.accounts||[]).filter((a)=>{
-      const life=accountLifecycle(a);
-      if(state.accountPlatform!=='all'&&a.family!==state.accountPlatform)return false;
-      if(state.accountStatus==='expired'&&life.tone!=='expired')return false;
-      if(state.accountStatus==='soon'&&life.tone!=='soon')return false;
-      if(state.accountStatus==='active'&&life.tone!=='active')return false;
-      if(state.accountStatus==='problems'&&!a.issueCount)return false;
-      if(state.accountStatus==='reviewed'&&!accountReviewSchedule(a).isReviewed)return false;
-      if(state.accountStatus==='review_due'&&!a.reviewDue)return false;
+    const items=accountsForSelectedPlatform(audit).filter((a)=>{
+      if(!accountMatchesStatus(a,state.accountStatus))return false;
       if(!q)return true;
       return norm([a.platform,a.email,a.clave,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount,dateLabel(r.date)])].join(' ')).includes(q);
     }).sort((a,b)=>{
@@ -1405,7 +1424,6 @@
 
   function homeDashboardHtml(audit){
     const tiles=platformTilesData(audit);
-    const m=audit.metrics||{};
     return `<section class="cm-panel cm-home-panel">
       <div class="cm-home-compact">
         <div class="cm-home-compact-copy">
@@ -1415,16 +1433,11 @@
         <div class="cm-home-compact-actions">
           <button class="cm-btn primary" data-cm-open-workspace="all">Ver todas las cuentas</button>
           <button class="cm-btn" data-cm-action="review">🔎 Revisar ahora</button>
-          <button class="cm-btn" data-cm-action="save-backup">☁️ Backup ahora</button>
+          <button class="cm-btn good" data-cm-action="generate-download" ${state.busy?'disabled':''}>📥 Descargar Excel</button>
+          <button class="cm-btn" data-cm-action="save-backup" ${state.busy?'disabled':''}>☁️ Backup ahora</button>
         </div>
       </div>
       <div class="cm-home-platforms">${tiles.map((it)=>`<button type="button" class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}" aria-label="Abrir ${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small><em>Abrir</em></button>`).join('')}</div>
-      <div class="cm-home-summary">
-        <div class="cm-home-stat"><b>${m.cuentas??0}</b><span>Cuentas agrupadas</span></div>
-        <div class="cm-home-stat"><b>${m.conProblemas??0}</b><span>Diferencias internas</span></div>
-        <div class="cm-home-stat"><b>${m.clientes??0}</b><span>Clientes detectados</span></div>
-        <div class="cm-home-stat"><b>${tiles.length}</b><span>Plataformas visibles</span></div>
-      </div>
     </section>`;
   }
 
@@ -1486,7 +1499,6 @@
         ${t?'<button class="cm-btn primary" data-cm-action="review">🔎 Revisar ahora</button>':''}
       </div>
       <div class="cm-hint">Para corregir algo, abra el cliente o la cuenta desde la revisión. Después presione “Revisar ahora”; no necesita escribirlo otra vez en Excel.</div>
-      <div class="cm-status ${state.statusType==='error'?'err':(state.statusType==='good'?'good':'')}">${esc(state.status)}</div>
     </section>`;
   }
 
@@ -1556,9 +1568,10 @@
       </header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede ajustarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
       ${accountAuditHtml()}
+      <div class="cm-status ${state.statusType==='error'?'err':(state.statusType==='good'?'good':'')}" role="status" aria-live="polite">${esc(state.status)}</div>
       <details class="cm-details cm-tools-details">
-        <summary><span><b>Herramientas, revisión y respaldos</b><small>La lógica del Control Maestro se conserva; solo se ordenó mejor la visualización.</small></span><i>Presione para abrir</i></summary>
-        <div class="cm-details-body">${kpisHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}</div>
+        <summary><span><b>Herramientas, revisión y respaldos</b><small>Formato Excel e historial de copias guardadas.</small></span><i>Presione para abrir</i></summary>
+        <div class="cm-details-body">${templateHtml()}${reviewHtml()}${backupsHtml()}</div>
       </details>
     </div>`;
     bind();
