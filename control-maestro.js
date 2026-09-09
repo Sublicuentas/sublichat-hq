@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-59';
+  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-60';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1001,7 +1001,9 @@
     const total=list.length;
     const reviewed=list.filter((a)=>accountReviewSchedule(a).isReviewed).length;
     const pending=Math.max(0,total-reviewed);
-    const percent=total?Math.round((reviewed/total)*100):0;
+    // 100% significa que no queda ninguna cuenta pendiente, incluso en listas
+    // grandes donde el redondeo de 199/200 antes mostraba 100%.
+    const percent=total?(pending?Math.min(99,Math.round((reviewed/total)*100)):100):0;
     const tone=percent===100?'complete':(percent===0?'empty':(percent<50?'urgent':'partial'));
     const label=percent===100?'✅ Completa':(percent===0?'🔴 Sin revisar':(percent<50?'🟠 Urge avanzar':'🟡 Parcial'));
     return {total,reviewed,pending,percent,tone,label};
@@ -1283,11 +1285,7 @@
   }
 
   function platformOrder(items){
-    const order=['all','disney','netflix','hbomax','primevideo','crunchyroll','spotify','youtube','vix','canva','gemini','duolingo','chatgpt','office','oleada','stellatv','liontv','latintv','sin_plataforma'];
-    return [...items].sort((a,b)=>{
-      const ai=order.indexOf(a.family); const bi=order.indexOf(b.family);
-      return (ai===-1?999:ai)-(bi===-1?999:bi) || a.name.localeCompare(b.name);
-    });
+    return [...items].sort((a,b)=>a.percent-b.percent||a.name.localeCompare(b.name,'es',{numeric:true}));
   }
 
   function platformTilesData(audit=state.accountAudit){
@@ -1341,20 +1339,65 @@
     }).join('');
   }
 
+  function rosterMatchSummary(account,row){
+    const status=ROSTER_STATUS[row.status]||{label:row.status||'Revisar',tone:'bad'};
+    if(!row.inv||!row.service||!['ok','vencido'].includes(row.status))return {...status,detail:row.detail,complete:false};
+    const inventory=auditIdentity(row.inv),service=auditIdentity(row.service,true);
+    const differences=[];
+    const compare=(list,label,a,b,required=false)=>{
+      if((required&&(!a||!b))||a!==b)list.push(label);
+    };
+    compare(differences,'nombre',inventory.name,service.name,true);
+    compare(differences,'perfil',inventory.profile,service.profile);
+    compare(differences,'PIN',inventory.pin,service.pin);
+    // Bodega no siempre guarda teléfono ni fecha: cuando existen se comparan;
+    // el teléfono y vencimiento de Clientes también se verifican con el Excel.
+    if(inventory.phone)compare(differences,'teléfono',inventory.phone,service.phone);
+    for(const key of ['clienteId','compraId','perfilId']){
+      if(inventory[key]&&service[key])compare(differences,'identificación',inventory[key],service[key]);
+    }
+    compare(differences,'cuenta',email(row.inv._email),email(row.service._email||row.service.correo),account.requiresEmail);
+    compare(differences,'plataforma',row.inv._family,row.service._family);
+    const inventoryAccount=account.inventoryAccounts.find((x)=>String(x.id||'')===String(row.inv._accountId||''))||account.inventoryAccounts[0];
+    const currentPassword=String(inventoryAccount?.clave??'');
+    compare(differences,'clave',currentPassword,String(row.service.clave??''),account.requiresPassword);
+    const currentDate=dateKey(row.service.fecha);
+    if(!currentDate)differences.push('vencimiento sin indicar');
+    if(account.duplicateDocs)differences.push('cuenta duplicada');
+    if(account.overCapacity)differences.push('capacidad excedida');
+    if(differences.length)return {label:'DATOS POR REVISAR',tone:'warn',complete:false,detail:`Revise en la base actual: ${[...new Set(differences)].join(', ')}.`};
+    if(row.status==='vencido')return {...status,complete:false,detail:'La asignación coincide, pero el servicio está vencido.'};
+    if(!row.excel)return {label:'COINCIDE EN BASE ACTUAL',tone:'ok',complete:false,detail:'Los datos de Clientes y Bodega coinciden. Falta una fila del respaldo Excel para comprobar la coincidencia completa.'};
+    const historical=[];
+    compare(historical,'nombre',service.name,auditPersonKey(row.excel.name),true);
+    compare(historical,'teléfono',service.phone,phone(row.excel.phone),true);
+    compare(historical,'perfil',service.profile,auditPersonKey(row.excel.profile));
+    compare(historical,'PIN',service.pin,norm(fieldText(row.excel.pin)));
+    compare(historical,'cuenta',email(row.service._email||row.service.correo),email(row.excel.email),account.requiresEmail);
+    compare(historical,'plataforma',row.service._family,row.excel.family);
+    compare(historical,'clave',currentPassword,String(row.excel.password??''),account.requiresPassword);
+    compare(historical,'vencimiento',currentDate,dateKey(row.excel.date),true);
+    if(historical.length)return {label:'COINCIDE EN BASE ACTUAL',tone:'ok',complete:false,detail:`Clientes y Bodega coinciden. El Excel tiene datos distintos o incompletos: ${historical.join(', ')}. El respaldo histórico no modifica la base actual.`};
+    return {label:'100% COINCIDE',tone:'ok',complete:true,detail:'Los datos de este cliente coinciden en Clientes, Bodega y el respaldo Excel: identidad, cuenta, perfil, PIN, teléfono, clave y vencimiento según corresponda.'};
+  }
+
   function rosterRowsCompactHtml(account){
     const accountIndex=state.accountVisible.findIndex((x)=>x.key===account.key);
     return (account.roster||[]).map((r,rowIndex)=>{
-      const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',tone:'bad'};
+      const s=rosterMatchSummary(account,r);
       const profile=fieldText(r.profile)?(/^perfil\b/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
       const pointer=`${accountIndex}:${rowIndex}`;
       const differentAccount=r.actualAccount&&email(r.actualAccount)!==email(account.email);
       return `<div class="cm-client-row ${s.tone}">
         <div class="cm-client-cell num">${rowIndex+1}</div>
-        <button type="button" class="cm-client-cell link cm-client-name" data-cm-audit-client="${pointer}"><small class="cm-field-label">Cliente</small><b>${esc(r.name||'Sin nombre')}</b><small>${esc(getLocalNote(localNoteKey(account,r))||'Ver ficha')}</small></button>
+        <div class="cm-client-heading">
+          <button type="button" class="cm-client-cell link cm-client-name" data-cm-audit-client="${pointer}" title="Ver ficha del cliente"><b>${esc(r.name||'Sin nombre')}</b>${getLocalNote(localNoteKey(account,r))?`<small>${esc(getLocalNote(localNoteKey(account,r)))}</small>`:''}</button>
+          <span class="cm-roster-status cm-client-match ${s.tone} ${s.complete?'is-complete':''}" title="${esc(s.detail||'')}">${esc(s.label)}</span>
+        </div>
         <div class="cm-client-cell cm-client-profile"><small class="cm-field-label">Perfil / PIN</small><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
         <div class="cm-client-cell cm-client-contact"><small class="cm-field-label">Teléfono</small><b>${esc(r.phone||'Sin teléfono')}</b>${differentAccount?`<small class="cm-account-mismatch">Cuenta asignada: ${esc(r.actualAccount)}</small>`:''}</div>
         <div class="cm-client-cell cm-client-expiry"><small class="cm-field-label">Vencimiento</small><b>${esc(r.date?dateLabel(r.date):'Sin fecha')}</b></div>
-        <div class="cm-client-cell end"><span class="cm-roster-status ${s.tone}">${esc(s.label)}</span><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':' +Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}${r.detail?`<details class="cm-client-review-details"><summary>Detalle de revisión</summary><p>${esc(r.detail)}</p></details>`:''}</div>
+        <div class="cm-client-cell end"><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':'+Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}${s.detail?`<details class="cm-client-review-details"><summary>Detalle de revisión</summary><p>${esc(s.detail)}</p></details>`:''}</div>
       </div>`;
     }).join('');
   }
@@ -1369,7 +1412,7 @@
       <div class="cm-account-detail-head">
         <div>
           <h4>Clientes de esta cuenta</h4>
-          <p>Estos son los clientes que utilizan la cuenta seleccionada de ${esc(account.platform||auditPlatformLabel(account.family))}.</p>
+          <p>100% COINCIDE: datos actuales y respaldo Excel iguales.</p>
         </div>
         <div class="cm-detail-side">
           <span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>
@@ -1409,7 +1452,7 @@
     const next=Math.min(ACCOUNT_PAGE_SIZE,remaining);
     return `<div class="cm-workspace-grid">
       <section class="cm-account-list-panel">
-        <div class="cm-account-list-head"><div><h4>Cuentas de ${esc(state.accountPlatform==='all'?'todas las plataformas':auditPlatformLabel(state.accountPlatform))}</h4><p>Seleccione una cuenta del listado y a la derecha verá todos los clientes de esa cuenta.</p></div><div class="cm-account-count-pill">${state.accountVisible.length} / ${all.length}</div></div>
+        <div class="cm-account-list-head"><div><h4>Cuentas de ${esc(state.accountPlatform==='all'?'todas las plataformas':auditPlatformLabel(state.accountPlatform))}</h4><p>Seleccione un correo para ver sus clientes.</p></div><div class="cm-account-count-pill">${state.accountVisible.length} / ${all.length}</div></div>
         <div class="cm-account-list-body">${accountListRowsHtml(selected)||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
         ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining} cuentas pendientes por mostrar.</small></div>`:''}
       </section>
@@ -1432,6 +1475,7 @@
           <button class="cm-btn" data-cm-action="save-backup" ${state.busy?'disabled':''}>☁️ Backup ahora</button>
         </div>
       </div>
+      <p class="cm-platform-order-hint">Cuentas revisadas: de menor a mayor porcentaje · 100% al final.</p>
       <div class="cm-home-platforms">${tiles.map((it)=>`<button type="button" class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}" aria-label="Abrir ${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small><em>Abrir</em></button>`).join('')}</div>
     </section>`;
   }
@@ -1449,6 +1493,7 @@
         <button class="cm-btn" data-cm-go-home>← Inicio</button>
         <div class="cm-workspace-search"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
       </div>
+      <p class="cm-platform-order-hint">Cuentas revisadas: de menor a mayor porcentaje · 100% al final.</p>
       <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
       <div class="cm-selected-platform">
         <div class="cm-selected-platform-head">

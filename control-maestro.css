@@ -515,45 +515,51 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
 
 .cm-shell>.cm-status:empty{display:none}
 
-/* v59: las columnas se ajustan al panel, con texto completo y campos separados. */
-.cm-workspace-grid{grid-template-columns:minmax(290px,.34fr) minmax(0,.66fr)!important;gap:18px!important}
+/* v60: correos y clientes comparten el ancho; filas compactas con estado arriba. */
+.cm-workspace-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important}
+.cm-platform-order-hint{margin:10px 0;color:var(--txt2);font-size:calc(13px * var(--cm-modern-scale));font-weight:750;line-height:1.4}
 .cm-account-list-panel,.cm-account-detail,.cm-account-list-body,.cm-account-list-main,.cm-account-list-info{min-width:0}
 .cm-account-list-head>div:first-child,.cm-account-detail-head>div:first-child{min-width:0;overflow-wrap:anywhere}
-.cm-account-list-row{grid-template-columns:28px minmax(0,1fr) 16px;grid-template-areas:"num main arrow" ". info arrow";gap:8px 10px;align-items:start}
+.cm-account-list-row{grid-template-columns:28px minmax(0,1fr) 16px;grid-template-areas:"num main arrow" ". info arrow";gap:6px 10px;align-items:start}
 .cm-account-list-num{grid-area:num}
 .cm-account-list-main{grid-area:main}
 .cm-account-list-arrow{grid-area:arrow;align-self:center}
-.cm-account-list-info{grid-area:info;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
-.cm-account-list-meta{display:block;flex:1 1 130px}
+.cm-account-list-info{grid-area:info;display:flex;align-items:center;flex-wrap:wrap;gap:5px 12px}
+.cm-account-list-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;flex-basis:100%}
 .cm-account-list-state{display:inline-flex;max-width:100%;padding:6px 8px}
-.cm-account-list-date{display:block;flex-basis:100%}
+.cm-account-list-date{display:block;flex:0 1 auto}
 .cm-account-list-main b,.cm-account-list-main small,.cm-account-list-meta small,.cm-account-list-date{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.45}
-.cm-shell .cm-account-list-main b{font-size:calc(15px * var(--cm-modern-scale))}
-.cm-shell .cm-account-list-main small,.cm-shell .cm-account-list-meta small,.cm-shell .cm-account-list-date{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-main b{font-size:calc(18px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-main small,.cm-shell .cm-account-list-meta small,.cm-shell .cm-account-list-date{font-size:calc(13px * var(--cm-modern-scale))}
 .cm-account-summary{flex-wrap:wrap;align-items:flex-start}
 .cm-account-summary-main,.cm-account-summary-main>div{min-width:0;max-width:100%}
 .cm-account-summary-metrics{justify-content:flex-start;flex-wrap:wrap}
-.cm-account-credentials-modern{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px!important}
-.cm-credential-card{min-width:0;gap:10px;padding:14px!important;align-content:start}
-.cm-shell .cm-credential-card b{font-size:calc(20px * var(--cm-modern-scale));line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
-.cm-credential-card .cm-copy{justify-self:start;font-size:calc(13px * var(--cm-modern-scale));min-height:36px;padding:8px 14px}
+.cm-account-credentials-modern{grid-template-columns:minmax(0,1fr);gap:6px!important}
+.cm-credential-card{min-width:0;grid-template-columns:82px minmax(0,1fr) auto;gap:6px 8px;padding:9px 10px!important;align-items:center}
+.cm-shell .cm-credential-card b{font-size:calc(17px * var(--cm-modern-scale));line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.cm-credential-card .cm-copy{justify-self:start;font-size:calc(13px * var(--cm-modern-scale));min-height:34px;padding:6px 10px}
 .cm-client-table{overflow:visible;border:0;background:transparent}
-.cm-client-table-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
-.cm-client-row{grid-template-columns:28px repeat(3,minmax(0,1fr));grid-template-areas:"num client client client" ". profile contact expiry" ". actions actions actions";gap:12px 16px;align-items:start;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:16px!important}
-.cm-client-cell.num{grid-area:num;width:28px;min-height:28px;display:grid;place-items:center;border-radius:8px;background:var(--card)}
-.cm-client-name{grid-area:client}
+.cm-client-table-body{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;max-height:680px;overflow:auto;padding-right:2px;align-content:start}
+.cm-client-row{grid-template-columns:22px minmax(0,1.15fr) minmax(0,.85fr) minmax(0,1fr);grid-template-areas:"num heading heading heading" ". profile contact expiry" ". actions actions actions";gap:6px 10px;align-items:start;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 12px!important}
+.cm-client-cell.num{grid-area:num;width:22px;min-height:22px;display:grid;place-items:center;border-radius:6px;background:var(--card)}
+.cm-client-heading{grid-area:heading;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;min-width:0}
+.cm-client-name{flex:1 1 160px;min-width:0}
+.cm-client-match{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.3;padding:5px 8px}
+.cm-shell .cm-client-match{font-size:calc(12px * var(--cm-modern-scale));font-weight:900}
+.cm-client-match.is-complete{background:var(--goodSoft);color:var(--good);border:1px solid currentColor}
 .cm-client-profile{grid-area:profile}
 .cm-client-contact{grid-area:contact}
 .cm-client-expiry{grid-area:expiry}
-.cm-client-cell.end{grid-area:actions;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--line)}
-.cm-shell .cm-client-cell b{font-size:calc(16px * var(--cm-modern-scale));line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
-.cm-shell .cm-client-name b{font-size:calc(17px * var(--cm-modern-scale))}
-.cm-shell .cm-client-cell small{font-size:calc(12px * var(--cm-modern-scale));line-height:1.5;white-space:normal;overflow-wrap:anywhere}
-.cm-shell .cm-client-cell .cm-field-label{margin:0 0 5px;font-size:calc(12px * var(--cm-modern-scale));color:var(--txt2)}
-.cm-client-actions{justify-content:flex-start;gap:8px;max-width:100%}
-.cm-client-actions .cm-row-action{font-size:calc(12px * var(--cm-modern-scale));min-height:34px;padding:7px 10px}
+.cm-client-cell.end{grid-area:actions;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 8px;padding-top:5px;border-top:1px solid var(--line)}
+.cm-shell .cm-client-cell b{font-size:calc(14px * var(--cm-modern-scale));line-height:1.35;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.cm-shell .cm-client-name b{font-size:calc(16px * var(--cm-modern-scale))}
+.cm-shell .cm-client-cell small{margin-top:2px;font-size:calc(12px * var(--cm-modern-scale));line-height:1.35;white-space:normal;overflow-wrap:anywhere}
+.cm-shell .cm-client-cell .cm-field-label{margin:0 0 2px;font-size:calc(12px * var(--cm-modern-scale));color:var(--txt2)}
+.cm-client-actions{justify-content:flex-start;gap:5px;max-width:100%}
+.cm-client-actions .cm-row-action{font-size:calc(12px * var(--cm-modern-scale));min-height:32px;padding:5px 8px}
 .cm-client-cell .cm-roster-status{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.4;font-size:calc(12px * var(--cm-modern-scale))}
-.cm-client-review-details{flex-basis:100%;min-width:0;font-size:calc(12px * var(--cm-modern-scale));line-height:1.5;color:var(--txt2)}
+.cm-client-review-details{flex:1 1 135px;min-width:0;font-size:calc(12px * var(--cm-modern-scale));line-height:1.4;color:var(--txt2)}
+.cm-client-review-details[open]{flex-basis:100%}
 .cm-client-review-details summary{cursor:pointer;padding:3px 0;font-weight:800}
 .cm-client-review-details p{margin:8px 0 0;white-space:normal;overflow-wrap:anywhere}
 .cm-client-cell .cm-inline-note{flex-basis:100%;min-width:0}
@@ -563,9 +569,10 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
   .cm-account-list-body{max-height:360px!important}
 }
 @media(max-width:600px){
-  .cm-account-credentials-modern{grid-template-columns:minmax(0,1fr)}
-  .cm-client-row{grid-template-columns:24px repeat(2,minmax(0,1fr));grid-template-areas:"num client client" ". profile profile" ". contact expiry" ". actions actions";gap:12px 10px;padding:12px!important}
-  .cm-client-cell.num{width:24px;min-height:24px}
+  .cm-credential-card{grid-template-columns:minmax(0,1fr) auto}
+  .cm-credential-card>span{grid-column:1/-1}
+  .cm-client-row{grid-template-columns:22px repeat(2,minmax(0,1fr));grid-template-areas:"num heading heading" ". profile profile" ". contact expiry" ". actions actions";gap:6px 8px;padding:10px!important}
+  .cm-client-match{flex-shrink:1}
   .cm-account-list-panel,.cm-account-detail{padding:10px!important}
   .cm-account-list-body{max-height:300px!important}
   .cm-account-detail-head{flex-wrap:wrap}
