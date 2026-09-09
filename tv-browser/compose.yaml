@@ -1,0 +1,32 @@
+services:
+  browser:
+    build:
+      context: ..
+      dockerfile: tv-browser/Dockerfile
+    init: true
+    restart: unless-stopped
+    shm_size: 1gb
+    security_opt:
+      - seccomp=./seccomp.json
+    env_file: .env
+    expose: ["8080"]
+    mem_limit: 3g
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  https:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    env_file: .env
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [browser]
+volumes:
+  caddy_data:
+  caddy_config:
