@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-INTERACCION-LECTURA-20260908-56';
+  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260908-57';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1234,18 +1234,18 @@
       eset:{label:'ESET',short:'ES',logo:'/assets/platformas/eset.jpg'},
       viki:{label:'Viki Rakuten',short:'VK',logo:'/assets/platformas/viki.jpg'},
       appletv:{label:'Apple TV',short:'AP',logo:'/assets/platformas/appletv.jpg'},
-      oleada:{label:'Oleada TV',short:'OL',logo:'/assets/platformas/oleada.jpg'},
-      oleadatv1:{label:'Oleada TV (1)',short:'OL',logo:'/assets/platformas/oleada.jpg'},
-      oleadatv3:{label:'Oleada TV (3)',short:'OL',logo:'/assets/platformas/oleada.jpg'},
-      stellatv:{label:'Stella TV',short:'ST',logo:'/assets/platformas/iptv.jpg'},
-      stellatv1:{label:'Stella TV (1)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
-      stellatv2:{label:'Stella TV (2)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
-      stellatv3:{label:'Stella TV (3)',short:'ST',logo:'/assets/platformas/iptv.jpg'},
-      latintv:{label:'LatinTV',short:'LA',logo:'/assets/platformas/iptv.jpg'},
-      latintv1:{label:'LatinTV (1)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
-      latintv2:{label:'LatinTV (2)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
-      latintv3:{label:'LatinTV (3)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
-      latintv4:{label:'LatinTV (4)',short:'LA',logo:'/assets/platformas/iptv.jpg'},
+      oleada:{label:'Oleada TV',short:'OL',logo:'/assets/platformas/oleada-tv.jpg'},
+      oleadatv1:{label:'Oleada TV (1)',short:'OL',logo:'/assets/platformas/oleada-tv.jpg'},
+      oleadatv3:{label:'Oleada TV (3)',short:'OL',logo:'/assets/platformas/oleada-tv.jpg'},
+      stellatv:{label:'Stella TV',short:'ST',logo:'/assets/platformas/stella-tv.jpg'},
+      stellatv1:{label:'Stella TV (1)',short:'ST',logo:'/assets/platformas/stella-tv.jpg'},
+      stellatv2:{label:'Stella TV (2)',short:'ST',logo:'/assets/platformas/stella-tv.jpg'},
+      stellatv3:{label:'Stella TV (3)',short:'ST',logo:'/assets/platformas/stella-tv.jpg'},
+      latintv:{label:'LatinTV',short:'LA',logo:'/assets/platformas/latin-tv.jpg'},
+      latintv1:{label:'LatinTV (1)',short:'LA',logo:'/assets/platformas/latin-tv.jpg'},
+      latintv2:{label:'LatinTV (2)',short:'LA',logo:'/assets/platformas/latin-tv.jpg'},
+      latintv3:{label:'LatinTV (3)',short:'LA',logo:'/assets/platformas/latin-tv.jpg'},
+      latintv4:{label:'LatinTV (4)',short:'LA',logo:'/assets/platformas/latin-tv.jpg'},
       liontv:{label:'Lion TV',short:'LI',logo:'/assets/platformas/iptv.jpg'},
       liontv1:{label:'Lion TV (1)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
       liontv2:{label:'Lion TV (2)',short:'LI',logo:'/assets/platformas/iptv.jpg'},
@@ -1575,6 +1575,10 @@
   // toda la pantalla ni el campo de búsqueda cada vez que se filtra.
   function bindAccountResults(container){
     if(!container)return;
+    // En algunos navegadores el menú principal de Sublichat detiene la propagación
+    // antes de que llegue al listener delegado del Control Maestro. Por eso estas
+    // acciones críticas se enlazan también directamente a cada elemento.
+    container.querySelectorAll('[data-cm-select-account]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();selectAccount(b.dataset.cmSelectAccount);});
     container.querySelectorAll('[data-cm-action="show-more-accounts"],[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     container.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     container.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
@@ -1615,6 +1619,15 @@
     state.accountLimit=DEFAULT_ACCOUNT_LIMIT;
     state.expandedAccountKey='';
     state.filteredAccountsCache=null;
+    // Fuerza a reconstruir el cruce con la fuente viva antes de pintar la lista.
+    // Evita el caso en que el inicio muestra porcentajes pero la vista de cuentas
+    // se abre con una colección cacheada vacía.
+    const liveSource=source();
+    if(!state.accountAudit||state.accountAudit._sourceVersion!==liveSource.version){
+      state.accountAudit=buildAccountAudit(liveSource,state.analysis);
+      state.accountAudit._forAnalysis=state.analysis;
+      state.accountAudit._sourceVersion=liveSource.version;
+    }
     render();
   }
 
@@ -1636,6 +1649,11 @@
   function bind(){
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
+    host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();setUiSize(b.dataset.cmSize);});
+    host.querySelectorAll('[data-cm-go-home]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();state.accountView='home';state.accountQuery='';state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
+    host.querySelectorAll('[data-cm-open-workspace]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();openWorkspace(b.dataset.cmOpenWorkspace||'all');});
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();state.accountView='workspace';state.accountPlatform=b.dataset.cmAuditPlatform||'all';state.accountStatus='all';state.accountQuery='';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();state.accountView='workspace';state.accountStatus=b.dataset.cmAuditStatus||'all';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
     const aq=host.querySelector('#cmAccountSearch');
     if(aq)aq.oninput=()=>{
