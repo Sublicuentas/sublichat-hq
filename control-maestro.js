@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-ICONOS-CUENTAS-20260908-55';
+  const BUILD='CONTROL-MAESTRO-INTERACCION-LECTURA-20260908-56';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1407,26 +1407,15 @@
     const tiles=platformTilesData(audit);
     const m=audit.metrics||{};
     return `<section class="cm-panel cm-home-panel">
-      <div class="cm-home-top">
-        <div class="cm-home-copy">
+      <div class="cm-home-compact">
+        <div class="cm-home-compact-copy">
           <h3>🏠 Inicio de Control Maestro</h3>
-          <p>Ahora el inicio no carga de golpe el relajo de cuentas. Primero elija una plataforma, y luego se abrirá la lista completa de cuentas de esa sección.</p>
-          <div class="cm-home-points">
-            <span>• Todas las plataformas quedan visibles por icono</span>
-            <span>• Cada icono muestra solo el porcentaje de avance</span>
-            <span>• Mantiene búsqueda, revisión, respaldo y edición</span>
-          </div>
-          <div class="cm-home-actions">
-            <button class="cm-btn primary" data-cm-open-workspace="all">Ver todas las cuentas</button>
-            <button class="cm-btn" data-cm-action="review">🔎 Revisar ahora</button>
-          </div>
+          <p>Seleccione una plataforma para abrir sus cuentas. El listado detallado solo carga cuando usted entra a trabajar.</p>
         </div>
-        <div class="cm-home-side">
-          <div class="cm-panel cm-backup-panel-modern">
-            <div class="cm-panel-head"><div><h3>Copias de respaldo</h3><p>Puede dejarlo automático o hacerlo manual antes de trabajar.</p></div></div>
-            <div class="cm-backup-choice"><label><input type="radio" name="cmBackupPref" checked> Backup diario</label><label><input type="radio" name="cmBackupPref"> Backup al entrar a trabajar</label></div>
-            <button class="cm-btn primary" data-cm-action="save-backup">☁️ Hacer backup ahora</button>
-          </div>
+        <div class="cm-home-compact-actions">
+          <button class="cm-btn primary" data-cm-open-workspace="all">Ver todas las cuentas</button>
+          <button class="cm-btn" data-cm-action="review">🔎 Revisar ahora</button>
+          <button class="cm-btn" data-cm-action="save-backup">☁️ Backup ahora</button>
         </div>
       </div>
       <div class="cm-home-platforms">${tiles.map((it)=>`<button type="button" class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}" aria-label="Abrir ${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small><em>Abrir</em></button>`).join('')}</div>
@@ -1587,7 +1576,6 @@
   function bindAccountResults(container){
     if(!container)return;
     container.querySelectorAll('[data-cm-action="show-more-accounts"],[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
-    container.querySelectorAll('[data-cm-select-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmSelectAccount));
     container.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     container.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
     container.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
@@ -1630,15 +1618,25 @@
     render();
   }
 
+  function controlDelegatedClick(event){
+    const host=root();
+    if(!host||!host.contains(event.target))return;
+    const el=event.target.closest('[data-cm-size],[data-cm-go-home],[data-cm-open-workspace],[data-cm-audit-platform],[data-cm-audit-status],[data-cm-select-account]');
+    if(!el||!host.contains(el))return;
+    event.preventDefault();
+    event.stopPropagation();
+    if(el.dataset.cmSize){setUiSize(el.dataset.cmSize);return;}
+    if(el.hasAttribute('data-cm-go-home')){state.accountView='home';state.accountQuery='';state.expandedAccountKey='';state.filteredAccountsCache=null;render();return;}
+    if(el.dataset.cmOpenWorkspace!=null){openWorkspace(el.dataset.cmOpenWorkspace||'all');return;}
+    if(el.dataset.cmAuditPlatform!=null){state.accountView='workspace';state.accountPlatform=el.dataset.cmAuditPlatform||'all';state.accountStatus='all';state.accountQuery='';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();return;}
+    if(el.dataset.cmAuditStatus!=null){state.accountView='workspace';state.accountStatus=el.dataset.cmAuditStatus||'all';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();return;}
+    if(el.dataset.cmSelectAccount!=null){selectAccount(el.dataset.cmSelectAccount);return;}
+  }
+
   function bind(){
     const host=root();if(!host)return;
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
-    host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
-    host.querySelectorAll('[data-cm-go-home]').forEach(b=>b.onclick=()=>{state.accountView='home';render();});
-    host.querySelectorAll('[data-cm-open-workspace]').forEach(b=>b.onclick=(event)=>{event.preventDefault();event.stopPropagation();openWorkspace(b.dataset.cmOpenWorkspace||'all');});
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=(event)=>{event.preventDefault();state.accountView='workspace';state.accountPlatform=b.dataset.cmAuditPlatform;state.accountStatus='all';state.accountQuery='';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=(event)=>{event.preventDefault();state.accountView='workspace';state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';state.filteredAccountsCache=null;render();});
     const aq=host.querySelector('#cmAccountSearch');
     if(aq)aq.oninput=()=>{
       state.accountQuery=aq.value;state.filteredAccountsCache=null;
@@ -1658,6 +1656,12 @@
     host.querySelectorAll('[data-cm-delete-historical-excel]').forEach(b=>b.onclick=()=>askDeleteExcelBackupRow(b,'',state.visible[Number(b.dataset.cmDeleteHistoricalExcel)]));
     host.querySelectorAll('[data-cm-download]').forEach(b=>b.onclick=()=>downloadStored(b.dataset.cmDownload));
     host.querySelectorAll('[data-cm-restore]').forEach(b=>b.onclick=()=>restoreStored(b.dataset.cmRestore));
+  }
+
+  function selectAccount(key){
+    if(!key)return;
+    state.expandedAccountKey=String(key);
+    updateAccountResults();
   }
 
   function toggleAccountDetails(key){
@@ -2608,6 +2612,7 @@
     // cambiar filtros, abrir/cerrar filas o volver a renderizar. Ninguna debe
     // cambiar el modo completo. Se reafirma después del evento sin interferir
     // con el onclick original.
+    screen.addEventListener('click',controlDelegatedClick,false);
     screen.addEventListener('click',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);
     screen.addEventListener('change',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);
     document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&screen?.classList.contains('cm-control-expanded')){event.preventDefault();closeControlExpanded();}},true);

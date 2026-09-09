@@ -425,3 +425,90 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
 .cm-platform-tile:hover em{opacity:1}
 .cm-home-platforms .cm-platform-tile{min-height:128px}
 .cm-platform-row .cm-platform-tile{min-height:118px}
+
+/* CONTROL MAESTRO 56 · interacción, lectura e iconos sin recorte */
+.cm-shell{--cm-modern-scale:.88}
+.cm-shell.cm-size-normal{--cm-modern-scale:.88}
+.cm-shell.cm-size-large{--cm-modern-scale:1}
+.cm-shell.cm-size-xlarge{--cm-modern-scale:1.18}
+
+/* Los controles de lectura ahora afectan también al rediseño nuevo. */
+.cm-shell .cm-home-compact-copy h3{font-size:calc(21px * var(--cm-modern-scale))}
+.cm-shell .cm-home-compact-copy p{font-size:calc(13px * var(--cm-modern-scale))}
+.cm-shell .cm-platform-tile b{font-size:calc(22px * var(--cm-modern-scale))}
+.cm-shell .cm-platform-tile small{font-size:calc(11px * var(--cm-modern-scale))}
+.cm-shell .cm-platform-tile em{font-size:calc(10px * var(--cm-modern-scale))}
+.cm-shell .cm-home-stat b{font-size:calc(24px * var(--cm-modern-scale))}
+.cm-shell .cm-home-stat span{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-selected-platform-main h3{font-size:calc(30px * var(--cm-modern-scale))}
+.cm-shell .cm-selected-platform-main p{font-size:calc(14px * var(--cm-modern-scale))}
+.cm-shell .cm-selected-progress b{font-size:calc(27px * var(--cm-modern-scale))}
+.cm-shell .cm-status-card small{font-size:calc(13px * var(--cm-modern-scale))}
+.cm-shell .cm-status-card b{font-size:calc(30px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-head h4,.cm-shell .cm-account-detail-head h4{font-size:calc(23px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-head p,.cm-shell .cm-account-detail-head p{font-size:calc(13px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-main b{font-size:calc(14px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-main small,.cm-shell .cm-account-list-date{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-account-list-meta small,.cm-shell .cm-account-list-state{font-size:calc(11px * var(--cm-modern-scale))}
+.cm-shell .cm-account-summary-main b{font-size:calc(20px * var(--cm-modern-scale))}
+.cm-shell .cm-account-summary-main small,.cm-shell .cm-pill,.cm-shell .cm-detail-review{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-credential-card span{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-credential-card b{font-size:calc(18px * var(--cm-modern-scale))}
+.cm-shell .cm-client-table-head{font-size:calc(12px * var(--cm-modern-scale))}
+.cm-shell .cm-client-cell b{font-size:calc(14px * var(--cm-modern-scale))}
+.cm-shell .cm-client-cell small{font-size:calc(11px * var(--cm-modern-scale))}
+
+/* Inicio compacto: menos aire y más espacio para plataformas. */
+.cm-home-panel{gap:12px!important;padding:14px!important}
+.cm-home-compact{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 15px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#fff 0%,#f7fbff 100%)}
+.cm-home-compact-copy h3{margin:0;color:var(--txt);font-weight:950;line-height:1.05}
+.cm-home-compact-copy p{margin:5px 0 0;color:var(--txt2);font-weight:760;line-height:1.38}
+.cm-home-compact-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.cm-home-compact-actions .cm-btn{min-height:38px!important;padding:7px 11px!important}
+.cm-home-platforms{grid-template-columns:repeat(auto-fill,minmax(112px,1fr))!important;gap:9px!important}
+.cm-home-platforms .cm-platform-tile{min-height:122px!important;padding:10px 7px!important;gap:4px!important;position:relative;z-index:2;pointer-events:auto!important}
+.cm-home-summary{gap:8px!important}
+.cm-home-stat{padding:11px 12px!important;border-radius:14px!important}
+.cm-tools-details{margin-top:10px!important}
+
+/* Logos: nunca recortar la imagen. */
+.cm-platform-tile-logo,.cm-selected-platform-logo,.cm-account-logo{background:#fff!important;border:1px solid rgba(15,23,42,.10)!important;overflow:hidden!important;box-shadow:0 4px 12px rgba(15,23,42,.08)!important}
+.cm-platform-tile-logo{width:68px!important;min-width:68px!important;height:58px!important;border-radius:14px!important;padding:5px!important;box-sizing:border-box!important}
+.cm-selected-platform-logo,.cm-account-logo{width:72px!important;min-width:72px!important;height:62px!important;border-radius:16px!important;padding:6px!important;box-sizing:border-box!important}
+.cm-platform-tile-logo img,.cm-selected-platform-logo img,.cm-account-logo img{width:100%!important;height:100%!important;display:block!important;object-fit:contain!important;object-position:center!important;border-radius:9px!important;background:#fff!important;padding:0!important}
+.cm-platform-tile-logo.fallback,.cm-selected-platform-logo.fallback,.cm-account-logo.fallback{padding:0!important}
+.cm-platform-tile-logo.fallback>i,.cm-selected-platform-logo.fallback>i,.cm-account-logo.fallback>i{display:grid!important;place-items:center;width:100%;height:100%;background:#64748b;color:#fff;border-radius:inherit}
+
+/* Workspace y detalle más aprovechados. */
+.cm-workspace-panel{padding:14px!important;gap:12px!important}
+.cm-platform-row{grid-template-columns:repeat(auto-fill,minmax(105px,1fr))!important;gap:8px!important}
+.cm-platform-row .cm-platform-tile{min-height:112px!important;padding:9px 6px!important;position:relative;z-index:2;pointer-events:auto!important}
+.cm-selected-platform{padding:14px!important;border-radius:18px!important}
+.cm-selected-platform-head{gap:12px!important}
+.cm-status-cards{gap:9px!important;margin-top:12px!important}
+.cm-status-card{padding:12px!important;border-radius:15px!important}
+.cm-status-icon{width:42px!important;height:42px!important;border-radius:12px!important}
+.cm-workspace-grid{gap:12px!important;grid-template-columns:minmax(390px,.92fr) minmax(520px,1.08fr)!important}
+.cm-account-list-panel,.cm-account-detail{padding:14px!important;border-radius:18px!important}
+.cm-account-list-body{max-height:680px!important;gap:7px!important}
+.cm-account-list-row{padding:11px 12px!important;border-radius:14px!important;min-height:64px;position:relative;z-index:2;pointer-events:auto!important}
+.cm-account-detail-head{margin-bottom:10px!important}
+.cm-account-summary{padding:12px!important;border-radius:15px!important}
+.cm-account-credentials-modern{gap:8px!important;margin-top:10px!important}
+.cm-credential-card{padding:11px!important;border-radius:14px!important}
+.cm-account-detail-actions{margin-top:10px!important;gap:7px!important}
+.cm-client-table{margin-top:12px!important;border-radius:15px!important}
+.cm-client-table-head,.cm-client-row{padding:11px 12px!important}
+
+/* Lectura: la selección se ve inmediatamente y no queda "pegada" visualmente. */
+.cm-size-options button{position:relative;z-index:5;pointer-events:auto!important;transition:transform .12s ease,background .12s ease,color .12s ease}
+.cm-size-options button:active{transform:scale(.96)}
+.cm-shell.cm-size-normal .cm-size-options button[data-cm-size="normal"],
+.cm-shell.cm-size-large .cm-size-options button[data-cm-size="large"],
+.cm-shell.cm-size-xlarge .cm-size-options button[data-cm-size="xlarge"]{border-color:var(--cm-blue)!important;background:var(--cm-blue)!important;color:#fff!important;box-shadow:0 5px 13px color-mix(in srgb,var(--cm-blue) 24%,transparent)!important}
+
+@media(max-width:1180px){
+  .cm-home-compact{grid-template-columns:1fr}
+  .cm-home-compact-actions{justify-content:flex-start}
+  .cm-workspace-grid{grid-template-columns:1fr!important}
+}
