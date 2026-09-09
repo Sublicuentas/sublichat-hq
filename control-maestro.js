@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-INICIO-VISUAL-20260908-53';
+  const BUILD='CONTROL-MAESTRO-GEISELL-ADMIN-20260908-54';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -128,7 +128,8 @@
     }
     return '';
   };
-  const isAdmin=()=>['sublicuentas','naara'].includes(activeUser());
+  const isAdmin=()=>['sublicuentas','naara','geisell','geissel'].includes(activeUser());
+  const controlUserLabel=()=>['geisell','geissel'].includes(activeUser())?'Geisell':'Sublicuentas';
 
   function source(){
     try{
@@ -1483,7 +1484,7 @@
       state.accountAudit=null;state.accountFeedback=null;
       state.status=state.pendingSyncMessage;state.statusType='good';state.pendingSyncMessage='';
     }
-    if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
+    if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo está habilitado únicamente para Sublicuentas y Geisell.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
     const liveSource=source();
     if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis||state.accountAudit._sourceVersion!==liveSource.version){
@@ -1498,7 +1499,7 @@
         <div class="cm-title">
           <div class="cm-title-icon">💠</div>
           <div>
-            <h2>Hola, Sublicuentas 👋</h2>
+            <h2>Hola, ${esc(controlUserLabel())} 👋</h2>
             <p>Gestione sus cuentas por plataforma de forma simple y centralizada. <span class="cm-build-tag" title="Si sube un archivo nuevo y este texto no cambia, el navegador está mostrando una copia guardada. Haga Ctrl+Shift+R para forzar la versión nueva.">v.${esc(BUILD.slice(-8))}</span></p>
           </div>
         </div>
@@ -1508,7 +1509,7 @@
             <small>${esc(refreshTimeLabel())}</small>
           </div>
           <button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Modo normal':'⛶ Pantalla completa'}</button>
-          <span class="cm-private">🔒 Solo Sublicuentas</span>
+          <span class="cm-private">🔒 ${esc(controlUserLabel())}</span>
         </div>
       </header>
       <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede ajustarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>

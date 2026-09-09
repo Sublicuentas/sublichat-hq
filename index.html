@@ -7790,13 +7790,15 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const ROLE_ALIAS={
     relojes:'finanzas', reloj:'finanzas', finanzas:'finanzas', finance:'finanzas', caja:'finanzas', cobros:'finanzas', libni:'finanzas', daniela:'finanzas',
     sublicuentas:'admin', naara:'admin', admin:'admin', administrador:'admin', owner:'admin', sistema:'admin',
-    magdiel:'auditor', auditor:'auditor', auditoria:'auditor', audit:'auditor'
+    magdiel:'auditor', auditor:'auditor', auditoria:'auditor', audit:'auditor',
+    geisell:'geisell_admin', geissel:'geisell_admin'
   };
-  const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
+  const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor', geisell_admin:'Geisell · Admin Control'};
   const ROLE_NAV={
     finanzas:['inicio','clientes','portal-cliente','catalogo-relojes','sorteos','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
     admin:['inicio','clientes','portal-cliente','control-cuentas','catalogo-relojes','sorteos','revendedores','agenda','objetivos','importar','tickets','inventario','egresos','pelis','partidos','chat','perfil','configuracion'],
-    auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
+    auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil'],
+    geisell_admin:['inicio','clientes','control-cuentas','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
@@ -7829,10 +7831,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return 'finanzas';
   }
   function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
+  function isGeisellAdminAccount(){return ['geisell','geissel'].includes(norm(currentUser()));}
+  function canControlMaestro(){return isSublicuentasAccount()||isGeisellAdminAccount();}
   function isRelojesAccount(){return ['relojes','libni'].includes(norm(currentUser()));}
   function canPortalCliente(){return isSublicuentasAccount()||isRelojesAccount();}
   function can(screen){
-    if(screen==='control-cuentas')return isSublicuentasAccount();
+    if(screen==='control-cuentas')return canControlMaestro();
     if(screen==='revendedores')return isSublicuentasAccount();
     if(screen==='portal-cliente')return canPortalCliente();
     if(screen==='sorteos')return canPortalCliente();
@@ -7877,7 +7881,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     sublicuentas:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     naara:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     magdiel:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Auditoría y estadísticas',emoji:'📊'},
-    geissel:{nombre:'Geisell',cargo:'Asesora de ventas'}, geisell:{nombre:'Geisell',cargo:'Asesora de ventas'},
+    geissel:{nombre:'Geisell',cargo:'Administradora · Clientes · Control Maestro',area:'Clientes y Control Maestro',emoji:'🛡️'}, geisell:{nombre:'Geisell',cargo:'Administradora · Clientes · Control Maestro',area:'Clientes y Control Maestro',emoji:'🛡️'},
     yami:{nombre:'Yami',cargo:'Asesora de ventas'}, manuel:{nombre:'Manuel',cargo:'Asesor de ventas'}, heber:{nombre:'Heber',cargo:'Asesor de ventas'}, abner:{nombre:'Abner',cargo:'Asesor de ventas'}, jimena:{nombre:'Jimena',cargo:'Asesora de ventas'}, elizabeth:{nombre:'Elizabeth',cargo:'Asesora de ventas'}, lucy:{nombre:'Lucy',cargo:'Asesora de ventas'}
   };
   function profileKey(){return 'sublichat_profile_'+norm(currentUser()||currentRole()||'usuario');}
@@ -8634,7 +8638,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function renderSoporteConfig(){
     const s=document.getElementById('rbac-soporte'); if(s) s.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${INVENTARIO.filter(c=>invDisp(c)<=0).length}</b><span>Cuentas llenas/sin cupo</span></div><div class="rbac-card"><b>${DATA.filter(c=>c.fecha&&daysTo(c.fecha)<0).length}</b><span>Clientes vencidos</span></div><div class="rbac-card"><b>${window._invError?'Error':'OK'}</b><span>Estado inventario Firebase</span></div></div><div class="empty">Aquí se conectarán reportes de caídas, reemplazos y compras de emergencia. La base ya queda separada para que el bot Telegram pueda leer las mismas alertas.</div>`;
-    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones y auditoria_eventos.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor.</p></div><span class="rbac-badge">Roles</span></div></div>`;
+    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones y auditoria_eventos.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor, geisell=geisell_admin.</p></div><span class="rbac-badge">Roles</span></div></div>`;
   }
 
   /* ===== BANDEJA DE TICKETS · mensajería interna Relojes / Magdiel / Sublicuentas ===== */
@@ -9941,7 +9945,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20260908-53"></script>
+<script defer src="./control-maestro.js?v=20260908-54"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
