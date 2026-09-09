@@ -25,7 +25,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-ACTUALIZACION-GRANDE-20260908-52">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-60">
+<link rel="stylesheet" href="./activar-tv.css?v=20260909-1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
@@ -1600,6 +1601,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <span class="focus-action-text"><b>Objetivos</b><small>Metas diarias, semanales y mensuales</small></span>
         <span class="fob-arrow">›</span>
       </button>
+      <button class="fin-open-btn focus-action-card" id="activarTvOpenBtn" type="button" hidden><span class="ico focus-action-icon">📺</span><span class="focus-action-text"><b>Activar TV</b><small>Iniciar sesión y vincular un televisor</small></span><span class="fob-arrow">›</span></button>
       <button class="fin-open-btn mesas-home-btn focus-action-card" id="mesasHomeBtn"><span class="ico focus-action-icon">📥</span><span class="focus-action-text"><b>Mesas de trabajo</b><small>Documentos y operación</small></span><span class="fob-arrow">›</span></button>
     </div></section>
     <div class="inicio-web-stats" id="inicioWebStats" hidden><b id="kCartera">—</b><b id="kClientes">—</b><b id="iwsCartera">—</b><b id="iwsDelta">—</b><b id="kSemana">—</b><b id="kTop">—</b><b id="kTopMonto">—</b><button id="homeGoalBtn"></button></div>
@@ -7790,17 +7792,19 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const ROLE_ALIAS={
     relojes:'finanzas', reloj:'finanzas', finanzas:'finanzas', finance:'finanzas', caja:'finanzas', cobros:'finanzas', libni:'finanzas', daniela:'finanzas',
     sublicuentas:'admin', naara:'admin', admin:'admin', administrador:'admin', owner:'admin', sistema:'admin',
-    magdiel:'auditor', auditor:'auditor', auditoria:'auditor', audit:'auditor'
+    magdiel:'auditor', auditor:'auditor', auditoria:'auditor', audit:'auditor',
+    geisell:'geisell_admin', geissel:'geisell_admin'
   };
-  const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor'};
+  const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor', geisell_admin:'Geisell · Admin Control'};
   const ROLE_NAV={
-    finanzas:['inicio','clientes','portal-cliente','catalogo-relojes','sorteos','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','clientes','portal-cliente','control-cuentas','catalogo-relojes','sorteos','revendedores','agenda','objetivos','importar','tickets','inventario','egresos','pelis','partidos','chat','perfil','configuracion'],
-    auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil']
+    finanzas:['inicio','activar-tv','clientes','portal-cliente','catalogo-relojes','sorteos','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
+    admin:['inicio','activar-tv','clientes','portal-cliente','control-cuentas','catalogo-relojes','sorteos','revendedores','agenda','objetivos','importar','tickets','inventario','egresos','pelis','partidos','chat','perfil','configuracion'],
+    auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil'],
+    geisell_admin:['inicio','activar-tv','clientes','control-cuentas','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], 'activar-tv':['📺','Activar TV'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -7829,10 +7833,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return 'finanzas';
   }
   function isSublicuentasAccount(){return ['sublicuentas','naara'].includes(norm(currentUser()));}
+  function isGeisellAdminAccount(){return ['geisell','geissel'].includes(norm(currentUser()));}
+  function canControlMaestro(){return isSublicuentasAccount()||isGeisellAdminAccount();}
   function isRelojesAccount(){return ['relojes','libni'].includes(norm(currentUser()));}
   function canPortalCliente(){return isSublicuentasAccount()||isRelojesAccount();}
   function can(screen){
-    if(screen==='control-cuentas')return isSublicuentasAccount();
+    if(screen==='activar-tv')return canControlMaestro()||isRelojesAccount();
+    if(screen==='control-cuentas')return canControlMaestro();
     if(screen==='revendedores')return isSublicuentasAccount();
     if(screen==='portal-cliente')return canPortalCliente();
     if(screen==='sorteos')return canPortalCliente();
@@ -7877,7 +7884,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     sublicuentas:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     naara:{nombre:'Sublicuentas',cargo:'Admin · Inventario · Sistema · Ventas',area:'Operación general',emoji:'🚀'},
     magdiel:{nombre:'Magdiel',cargo:'Auditoría · CRM Maestro · Estadísticas',area:'Auditoría y estadísticas',emoji:'📊'},
-    geissel:{nombre:'Geisell',cargo:'Asesora de ventas'}, geisell:{nombre:'Geisell',cargo:'Asesora de ventas'},
+    geissel:{nombre:'Geisell',cargo:'Administradora · Clientes · Control Maestro',area:'Clientes y Control Maestro',emoji:'🛡️'}, geisell:{nombre:'Geisell',cargo:'Administradora · Clientes · Control Maestro',area:'Clientes y Control Maestro',emoji:'🛡️'},
     yami:{nombre:'Yami',cargo:'Asesora de ventas'}, manuel:{nombre:'Manuel',cargo:'Asesor de ventas'}, heber:{nombre:'Heber',cargo:'Asesor de ventas'}, abner:{nombre:'Abner',cargo:'Asesor de ventas'}, jimena:{nombre:'Jimena',cargo:'Asesora de ventas'}, elizabeth:{nombre:'Elizabeth',cargo:'Asesora de ventas'}, lucy:{nombre:'Lucy',cargo:'Asesora de ventas'}
   };
   function profileKey(){return 'sublichat_profile_'+norm(currentUser()||currentRole()||'usuario');}
@@ -8126,6 +8133,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('importar','Módulos de trabajo','Bodega, Auditoría y Flujo diario como hoja de cálculo dentro de Sublichat (se trabaja desde la Web). Sublicuentas migra los archivos completos y ve el trabajo de todos.','');
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
+    ensureScreen('activar-tv','Activar TV','Primero inicie sesión. Después introduzca el código del televisor.','');
     ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
     ensureScreen('revendedores','Catálogo Socios','Precios, vendedores y clientes de toda la red de socios — conectado al Panel de Socios.','');
     ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
@@ -8145,7 +8153,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='revendedores'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='sorteos'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='activar-tv'||can('activar-tv')).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='revendedores'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='sorteos'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
@@ -8634,7 +8642,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function renderSoporteConfig(){
     const s=document.getElementById('rbac-soporte'); if(s) s.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${INVENTARIO.filter(c=>invDisp(c)<=0).length}</b><span>Cuentas llenas/sin cupo</span></div><div class="rbac-card"><b>${DATA.filter(c=>c.fecha&&daysTo(c.fecha)<0).length}</b><span>Clientes vencidos</span></div><div class="rbac-card"><b>${window._invError?'Error':'OK'}</b><span>Estado inventario Firebase</span></div></div><div class="empty">Aquí se conectarán reportes de caídas, reemplazos y compras de emergencia. La base ya queda separada para que el bot Telegram pueda leer las mismas alertas.</div>`;
-    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones y auditoria_eventos.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor.</p></div><span class="rbac-badge">Roles</span></div></div>`;
+    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones y auditoria_eventos.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor, geisell=geisell_admin.</p></div><span class="rbac-badge">Roles</span></div></div>`;
   }
 
   /* ===== BANDEJA DE TICKETS · mensajería interna Relojes / Magdiel / Sublicuentas ===== */
@@ -8905,7 +8913,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(typeof window.sublichatPortalClienteRender==='function')window.sublichatPortalClienteRender();
   }
 
-  function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); }
+  function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); window.SublichatActivarTV?.refreshAccess(); }
   const _oldEnterApp=enterApp;
   enterApp=function(){ _oldEnterApp(); setTimeout(applyRBAC,50); setTimeout(loadProfileFromServer,300); };
   const _oldRender=render;
@@ -9941,7 +9949,9 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20260908-52"></script>
+<script defer src="./control-maestro.js?v=20260909-60"></script>
+<script defer src="./activar-tv-platforms.js?v=20260909-1"></script>
+<script defer src="./activar-tv.js?v=20260909-1"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
@@ -12623,151 +12633,6 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <script src="/catalogo-relojes-admin.js?v=20260907-8"></script>
 <script src="/revendedores-admin.js?v=20260908-promos-premium-editable-2"></script>
 <script src="/sorteos-admin.js?v=20260826-4"></script>
-
-<!-- =========================================================
-     SUBLICHAT · ACTIVAR TV · 6 PLATAFORMAS
-     Flujo obligatorio: 1) Iniciar sesión  2) Código del TV
-     Acceso desde Inicio para Sublicuentas, Relojes y Geisell.
-     Datos manuales: NO depende de que el correo exista en CRM.
-     ========================================================= -->
-<style id="subliActivarTvStyle">
-  #screen-activar-tv{padding-bottom:120px}
-  .atv-shell{max-width:1020px;margin:0 auto}
-  .atv-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,var(--card),var(--surface));box-shadow:var(--sh);margin-bottom:14px}
-  .atv-hero h2{margin:0 0 6px;font-family:var(--ff);font-size:28px;color:var(--txt)}
-  .atv-hero p{margin:0;color:var(--txt2);font-size:13px;line-height:1.5;max-width:740px}
-  .atv-back{border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:13px;padding:10px 14px;font-weight:900;cursor:pointer;white-space:nowrap}
-  .atv-platforms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
-  .atv-platform{border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:18px;padding:14px 10px;min-height:92px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;font-weight:900;cursor:pointer;box-shadow:var(--sh)}
-  .atv-platform:hover{border-color:var(--accent)}
-  .atv-platform.on{border:2px solid var(--accent);background:var(--accentSoft)}
-  .atv-brand{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;background:var(--surface);font-family:Arial,sans-serif;font-size:21px;font-weight:1000;box-shadow:inset 0 0 0 1px var(--line);letter-spacing:-1px}
-  .atv-brand.netflix{color:#e50914}.atv-brand.disney{color:#1776d2}.atv-brand.hbo{color:var(--txt)}.atv-brand.prime{color:#00a8e1}.atv-brand.crunchy{color:#f47521}.atv-brand.paramount{color:#1675d1}
-  .atv-card{border:1px solid var(--line);background:var(--card);border-radius:22px;padding:20px;box-shadow:var(--sh)}
-  .atv-title-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-  .atv-title-row .atv-brand{flex:0 0 50px}
-  .atv-title-row b{display:block;font-family:var(--ff);font-size:20px;color:var(--txt)}
-  .atv-title-row small{display:block;margin-top:2px;color:var(--txt2);font-size:12px}
-  .atv-stepper{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin:2px 0 18px}
-  .atv-step{display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 12px;color:var(--txt2);font-size:12px;font-weight:900}
-  .atv-step strong{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--txt)}
-  .atv-step.on{border-color:var(--accent);background:var(--accentSoft);color:var(--txt)}
-  .atv-step.on strong{background:var(--accent);color:#fff}.atv-step.done strong{background:#25d366;color:#07391c}
-  .atv-arrow{font-weight:1000;color:var(--txt2)}
-  .atv-section{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:16px}
-  .atv-section+.atv-section{margin-top:14px}
-  .atv-section.locked{opacity:.48;filter:grayscale(.15);pointer-events:none;user-select:none}
-  .atv-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-  .atv-section-head b{font-size:15px;color:var(--txt)}.atv-section-head span{font-size:11px;color:var(--txt2);font-weight:800;text-align:right}
-  .atv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .atv-field{display:block}.atv-field.wide{grid-column:1/-1}
-  .atv-field>span{display:block;font-size:12px;color:var(--txt2);font-weight:900;margin:0 0 6px 2px}
-  .atv-input-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
-  .atv-input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:13px;padding:12px 13px;font-size:14px;outline:none}
-  .atv-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accentSoft)}
-  .atv-mini{border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:12px;padding:0 12px;font-weight:900;cursor:pointer;min-height:42px}
-  .atv-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
-  .atv-action{border:0;border-radius:15px;padding:13px 15px;font-size:13px;font-weight:1000;cursor:pointer}
-  .atv-action.login{background:var(--accent);color:#fff}.atv-action.confirm{background:#111827;color:#fff}.atv-action.activate{background:#25d366;color:#06351a}
-  .atv-action:disabled{opacity:.45;cursor:not-allowed}
-  .atv-note{border:1px solid var(--line);border-radius:15px;padding:12px 14px;background:var(--surface);color:var(--txt2);font-size:12px;line-height:1.45;margin-top:14px}
-  .atv-note b{color:var(--txt)}
-  .atv-status{min-height:22px;margin-top:10px;font-size:12px;font-weight:900;color:var(--accent)}
-  .atv-home-btn{display:none!important} body.atv-allowed .atv-home-btn{display:grid!important}
-  @media(max-width:760px){.atv-platforms{grid-template-columns:1fr 1fr}.atv-grid,.atv-actions{grid-template-columns:1fr}.atv-field.wide{grid-column:auto}.atv-hero{flex-direction:column}.atv-back{width:100%}.atv-stepper{grid-template-columns:1fr}.atv-arrow{display:none}}
-  @media(max-width:420px){.atv-platforms{grid-template-columns:1fr 1fr}.atv-card{padding:14px}.atv-hero{padding:17px}.atv-hero h2{font-size:23px}.atv-platform{min-height:82px}.atv-brand{width:44px;height:44px;font-size:18px}}
-</style>
-<script id="subliActivarTvScript">
-(function(){
-  'use strict';
-  const PLATFORMS={
-    disney:{name:'Disney+',mark:'D+',cls:'disney',login:'https://www.disneyplus.com/identity/login',activate:'https://www.disneyplus.com/es-419/identity/begin?cid=DSS-OFFDEVICE-LP'},
-    netflix:{name:'Netflix',mark:'N',cls:'netflix',login:'https://www.netflix.com/hn/login',activate:'https://www.netflix.com/tv2'},
-    hbo:{name:'HBO Max',mark:'max',cls:'hbo',login:'https://auth.hbomax.com/login',activate:'https://auth.hbomax.com/link'},
-    prime:{name:'Prime Video',mark:'▶',cls:'prime',login:'https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fna.primevideo.com%2F-%2Fes%2Fauth%2Freturn%3F_t%3D1sgwwlUgmap-OLgHJ91w-Z0Yt3HrY-wzhgS6muvqqpp8yIAAAAAQAAAABqoWwFcmF3AAAAAPgWC9WfHH8iB-olH_E9xQ%26ref_%3Dav_auth_ap%26language%3Des%26location%3D%2F-%2Fes%2Foffers%2Fnonprimehomepage%3Fref_%253Ddv_web_force_root%2526language%253Des&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=amzn_prime_video_sso_us&openid.mode=checkid_setup&countryCode=HN&siteState=131-2166694-9842114&language=es_ES&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0',activate:'https://primevideo.com/mytv'},
-    crunchy:{name:'Crunchyroll',mark:'CR',cls:'crunchy',login:'https://www.crunchyroll.com/login',activate:'https://www.crunchyroll.com/activate'},
-    paramount:{name:'Paramount+',mark:'P+',cls:'paramount',login:'https://paramountplus.com/hn/account/signin',activate:'https://paramountplus.com/activate'}
-  };
-  let active='disney';
-  let loginConfirmed=false;
-  function norm(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
-  function currentUser(){
-    for(const k of ['sublichat_user','subli_usuario','usuario','subli_user','active_user']){
-      const v=localStorage.getItem(k); if(v&&String(v).trim()) return norm(v);
-    }
-    return '';
-  }
-  function allowed(){return ['sublicuentas','sublicuentas2','naara','relojes','libni','geisell','geissel'].includes(currentUser());}
-  function esc(v){return String(v??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m]||m));}
-  function brand(p){return '<span class="atv-brand '+p.cls+'">'+esc(p.mark)+'</span>';}
-  function ensureScreen(){
-    if(document.getElementById('screen-activar-tv')) return;
-    const wrap=document.querySelector('.wrap'); if(!wrap)return;
-    const sec=document.createElement('section'); sec.className='screen'; sec.id='screen-activar-tv';
-    sec.innerHTML='<div class="atv-shell"><div class="atv-hero"><div><h2>📺 Activar TV</h2><p>Primero inicie sesión en la plataforma y después introduzca el código que muestra el TV. Disponible para Disney+, Netflix, HBO Max, Prime Video, Crunchyroll y Paramount+.</p></div><button type="button" class="atv-back" id="atvBack">← Volver a Inicio</button></div><div class="atv-platforms" id="atvPlatforms"></div><div class="atv-card" id="atvCard"></div></div>';
-    wrap.appendChild(sec); document.getElementById('atvBack').onclick=()=>goHome();
-  }
-  function ensureHomeButton(){
-    const row=document.querySelector('#screen-inicio .inicio-cards-row'); if(!row)return;
-    let btn=document.getElementById('activarTvOpenBtn');
-    if(!btn){
-      btn=document.createElement('button'); btn.type='button'; btn.id='activarTvOpenBtn'; btn.className='fin-open-btn focus-action-card atv-home-btn';
-      btn.innerHTML='<span class="ico focus-action-icon">📺</span><span class="focus-action-text"><b>Activar TV</b><small>6 plataformas · inicio + código</small></span><span class="fob-arrow">›</span>';
-      row.appendChild(btn);
-    }
-    btn.onclick=()=>openModule();
-  }
-  function openModule(){
-    if(!allowed()){try{window.mostrarToast&&mostrarToast('Este usuario no tiene acceso a Activar TV.');}catch(_){}return;}
-    ensureScreen(); document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
-    document.getElementById('screen-activar-tv')?.classList.add('active'); renderPlatforms(); renderCard(); window.scrollTo({top:0,behavior:'smooth'});
-  }
-  function goHome(){
-    if(window.subliRBAC&&typeof window.subliRBAC.go==='function'){try{window.subliRBAC.go('inicio');return;}catch(_){}}
-    document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active')); document.getElementById('screen-inicio')?.classList.add('active'); document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.screen==='inicio')); window.scrollTo({top:0,behavior:'smooth'});
-  }
-  function renderPlatforms(){
-    const host=document.getElementById('atvPlatforms'); if(!host)return;
-    host.innerHTML=Object.entries(PLATFORMS).map(([k,p])=>'<button type="button" class="atv-platform '+(k===active?'on':'')+'" data-atv-platform="'+k+'">'+brand(p)+'<span>'+esc(p.name)+'</span></button>').join('');
-    host.querySelectorAll('[data-atv-platform]').forEach(b=>b.onclick=()=>{active=b.dataset.atvPlatform;loginConfirmed=false;renderPlatforms();renderCard();});
-  }
-  function renderCard(){
-    const host=document.getElementById('atvCard'); if(!host)return; const p=PLATFORMS[active];
-    host.innerHTML='<div class="atv-title-row">'+brand(p)+'<div><b>'+esc(p.name)+'</b><small>Flujo: iniciar sesión → confirmar → introducir código del TV.</small></div></div>'+stepper()+
-      '<div class="atv-section" id="atvLoginSection"><div class="atv-section-head"><b>1. Iniciar sesión</b><span>Puede usar una cuenta guardada o escribir los datos manualmente.</span></div>'+ 
-        '<div class="atv-grid"><label class="atv-field"><span>Correo / usuario</span><div class="atv-input-wrap"><input id="atvUser" class="atv-input" autocomplete="off" placeholder="Escriba el correo o usuario"><button type="button" class="atv-mini" id="atvCopyUser">Copiar</button></div></label>'+ 
-        '<label class="atv-field"><span>Clave</span><div class="atv-input-wrap"><input id="atvPass" type="password" class="atv-input" autocomplete="off" placeholder="Escriba la clave"><button type="button" class="atv-mini" id="atvShowPass">Ver</button></div></label></div>'+ 
-        '<div class="atv-actions"><button type="button" class="atv-action login" id="atvLogin">🔐 Iniciar sesión en '+esc(p.name)+'</button><button type="button" class="atv-mini" id="atvCopyPass">📋 Copiar clave</button></div>'+ 
-        '<div class="atv-actions"><button type="button" class="atv-action confirm" id="atvConfirm">✅ Ya inicié sesión</button><button type="button" class="atv-mini" id="atvChangeAccount">↻ Cambiar / volver a iniciar</button></div></div>'+ 
-      '<div class="atv-section '+(loginConfirmed?'':'locked')+'" id="atvCodeSection"><div class="atv-section-head"><b>2. Código del TV</b><span>'+(loginConfirmed?'Listo para vincular el dispositivo.':'Primero confirme que ya inició sesión.')+'</span></div>'+ 
-        '<div class="atv-grid"><label class="atv-field wide"><span>Código que muestra el TV</span><div class="atv-input-wrap"><input id="atvCode" class="atv-input" inputmode="text" autocomplete="off" placeholder="Escriba o pegue el código"><button type="button" class="atv-mini" id="atvCopyCode">Copiar</button></div></label></div>'+ 
-        '<div class="atv-actions"><button type="button" class="atv-action activate" id="atvActivate">📺 Ir a Activar TV</button><button type="button" class="atv-mini" id="atvClear">Limpiar / nueva activación</button></div></div>'+ 
-      '<div class="atv-note"><b>Importante:</b> Sublichat no guarda en localStorage el correo, la clave ni el código escritos en este módulo. Los enlaces se abren en páginas oficiales. Sublichat no marca automáticamente una sesión como válida: usted confirma con “Ya inicié sesión” después de entrar correctamente.</div><div class="atv-status" id="atvStatus"></div>';
-    bindCard();
-  }
-  function stepper(){return '<div class="atv-stepper"><div class="atv-step '+(loginConfirmed?'done':'on')+'"><strong>'+(loginConfirmed?'✓':'1')+'</strong><span>Iniciar sesión</span></div><div class="atv-arrow">→</div><div class="atv-step '+(loginConfirmed?'on':'')+'"><strong>2</strong><span>Código del TV</span></div></div>';}
-  async function copyText(value,label){
-    const txt=String(value||'').trim(); if(!txt){status('Escriba '+label+' primero.');return false;}
-    try{await navigator.clipboard.writeText(txt);status('✅ '+label+' copiado.');return true;}catch(_){const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');status('✅ '+label+' copiado.');return true;}catch(e){status('No se pudo copiar automáticamente.');return false;}finally{ta.remove();}}
-  }
-  function status(msg){const el=document.getElementById('atvStatus');if(el)el.textContent=msg;}
-  function openOfficial(url){const w=window.open(url,'_blank','noopener,noreferrer');if(!w)status('El navegador bloqueó la pestaña. Habilite ventanas emergentes para Sublichat.');}
-  function bindCard(){
-    const u=document.getElementById('atvUser'),pw=document.getElementById('atvPass'),code=document.getElementById('atvCode');
-    document.getElementById('atvCopyUser').onclick=()=>copyText(u.value,'correo / usuario'); document.getElementById('atvCopyPass').onclick=()=>copyText(pw.value,'clave');
-    document.getElementById('atvShowPass').onclick=(e)=>{pw.type=pw.type==='password'?'text':'password';e.currentTarget.textContent=pw.type==='password'?'Ver':'Ocultar';};
-    document.getElementById('atvLogin').onclick=()=>{const p=PLATFORMS[active];status('🔐 Abriendo inicio de sesión oficial de '+p.name+'…');openOfficial(p.login);};
-    document.getElementById('atvConfirm').onclick=()=>{const user=u.value,pass=pw.value;loginConfirmed=true;renderCard();const nu=document.getElementById('atvUser'),np=document.getElementById('atvPass');if(nu)nu.value=user;if(np)np.value=pass;status('✅ Sesión confirmada por usted. Ahora introduzca el código del TV.');document.getElementById('atvCode')?.focus();};
-    document.getElementById('atvChangeAccount').onclick=()=>{loginConfirmed=false;renderCard();status('Puede cambiar la cuenta o volver a iniciar sesión.');};
-    if(document.getElementById('atvCopyCode'))document.getElementById('atvCopyCode').onclick=()=>copyText(code.value,'código');
-    if(document.getElementById('atvActivate'))document.getElementById('atvActivate').onclick=async()=>{const p=PLATFORMS[active];if(!loginConfirmed){status('Primero confirme que ya inició sesión.');return;}if(!code.value.trim()){status('Escriba el código que muestra el TV.');code.focus();return;}await copyText(code.value,'código');status('📺 Código copiado. Abriendo activación oficial de '+p.name+'…');openOfficial(p.activate);};
-    if(document.getElementById('atvClear'))document.getElementById('atvClear').onclick=()=>{loginConfirmed=false;renderCard();status('Datos limpiados. Lista para una nueva activación.');document.getElementById('atvUser')?.focus();};
-  }
-  function init(){const ok=allowed();document.body.classList.toggle('atv-allowed',ok);ensureScreen();ensureHomeButton();if(ok){renderPlatforms();renderCard();}}
-  document.addEventListener('DOMContentLoaded',()=>{init();setTimeout(init,250);setTimeout(init,900);}); window.addEventListener('storage',()=>setTimeout(init,30)); window.SublichatActivarTV={open:openModule,init:init}; if(document.readyState!=='loading')setTimeout(init,0);
-})();
-</script>
-
 </body>
 </html>
 
