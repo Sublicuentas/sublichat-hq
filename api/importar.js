@@ -38,11 +38,12 @@ async function requireFirebaseUser(req, res) {
 function importIdentity(user) {
   const role = String(user && user.role || "").toLowerCase();
   const usuario = String(user && (user.usuario || user.uid) || "sublichat").toLowerCase();
-  const canonicalRole = ["admin", "administrador", "sublicuentas", "owner"].includes(role) || ["naara", "sublicuentas"].includes(usuario)
-    ? "sublicuentas"
-    : (["finanzas", "relojes"].includes(role) || ["libni", "relojes"].includes(usuario)
-      ? "relojes"
-      : (["auditor", "auditoria", "magdiel"].includes(role) || usuario === "magdiel" ? "magdiel" : role || usuario));
+  let canonicalRole;
+  if (["geisell_admin", "control_admin"].includes(role) || ["geisell", "geissel"].includes(usuario)) canonicalRole = "geisell_admin";
+  else if (["admin", "administrador", "sublicuentas", "owner"].includes(role) || ["naara", "sublicuentas"].includes(usuario)) canonicalRole = "sublicuentas";
+  else if (["finanzas", "relojes"].includes(role) || ["libni", "relojes"].includes(usuario)) canonicalRole = "relojes";
+  else if (["auditor", "auditoria", "magdiel"].includes(role) || usuario === "magdiel") canonicalRole = "magdiel";
+  else canonicalRole = role || usuario;
   return { usuario, role: canonicalRole };
 }
 
@@ -616,7 +617,7 @@ function controlDateKey(value) {
 function controlEsAdmin(body) {
   const usuario = String(body && (body.usuario || body.editor) || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const rol = String(body && body.rol || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  return ["sublicuentas", "naara"].includes(usuario) || ["sublicuentas", "admin", "administrador", "owner"].includes(rol);
+  return ["sublicuentas", "naara", "geisell", "geissel"].includes(usuario) || ["sublicuentas", "admin", "administrador", "owner", "geisell_admin", "control_admin"].includes(rol);
 }
 
 function controlDenegado() {
@@ -1038,6 +1039,7 @@ function secRole(body) {
   const raw = String((body && (body.rol || body.role || body.usuario || body.editor)) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   if (['magdiel','auditor','auditoria'].includes(raw)) return 'magdiel';
   if (['libni','relojes','reloj','finanzas','cobros'].includes(raw)) return 'relojes';
+  if (['geisell','geissel','geisell_admin','control_admin'].includes(raw)) return 'geisell_admin';
   if (['sublicuentas','naara','admin','administrador','owner'].includes(raw)) return 'sublicuentas';
   return 'sin_permiso';
 }

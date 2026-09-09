@@ -34,8 +34,8 @@ async function requireFirebaseUser(req, res) {
 function isAdminUser(user) {
   const role = String(user && user.role || "").toLowerCase();
   const name = String(user && user.usuario || "").toLowerCase();
-  return ["admin", "administrador", "sublicuentas", "owner"].includes(role) ||
-    ["naara", "sublicuentas"].includes(name);
+  return ["admin", "administrador", "sublicuentas", "owner", "geisell_admin", "control_admin"].includes(role) ||
+    ["naara", "sublicuentas", "geisell", "geissel"].includes(name);
 }
 
 function normText(value) {

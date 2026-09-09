@@ -95,7 +95,8 @@ module.exports = async function handler(req, res){
     const db = admin.firestore();
 
     const { usuario, clave } = req.body || {};
-    const key = String(usuario || "").trim().toLowerCase();
+    const enteredKey = String(usuario || "").trim().toLowerCase();
+    const key = enteredKey === 'geissel' ? 'geisell' : enteredKey;
 
     if(!key || !clave){
       return res.status(400).json({ error:"Usuario y clave requeridos" });
@@ -107,9 +108,25 @@ module.exports = async function handler(req, res){
     }
 
     const users = JSON.parse(process.env.AUTH_USERS_JSON || "{}");
-    const record = users[key];
+    let record = users[key] || users[enteredKey];
 
-    if(!record || !verifyPassword(clave, record.passwordHash)){
+    // Geisell usa un rol administrativo limitado en Sublichat. Puede vivir
+    // dentro de AUTH_USERS_JSON como cualquier otro usuario o, para facilitar
+    // el alta inicial, puede configurarse con GEISELL_PASSWORD_HASH o
+    // GEISELL_PASSWORD en Vercel. Ninguna de esas claves llega al navegador.
+    if(!record && key === 'geisell'){
+      const envHash = String(process.env.GEISELL_PASSWORD_HASH || '').trim();
+      const envPlain = String(process.env.GEISELL_PASSWORD || '');
+      if(envHash) record = { uid:'admin-geisell', role:'geisell_admin', passwordHash:envHash };
+      else if(envPlain) record = { uid:'admin-geisell', role:'geisell_admin', plainPassword:envPlain };
+    }
+
+    const validHash = !!(record && record.passwordHash && verifyPassword(clave, record.passwordHash));
+    const validPlain = !!(record && typeof record.plainPassword === 'string' && (()=>{
+      const a=Buffer.from(String(clave)); const b=Buffer.from(String(record.plainPassword));
+      return a.length===b.length && crypto.timingSafeEqual(a,b);
+    })());
+    if(!record || (!validHash && !validPlain)){
       await registerFailure(db, key);
       // Misma respuesta para usuario inexistente o clave mala.
       return res.status(401).json({ error:"Acceso no autorizado" });
@@ -119,10 +136,10 @@ module.exports = async function handler(req, res){
     const uid = record.uid || `asesor-${key}`;
     const token = await admin.auth().createCustomToken(uid, {
       usuario:key,
-      role:record.role || "asesor"
+      role:(key==='geisell' ? 'geisell_admin' : (record.role || "asesor"))
     });
 
-    return res.status(200).json({ token, usuario:key, role:record.role || "asesor" });
+    return res.status(200).json({ token, usuario:key, role:(key==='geisell' ? 'geisell_admin' : (record.role || "asesor")) });
   }catch(err){
     console.error("LOGIN_ERROR", err);
     return res.status(500).json({ error:"Error interno de autenticación" });
