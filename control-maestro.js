@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-58';
+  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-59';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -1185,7 +1185,6 @@
   function accountCardHtml(a,i){
     const life=accountLifecycle(a);
     const expanded=state.expandedAccountKey===a.key;
-    const revealed=state.revealedAccounts.has(a.key);
     const review=a.revision;
     const saving=state.reviewSavingKey===a.key;
     const savedCorrect=review?.resultado==='correcta'&&!a.reviewDue;
@@ -1193,10 +1192,8 @@
     const feedback=state.accountFeedback?.key===a.key?state.accountFeedback:null;
     const reviewSchedule=accountReviewSchedule(a);
     const reviewTone=reviewSchedule.tone;
-    const inventoryIds=a.accountIds.filter(Boolean);
-    const editableAccount=inventoryIds.length===1;
     const excelOnlyAccount=!a.inventoryAccounts.length&&!a.services.length&&!a.excelRows.length&&a.excelAccountHeaders.length>0;
-    const password=a.clave?revealed?esc(a.clave):'••••••••':(a.requiresPassword?'Sin clave guardada':'No usa clave');
+    const password=a.clave?esc(a.clave):(a.requiresPassword?'Sin clave guardada':'No usa clave');
     const identity=a.email||(a.requiresEmail?'CUENTA SIN CORREO':'LICENCIA / SERIAL');
     const roster=expanded?a.roster.map((r,j)=>rosterRowHtml(r,a,i,j)).join(''):'';
     return `<article class="cm-ledger-account ${life.tone} ${expanded?'is-open':''}" data-cm-account-key="${esc(a.key)}" style="--platform-color:${platformColor(a.family)}">
@@ -1209,13 +1206,13 @@
         <button class="cm-ledger-toggle" data-cm-toggle-account="${esc(a.key)}" aria-expanded="${expanded?'true':'false'}">${expanded?'Cerrar':'Ver clientes'} <i>${expanded?'▲':'▼'}</i></button>
       </div>
       ${expanded?`<div class="cm-ledger-detail">
-        <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${editableAccount||excelOnlyAccount?`<div class="cm-account-tools">${editableAccount?`<button class="cm-row-action edit" data-cm-edit-account="${i}">✏️ Editar cuenta</button><button class="cm-row-action delete" data-cm-delete-account="${i}">🗑️ Eliminar cuenta</button>`:''}${excelOnlyAccount?`<button class="cm-row-action delete" data-cm-delete-excel-account="${i}">🗑️ Borrar del Excel</button>`:''}</div>`:''}</div></div>
+        <div class="cm-ledger-detail-head"><div><small>${a.excelRows.length} fila${a.excelRows.length===1?'':'s'} Excel · ${a.inventoryAccounts.length} registro${a.inventoryAccounts.length===1?'':'s'} en Bodega · ${a.services.length} servicio${a.services.length===1?'':'s'} en Clientes</small></div><div class="cm-ledger-detail-side"><span class="cm-review-state ${reviewTone}"><b>${esc(reviewSchedule.label)}</b><small>${esc(reviewSchedule.detail)}</small></span>${excelOnlyAccount?`<div class="cm-account-tools"><button class="cm-row-action delete" data-cm-delete-excel-account="${i}">🗑️ Borrar del Excel</button></div>`:''}</div></div>
         <div class="cm-account-issues">${accountIssuesHtml(a)}</div>
         <div class="cm-credentials">
           <div class="cm-credential"><span>${a.requiresEmail?'Correo de acceso':'Tipo de acceso'}</span><code>${esc(a.email||(a.requiresEmail?'—':'Licencia / serial'))}</code><button class="cm-copy" data-cm-copy-email="${i}" ${a.email?'':'disabled'}>📋 Copiar</button></div>
-          <div class="cm-credential"><span>${a.requiresEmail?'Clave de la cuenta':'Serial / licencia'}</span><code class="cm-secret ${revealed?'shown':''}">${password}</code><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${i}" ${a.clave?'':'disabled'}>${revealed?'🙈 Ocultar':'👁️ Ver'}</button><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div></div>
+          <div class="cm-credential"><span>${a.requiresEmail?'Clave de la cuenta':'Serial / licencia'}</span><code class="cm-secret shown">${password}</code><button class="cm-copy" data-cm-copy-password="${i}" ${a.clave?'':'disabled'}>📋 Copiar</button></div>
         </div>
-        <div class="cm-roster-head"><div><b>Clientes que deben estar aquí</b></div><button class="cm-btn" data-cm-open-audit="${i}">📦 Abrir en Bodega</button></div>
+        <div class="cm-roster-head"><div><b>Clientes que deben estar aquí</b></div></div>
         <div class="cm-roster">${roster||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
         ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
         ${feedback?`<div class="cm-review-note ${esc(feedback.type)}"><b>${esc(feedback.text)}</b></div>`:''}
@@ -1334,9 +1331,11 @@
       return `<button type="button" class="cm-account-list-row ${isSelected?'is-selected':''}" data-cm-select-account="${esc(a.key)}">
         <span class="cm-account-list-num">${i+1}</span>
         <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small></span>
-        <span class="cm-account-list-meta"><small>${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles</small><small>${esc(review.rowText)}</small></span>
-        <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
-        <span class="cm-account-list-date">${esc(life.nextText.replace('Próximo: ','').replace('Último: ',''))}</span>
+        <span class="cm-account-list-info">
+          <span class="cm-account-list-meta"><small>${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles</small><small>${esc(review.rowText)}</small></span>
+          <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
+          <span class="cm-account-list-date">${esc(life.nextText)}</span>
+        </span>
         <span class="cm-account-list-arrow">›</span>
       </button>`;
     }).join('');
@@ -1348,13 +1347,14 @@
       const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',tone:'bad'};
       const profile=fieldText(r.profile)?(/^perfil\b/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
       const pointer=`${accountIndex}:${rowIndex}`;
+      const differentAccount=r.actualAccount&&email(r.actualAccount)!==email(account.email);
       return `<div class="cm-client-row ${s.tone}">
         <div class="cm-client-cell num">${rowIndex+1}</div>
-        <div class="cm-client-cell"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
-        <button class="cm-client-cell link" data-cm-audit-client="${pointer}"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(getLocalNote(localNoteKey(account,r))||'Ver ficha')}</small></button>
-        <div class="cm-client-cell"><b>${esc(r.phone||'—')}</b><small>${esc(r.actualAccount||'')}</small></div>
-        <div class="cm-client-cell"><b>${esc(dateLabel(r.date)||'Sin fecha')}</b><small>${esc(r.detail||'')}</small></div>
-        <div class="cm-client-cell end"><span class="cm-roster-status ${s.tone}">${esc(s.label)}</span><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':' +Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}</div>
+        <button type="button" class="cm-client-cell link cm-client-name" data-cm-audit-client="${pointer}"><small class="cm-field-label">Cliente</small><b>${esc(r.name||'Sin nombre')}</b><small>${esc(getLocalNote(localNoteKey(account,r))||'Ver ficha')}</small></button>
+        <div class="cm-client-cell cm-client-profile"><small class="cm-field-label">Perfil / PIN</small><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
+        <div class="cm-client-cell cm-client-contact"><small class="cm-field-label">Teléfono</small><b>${esc(r.phone||'Sin teléfono')}</b>${differentAccount?`<small class="cm-account-mismatch">Cuenta asignada: ${esc(r.actualAccount)}</small>`:''}</div>
+        <div class="cm-client-cell cm-client-expiry"><small class="cm-field-label">Vencimiento</small><b>${esc(r.date?dateLabel(r.date):'Sin fecha')}</b></div>
+        <div class="cm-client-cell end"><span class="cm-roster-status ${s.tone}">${esc(s.label)}</span><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':' +Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}${r.detail?`<details class="cm-client-review-details"><summary>Detalle de revisión</summary><p>${esc(r.detail)}</p></details>`:''}</div>
       </div>`;
     }).join('');
   }
@@ -1363,8 +1363,7 @@
     if(!account)return `<section class="cm-account-detail"><div class="cm-empty">Seleccione una cuenta para ver a la derecha sus clientes, estado, credenciales y acciones.</div></section>`;
     const life=accountLifecycle(account);
     const review=accountReviewSchedule(account);
-    const revealed=state.revealedAccounts.has(account.key);
-    const password=account.clave?(revealed?esc(account.clave):'•'.repeat(Math.min(Math.max(String(account.clave).length,8),18))):'—';
+    const password=account.clave?esc(account.clave):'Sin clave guardada';
     const index=state.accountVisible.findIndex((x)=>x.key===account.key);
     return `<section class="cm-account-detail">
       <div class="cm-account-detail-head">
@@ -1389,18 +1388,14 @@
       </div>
       <div class="cm-account-credentials-modern">
         <div class="cm-credential-card"><span>Correo / usuario</span><b>${esc(account.email||'—')}</b><button class="cm-copy" data-cm-copy-email="${index}" ${account.email?'':'disabled'}>Copiar</button></div>
-        <div class="cm-credential-card"><span>Clave</span><b class="mono">${password}</b><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${index}" ${account.clave?'':'disabled'}>${revealed?'Ocultar':'Ver'}</button><button class="cm-copy" data-cm-copy-password="${index}" ${account.clave?'':'disabled'}>Copiar</button></div></div>
+        <div class="cm-credential-card"><span>Clave</span><b class="mono">${password}</b><button class="cm-copy" data-cm-copy-password="${index}" ${account.clave?'':'disabled'}>Copiar</button></div>
       </div>
       <div class="cm-account-detail-actions">
-        <button class="cm-btn" data-cm-open-audit="${index}">📦 Abrir en Bodega</button>
         <button class="cm-btn good" data-cm-review-ok="${esc(account.key)}" ${state.busy?'disabled':''}>✅ Marcar revisada</button>
         <button class="cm-btn warn" data-cm-review-issue="${esc(account.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button>
-        <button class="cm-btn" data-cm-edit-account="${index}">✏️ Editar cuenta</button>
-        <button class="cm-btn danger" data-cm-delete-account="${index}">🗑️ Eliminar cuenta</button>
       </div>
       ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
       <div class="cm-client-table">
-        <div class="cm-client-table-head"><span>#</span><span>Perfil / PIN</span><span>Cliente</span><span>Contacto</span><span>Vencimiento</span><span>Estado / acciones</span></div>
         <div class="cm-client-table-body">${rosterRowsCompactHtml(account)||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
       </div>
     </section>`;
