@@ -333,3 +333,85 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
   margin-right:auto!important;
 }
 
+
+/* --- Control Maestro rediseño visual inicio/workspace 2026-09-08 --- */
+.cm-hero-modern .cm-title h2{font-size:32px}
+.cm-tools-details{margin-top:18px}
+.cm-tools-details .cm-details-body{display:grid;gap:16px}
+.cm-home-panel,.cm-workspace-panel{display:grid;gap:18px}
+.cm-home-top{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:18px;align-items:start}
+.cm-home-copy{padding:24px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#f6faff 100%)}
+.cm-home-copy h3{margin:0 0 10px;color:var(--txt);font:900 28px/1.1 'Fredoka','Nunito',system-ui,sans-serif}
+.cm-home-copy p{margin:0;color:var(--txt2);font-size:15px;font-weight:760;line-height:1.6}
+.cm-home-points{display:grid;gap:8px;margin-top:16px}
+.cm-home-points span{padding:10px 12px;border-radius:14px;background:var(--card);color:var(--txt);font-size:13px;font-weight:800}
+.cm-home-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.cm-backup-panel-modern{height:100%}
+.cm-backup-choice{display:grid;gap:10px;margin-top:4px;margin-bottom:14px}
+.cm-backup-choice label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--txt);font-size:13px;font-weight:800}
+.cm-home-platforms,.cm-platform-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));gap:12px}
+.cm-platform-tile{display:grid;justify-items:center;gap:6px;padding:14px 10px;border:1px solid var(--line);border-radius:18px;background:var(--surface);cursor:pointer;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.cm-platform-tile:hover,.cm-platform-tile.on{border-color:color-mix(in srgb,var(--cm-blue) 35%,var(--line));box-shadow:0 8px 18px color-mix(in srgb,var(--cm-blue) 10%,transparent);transform:translateY(-1px)}
+.cm-platform-tile-logo,.cm-selected-platform-logo,.cm-account-logo{display:grid;place-items:center;min-width:56px;height:56px;padding:0 8px;border-radius:16px;color:#fff;font-size:18px;font-weight:950;box-shadow:0 10px 20px color-mix(in srgb,var(--txt) 12%,transparent)}
+.cm-platform-tile b{color:var(--txt);font-size:22px;font-weight:950;line-height:1}
+.cm-platform-tile small{color:var(--txt2);font-size:11px;font-weight:850;text-align:center;line-height:1.25}
+.cm-home-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.cm-home-stat{padding:16px 14px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.cm-home-stat b{display:block;color:var(--txt);font-size:24px;font-weight:950}
+.cm-home-stat span{display:block;margin-top:6px;color:var(--txt2);font-size:12px;font-weight:800}
+.cm-workspace-top{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.cm-workspace-search .cm-search{max-width:none}
+.cm-selected-platform{padding:18px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%)}
+.cm-selected-platform-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center}
+.cm-selected-platform-main{display:flex;align-items:center;gap:16px;min-width:0}
+.cm-selected-platform-main h3{margin:0;color:var(--txt);font-size:32px;font-weight:950}
+.cm-selected-platform-main p{margin:5px 0 0;color:var(--txt2);font-size:15px;font-weight:800}
+.cm-selected-progress{display:flex;align-items:center;gap:12px}
+.cm-selected-progress b{color:var(--txt);font-size:28px;font-weight:950}
+.cm-selected-progress-bar{width:260px;height:14px;border-radius:999px;background:#e7eef8;overflow:hidden}
+.cm-selected-progress-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#24d86f,#1ec6ff)}
+.cm-status-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.cm-status-card{display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--surface);cursor:pointer;text-align:left}
+.cm-status-card.on{border-color:color-mix(in srgb,var(--cm-blue) 30%,var(--line));background:color-mix(in srgb,var(--cm-blue) 5%,#fff)}
+.cm-status-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:var(--card);color:var(--cm-blue);font-size:24px;font-weight:900}
+.cm-status-card small{display:block;color:var(--txt2);font-size:13px;font-weight:850}
+.cm-status-card b{display:block;margin-top:4px;color:var(--txt);font-size:32px;font-weight:950;line-height:1}
+.cm-workspace-grid{display:grid;grid-template-columns:minmax(420px,.95fr) minmax(460px,1.05fr);gap:18px;align-items:start}
+.cm-account-list-panel,.cm-account-detail{border:1px solid var(--line);border-radius:22px;background:var(--surface);padding:18px}
+.cm-account-list-head,.cm-account-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.cm-account-list-head h4,.cm-account-detail-head h4{margin:0;color:var(--txt);font-size:24px;font-weight:950}
+.cm-account-list-head p,.cm-account-detail-head p{margin:4px 0 0;color:var(--txt2);font-size:13px;font-weight:760;line-height:1.45}
+.cm-account-count-pill,.cm-detail-badge{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:14px;background:var(--card);color:var(--cm-blue);font-size:14px;font-weight:900;white-space:nowrap}
+.cm-account-list-body{display:grid;gap:10px;max-height:760px;overflow:auto;padding-right:2px}
+.cm-account-list-row{display:grid;grid-template-columns:40px minmax(0,1.4fr) minmax(140px,.72fr) 120px 100px 18px;gap:10px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:18px;background:#fff;cursor:pointer;text-align:left}
+.cm-account-list-row:hover,.cm-account-list-row.is-selected{border-color:color-mix(in srgb,var(--cm-blue) 32%,var(--line));background:color-mix(in srgb,var(--cm-blue) 4%,#fff);box-shadow:0 10px 18px color-mix(in srgb,var(--cm-blue) 8%,transparent)}
+.cm-account-list-num{width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:var(--card);color:var(--txt2);font-size:12px;font-weight:900}
+.cm-account-list-main{min-width:0}.cm-account-list-main b,.cm-account-list-meta small,.cm-account-list-date{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-account-list-main b{color:var(--txt);font-size:14px;font-weight:950}.cm-account-list-main small{display:block;margin-top:4px;color:var(--txt2);font-size:12px;font-weight:760}
+.cm-account-list-meta small{color:var(--txt2);font-size:11px;font-weight:800;line-height:1.35}
+.cm-account-list-state{display:inline-flex;justify-content:center;padding:8px 10px;border-radius:12px;font-size:11px;font-weight:900;text-align:center}
+.cm-account-list-state.ok{background:var(--goodSoft);color:var(--good)}
+.cm-account-list-state.warn{background:var(--warnSoft);color:var(--warn)}
+.cm-account-list-state.bad{background:var(--accentSoft);color:var(--accent)}
+.cm-account-list-date{color:var(--txt);font-size:12px;font-weight:850}.cm-account-list-arrow{color:var(--cm-blue);font-size:28px;line-height:1}
+.cm-detail-side{display:grid;gap:8px;justify-items:end}
+.cm-detail-review{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:12px;font-size:12px;font-weight:900;white-space:nowrap}
+.cm-detail-review.ok{background:var(--goodSoft);color:var(--good)}
+.cm-detail-review.due{background:var(--warnSoft);color:var(--warn)}
+.cm-detail-review.bad{background:var(--accentSoft);color:var(--accent)}
+.cm-account-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%)}
+.cm-account-summary-main{display:flex;align-items:center;gap:14px;min-width:0}.cm-account-summary-main b{display:block;color:var(--txt);font-size:20px;font-weight:950;overflow-wrap:anywhere}.cm-account-summary-main small{display:block;margin-top:4px;color:var(--txt2);font-size:12px;font-weight:820}
+.cm-account-summary-metrics{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.cm-pill{display:inline-flex;padding:8px 12px;border-radius:999px;background:var(--card);color:var(--txt);font-size:12px;font-weight:900}.cm-pill.ok{background:var(--goodSoft);color:var(--good)}.cm-pill.due{background:var(--warnSoft);color:var(--warn)}.cm-pill.bad{background:var(--accentSoft);color:var(--accent)}
+.cm-account-credentials-modern{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
+.cm-credential-card{padding:14px;border:1px solid var(--line);border-radius:18px;background:#fff;display:grid;gap:8px}
+.cm-credential-card span{color:var(--txt2);font-size:12px;font-weight:820}.cm-credential-card b{color:var(--txt);font-size:18px;font-weight:950;overflow-wrap:anywhere}.cm-credential-card b.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.cm-account-detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.cm-client-table{margin-top:16px;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:#fff}
+.cm-client-table-head,.cm-client-row{display:grid;grid-template-columns:44px minmax(150px,.9fr) minmax(150px,1fr) minmax(130px,.8fr) minmax(120px,.82fr) minmax(210px,1.1fr);gap:10px;align-items:center}
+.cm-client-table-head{padding:14px 16px;background:var(--card);color:var(--txt2);font-size:12px;font-weight:900}
+.cm-client-table-body{display:grid}.cm-client-row{padding:14px 16px;border-top:1px solid var(--line)}.cm-client-row.ok{box-shadow:inset 4px 0 var(--cm-green)}.cm-client-row.warn{box-shadow:inset 4px 0 var(--cm-yellow)}.cm-client-row.bad{box-shadow:inset 4px 0 var(--cm-red)}
+.cm-client-cell{min-width:0}.cm-client-cell.num{font-size:14px;font-weight:900;color:var(--txt2)}.cm-client-cell b{display:block;color:var(--txt);font-size:14px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cm-client-cell small{display:block;margin-top:4px;color:var(--txt2);font-size:11px;font-weight:760;line-height:1.35}
+.cm-client-cell.link{border:0;background:transparent;text-align:left;cursor:pointer;padding:0}.cm-client-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.cm-client-cell.end{display:grid;gap:8px;justify-items:end}
+.cm-inline-note{display:grid;gap:8px;width:100%;margin-top:8px}.cm-inline-note input{min-width:220px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font:800 12px/1.2 'Nunito',system-ui,sans-serif}.cm-inline-note>div{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+@media(max-width:1180px){.cm-home-top,.cm-workspace-grid,.cm-selected-platform-head,.cm-account-summary,.cm-workspace-top{grid-template-columns:1fr}.cm-home-summary,.cm-status-cards,.cm-account-credentials-modern{grid-template-columns:repeat(2,1fr)}.cm-selected-progress{justify-content:flex-start}.cm-client-table-head,.cm-client-row{grid-template-columns:44px minmax(140px,.8fr) minmax(150px,1fr) minmax(120px,.8fr) minmax(120px,.8fr) minmax(180px,1fr)}}
+@media(max-width:760px){.cm-home-summary,.cm-status-cards,.cm-account-credentials-modern{grid-template-columns:1fr}.cm-home-platforms,.cm-platform-row{grid-template-columns:repeat(2,1fr)}.cm-account-list-row{grid-template-columns:34px minmax(0,1fr);}.cm-account-list-meta,.cm-account-list-state,.cm-account-list-date,.cm-account-list-arrow{display:none}.cm-client-table-head{display:none}.cm-client-row{grid-template-columns:1fr;gap:8px}.cm-client-cell.end{justify-items:start}.cm-detail-side{justify-items:start}.cm-account-list-head,.cm-account-detail-head{flex-direction:column;align-items:flex-start}}

@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-ACTUALIZACION-GRANDE-20260908-52';
+  const BUILD='CONTROL-MAESTRO-INICIO-VISUAL-20260908-53';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -14,7 +14,7 @@
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
-    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:DEFAULT_ACCOUNT_LIMIT,revealedAccounts:new Set(),expandedAccountKey:'',
+    accountAudit:null,accountPlatform:'all',accountStatus:'all',accountQuery:'',accountVisible:[],accountLimit:DEFAULT_ACCOUNT_LIMIT,revealedAccounts:new Set(),expandedAccountKey:'',accountView:'home',
     reviewSavingKey:'',accountFeedback:null,uiSize:loadUiSize(),refreshing:false,lastRefreshAt:'',fullscreenReturnY:0,editingNoteKey:'',
     controlExpanded:false,fullscreenParent:null,fullscreenNextSibling:null,pendingSyncMessage:'',filteredAccountsCache:null,
     metaRetryCount:0,metaRetryTimer:0
@@ -77,7 +77,7 @@
     let anchor=state.expandedAccountKey?cards.find((el)=>el.dataset.cmAccountKey===state.expandedAccountKey):null;
     if(!anchor)anchor=cards.find((el)=>el.getBoundingClientRect().bottom>viewportTop+70)||cards[0]||null;
     return {
-      accountPlatform:state.accountPlatform,accountStatus:state.accountStatus,accountQuery:state.accountQuery,
+      accountView:state.accountView,accountPlatform:state.accountPlatform,accountStatus:state.accountStatus,accountQuery:state.accountQuery,
       accountLimit:state.accountLimit,expandedAccountKey:state.expandedAccountKey,
       screenTop:screen?.scrollTop||0,windowX:window.scrollX||0,windowY:window.scrollY||0,
       ledgerLeft:host?.querySelector('.cm-ledger-scroll')?.scrollLeft||0,rosterTop:roster?.scrollTop||0,
@@ -89,7 +89,7 @@
 
   function restoreControlView(view,{keepExpanded=false}={}){
     if(!view)return;
-    state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
+    state.accountView=view.accountView||'home';state.accountPlatform=view.accountPlatform||'all';state.accountStatus=view.accountStatus||'all';
     state.accountQuery=String(view.accountQuery||'');state.accountLimit=Number(view.accountLimit)||DEFAULT_ACCOUNT_LIMIT;
     if(!keepExpanded)state.expandedAccountKey=String(view.expandedAccountKey||'');
     if(view.fullscreen&&screenActive()){
@@ -1204,72 +1204,217 @@
     </article>`;
   }
 
+  function platformTileMeta(family){
+    const key=auditFamily(family);
+    const map={
+      all:{label:'Todas',short:'★'},netflix:{label:'Netflix',short:'N'},vipnetflix:{label:'Netflix VIP',short:'NV'},disney:{label:'Disney+',short:'D+'},hbomax:{label:'HBO Max',short:'HBO'},primevideo:{label:'Prime Video',short:'PV'},crunchyroll:{label:'Crunchyroll',short:'CR'},spotify:{label:'Spotify',short:'SP'},youtube:{label:'YouTube',short:'YT'},vix:{label:'ViX',short:'ViX'},canva:{label:'Canva',short:'Ca'},gemini:{label:'Gemini',short:'Ge'},duolingo:{label:'Duolingo',short:'Du'},chatgpt:{label:'ChatGPT',short:'AI'},office:{label:'Office',short:'Of'},oleada:{label:'Oleada',short:'TV'},stellatv:{label:'Stella TV',short:'ST'},liontv:{label:'Lion TV',short:'LT'},latintv:{label:'Latin TV',short:'LA'},sin_plataforma:{label:'Sin plataforma',short:'?'}
+    };
+    return map[key]||{label:auditPlatformLabel(family),short:auditPlatformLabel(family).slice(0,2).toUpperCase()};
+  }
+
+  function platformOrder(items){
+    const order=['all','disney','netflix','hbomax','primevideo','crunchyroll','spotify','youtube','vix','canva','gemini','duolingo','chatgpt','office','oleada','stellatv','liontv','latintv','sin_plataforma'];
+    return [...items].sort((a,b)=>{
+      const ai=order.indexOf(a.family); const bi=order.indexOf(b.family);
+      return (ai===-1?999:ai)-(bi===-1?999:bi) || a.name.localeCompare(b.name);
+    });
+  }
+
+  function platformTilesData(audit=state.accountAudit){
+    const groups=Object.keys(audit?.platforms||{}).map((family)=>{
+      const accounts=(audit.accounts||[]).filter((a)=>a.family===family);
+      const meta=platformTileMeta(family);
+      return {family,name:meta.label,short:meta.short,color:platformColor(family),count:accounts.length,...reviewProgress(accounts)};
+    });
+    return platformOrder(groups);
+  }
+
+  function workspaceStatusCards(accounts){
+    const counts=accountStatusCounts(accounts);
+    return [
+      {key:'all',label:'Todas',value:counts.all,icon:'▦'},
+      {key:'review_due',label:'Revisar',value:counts.review_due,icon:'◔'},
+      {key:'expired',label:'Vencidos',value:counts.expired,icon:'✉'},
+      {key:'reviewed',label:'Revisados',value:counts.reviewed,icon:'✓'}
+    ];
+  }
+
+  function selectedAccountData(){
+    const visible=state.accountVisible||[];
+    if(!visible.length)return null;
+    let account=visible.find((a)=>a.key===state.expandedAccountKey)||null;
+    if(!account){ account=visible[0]; state.expandedAccountKey=account.key; }
+    return account;
+  }
+
+  function accountPrimaryClient(a){
+    return (a.roster||[]).find((r)=>norm(r.name)) || a.roster?.[0] || null;
+  }
+
+  function accountListRowsHtml(selected){
+    return state.accountVisible.map((a,i)=>{
+      const primary=accountPrimaryClient(a);
+      const life=accountLifecycle(a);
+      const review=accountReviewSchedule(a);
+      const isSelected=selected&&selected.key===a.key;
+      const tone=life.tone==='expired'?'bad':(life.tone==='soon'?'warn':'ok');
+      return `<button type="button" class="cm-account-list-row ${isSelected?'is-selected':''}" data-cm-select-account="${esc(a.key)}">
+        <span class="cm-account-list-num">${i+1}</span>
+        <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small></span>
+        <span class="cm-account-list-meta"><small>${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles</small><small>${esc(review.rowText)}</small></span>
+        <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
+        <span class="cm-account-list-date">${esc(life.nextText.replace('Próximo: ','').replace('Último: ',''))}</span>
+        <span class="cm-account-list-arrow">›</span>
+      </button>`;
+    }).join('');
+  }
+
+  function rosterRowsCompactHtml(account){
+    const accountIndex=state.accountVisible.findIndex((x)=>x.key===account.key);
+    return (account.roster||[]).map((r,rowIndex)=>{
+      const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',tone:'bad'};
+      const profile=fieldText(r.profile)?(/^perfil/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
+      const pointer=`${accountIndex}:${rowIndex}`;
+      return `<div class="cm-client-row ${s.tone}">
+        <div class="cm-client-cell num">${rowIndex+1}</div>
+        <div class="cm-client-cell"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
+        <button class="cm-client-cell link" data-cm-audit-client="${pointer}"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(getLocalNote(localNoteKey(account,r))||'Ver ficha')}</small></button>
+        <div class="cm-client-cell"><b>${esc(r.phone||'—')}</b><small>${esc(r.actualAccount||'')}</small></div>
+        <div class="cm-client-cell"><b>${esc(dateLabel(r.date)||'Sin fecha')}</b><small>${esc(r.detail||'')}</small></div>
+        <div class="cm-client-cell end"><span class="cm-roster-status ${s.tone}">${esc(s.label)}</span><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':' +Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function selectedAccountPanelHtml(account){
+    if(!account)return `<section class="cm-account-detail"><div class="cm-empty">Seleccione una cuenta para ver a la derecha sus clientes, estado, credenciales y acciones.</div></section>`;
+    const life=accountLifecycle(account);
+    const review=accountReviewSchedule(account);
+    const revealed=state.revealedAccounts.has(account.key);
+    const password=account.clave?(revealed?esc(account.clave):'•'.repeat(Math.min(Math.max(String(account.clave).length,8),18))):'—';
+    const index=state.accountVisible.findIndex((x)=>x.key===account.key);
+    return `<section class="cm-account-detail">
+      <div class="cm-account-detail-head">
+        <div>
+          <h4>Clientes de esta cuenta</h4>
+          <p>Estos son los clientes que utilizan la cuenta seleccionada de ${esc(account.platform||auditPlatformLabel(account.family))}.</p>
+        </div>
+        <div class="cm-detail-side">
+          <span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>
+          <span class="cm-detail-review ${esc(review.tone)}">${review.isReviewed?'Cuenta revisada':'Cuenta por revisar'}</span>
+        </div>
+      </div>
+      <div class="cm-account-summary">
+        <div class="cm-account-summary-main">
+          <div class="cm-account-logo" style="background:${platformColor(account.family)}">${esc(platformTileMeta(account.family).short)}</div>
+          <div><b>${esc(account.email||'Sin cuenta')}</b><small>${esc(account.platform||auditPlatformLabel(account.family))} · ${(account.roster||[]).length}/${account.capacity||0} perfiles</small></div>
+        </div>
+        <div class="cm-account-summary-metrics">
+          <span class="cm-pill">${esc(life.label)}</span>
+          <span class="cm-pill ${esc(review.tone)}">${esc(review.label)}</span>
+        </div>
+      </div>
+      <div class="cm-account-credentials-modern">
+        <div class="cm-credential-card"><span>Correo / usuario</span><b>${esc(account.email||'—')}</b><button class="cm-copy" data-cm-copy-email="${index}" ${account.email?'':'disabled'}>Copiar</button></div>
+        <div class="cm-credential-card"><span>Clave</span><b class="mono">${password}</b><div class="cm-secret-actions"><button class="cm-copy" data-cm-reveal-account="${index}" ${account.clave?'':'disabled'}>${revealed?'Ocultar':'Ver'}</button><button class="cm-copy" data-cm-copy-password="${index}" ${account.clave?'':'disabled'}>Copiar</button></div></div>
+      </div>
+      <div class="cm-account-detail-actions">
+        <button class="cm-btn" data-cm-open-audit="${index}">📦 Abrir en Bodega</button>
+        <button class="cm-btn good" data-cm-review-ok="${esc(account.key)}" ${state.busy?'disabled':''}>✅ Marcar revisada</button>
+        <button class="cm-btn warn" data-cm-review-issue="${esc(account.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button>
+        <button class="cm-btn" data-cm-edit-account="${index}">✏️ Editar cuenta</button>
+        <button class="cm-btn danger" data-cm-delete-account="${index}">🗑️ Eliminar cuenta</button>
+      </div>
+      ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
+      <div class="cm-client-table">
+        <div class="cm-client-table-head"><span>#</span><span>Perfil / PIN</span><span>Cliente</span><span>Contacto</span><span>Vencimiento</span><span>Estado / acciones</span></div>
+        <div class="cm-client-table-body">${rosterRowsCompactHtml(account)||'<div class="cm-empty cm-roster-empty">Esta cuenta no tiene clientes asignados.</div>'}</div>
+      </div>
+    </section>`;
+  }
+
   function accountResultsHtml(){
-    const all=filteredAccounts();state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||DEFAULT_ACCOUNT_LIMIT));
+    const all=filteredAccounts();
+    state.accountVisible=all.slice(0,Math.max(1,state.accountLimit||DEFAULT_ACCOUNT_LIMIT));
+    const selected=selectedAccountData();
     const remaining=Math.max(0,all.length-state.accountVisible.length);
     const next=Math.min(ACCOUNT_PAGE_SIZE,remaining);
-    return `<div class="cm-account-count">Mostrando <b>${state.accountVisible.length}</b> de <b>${all.length}</b> cuentas. Las urgentes aparecen primero.</div>
-      <div class="cm-ledger-scroll"><div class="cm-account-ledger"><div class="cm-ledger-header"><span>Plataforma / estado</span><span>Cuenta y clave</span><span>Clientes</span><span>Vencimientos</span><span>Control interno</span><span>Detalle</span></div>${state.accountVisible.map(accountCardHtml).join('')||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div></div>
-      ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining}. El conteo y la búsqueda ya incluyen todas; se dibujan por bloques para mantener el panel rápido.</small></div>`:''}`;
+    return `<div class="cm-workspace-grid">
+      <section class="cm-account-list-panel">
+        <div class="cm-account-list-head"><div><h4>Cuentas de ${esc(state.accountPlatform==='all'?'todas las plataformas':auditPlatformLabel(state.accountPlatform))}</h4><p>Seleccione una cuenta del listado y a la derecha verá todos los clientes de esa cuenta.</p></div><div class="cm-account-count-pill">${state.accountVisible.length} / ${all.length}</div></div>
+        <div class="cm-account-list-body">${accountListRowsHtml(selected)||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
+        ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining} cuentas pendientes por mostrar.</small></div>`:''}
+      </section>
+      ${selectedAccountPanelHtml(selected)}
+    </div>`;
   }
 
-  function accountsForSelectedPlatform(audit=state.accountAudit){
-    const accounts=Array.isArray(audit?.accounts)?audit.accounts:[];
-    if(state.accountPlatform==='all')return accounts;
-    return accounts.filter((a)=>a.family===state.accountPlatform);
+  function homeDashboardHtml(audit){
+    const tiles=platformTilesData(audit);
+    const m=audit.metrics||{};
+    return `<section class="cm-panel cm-home-panel">
+      <div class="cm-home-top">
+        <div class="cm-home-copy">
+          <h3>🏠 Inicio de Control Maestro</h3>
+          <p>Ahora el inicio no carga de golpe el relajo de cuentas. Primero elija una plataforma, y luego se abrirá la lista completa de cuentas de esa sección.</p>
+          <div class="cm-home-points">
+            <span>• Todas las plataformas quedan visibles por icono</span>
+            <span>• Cada icono muestra solo el porcentaje de avance</span>
+            <span>• Mantiene búsqueda, revisión, respaldo y edición</span>
+          </div>
+          <div class="cm-home-actions">
+            <button class="cm-btn primary" data-cm-open-workspace="all">Ver todas las cuentas</button>
+            <button class="cm-btn" data-cm-action="review">🔎 Revisar ahora</button>
+          </div>
+        </div>
+        <div class="cm-home-side">
+          <div class="cm-panel cm-backup-panel-modern">
+            <div class="cm-panel-head"><div><h3>Copias de respaldo</h3><p>Puede dejarlo automático o hacerlo manual antes de trabajar.</p></div></div>
+            <div class="cm-backup-choice"><label><input type="radio" name="cmBackupPref" checked> Backup diario</label><label><input type="radio" name="cmBackupPref"> Backup al entrar a trabajar</label></div>
+            <button class="cm-btn primary" data-cm-action="save-backup">☁️ Hacer backup ahora</button>
+          </div>
+        </div>
+      </div>
+      <div class="cm-home-platforms">${tiles.map((it)=>`<button class="cm-platform-tile" data-cm-open-workspace="${esc(it.family)}"><span class="cm-platform-tile-logo" style="background:${it.color}">${esc(it.short)}</span><b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
+      <div class="cm-home-summary">
+        <div class="cm-home-stat"><b>${m.cuentas??0}</b><span>Cuentas agrupadas</span></div>
+        <div class="cm-home-stat"><b>${m.conProblemas??0}</b><span>Diferencias internas</span></div>
+        <div class="cm-home-stat"><b>${m.clientes??0}</b><span>Clientes detectados</span></div>
+        <div class="cm-home-stat"><b>${tiles.length}</b><span>Plataformas visibles</span></div>
+      </div>
+    </section>`;
   }
 
-  function accountStatusCounts(accounts){
-    const list=Array.isArray(accounts)?accounts:[];
-    const counts={all:list.length,expired:0,soon:0,active:0,problems:0,reviewed:0,review_due:0};
-    list.forEach((a)=>{
-      const life=accountLifecycle(a);
-      if(life.tone==='expired')counts.expired++;
-      else if(life.tone==='soon')counts.soon++;
-      else if(life.tone==='active')counts.active++;
-      if(a.issueCount)counts.problems++;
-      if(accountReviewSchedule(a).isReviewed)counts.reviewed++;
-      if(a.reviewDue)counts.review_due++;
-    });
-    return counts;
+  function workspaceHeaderHtml(audit){
+    const tiles=platformTilesData(audit);
+    const scopedAccounts=accountsForSelectedPlatform(audit);
+    const selectedName=state.accountPlatform==='all'?'Todas las plataformas':auditPlatformLabel(state.accountPlatform);
+    const selectedMeta=platformTileMeta(state.accountPlatform==='all'?'all':state.accountPlatform);
+    const selectedColor=state.accountPlatform==='all'?'#2563eb':platformColor(state.accountPlatform);
+    const progress=reviewProgress(scopedAccounts);
+    const cards=workspaceStatusCards(scopedAccounts);
+    return `<section class="cm-panel cm-workspace-panel">
+      <div class="cm-workspace-top">
+        <button class="cm-btn" data-cm-go-home>← Inicio</button>
+        <div class="cm-workspace-search"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
+      </div>
+      <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}"><span class="cm-platform-tile-logo" style="background:${it.color}">${esc(it.short)}</span><b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
+      <div class="cm-selected-platform">
+        <div class="cm-selected-platform-head">
+          <div class="cm-selected-platform-main"><span class="cm-selected-platform-logo" style="background:${selectedColor}">${esc(selectedMeta.short)}</span><div><h3>${esc(selectedName)}</h3><p>${scopedAccounts.length} cuentas totales</p></div></div>
+          <div class="cm-selected-progress"><div class="cm-selected-progress-bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>
+        </div>
+        <div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>
+      </div>
+      <div id="cmAccountResults">${accountResultsHtml()}</div>
+    </section>`;
   }
 
   function accountAuditHtml(){
     const audit=state.accountAudit;
-    if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar base</b>.</div></section>`;
-    // Los contadores junto a la búsqueda pertenecen EXCLUSIVAMENTE a la
-    // plataforma elegida en la columna izquierda. Antes mostraban totales
-    // globales (por ejemplo 109 revisadas / 794 por revisar) aunque se estuviera
-    // trabajando solo Prime Video, lo que hacía parecer que el filtro estaba
-    // mezclando todas las cuentas.
-    const scopedAccounts=accountsForSelectedPlatform(audit);
-    const statusCounts=accountStatusCounts(scopedAccounts);
-    const scopeName=state.accountPlatform==='all'?'Todas las plataformas':auditPlatformLabel(state.accountPlatform);
-    const statuses=[
-      ['all',`Todas (${statusCounts.all})`],
-      ['expired',`🔴 Vencidos (${statusCounts.expired})`],
-      ['soon',`🟡 Próximos ${EXPIRY_SOON_DAYS} días (${statusCounts.soon})`],
-      ['active',`🟢 Vigentes (${statusCounts.active})`],
-      ['problems',`⚠️ Diferencias (${statusCounts.problems})`],
-      ['reviewed',`✅ Revisadas (${statusCounts.reviewed})`],
-      ['review_due',`🕒 Toca revisar (${statusCounts.review_due})`]
-    ];
-    // Si el Excel todavía no terminó de leerse (o falló toda la serie de
-    // reintentos), lo decimos claro en vez de dejar que los números se vean
-    // "raros" sin explicación — así se sabe que faltan las cuentas "Solo Excel".
-    const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó (o no se pudo leer) — estos números todavía no incluyen las cuentas que solo están en el Excel. Se actualiza solo apenas termine.</div>`;
-    return `<section class="cm-panel cm-accounts-panel">
-      <div class="cm-panel-head"><div><h3>📋 Mesa compacta por cuenta</h3><p>Una línea por correo, como en su Excel. Vista actual: <b>${esc(scopeName)}</b> · ${statusCounts.all} cuenta${statusCounts.all===1?'':'s'}.</p></div><span class="cm-template-state ${statusCounts.problems?'':'ok'}">${statusCounts.problems?statusCounts.problems+' cuenta'+(statusCounts.problems===1?'':'s')+' con diferencias':'✅ Sin diferencias en esta vista'}</span></div>
-      <div class="cm-audit-callout"><b>Lectura rápida:</b> <span class="expired">🔴 vencido</span> · <span class="soon">🟡 vence hoy o en ${EXPIRY_SOON_DAYS} días</span> · <span class="active">🟢 vigente</span>. Presione <b>Ver clientes</b> para editar, sacar o eliminar. Firebase es la base viva; el Excel queda solamente como respaldo histórico.</div>
-      ${excelNote}
-      <div class="cm-split">
-        ${platformSidebarHtml(audit)}
-        <div class="cm-split-main">
-          <div class="cm-toolbar cm-account-toolbar"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Correo, clave, cliente, teléfono, perfil o PIN…"></label><div class="cm-filters">${statuses.map(([k,l])=>`<button class="cm-filter ${state.accountStatus===k?'on':''}" data-cm-audit-status="${k}">${l}</button>`).join('')}</div></div>
-          <div id="cmAccountResults">${accountResultsHtml()}</div>
-        </div>
-      </div>
-    </section>`;
+    if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar datos</b>.</div></section>`;
+    const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó completo; los datos se actualizarán solos al terminar.</div>`;
+    return `${state.accountView==='home'?homeDashboardHtml(audit):workspaceHeaderHtml(audit)}${excelNote}`;
   }
 
   function kpisHtml(){
@@ -1340,20 +1485,7 @@
     }
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo pertenece únicamente al usuario Sublicuentas.</div>';return;}
     if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
-    // ⚠️ BUG REAL encontrado: la mesa se calculaba una vez y quedaba "pegada"
-    // en memoria (`if(!state.accountAudit)`). Al abrir Control Maestro, la
-    // plantilla de Excel todavía no había terminado de leerse en ese primer
-    // instante, así que la mesa se calculaba SIN el cruce de Excel (por eso
-    // Canva salía en 100%, sin las cuentas "Solo Excel"). Cuando el Excel
-    // terminaba de leerse un segundo después, la mesa YA estaba guardada en
-    // memoria y no se volvía a calcular — se quedaba mal hasta que alguien
-    // tocaba "Actualizar datos" a la fuerza. Ahora se vuelve a calcular
-    // automáticamente en cuanto el análisis del Excel cambia de verdad.
     const liveSource=source();
-    // La mesa también depende de Bodega, no solo del Excel. Antes podía abrirse
-    // durante el arranque con INVENTARIO todavía vacío y quedar cacheada así
-    // aunque Firebase cargara la cuenta segundos después. El versionado de la
-    // fuente obliga a reconstruirla en cuanto cambia Clientes o Bodega.
     if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis||state.accountAudit._sourceVersion!==liveSource.version){
       state.accountAudit=buildAccountAudit(liveSource,state.analysis);
       state.accountAudit._forAnalysis=state.analysis;
@@ -1362,9 +1494,29 @@
     const controlScreen=document.getElementById('screen-control-cuentas');
     const expanded=state.controlExpanded||document.fullscreenElement===controlScreen||controlScreen?.classList.contains('cm-control-expanded');
     host.innerHTML=`<div class="cm-shell cm-size-${esc(state.uiSize)}" data-build="${BUILD}">
-      <header class="cm-hero"><div class="cm-title"><div class="cm-title-icon">📋</div><div><h2>Control Maestro</h2><p>Vista tipo Excel: una línea por cuenta, colores de vencimiento y clientes desplegables. <span class="cm-build-tag" title="Si subís un archivo nuevo y este texto no cambia, el navegador está mostrando una copia guardada — haga Ctrl+Shift+R (o borre caché) para forzar la versión nueva.">v.${esc(BUILD.slice(-8))}</span></p></div></div><div class="cm-hero-actions"><div class="cm-refresh-top-wrap"><button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button><small>${esc(refreshTimeLabel())}</small></div><button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Salir de pantalla completa':'⛶ Pantalla completa'}</button><span class="cm-private">🔒 Solo Sublicuentas</span></div></header>
-      <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede aumentarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
-      ${kpisHtml()}${accountAuditHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}
+      <header class="cm-hero cm-hero-modern">
+        <div class="cm-title">
+          <div class="cm-title-icon">💠</div>
+          <div>
+            <h2>Hola, Sublicuentas 👋</h2>
+            <p>Gestione sus cuentas por plataforma de forma simple y centralizada. <span class="cm-build-tag" title="Si sube un archivo nuevo y este texto no cambia, el navegador está mostrando una copia guardada. Haga Ctrl+Shift+R para forzar la versión nueva.">v.${esc(BUILD.slice(-8))}</span></p>
+          </div>
+        </div>
+        <div class="cm-hero-actions">
+          <div class="cm-refresh-top-wrap">
+            <button class="cm-btn primary cm-refresh-top ${state.refreshing?'is-loading':''}" data-cm-action="refresh-data" ${state.busy?'disabled':''}>${state.refreshing?'⏳ Actualizando datos…':'🔄 Actualizar datos'}</button>
+            <small>${esc(refreshTimeLabel())}</small>
+          </div>
+          <button class="cm-btn cm-expand" data-cm-action="toggle-fullscreen">${expanded?'↙️ Modo normal':'⛶ Pantalla completa'}</button>
+          <span class="cm-private">🔒 Solo Sublicuentas</span>
+        </div>
+      </header>
+      <div class="cm-reading-bar"><div><b>👓 Tamaño de lectura</b><small>Puede ajustarlo sin cambiar el tamaño del resto de Sublichat.</small></div><div class="cm-size-options" role="group" aria-label="Tamaño del texto"><button data-cm-size="normal" class="${state.uiSize==='normal'?'on':''}" aria-pressed="${state.uiSize==='normal'}">Normal</button><button data-cm-size="large" class="${state.uiSize==='large'?'on':''}" aria-pressed="${state.uiSize==='large'}">Grande</button><button data-cm-size="xlarge" class="${state.uiSize==='xlarge'?'on':''}" aria-pressed="${state.uiSize==='xlarge'}">Muy grande</button></div></div>
+      ${accountAuditHtml()}
+      <details class="cm-details cm-tools-details">
+        <summary><span><b>Herramientas, revisión y respaldos</b><small>La lógica del Control Maestro se conserva; solo se ordenó mejor la visualización.</small></span><i>Presione para abrir</i></summary>
+        <div class="cm-details-body">${kpisHtml()}${templateHtml()}${reviewHtml()}${backupsHtml()}</div>
+      </details>
     </div>`;
     bind();
     if(expanded){
@@ -1381,7 +1533,7 @@
   function bindAccountResults(container){
     if(!container)return;
     container.querySelectorAll('[data-cm-action="show-more-accounts"],[data-cm-action="show-all-accounts"]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
-    container.querySelectorAll('[data-cm-toggle-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmToggleAccount));
+    container.querySelectorAll('[data-cm-select-account]').forEach(b=>b.onclick=()=>toggleAccountDetails(b.dataset.cmSelectAccount));
     container.querySelectorAll('[data-cm-reveal-account]').forEach(b=>b.onclick=()=>toggleAccountSecret(Number(b.dataset.cmRevealAccount)));
     container.querySelectorAll('[data-cm-copy-email]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyEmail),'email'));
     container.querySelectorAll('[data-cm-copy-password]').forEach(b=>b.onclick=()=>copyAccountValue(Number(b.dataset.cmCopyPassword),'password'));
@@ -1418,8 +1570,10 @@
     host.querySelectorAll('[data-cm-action]').forEach(b=>b.onclick=()=>handleAction(b.dataset.cmAction));
     host.querySelectorAll('[data-cm-size]').forEach(b=>b.onclick=()=>setUiSize(b.dataset.cmSize));
     const file=host.querySelector('#cmTemplateFile');if(file)file.onchange=()=>uploadTemplate(file.files?.[0]);
-    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
-    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-go-home]').forEach(b=>b.onclick=()=>{state.accountView='home';render();});
+    host.querySelectorAll('[data-cm-open-workspace]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountPlatform=b.dataset.cmOpenWorkspace||'all';state.accountStatus='all';state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-audit-platform]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountPlatform=b.dataset.cmAuditPlatform;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;state.expandedAccountKey='';render();});
+    host.querySelectorAll('[data-cm-audit-status]').forEach(b=>b.onclick=()=>{state.accountView='workspace';state.accountStatus=b.dataset.cmAuditStatus;state.accountLimit=DEFAULT_ACCOUNT_LIMIT;render();});
     const aq=host.querySelector('#cmAccountSearch');
     if(aq)aq.oninput=()=>{
       state.accountQuery=aq.value;
@@ -1445,7 +1599,7 @@
     state.expandedAccountKey=state.expandedAccountKey===key?'':key;
     render();
     setTimeout(()=>{
-      const button=[...document.querySelectorAll('[data-cm-toggle-account]')].find((x)=>x.dataset.cmToggleAccount===key);
+      const button=[...document.querySelectorAll('[data-cm-select-account]')].find((x)=>x.dataset.cmSelectAccount===key);
       if(button&&state.expandedAccountKey===key)button.closest('.cm-ledger-account')?.scrollIntoView({block:'nearest',behavior:'smooth'});
     },0);
   }
