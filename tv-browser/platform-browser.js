@@ -54,13 +54,14 @@ class PlatformBrowser {
   visiblePage() { return /^https?:\/\//i.test(this.page.url()); }
   async navigate(url) {
     try {
-      // A committed page can already be displayed even if a slow third-party
-      // resource delays DOMContentLoaded. Do not abandon that usable session.
-      await this.page.goto(url, { waitUntil: 'commit', timeout: 20000 });
-    } catch (error) {
-      if (!this.visiblePage() || !(/TimeoutError/i.test(error?.name || '') || /ERR_ABORTED/.test(error?.message || ''))) {
-        throw new TVError(502, 'No se pudo cargar la página de la plataforma. Pulse Recuperar página para reintentar.', 'TV_NAVIGATION_FAILED');
-      }
+      // Cloudflare Browser Run defaults to DOMContentLoaded. If a provider
+      // keeps loading secondary resources past the timeout, keep the committed
+      // page when a public URL is already visible instead of destroying it.
+      await this.page.goto(url, { timeout: 30000 });
+    } catch (_) {
+      // Some SPAs abort the original navigation after committing a usable URL.
+      // Keep that page visible; only fail when Chromium never left a blank/error URL.
+      if (!this.visiblePage()) throw new TVError(502, 'No se pudo cargar la página de la plataforma. Pulse Recuperar página para reintentar.', 'TV_NAVIGATION_FAILED');
     }
     await this.settle();
   }
@@ -68,11 +69,9 @@ class PlatformBrowser {
     // Explicit operator action only. Reopen the fixed login/activation URL
     // when Chromium is still blank; otherwise reload the same page/context.
     if (!this.visiblePage()) return this.navigate(this.platform.login);
-    try { await this.page.reload({ waitUntil: 'commit', timeout: 20000 }); }
-    catch (error) {
-      if (!this.visiblePage() || !(/TimeoutError/i.test(error?.name || '') || /ERR_ABORTED/.test(error?.message || ''))) {
-        throw new TVError(502, 'La plataforma todavía no respondió. Reintente la página o cambie de cuenta.', 'TV_NAVIGATION_FAILED');
-      }
+    try { await this.page.reload({ timeout: 30000 }); }
+    catch (_) {
+      if (!this.visiblePage()) throw new TVError(502, 'La plataforma todavía no respondió. Reintente la página o cambie de cuenta.', 'TV_NAVIGATION_FAILED');
     }
     await this.settle();
   }
@@ -184,7 +183,7 @@ class PlatformBrowser {
     } else throw new TVError(400, 'Acción no válida.');
     await this.settle();
   }
-  async close() { if (!this.closed) { this.closed = true; await this.context.close(); } }
+  async close() { if (!this.closed) { this.closed = true; await this.context.clearCookies().catch(() => {}); await this.context.close(); } }
 }
 
 module.exports = { PlatformBrowser, interpretEvidence };
