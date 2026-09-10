@@ -4,7 +4,7 @@
   if (!P) return;
   const API = '/api/activar-tv';
   let installed = false;
-  const state = { platform: null, session: null, available: null, busy: false, timer: 0, owner: '', generation: 0, availabilityId: 0, requestId: '', saved: [], authToken: '' };
+  const state = { platform: null, session: null, available: null, busy: false, polling: false, timer: 0, owner: '', generation: 0, availabilityId: 0, requestId: '', saved: [], authToken: '', lastFrameImage: '' };
   const $ = id => document.getElementById(id);
   const user = () => String(localStorage.getItem('sublichat_user') || '').trim().toLowerCase();
   const active = () => $('screen-activar-tv')?.classList.contains('active');
@@ -160,7 +160,7 @@
     }; });
   }
   function forget() {
-    clearTimeout(state.timer); state.generation++; state.session = null; state.busy = false; state.requestId = ''; state.saved = [];
+    clearTimeout(state.timer); state.generation++; state.session = null; state.busy = false; state.polling = false; state.requestId = ''; state.saved = []; state.lastFrameImage = '';
     for (const id of ['tvEmail','tvSecret','tvCode','tvRemoteText','tvSavedSearch']) if ($(id)) $(id).value = '';
     if ($('tvFrame')) $('tvFrame').removeAttribute('src');
     if ($('tvAccountEmail')) $('tvAccountEmail').textContent = '';
@@ -206,7 +206,10 @@
       $('tvAccountStatus').textContent = ['ready','activation','submitting','activated'].includes(step) ?
         (s.verifiedBy === 'operator' ? 'Cuenta confirmada por usted' : 'Sesión iniciada') : 'Cuenta para iniciar sesión';
       if (s.frame) {
-        $('tvFrame').src = 'data:image/jpeg;base64,' + s.frame.image;
+        if (s.frame.image && s.frame.image !== state.lastFrameImage) {
+          state.lastFrameImage = s.frame.image;
+          $('tvFrame').src = 'data:image/jpeg;base64,' + s.frame.image;
+        }
         $('tvRemoteHost').textContent = s.frame.host;
       }
     }
@@ -234,17 +237,23 @@
     if (active() && state.session && state.session.state !== 'activated' && !document.hidden) state.timer = setTimeout(poll, 2200);
   }
   async function poll() {
-    if (!state.session || state.busy || !active() || document.hidden) return schedule();
-    const generation = state.generation; state.busy = true; update();
+    if (!state.session || state.busy || state.polling || !active() || document.hidden) return schedule();
+    const generation = state.generation;
+    // Passive refresh must not toggle the whole UI into disabled state. Doing so
+    // changed button opacity every ~2.2 s and made Activar TV visibly flicker.
+    state.polling = true;
     try {
       const result = await api({ action:'poll', sessionId:state.session.sessionId });
       if (generation !== state.generation) return;
-      state.session = result; message(result.message);
+      state.session = result; message(result.message); update();
     } catch (err) {
       if (generation !== state.generation) return;
       if (err.code === 'TV_SESSION_GONE' || [401,403].includes(err.status)) forget();
-      message(err.message, true);
-    } finally { if (generation === state.generation) state.busy = false; update(); schedule(); }
+      message(err.message, true); update();
+    } finally {
+      if (generation === state.generation) state.polling = false;
+      schedule();
+    }
   }
   async function command(action, extra = {}) {
     if (!state.session || state.busy || state.session.busy) return;
