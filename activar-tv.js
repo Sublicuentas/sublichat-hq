@@ -28,7 +28,7 @@
       throw err;
     } finally { clearTimeout(timeout); }
   }
-  function platformEnabled() { return !!state.platform && !!state.available?.available && Number(state.available.version) >= 2 && state.available.platforms.includes(state.platform.id); }
+  function platformEnabled() { return !!state.platform && !!state.available?.available && Number(state.available.version) >= 3 && state.available.platforms.includes(state.platform.id); }
   function draw() {
     const root = $('rbac-activar-tv'); if (!root) return;
     root.innerHTML = `<div class="tv-shell">
@@ -39,14 +39,14 @@
       <div id="tvWorkspace" hidden>
         <ol class="tv-steps" aria-label="Pasos de activación"><li id="tvStepLogin" aria-current="step"><span>1</span> Iniciar sesión</li><li id="tvStepCode"><span>2</span> Código del TV</li></ol>
         <div id="tvMessage" class="tv-notice" role="status" aria-live="polite" hidden></div>
-        <form id="tvLoginForm" class="tv-card" autocomplete="off">
+        <div id="tvLoginForm" class="tv-card" role="form" aria-labelledby="tvLoginTitle" autocomplete="off">
           <h3 id="tvLoginTitle">Iniciar sesión</h3>
           <p class="tv-help">Puede escribir cualquier cuenta, aunque no esté guardada en Sublichat.</p>
-          <div class="tv-fields"><label>Correo<input id="tvEmail" type="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="254" required placeholder="Escriba el correo de la cuenta"></label>
-          <label>Clave<div class="tv-key"><input id="tvPassword" type="password" autocomplete="new-password" maxlength="512" required placeholder="Escriba la clave"><button type="button" id="tvShowPassword" class="tv-button" aria-label="Mostrar clave">Ver</button></div></label></div>
+          <div class="tv-fields"><label>Correo<input id="tvEmail" type="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="254" required placeholder="Escriba el correo de la cuenta" data-lpignore="true" data-1p-ignore="true" data-bwignore="true"></label>
+          <label>Clave<div class="tv-key"><input id="tvSecret" class="tv-secret-input" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required placeholder="Escriba la clave" aria-label="Clave" data-lpignore="true" data-1p-ignore="true" data-bwignore="true"><button type="button" id="tvShowPassword" class="tv-button" aria-label="Mostrar clave">Ver</button></div></label></div>
           <details id="tvSavedDetails" class="tv-saved"><summary>Elegir una cuenta guardada (opcional)</summary><label>Buscar correo<input id="tvSavedSearch" type="search" placeholder="Buscar entre las cuentas disponibles" autocomplete="off"></label><div id="tvSavedList" class="tv-saved-list"></div></details>
-          <button id="tvLogin" class="tv-button tv-primary" type="submit" disabled>Iniciar sesión</button>
-        </form>
+          <button id="tvLogin" class="tv-button tv-primary" type="button" disabled>Iniciar sesión</button>
+        </div>
         <div id="tvAccount" class="tv-card tv-account" hidden><div><small id="tvAccountStatus">Iniciando sesión</small><strong id="tvAccountEmail"></strong></div><button id="tvChange" type="button" class="tv-button">Cambiar cuenta</button></div>
         <button id="tvRecover" type="button" class="tv-button" hidden>Recuperar página</button>
         <div id="tvConfirmBox" class="tv-card" hidden><p>La plataforma no muestra el correo completo. Revise la cuenta en la página de abajo antes de continuar.</p><label class="tv-checkbox"><input type="checkbox" id="tvConfirmCheck">Confirmo que la cuenta abierta corresponde al correo indicado arriba.</label><button type="button" id="tvConfirm" class="tv-button tv-primary" disabled>Confirmar cuenta</button></div>
@@ -58,16 +58,20 @@
           <p class="tv-help">Toque los botones de la página para continuar. Si pide una verificación, complétela aquí.</p>
           <div id="tvRemoteViewport" class="tv-viewport"><img id="tvFrame" alt="Página actual de la plataforma. Toque para interactuar." draggable="false" tabindex="0"></div>
           <div class="tv-remote-tools"><button type="button" class="tv-button" data-tv-key="Tab">Siguiente campo</button><button type="button" class="tv-button" data-tv-key="Enter">Enter</button><button type="button" class="tv-button" data-tv-scroll="-500">↑ Subir</button><button type="button" class="tv-button" data-tv-scroll="500">↓ Bajar</button><button type="button" id="tvRefresh" class="tv-button">Actualizar página</button></div>
-          <form id="tvRemoteTextForm"><label>Para escribir en la página, toque primero el campo<input id="tvRemoteText" type="password" autocomplete="new-password" maxlength="1024" placeholder="Texto o código de verificación"></label><button type="submit" class="tv-button">Escribir en el campo</button></form>
+          <form id="tvRemoteTextForm" autocomplete="off"><label>Para escribir en la página, toque primero el campo<input id="tvRemoteText" class="tv-secret-input" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="1024" placeholder="Texto o código de verificación" data-lpignore="true" data-1p-ignore="true" data-bwignore="true"></label><button type="submit" class="tv-button">Escribir en el campo</button></form>
         </section>
       </div></div>`;
     $('tvHome').onclick = () => window.subliRBAC?.go('inicio');
     root.querySelectorAll('[data-tv-platform]').forEach(button => { button.onclick = () => selectPlatform(button.dataset.tvPlatform); });
     $('tvReconnect').onclick = availability;
-    $('tvLoginForm').onsubmit = start;
-    $('tvEmail').oninput = $('tvPassword').oninput = () => { state.requestId = ''; };
+    $('tvLogin').onclick = () => { void start(); };
+    $('tvLoginForm').addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing && ['tvEmail','tvSecret'].includes(event.target?.id)) { event.preventDefault(); void start(); }
+    });
+    $('tvEmail').oninput = $('tvSecret').oninput = () => { state.requestId = ''; };
     $('tvShowPassword').onclick = () => {
-      const reveal = $('tvPassword').type === 'password'; $('tvPassword').type = reveal ? 'text' : 'password';
+      const reveal = !$('tvSecret').classList.contains('tv-secret-visible');
+      $('tvSecret').classList.toggle('tv-secret-visible', reveal);
       $('tvShowPassword').textContent = reveal ? 'Ocultar' : 'Ver'; $('tvShowPassword').setAttribute('aria-label', reveal ? 'Ocultar clave' : 'Mostrar clave');
     };
     $('tvSavedDetails').ontoggle = () => { if ($('tvSavedDetails').open) savedAccounts(); };
@@ -111,7 +115,7 @@
     try {
       const result = await api({ action:'availability' }); if (availabilityId !== state.availabilityId || !active()) return;
       state.available = result;
-      const outdated = result.available && Number(result.version || 0) < 2;
+      const outdated = result.available && Number(result.version || 0) < 3;
       $('tvAvailability').textContent = outdated ? 'La conexión usa una versión anterior de Activar TV. Publique la actualización en Cloudflare y pulse Reintentar conexión.' : result.available ? 'Seleccione una plataforma para iniciar.' :
         'Activar TV está pendiente de conexión o habilitación. Solicite a Sublicuentas conectar el servicio.';
       hidden('tvReconnect', !!result.available && !outdated);
@@ -134,13 +138,13 @@
       '<p>No hay cuentas guardadas que coincidan. Escriba el correo y la clave arriba.</p>';
     $('tvSavedList').querySelectorAll('[data-tv-saved]').forEach(button => { button.onclick = () => {
       const row = state.saved[Number(button.dataset.tvSaved)]; if (!row) return;
-      $('tvEmail').value = String(row.correo || '').trim(); $('tvPassword').value = String(row.clave || '');
-      state.requestId = ''; $('tvSavedDetails').open = false; $('tvPassword').focus();
+      $('tvEmail').value = String(row.correo || '').trim(); $('tvSecret').value = String(row.clave || '');
+      state.requestId = ''; $('tvSavedDetails').open = false; $('tvSecret').focus();
     }; });
   }
   function forget() {
     clearTimeout(state.timer); state.generation++; state.session = null; state.busy = false; state.requestId = ''; state.saved = [];
-    for (const id of ['tvEmail','tvPassword','tvCode','tvRemoteText','tvSavedSearch']) if ($(id)) $(id).value = '';
+    for (const id of ['tvEmail','tvSecret','tvCode','tvRemoteText','tvSavedSearch']) if ($(id)) $(id).value = '';
     if ($('tvFrame')) $('tvFrame').removeAttribute('src');
     if ($('tvAccountEmail')) $('tvAccountEmail').textContent = '';
     if ($('tvSavedList')) $('tvSavedList').replaceChildren();
@@ -191,19 +195,19 @@
     }
   }
   async function start(event) {
-    event.preventDefault(); if (state.busy || state.session || !platformEnabled()) return;
-    const email = $('tvEmail').value.trim(); const password = $('tvPassword').value;
+    event?.preventDefault?.(); if (state.busy || state.session || !platformEnabled()) return;
+    const email = $('tvEmail').value.trim(); const password = $('tvSecret').value;
     if (!email || !password) return message('Escriba el correo y la clave de la cuenta.', true);
     // Remove the value before the network operation; keep no credential in the
-    // visible form after submitting. Browser password-manager prompts remain
-    // controlled by the browser/user, not by this application.
-    $('tvPassword').value = '';
+    // visible form after submitting. The local field is rendered as masked text
+    // instead of a password control so Chrome does not offer to save it.
+    $('tvSecret').value = '';
     state.requestId ||= newId(); const generation = state.generation;
     state.busy = true; update(); message('Abriendo una sesión para esta cuenta…');
     try {
       const result = await api({ action:'start', platform:state.platform.id, email, password, requestId:state.requestId });
       if (generation !== state.generation) { void api({ action:'close', sessionId:result.sessionId }).catch(() => {}); return; }
-      state.session = result; $('tvPassword').value = ''; message(result.message);
+      state.session = result; $('tvSecret').value = ''; message(result.message);
     } catch (err) { if (generation === state.generation) message(err.message, true); }
     finally { if (generation === state.generation) { state.busy = false; update(); schedule(); } }
   }

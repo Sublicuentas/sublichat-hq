@@ -26,6 +26,8 @@
 #screen-activar-tv input::placeholder{color:var(--muted,#67768a);opacity:1;font-size:15px}
 #screen-activar-tv .tv-key{display:flex;align-items:end;gap:8px}
 #screen-activar-tv .tv-key input{flex:1}
+#screen-activar-tv .tv-secret-input{-webkit-text-security:disc}
+#screen-activar-tv .tv-secret-input.tv-secret-visible{-webkit-text-security:none}
 #screen-activar-tv .tv-key button{height:48px;flex:none}
 #screen-activar-tv .tv-steps{display:flex;list-style:none;gap:20px;padding:0;margin:24px 0 16px;flex-wrap:wrap;font-size:17px;font-weight:750}
 #screen-activar-tv .tv-steps li{display:flex;align-items:center;gap:9px;color:var(--txt2,#42536a)}
