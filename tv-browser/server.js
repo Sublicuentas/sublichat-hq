@@ -56,7 +56,8 @@ async function main() {
     setTimeout(() => process.exit(1), 10000).unref();
   };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
-  server.listen(Number(process.env.PORT) || 8080, '0.0.0.0', () => console.log('Servicio Activar TV iniciado.'));
+  const host = process.env.TV_LISTEN_HOST || (process.platform === 'win32' ? '127.0.0.1' : '0.0.0.0');
+  server.listen(Number(process.env.PORT) || 8080, host, () => console.log('Servicio Activar TV iniciado.'));
 }
 if (require.main === module) main().catch(err => { console.error(err.message); process.exit(1); });
 module.exports = { serverFor, authorized };

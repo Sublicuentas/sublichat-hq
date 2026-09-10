@@ -111,7 +111,8 @@ class SessionManager {
     }
     const attempts = (this.starts.get(owner) || []).filter(t => this.now() - t < 60000);
     if (attempts.length >= 5) fail(429, 'Espere un minuto antes de abrir otra sesión.');
-    const activeOthers = [...this.sessions.values()].filter(s => s.owner !== owner).length;
+    const activeOthers = [...this.sessions.values()].filter(s => s.owner !== owner &&
+      !(s.state === 'activated' && !s.browser)).length;
     if (activeOthers >= this.maxSessions) fail(429, 'Activar TV está ocupado. Reintente al terminar otra sesión.');
     // Reserve synchronously before closing the old browser, so simultaneous
     // starts cannot allocate two sessions to one owner or exceed capacity.

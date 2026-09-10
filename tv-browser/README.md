@@ -1,5 +1,13 @@
 # Activar TV — instalación del navegador
 
+**Para utilizar Activar TV sin depender de una PC encendida, siga
+[la instalación en Cloudflare](../tv-cloudflare/README.md).** Incluye los pasos
+desde Windows. La conexión y las activaciones reales siguen pendientes de prueba.
+
+**Si utiliza Windows 11, siga [WINDOWS.md](WINDOWS.md).** Incluye accesos de doble
+clic y ejecución nativa con Node.js. La sección Docker de este documento corresponde
+al despliegue en un servidor Linux.
+
 El módulo de Sublichat está implementado para **Geisell, Relojes y Sublicuentas**
 (también reconoce los accesos existentes `geissel`, `libni` y `naara`).
 Permite escribir cualquier correo y clave sin registrar la cuenta en el CRM.
@@ -28,9 +36,11 @@ completar pasos adicionales; no elude verificaciones.
 | API privada de Vercel | `api/activar-tv.js` | Comprueba el ID token Firebase y el usuario autorizado |
 | Navegador persistente | `tv-browser/` | Mantiene una sesión aislada mientras se inicia sesión y se vincula el TV |
 
-Sublichat sigue alojado donde está. El servicio de navegador debe ejecutarse en
-un servidor permanente con Docker, HTTPS y soporte de sandbox Chromium. No debe
-instalarse como una función temporal de Vercel. No necesita otro proyecto Firebase.
+Sublichat sigue alojado donde está. El servicio de navegador puede ejecutarse en
+Cloudflare, en un servidor Linux con Docker o en Windows con Node.js. En la opción
+local, la computadora debe estar disponible mientras se realizan activaciones.
+El servicio no debe instalarse como una función temporal de Vercel. No necesita
+otro proyecto Firebase.
 
 ## Instalar en un servidor Docker
 
