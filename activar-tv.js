@@ -4,7 +4,7 @@
   if (!P) return;
   const API = '/api/activar-tv';
   let installed = false;
-  const state = { platform: null, session: null, available: null, busy: false, timer: 0, owner: '', generation: 0, availabilityId: 0, requestId: '', saved: [] };
+  const state = { platform: null, session: null, available: null, busy: false, timer: 0, owner: '', generation: 0, availabilityId: 0, requestId: '', saved: [], authToken: '' };
   const $ = id => document.getElementById(id);
   const user = () => String(localStorage.getItem('sublichat_user') || '').trim().toLowerCase();
   const active = () => $('screen-activar-tv')?.classList.contains('active');
@@ -14,6 +14,23 @@
   function message(text, error = false) {
     const node = $('tvMessage'); if (!node) return;
     node.textContent = text || ''; node.classList.toggle('tv-error', error); node.hidden = !text;
+  }
+  async function cacheAuthToken() {
+    try {
+      const authUser = await window.sublichatCurrentAuthUser?.();
+      state.authToken = authUser && typeof authUser.getIdToken === 'function' ? await authUser.getIdToken() : '';
+    } catch (_) { state.authToken = ''; }
+  }
+  function closeOnPageExit() {
+    const sessionId = state.session?.sessionId;
+    if (!sessionId || !state.authToken) { forget(); return; }
+    // keepalive lets the close request finish while the page is being reloaded/closed.
+    fetch(API, {
+      method:'POST', keepalive:true, cache:'no-store',
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + state.authToken },
+      body:JSON.stringify({ action:'close', sessionId })
+    }).catch(() => {});
+    forget();
   }
   async function api(payload) {
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 30000);
@@ -204,6 +221,7 @@
     $('tvSecret').value = '';
     state.requestId ||= newId(); const generation = state.generation;
     state.busy = true; update(); message('Abriendo una sesión para esta cuenta…');
+    await cacheAuthToken();
     try {
       const result = await api({ action:'start', platform:state.platform.id, email, password, requestId:state.requestId });
       if (generation !== state.generation) { void api({ action:'close', sessionId:result.sessionId }).catch(() => {}); return; }
@@ -268,7 +286,7 @@
     window.addEventListener('storage', access);
     document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(state.timer); else schedule(); });
     $('logoutBtn')?.addEventListener('click', () => { void closeCurrent(); }, true);
-    window.addEventListener('pagehide', forget);
+    window.addEventListener('pagehide', closeOnPageExit);
     if (wasActive) void open();
     return true;
   }
