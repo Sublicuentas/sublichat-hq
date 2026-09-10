@@ -17,7 +17,7 @@ class SessionManager {
     this.now = now; this.idleMs = idleMs; this.lifetimeMs = lifetimeMs; this.maxSessions = maxSessions;
     this.sessions = new Map(); this.starts = new Map();
   }
-  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 3, build: 'tv-20260910-3' }; }
+  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 3, build: 'tv-20260910-5' }; }
   view(s) {
     return { ok: true, sessionId: s.id, platform: s.platform.id, email: s.email, state: s.state,
       verifiedBy: s.verifiedBy || '', message: s.operationError || s.message || '', busy: !!s.busy && !s.refreshing,
