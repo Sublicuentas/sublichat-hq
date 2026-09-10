@@ -47,12 +47,15 @@ class PlatformBrowser {
   async waitForLoginFields() {
     await this.page.locator('input[type="email"]:visible,input[autocomplete="username"]:visible,input[name="email"]:visible,input[name="userLoginId"]:visible,#ap_email:visible,input[name="identifier"]:visible').first().waitFor({ state:'visible', timeout:8000 }).catch(() => {});
   }
-  assertPage() {
-    if (!allowsNavigation(this.page.url(), this.platform)) throw new TVError(409, 'La plataforma abrió una página fuera del acceso permitido. Inicie una sesión nueva.');
+  trustedPage() { return allowsNavigation(this.page.url(), this.platform); }
+  assertTrustedPage() {
+    if (!this.trustedPage()) throw new TVError(409, 'La plataforma abrió un acceso externo. Complételo manualmente en la página mostrada o inicie una sesión nueva.');
   }
   async login(email, password) {
     await this.page.goto(this.platform.login, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    this.assertPage();
+    // If the provider redirects to an external identity/challenge host, keep
+    // that page visible for the operator but never autofill credentials there.
+    if (!this.trustedPage()) return;
     if (this.platform.id !== 'prime') await this.waitForLoginFields();
     // El acceso de Prime debe generar su propio enlace OpenID. Paramount puede
     // devolver la portada regional y exige volver a pulsar Iniciar sesión.
@@ -64,7 +67,8 @@ class PlatformBrowser {
       field = await this.firstVisible(['input[type="email"]', 'input[autocomplete="username"]', 'input[name="email"]', 'input[name="userLoginId"]', '#ap_email', 'input[name="identifier"]']);
     }
     if (!field) return; // La página remota permite completar un diseño distinto.
-    this.assertPage(); await field.fill(email);
+    if (!this.trustedPage()) return;
+    await field.fill(email);
     let key = await this.firstVisible(['input[type="password"]']);
     if (!key) {
       await this.clickNamed(/^(?:continuar|continue|siguiente|next)$/i);
@@ -73,17 +77,18 @@ class PlatformBrowser {
       key = await this.firstVisible(['input[type="password"]']);
     }
     if (key) {
-      this.assertPage(); await key.fill(password);
+      if (!this.trustedPage()) return;
+      await key.fill(password);
       await this.clickNamed(/^(?:iniciar sesi[oó]n|sign in|log in|continuar|continue|entrar|acceder)$/i);
       await this.settle();
     }
   }
   async openActivation() {
     await this.page.goto(this.platform.activation, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    this.assertPage();
+    this.assertTrustedPage();
   }
   async activate(code) {
-    this.assertPage();
+    this.assertTrustedPage();
     const candidates = this.page.locator('input:not([type="hidden"]):not([type="password"]):not([type="email"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="search"])');
     const fields = [];
     for (let i = 0, count = Math.min(await candidates.count(), 30); i < count; i++) {
@@ -107,7 +112,6 @@ class PlatformBrowser {
     await this.settle();
   }
   async inspect(email) {
-    this.assertPage();
     const snapshot = await this.page.evaluate(() => {
       const visible = element => !!(element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
       const textOf = selectors => [...document.querySelectorAll(selectors)].filter(visible).map(el => el.innerText || '').join('\n');
@@ -124,13 +128,13 @@ class PlatformBrowser {
     return interpretEvidence(snapshot, email);
   }
   async frame() {
-    this.assertPage();
     const data = await this.page.screenshot({ type: 'jpeg', quality: 65, fullPage: false, timeout: 7000,
       mask: [this.page.locator('input[type="password"]')], maskColor: '#dbe6ef' });
-    return { image: data.toString('base64'), width: 1000, height: 760, host: new URL(this.page.url()).hostname };
+    let host = '';
+    try { host = new URL(this.page.url()).hostname; } catch (_) {}
+    return { image: data.toString('base64'), width: 1000, height: 760, host };
   }
   async interact(event) {
-    this.assertPage();
     if (event.type === 'tap') {
       if (!Number.isFinite(event.x) || !Number.isFinite(event.y) || event.x < 0 || event.x >= 1000 || event.y < 0 || event.y >= 760) throw new TVError(400, 'Posición no válida.');
       await this.page.mouse.click(event.x, event.y);

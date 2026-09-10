@@ -25,8 +25,10 @@ function requestGuard(platform, resolve, now = Date.now) {
           (url.port && !['80', '443'].includes(url.port))) return route.abort();
       const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
       if (/^(?:localhost|metadata\.google\.internal)$|\.(?:localhost|local|internal)$/.test(host)) return route.abort();
-      if (request.isNavigationRequest() && !request.frame().parentFrame() &&
-          !allowsNavigation(url.href, platform)) return route.abort();
+      // Top-level redirects are allowed when they resolve only to public IPs.
+      // Streaming providers increasingly hand login/challenge flows to separate
+      // identity hosts. Automatic credential entry remains restricted in
+      // PlatformBrowser to the platform's trusted domains.
       let entry = addresses.get(host);
       if (!entry || now() - entry.at >= 60000) {
         if (addresses.size >= 256) addresses.delete(addresses.keys().next().value);
