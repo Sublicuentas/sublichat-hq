@@ -8134,7 +8134,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
     ensureScreen('activar-tv','Activar TV','Primero inicie sesión. Después introduzca el código del televisor.','');
-    ensureScreen('control-cuentas','Control Maestro','Revisión privada de clientes, cuentas asignadas y respaldo diario en el formato de su Excel.','');
+    ensureScreen('control-cuentas','Control Maestro','Cuentas, revisiones y respaldos compartidos por Sublicuentas y Geisell.','');
     ensureScreen('revendedores','Catálogo Socios','Precios, vendedores y clientes de toda la red de socios — conectado al Panel de Socios.','');
     ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
     ensureScreen('catalogo-relojes','Catálogo Relojes','Administre productos, precios, promociones públicas, disponibilidad y apariencia del catálogo desde Sublichat.','');
@@ -8153,7 +8153,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.body.classList.toggle('role-finanzas',role==='finanzas');
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(s=>s!=='activar-tv'||can('activar-tv')).filter(s=>s!=='control-cuentas'||isSublicuentasAccount()).filter(s=>s!=='revendedores'||isSublicuentasAccount()).filter(s=>s!=='portal-cliente'||canPortalCliente()).filter(s=>s!=='sorteos'||canPortalCliente()).filter(s=>s!=='catalogo-relojes'||canPortalCliente());
+    // El menú usa el mismo permiso que abre el módulo para incluir a Geisell en Control Maestro.
+    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(can);
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&role==='admin')?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
