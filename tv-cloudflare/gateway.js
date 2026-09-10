@@ -45,7 +45,7 @@ async function readInput(request) {
 export async function serve(request, env, forward) {
   try {
     const url = new URL(request.url);
-    if (url.pathname === '/healthz' && request.method === 'GET') return json({ ok: true, service: 'sublichat-activar-tv', version: 'tv-20260910-2' });
+    if (url.pathname === '/healthz' && request.method === 'GET') return json({ ok: true, service: 'sublichat-activar-tv', version: 'tv-20260910-3' });
     if (url.pathname !== '/v1/action') return json({ ok: false, error: 'No encontrado.' }, 404);
     if (request.method !== 'POST') return json({ ok: false, error: 'Use POST.' }, 405);
     if (!authorized(request.headers.get('authorization'), env.TV_BROWSER_SECRET)) return json({ ok: false, error: 'Acceso no autorizado.' }, 401);

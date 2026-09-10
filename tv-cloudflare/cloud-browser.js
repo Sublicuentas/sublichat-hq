@@ -32,14 +32,14 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
     const lease = { browser: null }; leases.add(lease);
     let browser, context;
     const closeBrowser = async () => {
-      try { if (context) await context.close(); }
+      try { if (context) { await context.clearCookies().catch(() => {}); await context.close(); } }
       finally {
         try { if (browser) await browser.close(); }
         finally { if (!browser || !browser.isConnected()) leases.delete(lease); }
       }
     };
     try {
-      browser = await launch(binding, { keep_alive: 60000 }); lease.browser = browser;
+      browser = await launch(binding, { keep_alive: 600000 }); lease.browser = browser;
       browser.on('disconnected', () => leases.delete(lease));
       context = await browser.newContext({
         viewport: { width: 1000, height: 760 }, locale: 'es-HN', timezoneId: 'America/Tegucigalpa',
