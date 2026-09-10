@@ -28,7 +28,7 @@
       throw err;
     } finally { clearTimeout(timeout); }
   }
-  function platformEnabled() { return !!state.platform && !!state.available?.available && state.available.platforms.includes(state.platform.id); }
+  function platformEnabled() { return !!state.platform && !!state.available?.available && Number(state.available.version) >= 2 && state.available.platforms.includes(state.platform.id); }
   function draw() {
     const root = $('rbac-activar-tv'); if (!root) return;
     root.innerHTML = `<div class="tv-shell">
@@ -48,6 +48,7 @@
           <button id="tvLogin" class="tv-button tv-primary" type="submit" disabled>Iniciar sesión</button>
         </form>
         <div id="tvAccount" class="tv-card tv-account" hidden><div><small id="tvAccountStatus">Iniciando sesión</small><strong id="tvAccountEmail"></strong></div><button id="tvChange" type="button" class="tv-button">Cambiar cuenta</button></div>
+        <button id="tvRecover" type="button" class="tv-button" hidden>Recuperar página</button>
         <div id="tvConfirmBox" class="tv-card" hidden><p>La plataforma no muestra el correo completo. Revise la cuenta en la página de abajo antes de continuar.</p><label class="tv-checkbox"><input type="checkbox" id="tvConfirmCheck">Confirmo que la cuenta abierta corresponde al correo indicado arriba.</label><button type="button" id="tvConfirm" class="tv-button tv-primary" disabled>Confirmar cuenta</button></div>
         <button type="button" id="tvNext" class="tv-button tv-primary" hidden>Continuar al código del TV →</button>
         <form id="tvCodeForm" class="tv-card" hidden><h3>2. Código del TV</h3><label>Código que aparece en el televisor<input id="tvCode" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="Escriba el código" required></label><button type="submit" id="tvActivate" class="tv-button tv-primary">Activar TV</button></form>
@@ -72,6 +73,7 @@
     $('tvSavedDetails').ontoggle = () => { if ($('tvSavedDetails').open) savedAccounts(); };
     $('tvSavedSearch').oninput = savedAccounts;
     $('tvChange').onclick = $('tvAnother').onclick = () => selectPlatform(state.platform.id);
+    $('tvRecover').onclick = () => command('reload');
     $('tvConfirmCheck').onchange = () => { $('tvConfirm').disabled = !$('tvConfirmCheck').checked || state.busy || state.session?.busy; };
     $('tvConfirm').onclick = () => command('confirm_account', { email:state.session.email });
     $('tvNext').onclick = () => command('activation_page');
@@ -109,9 +111,10 @@
     try {
       const result = await api({ action:'availability' }); if (availabilityId !== state.availabilityId || !active()) return;
       state.available = result;
-      $('tvAvailability').textContent = result.available ? 'Seleccione una plataforma para iniciar.' :
+      const outdated = result.available && Number(result.version || 0) < 2;
+      $('tvAvailability').textContent = outdated ? 'La conexión usa una versión anterior de Activar TV. Publique la actualización en Cloudflare y pulse Reintentar conexión.' : result.available ? 'Seleccione una plataforma para iniciar.' :
         'Activar TV está pendiente de conexión o habilitación. Solicite a Sublicuentas conectar el servicio.';
-      hidden('tvReconnect', !!result.available);
+      hidden('tvReconnect', !!result.available && !outdated);
     } catch (err) {
       if (availabilityId !== state.availabilityId || !active()) return;
       state.available = null; $('tvAvailability').textContent = err.message; hidden('tvReconnect', false);
@@ -169,12 +172,13 @@
     if (!$('tvLogin')) return;
     $('tvLogin').disabled = busy || !platformEnabled(); $('tvLogin').textContent = state.busy && !s ? 'Iniciando…' : 'Iniciar sesión';
     hidden('tvLoginForm', !!s); hidden('tvAccount', !s);
+    hidden('tvRecover', !s || step === 'activated' || (!s.recoverable && !!s.frame));
     hidden('tvConfirmBox', step !== 'verify_account'); hidden('tvNext', step !== 'ready');
     hidden('tvCodeForm', !['activation','submitting'].includes(step)); hidden('tvDone', step !== 'activated');
     hidden('tvRemote', !s?.frame || step === 'activated');
     const codeStep = ['activation','submitting','activated'].includes(step);
     $('tvStepLogin').setAttribute('aria-current', codeStep ? 'false' : 'step'); $('tvStepCode').setAttribute('aria-current', codeStep ? 'step' : 'false');
-    for (const id of ['tvChange','tvConfirm','tvNext','tvActivate','tvRefresh']) $(id).disabled = busy || (id === 'tvConfirm' && !$('tvConfirmCheck').checked);
+    for (const id of ['tvChange','tvConfirm','tvNext','tvActivate','tvRefresh','tvRecover']) $(id).disabled = busy || (id === 'tvConfirm' && !$('tvConfirmCheck').checked);
     $('tvRemote').querySelectorAll('button,input').forEach(element => { element.disabled = busy; });
     if (s) {
       $('tvAccountEmail').textContent = s.email;
@@ -190,6 +194,10 @@
     event.preventDefault(); if (state.busy || state.session || !platformEnabled()) return;
     const email = $('tvEmail').value.trim(); const password = $('tvPassword').value;
     if (!email || !password) return message('Escriba el correo y la clave de la cuenta.', true);
+    // Remove the value before the network operation; keep no credential in the
+    // visible form after submitting. Browser password-manager prompts remain
+    // controlled by the browser/user, not by this application.
+    $('tvPassword').value = '';
     state.requestId ||= newId(); const generation = state.generation;
     state.busy = true; update(); message('Abriendo una sesión para esta cuenta…');
     try {
