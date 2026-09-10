@@ -42,7 +42,7 @@ async function readInput(request) {
   return clean;
 }
 
-const BUILD = 'tv-20260910-5';
+const BUILD = 'tv-20260910-6';
 
 export async function serve(request, env, forward) {
   try {

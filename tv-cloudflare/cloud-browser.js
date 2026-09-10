@@ -62,10 +62,12 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
       if (error instanceof TVError) throw error;
       const detail = String(error?.message || error || '').toLowerCase();
       if (detail.includes('browser time limit exceeded') || detail.includes('time limit exceeded for today')) {
-        throw new TVError(429, 'Cloudflare agotó los 10 minutos diarios de Browser Run del plan Free. La cuota vuelve al iniciar el siguiente día UTC (6:00 p. m. en Honduras).', 'TV_CLOUD_DAILY_LIMIT');
+        throw new TVError(429, 'Cloudflare confirmó que se alcanzó el límite diario de Browser Run del plan Free. La cuota vuelve al iniciar el siguiente día UTC.', 'TV_CLOUD_DAILY_LIMIT');
       }
       if (detail.includes('rate limit exceeded') || detail.includes('too many requests') || Number(error?.status) === 429) {
-        throw new TVError(429, 'Cloudflare rechazó Browser Run por límite 429. Espere 25 segundos; si continúa, ya se agotaron los 10 minutos diarios del plan Free y podrá probar de nuevo a las 6:00 p. m. de Honduras.', 'TV_CLOUD_LIMIT');
+        // A generic HTTP 429 does NOT prove that the daily browser-time quota was
+        // exhausted. Cloudflare also uses 429 for creation/rate limits.
+        throw new TVError(429, 'Cloudflare rechazó temporalmente una nueva sesión de navegador (429 Rate limit exceeded). Esto no confirma que su cuota diaria esté agotada. Espere unos segundos y reintente.', 'TV_CLOUD_RATE_LIMIT');
       }
       throw new TVError(503, 'Cloudflare no pudo abrir el navegador remoto. Reintente; si continúa, revise Browser Run.', 'TV_CLOUD_UNAVAILABLE');
     }
