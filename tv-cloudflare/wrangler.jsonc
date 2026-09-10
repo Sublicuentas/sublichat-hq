@@ -11,7 +11,7 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TVCoordinator"] }],
   "vars": {
-    "TV_ENABLED_PLATFORMS": "",
+    "TV_ENABLED_PLATFORMS": "disney,netflix,hbo,prime,crunchyroll,paramount",
     "TV_MAX_SESSIONS": "3",
     "TV_IDLE_MINUTES": "3",
     "TV_LIFETIME_MINUTES": "30"
