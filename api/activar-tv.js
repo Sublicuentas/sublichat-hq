@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
   catch (_) { return res.status(401).json({ ok: false, error: 'La sesión de Sublichat venció. Vuelva a ingresar.' }); }
   if (!canUse(user.usuario)) return res.status(403).json({ ok: false, error: 'Este usuario no tiene acceso a Activar TV.' });
   const body = req.body || {};
-  const allowed = ['availability', 'start', 'poll', 'interact', 'confirm_account', 'activation_page', 'activate', 'close'];
+  const allowed = ['availability', 'start', 'poll', 'interact', 'confirm_account', 'activation_page', 'activate', 'reload', 'close'];
   if (!allowed.includes(body.action)) return res.status(400).json({ ok: false, error: 'Acción no válida.' });
   if (Buffer.byteLength(JSON.stringify(body)) > 24000) return res.status(413).json({ ok: false, error: 'Solicitud demasiado grande.' });
   const rawUrl = process.env.TV_BROWSER_URL || '';
