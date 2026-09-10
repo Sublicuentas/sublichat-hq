@@ -39,7 +39,7 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
       }
     };
     try {
-      browser = await launch(binding, { keep_alive: 600000 }); lease.browser = browser;
+      browser = await launch(binding, { keep_alive: 180000 }); lease.browser = browser;
       browser.on('disconnected', () => leases.delete(lease));
       context = await browser.newContext({
         viewport: { width: 1000, height: 760 }, locale: 'es-HN', timezoneId: 'America/Tegucigalpa',
@@ -60,7 +60,14 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
     } catch (error) {
       await closeBrowser().catch(() => {});
       if (error instanceof TVError) throw error;
-      throw new TVError(503, 'Cloudflare no pudo abrir el navegador. Revise Browser Run, su cuota y reintente.', 'TV_CLOUD_UNAVAILABLE');
+      const detail = String(error?.message || error || '').toLowerCase();
+      if (detail.includes('browser time limit exceeded') || detail.includes('time limit exceeded for today')) {
+        throw new TVError(429, 'Cloudflare agotó los 10 minutos diarios de Browser Run del plan Free. La cuota vuelve al iniciar el siguiente día UTC (6:00 p. m. en Honduras).', 'TV_CLOUD_DAILY_LIMIT');
+      }
+      if (detail.includes('rate limit exceeded') || detail.includes('too many requests') || Number(error?.status) === 429) {
+        throw new TVError(429, 'Cloudflare rechazó Browser Run por límite 429. Espere 25 segundos; si continúa, ya se agotaron los 10 minutos diarios del plan Free y podrá probar de nuevo a las 6:00 p. m. de Honduras.', 'TV_CLOUD_LIMIT');
+      }
+      throw new TVError(503, 'Cloudflare no pudo abrir el navegador remoto. Reintente; si continúa, revise Browser Run.', 'TV_CLOUD_UNAVAILABLE');
     }
   };
 }
