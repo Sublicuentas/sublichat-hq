@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-60">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-COMPARTIDO-20260910-61">
 <link rel="stylesheet" href="./activar-tv.css?v=20260909-1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -1940,13 +1940,15 @@ const DEMO = [
 
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
 let CONTROL_DATA_VERSION=0; // cambia cada vez que Clientes/Bodega reciben una lectura nueva
+let CONTROL_SESSION_VERSION=0, CONTROL_DATA_ERROR="", controlLiveFallback=null;
+const controlSharedRequests=new Map();
 function bumpControlDataVersion(){ CONTROL_DATA_VERSION=(CONTROL_DATA_VERSION+1)%1000000000; return CONTROL_DATA_VERSION; }
 let clientesLiveUnsubscribe=null, clientesLiveStarted=false;
 const fmt = n => "Lps " + Number(n||0).toLocaleString("es-HN");
 const daysTo = d => Math.round((d - today)/86400000);
 function parseDate(v){
   if(!v) return null;
-  if(typeof v==="object" && v.seconds!=null) return new Date(v.seconds*1000);
+  if(typeof v==="object" && (v.seconds??v._seconds)!=null) return new Date((v.seconds??v._seconds)*1000);
   if(v instanceof Date) return v;
   const s=String(v).trim();
   if(/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s.slice(0,10)+"T00:00:00");
@@ -2076,11 +2078,59 @@ function resumenCarteraVigente(lista=DATA){
   };
 }
 
+function controlUsesSharedData(){
+  for(const key of ['sublichat_user','subli_usuario','usuario','subli_user','active_user']){
+    const name=String(localStorage.getItem(key)||'').trim().toLowerCase();
+    if(name)return ['sublicuentas','naara','geisell','geissel'].includes(name);
+  }
+  return false;
+}
+
+async function readControlSharedCollection(coleccion){
+  const session=CONTROL_SESSION_VERSION;
+  const key=session+':'+coleccion;
+  if(controlSharedRequests.has(key))return controlSharedRequests.get(key);
+  const pending=(async()=>{
+    const docs=[],seen=new Set();let cursor='';
+    do{
+      if(session!==CONTROL_SESSION_VERSION)throw new Error('La sesión cambió.');
+      const response=await fetch('/api/importar',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'control_datos',coleccion,cursor})});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok||!result.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos de Control Maestro.');
+      if(result.coleccion!==coleccion||!Array.isArray(result.documentos))throw new Error('Respuesta incompleta de Control Maestro.');
+      for(const item of result.documentos){
+        if(!item||typeof item.id!=='string'||!item.data||typeof item.data!=='object')throw new Error('Datos incompletos de Control Maestro.');
+        docs.push({id:item.id,data:()=>item.data});
+      }
+      cursor=String(result.nextCursor||'');
+      if(cursor&&seen.has(cursor))throw new Error('No se pudo completar la lectura de todas las cuentas.');
+      if(cursor)seen.add(cursor);
+    }while(cursor);
+    if(session!==CONTROL_SESSION_VERSION)throw new Error('La sesión cambió.');
+    return {docs};
+  })();
+  controlSharedRequests.set(key,pending);
+  try{return await pending;}finally{controlSharedRequests.delete(key);}
+}
+
+function activarControlFallback(){
+  if(controlLiveFallback||!controlUsesSharedData())return;
+  // Si las reglas del navegador no admiten el nuevo rol de Geisell, la API
+  // privada conserva la actualización mientras trabaja en Control Maestro.
+  controlLiveFallback=setInterval(()=>{
+    if(document.hidden||!document.body.classList.contains('ready')||!document.getElementById('screen-control-cuentas')?.classList.contains('active'))return;
+    if(window.SublichatControlMaestro?.isBusy?.())return;
+    load({forceServer:true,requireServer:true,controlOnly:true}).catch(()=>{});
+  },60000);
+}
+
 function activarClientesEnVivo(db,collection,onSnapshot){
   if(clientesLiveStarted||typeof onSnapshot!=="function")return;
   clientesLiveStarted=true;
+  const session=CONTROL_SESSION_VERSION;
   const ref=collection(db,CONFIG.collection);
   clientesLiveUnsubscribe=onSnapshot(ref,{includeMetadataChanges:true},snap=>{
+    if(session!==CONTROL_SESSION_VERSION)return;
     // No permita que una copia vieja del caché reemplace una lectura confirmada.
     // Los cambios del bot llegan aquí apenas Firebase confirma el servidor.
     if(snap.metadata&&snap.metadata.fromCache)return;
@@ -2094,13 +2144,19 @@ function activarClientesEnVivo(db,collection,onSnapshot){
         window.sublichatControlSyncLoadedData("🔄 Cambio recibido desde Firebase/Telegram.");
     }catch(_){ }
   },error=>{
+    if(session!==CONTROL_SESSION_VERSION)return;
     console.error("clientes en vivo",error);
     clientesLiveStarted=false;
     clientesLiveUnsubscribe=null;
+    activarControlFallback();
   });
 }
 
 function detenerClientesEnVivo(){
+  CONTROL_SESSION_VERSION++;
+  if(controlLiveFallback)clearInterval(controlLiveFallback);
+  controlLiveFallback=null;controlSharedRequests.clear();CONTROL_DATA_ERROR='';
+  DATA=[];INVENTARIO=[];FINANZAS=[];bumpControlDataVersion();
   try{if(typeof clientesLiveUnsubscribe==="function")clientesLiveUnsubscribe();}catch(_){ }
   clientesLiveUnsubscribe=null;
   clientesLiveStarted=false;
@@ -2110,6 +2166,8 @@ async function load(options={}){
   const forceServer=options===true || !!(options&&options.forceServer);
   const requireServer=!!(options&&options.requireServer);
   const controlOnly=!!(options&&options.controlOnly);
+  const session=CONTROL_SESSION_VERSION;
+  const sharedControl=controlUsesSharedData();
   const cfg=CONFIG.firebase;
   if(cfg && cfg.projectId){
     try{
@@ -2117,7 +2175,9 @@ async function load(options={}){
       const { getFirestore, collection, getDocs, getDocsFromServer, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const app = getApps().length ? getApp() : initializeApp(cfg);
       const db=getFirestore(app);
+      if(!await sublichatCurrentAuthUser())throw new Error('Vuelva a iniciar sesión para cargar los datos.');
       const readCollection=async(name)=>{
+        if(sharedControl&&[CONFIG.collection,'inventario'].includes(name))return readControlSharedCollection(name);
         const ref=collection(db,name);
         if(forceServer&&typeof getDocsFromServer==="function"){
           try{return await getDocsFromServer(ref);}
@@ -2134,10 +2194,11 @@ async function load(options={}){
       const snap=await readCollection(CONFIG.collection);
       let invSnap=null,invError=null;
       try{invSnap=await readCollection("inventario");}
-      catch(e){if(requireServer)throw e;invError=e;}
+      catch(e){if(requireServer||sharedControl)throw e;invError=e;}
       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
-      DATA=nextData;INVENTARIO=nextInventory;
+      if(session!==CONTROL_SESSION_VERSION)return;
+      DATA=nextData;INVENTARIO=nextInventory;CONTROL_DATA_ERROR='';
       bumpControlDataVersion();
       // Control Maestro puede abrirse antes de que termine la primera lectura de
       // Bodega. Avisamos inmediatamente cuando la lectura atómica de Clientes +
@@ -2166,15 +2227,19 @@ async function load(options={}){
           const finPorId=new Map();
           if(finHistorico)finHistorico.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas",...d.data()}));
           if(finActual)finActual.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas_movimientos",...d.data()}));
+          if(session!==CONTROL_SESSION_VERSION)return;
           FINANZAS=[...finPorId.values()];
           window._finError="";
         }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
       }
     }catch(e){
+      if(session!==CONTROL_SESSION_VERSION)return;
       console.error(e);
-      if(requireServer)throw new Error('No se pudo leer Firebase directamente. Revise su conexión e intente de nuevo.');
-      if(!DATA.length)DATA=DEMO.flatMap(flattenCliente);
-      document.getElementById("srcLabel").textContent=DATA.length?"Firebase · última copia visible":"Error · demo";
+      CONTROL_DATA_ERROR=e.message||'No se pudieron cargar los datos de Firebase. Presione Actualizar datos para reintentar.';
+      document.getElementById("srcLabel").textContent=DATA.length?'Error de conexión · última copia visible':'No se pudieron cargar los datos';
+      if(sharedControl)activarControlFallback();
+      try{window.sublichatControlSyncLoadedData?.();}catch(_){}
+      if(requireServer)throw new Error(CONTROL_DATA_ERROR);
     }
   }else{
     if(requireServer)throw new Error('Firebase no está configurado en esta sesión.');
@@ -2193,10 +2258,11 @@ async function load(options={}){
 }
 
 // Fuente privada para Control Maestro. Solo expone la información que ya está
-// cargada dentro de la sesión actual; el módulo y su API vuelven a validar que
-// el usuario sea Sublicuentas antes de permitir plantillas o respaldos.
+// cargada dentro de la sesión actual. Sublicuentas y Geisell reciben las mismas
+// colecciones; la API valida su sesión antes de servir datos o respaldos.
 window.sublichatControlData=()=>({
   version:CONTROL_DATA_VERSION,
+  error:CONTROL_DATA_ERROR,
   servicios:DATA.flatMap(c=>(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre)).map((p,perfilIndex)=>({
     clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
     cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),titular:c.nombre||'',
@@ -9950,7 +10016,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20260909-60"></script>
+<script defer src="./control-maestro.js?v=20260910-61"></script>
 <script defer src="./activar-tv-platforms.js?v=20260909-1"></script>
 <script defer src="./activar-tv.js?v=20260909-1"></script>
 

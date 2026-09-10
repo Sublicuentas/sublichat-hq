@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-PLATAFORMAS-CUENTAS-20260909-60';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260910-61';
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -134,7 +134,7 @@
   function source(){
     try{
       const x=typeof window.sublichatControlData==='function'?window.sublichatControlData():{};
-      return {version:Number(x.version)||0,servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
+      return {version:Number(x.version)||0,error:String(x.error||''),servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
     }catch(_){return {version:0,servicios:[],cuentas:[]};}
   }
 
@@ -1378,7 +1378,7 @@
     compare(historical,'clave',currentPassword,String(row.excel.password??''),account.requiresPassword);
     compare(historical,'vencimiento',currentDate,dateKey(row.excel.date),true);
     if(historical.length)return {label:'COINCIDE EN BASE ACTUAL',tone:'ok',complete:false,detail:`Clientes y Bodega coinciden. El Excel tiene datos distintos o incompletos: ${historical.join(', ')}. El respaldo histórico no modifica la base actual.`};
-    return {label:'100% COINCIDE',tone:'ok',complete:true,detail:'Los datos de este cliente coinciden en Clientes, Bodega y el respaldo Excel: identidad, cuenta, perfil, PIN, teléfono, clave y vencimiento según corresponda.'};
+    return {label:'Coincide',tone:'ok',complete:true,detail:'Coincide al 100% en Clientes, Bodega y el respaldo Excel: identidad, cuenta, perfil, PIN, teléfono, clave y vencimiento según corresponda.'};
   }
 
   function rosterRowsCompactHtml(account){
@@ -1412,7 +1412,7 @@
       <div class="cm-account-detail-head">
         <div>
           <h4>Clientes de esta cuenta</h4>
-          <p>100% COINCIDE: datos actuales y respaldo Excel iguales.</p>
+          <p>Coincide en verde: todos los datos del perfil y del respaldo Excel son iguales.</p>
         </div>
         <div class="cm-detail-side">
           <span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>
@@ -1491,10 +1491,10 @@
     return `<section class="cm-panel cm-workspace-panel">
       <div class="cm-workspace-top">
         <button class="cm-btn" data-cm-go-home>← Inicio</button>
-        <div class="cm-workspace-search"><label class="cm-search"><span>⌕</span><input id="cmAccountSearch" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
       </div>
       <p class="cm-platform-order-hint">Cuentas revisadas: de menor a mayor porcentaje · 100% al final.</p>
       <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
+      <div class="cm-workspace-search"><label class="cm-search"><span aria-hidden="true">⌕</span><input id="cmAccountSearch" aria-label="Buscar cuenta, cliente, correo, perfil o PIN" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
       <div class="cm-selected-platform">
         <div class="cm-selected-platform-head">
           <div class="cm-selected-platform-main">${platformLogoHtml(selectedMeta,'cm-selected-platform-logo',selectedColor)}<div><h3>${esc(selectedName)}</h3><p>${scopedAccounts.length} cuentas totales</p></div></div>
@@ -1508,9 +1508,11 @@
 
   function accountAuditHtml(){
     const audit=state.accountAudit;
+    const loadError=source().error;
+    if(loadError&&!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-status err" role="alert">${esc(loadError)} Presione Actualizar datos para reintentar.</div></section>`;
     if(!audit?.accounts?.length)return `<section class="cm-panel"><div class="cm-empty">Todavía no cargaron las cuentas de Firebase. Presione <b>Actualizar datos</b>.</div></section>`;
     const excelNote=audit.metrics.hasExcelAudit?'':`<div class="cm-excel-pending">⏳ El cruce con el Excel histórico todavía no cargó completo; los datos se actualizarán solos al terminar.</div>`;
-    return `${state.accountView==='home'?homeDashboardHtml(audit):workspaceHeaderHtml(audit)}${excelNote}`;
+    return `${loadError?`<div class="cm-status err" role="alert">${esc(loadError)} Se conserva la última lectura completa.</div>`:''}${state.accountView==='home'?homeDashboardHtml(audit):workspaceHeaderHtml(audit)}${excelNote}`;
   }
 
   function kpisHtml(){
@@ -2692,6 +2694,7 @@
   }
 
   window.SublichatControlMaestro={
+    isBusy:()=>state.busy||state.loading||state.refreshing,
     repair:()=>repairControlNavigation(),
     close:()=>closeControlExpanded({restoreScroll:false}),
     isExpanded:()=>!!state.controlExpanded
