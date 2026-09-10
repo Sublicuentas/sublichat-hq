@@ -38,7 +38,7 @@ export class CloudSessionManager extends SessionManager {
       }
       // Browser I/O continues in the Durable Object. The HTTP request returns
       // promptly, including while a platform asks for additional verification.
-      if (!s.busy && s.browser && s.state !== 'activated') return this.launch(s, async () => {});
+      if (!s.busy && s.browser && s.state !== 'activated') return this.launch(s, async () => {}, { background: true });
       return this.view(s);
     }
     return super.dispatch(owner, input);
