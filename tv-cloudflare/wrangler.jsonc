@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sublichat-activar-tv",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "browser": { "binding": "BROWSER" },
+  "durable_objects": {
+    "bindings": [{ "name": "TV_SESSIONS", "class_name": "TVCoordinator" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TVCoordinator"] }],
+  "vars": {
+    "TV_ENABLED_PLATFORMS": "",
+    "TV_MAX_SESSIONS": "3",
+    "TV_IDLE_MINUTES": "3",
+    "TV_LIFETIME_MINUTES": "30"
+  },
+  "observability": { "enabled": false },
+  "send_metrics": false
+}
