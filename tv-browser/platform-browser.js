@@ -49,34 +49,10 @@ class PlatformBrowser {
   }
   trustedPage() { return allowsNavigation(this.page.url(), this.platform); }
   assertTrustedPage() {
-    if (!this.trustedPage()) throw new TVError(409, 'La plataforma abrió un acceso externo. Complételo manualmente en la página mostrada o inicie una sesión nueva.', 'TV_EXTERNAL_LOGIN');
-  }
-  visiblePage() { return /^https?:\/\//i.test(this.page.url()); }
-  async navigate(url) {
-    try {
-      // Cloudflare Browser Run defaults to DOMContentLoaded. If a provider
-      // keeps loading secondary resources past the timeout, keep the committed
-      // page when a public URL is already visible instead of destroying it.
-      await this.page.goto(url, { timeout: 30000 });
-    } catch (_) {
-      // Some SPAs abort the original navigation after committing a usable URL.
-      // Keep that page visible; only fail when Chromium never left a blank/error URL.
-      if (!this.visiblePage()) throw new TVError(502, 'No se pudo cargar la página de la plataforma. Pulse Recuperar página para reintentar.', 'TV_NAVIGATION_FAILED');
-    }
-    await this.settle();
-  }
-  async reload() {
-    // Explicit operator action only. Reopen the fixed login/activation URL
-    // when Chromium is still blank; otherwise reload the same page/context.
-    if (!this.visiblePage()) return this.navigate(this.platform.login);
-    try { await this.page.reload({ timeout: 30000 }); }
-    catch (_) {
-      if (!this.visiblePage()) throw new TVError(502, 'La plataforma todavía no respondió. Reintente la página o cambie de cuenta.', 'TV_NAVIGATION_FAILED');
-    }
-    await this.settle();
+    if (!this.trustedPage()) throw new TVError(409, 'La plataforma abrió un acceso externo. Complételo manualmente en la página mostrada o inicie una sesión nueva.');
   }
   async login(email, password) {
-    await this.navigate(this.platform.login);
+    await this.page.goto(this.platform.login, { waitUntil: 'domcontentloaded', timeout: 30000 });
     // If the provider redirects to an external identity/challenge host, keep
     // that page visible for the operator but never autofill credentials there.
     if (!this.trustedPage()) return;
@@ -108,7 +84,7 @@ class PlatformBrowser {
     }
   }
   async openActivation() {
-    await this.navigate(this.platform.activation);
+    await this.page.goto(this.platform.activation, { waitUntil: 'domcontentloaded', timeout: 30000 });
     this.assertTrustedPage();
   }
   async activate(code) {
@@ -136,8 +112,6 @@ class PlatformBrowser {
     await this.settle();
   }
   async inspect(email) {
-    if (!this.visiblePage()) throw new TVError(502, 'La página de la plataforma no terminó de abrir. Pulse Recuperar página.', 'TV_NAVIGATION_FAILED');
-    if (!this.trustedPage()) return { external: true, authenticated: false, emailMatches: false, activationSuccess: false };
     const snapshot = await this.page.evaluate(() => {
       const visible = element => !!(element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
       const textOf = selectors => [...document.querySelectorAll(selectors)].filter(visible).map(el => el.innerText || '').join('\n');
@@ -154,7 +128,6 @@ class PlatformBrowser {
     return interpretEvidence(snapshot, email);
   }
   async frame() {
-    if (!this.visiblePage()) throw new TVError(502, 'La página todavía no está disponible. Pulse Recuperar página.', 'TV_NAVIGATION_FAILED');
     const data = await this.page.screenshot({ type: 'jpeg', quality: 65, fullPage: false, timeout: 7000,
       mask: [this.page.locator('input[type="password"]')], maskColor: '#dbe6ef' });
     let host = '';
@@ -183,7 +156,7 @@ class PlatformBrowser {
     } else throw new TVError(400, 'Acción no válida.');
     await this.settle();
   }
-  async close() { if (!this.closed) { this.closed = true; await this.context.clearCookies().catch(() => {}); await this.context.close(); } }
+  async close() { if (!this.closed) { this.closed = true; await this.context.close(); } }
 }
 
 module.exports = { PlatformBrowser, interpretEvidence };
