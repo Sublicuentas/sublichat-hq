@@ -17,10 +17,11 @@ class SessionManager {
     this.now = now; this.idleMs = idleMs; this.lifetimeMs = lifetimeMs; this.maxSessions = maxSessions;
     this.sessions = new Map(); this.starts = new Map();
   }
-  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 1 }; }
+  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 2, build: 'tv-20260910-2' }; }
   view(s) {
     return { ok: true, sessionId: s.id, platform: s.platform.id, email: s.email, state: s.state,
-      verifiedBy: s.verifiedBy || '', message: s.operationError || s.message || '', busy: !!s.busy,
+      verifiedBy: s.verifiedBy || '', message: s.operationError || s.message || '', busy: !!s.busy && !s.refreshing,
+      errorCode: s.errorCode || '', recoverable: !!s.browser && !!s.errorCode,
       frame: s.frame || null, expiresAt: Math.min(s.createdAt + this.lifetimeMs, s.lastActionAt + this.idleMs) };
   }
   find(owner, id) {
@@ -47,7 +48,13 @@ class SessionManager {
   async refresh(s) {
     if (!s.browser || s.closed) return;
     const evidence = await s.browser.inspect(s.email);
-    if (evidence.loginVisible && s.stage === 'activation') {
+    // A successful inspection supersedes a previous transient navigation error.
+    // Reading a page outside the provider is never evidence of account access.
+    s.operationError = ''; s.errorCode = '';
+    if (evidence.external) {
+      s.authDetected = false; s.confirmed = false; s.verifiedBy = ''; s.stage = 'login'; s.state = 'login';
+      s.message = 'La plataforma abrió un acceso externo. Revise la página mostrada. El paso de TV estará disponible al regresar a la plataforma y confirmar la cuenta.';
+    } else if (evidence.loginVisible && s.stage === 'activation') {
       s.stage = 'login'; s.confirmed = false; s.verifiedBy = ''; s.state = 'login';
       s.message = 'La plataforma pidió iniciar sesión otra vez. Complete el acceso antes del código del TV.';
     } else if (s.stage === 'activation' && s.activationAttempted && evidence.activationSuccess) {
@@ -80,19 +87,20 @@ class SessionManager {
     }
     s.frame = await s.browser.frame();
   }
-  launch(s, operation) {
+  launch(s, operation, { background = false } = {}) {
     if (s.busy) fail(409, 'Espere a que termine la operación actual.', 'TV_BUSY');
-    s.busy = true;
+    s.busy = true; s.refreshing = background;
     s.task = (async () => {
       try { await operation(); if (!s.closed) await this.refresh(s); }
       catch (err) {
         if (!s.closed) {
-          s.state = s.browser ? (s.stage === 'activation' ? 'activation' : 'login') : 'error';
+          if (!background) s.state = s.browser ? (s.stage === 'activation' ? 'activation' : 'login') : 'error';
           s.message = err instanceof TVError ? err.message : 'La página no respondió. Puede reintentar o iniciar una sesión nueva.';
           s.operationError = s.message;
+          s.errorCode = err instanceof TVError ? err.code : 'TV_PAGE_TIMEOUT';
           if (s.browser) s.frame = await s.browser.frame().catch(() => s.frame);
         }
-      } finally { s.busy = false; }
+      } finally { s.busy = false; s.refreshing = false; }
     })();
     return this.view(s);
   }
@@ -149,9 +157,21 @@ class SessionManager {
       }
       return this.view(s);
     }
+    // Background screenshots must not disable every button on each poll.
+    // Serialize a click behind the pending read without submitting it twice.
+    if (s.busy && s.refreshing) {
+      await s.task;
+      return this.dispatch(owner, input);
+    }
     if (s.busy) fail(409, 'Espere a que termine la operación actual.', 'TV_BUSY');
     s.lastActionAt = this.now();
     s.operationError = '';
+    s.errorCode = '';
+    if (input.action === 'reload') {
+      if (!s.browser || s.state === 'activated') fail(409, 'Inicie una sesión nueva para abrir la página.');
+      s.activationAttempted = false;
+      return this.launch(s, () => s.browser.reload());
+    }
     if (input.action === 'interact') {
       const event = input.event;
       if (!event || !/^[a-zA-Z0-9-]{12,80}$/.test(event.id || '')) fail(400, 'Entrada no válida.');
