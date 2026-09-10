@@ -621,7 +621,37 @@ function controlEsAdmin(body) {
 }
 
 function controlDenegado() {
-  return { status: 403, json: { ok: false, error: "Control Maestro es exclusivo del usuario Sublicuentas." } };
+  return { status: 403, json: { ok: false, error: "No tiene permiso para acceder a Control Maestro." } };
+}
+
+async function controlDatos(db, body) {
+  if (!controlEsAdmin(body)) return controlDenegado();
+  const coleccion = String(body.coleccion || "");
+  if (!["clientes", "inventario"].includes(coleccion)) {
+    return { status: 400, json: { ok: false, error: "Colección de Control Maestro inválida." } };
+  }
+  const cursor = String(body.cursor || "");
+  if (cursor.includes("/") || Buffer.byteLength(cursor, "utf8") > 1500) {
+    return { status: 400, json: { ok: false, error: "Página de Control Maestro inválida." } };
+  }
+  // Ambos administradores consultan las mismas colecciones completas. La
+  // autorización viene del token verificado, nunca del vendedor enviado.
+  const pageSize = 200;
+  let query = db.collection(coleccion).orderBy(admin.firestore.FieldPath.documentId());
+  if (cursor) query = query.startAfter(cursor);
+  const snap = await query.limit(pageSize).get();
+  const documentos = [];
+  let bytes = 0;
+  for (const doc of snap.docs) {
+    const item = { id: doc.id, data: doc.data() };
+    const size = Buffer.byteLength(JSON.stringify(item), "utf8");
+    // Deje margen al límite de respuesta de Vercel, incluso en fichas grandes.
+    if (documentos.length && bytes + size > 2000000) break;
+    documentos.push(item); bytes += size;
+  }
+  const more = documentos.length < snap.docs.length || snap.docs.length === pageSize;
+  const nextCursor = more && documentos.length ? documentos[documentos.length - 1].id : "";
+  return { status: 200, json: { ok: true, coleccion, documentos, nextCursor } };
 }
 
 function controlArchivoMeta(id, x) {
@@ -1484,6 +1514,10 @@ async function handler(req, res) {
     body.rol = identity.role;
     const accion = body.accion || "guardar_respaldo_excel";
 
+    if (accion === "control_datos") {
+      const out = await controlDatos(db, body);
+      return res.status(out.status).json(out.json);
+    }
     if (accion === "control_estado") {
       const out = await controlEstado(db, body);
       return res.status(out.status).json(out.json);
