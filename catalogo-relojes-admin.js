@@ -2,7 +2,7 @@
   'use strict';
 
   const API='/api/catalogo-relojes';
-  const BUILD='20260907-8';
+  const BUILD='20260910-CAT-1';
   const state={
     loaded:false,loading:false,saving:false,dirty:false,tab:'products',catalog:null,history:[],baseStatus:'Catálogo listo.',savebarObserver:null
   };
@@ -13,7 +13,7 @@
   const BADGE_TONES={trend:'En tendencia',offer:'En oferta',new:'Nuevo',popular:'Popular',exclusive:'Exclusivo'};
 
   const host=()=>document.getElementById('rbac-catalogo-relojes');
-  const $=(selector)=>host()?.querySelector(selector)||null;
+  const $=(selector)=>host()?.querySelector(selector)||document.querySelector(selector)||null;
   const esc=(value)=>String(value??'').replace(/[&<>"']/g,(char)=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[char]));
@@ -78,6 +78,24 @@
     const modal=$('#crModal');
     if(!modal)return;
     modal.hidden=true;
+    modal.innerHTML='';
+    document.body.classList.remove('cr-modal-open');
+  }
+
+  function openModal(markup){
+    const modal=$('#crModal');
+    if(!modal)return null;
+    modal.innerHTML=markup;
+    modal.hidden=false;
+    document.body.classList.add('cr-modal-open');
+    requestAnimationFrame(()=>{
+      modal.scrollTop=0;
+      const sheet=modal.querySelector('.cr-sheet');
+      const scroll=modal.querySelector('.cr-editor-scroll');
+      if(sheet)sheet.scrollTop=0;
+      if(scroll)scroll.scrollTop=0;
+    });
+    return modal;
   }
 
   function enhanceModal(){
@@ -94,7 +112,9 @@
     if(!target)return;
     // Si otro render reconstruyó la pantalla pero dejó data-ready, se reparaba mal:
     // el módulo creía estar montado aunque el HTML ya no existía. Se valida el shell real.
-    if(target.dataset.ready==='1'&&target.querySelector('.cr-admin'))return;
+    if(target.dataset.ready==='1'&&target.querySelector('.cr-admin')&&document.getElementById('crModal'))return;
+    const staleModal=document.getElementById('crModal');
+    if(staleModal&&!target.contains(staleModal))staleModal.remove();
     target.dataset.ready='1';
     target.innerHTML=`<div class="cr-admin" data-build="${BUILD}">
       <div class="cr-hero">
@@ -132,10 +152,11 @@
     $('#crReload').onclick=()=>load(true);
     installSavebarSync();
     syncSavebarGeometry();
-    const modal=$('#crModal');
+    const modal=target.querySelector('#crModal');
     if(modal){
       modal.addEventListener('click',(event)=>{if(event.target===modal&&!state.saving)closeModal();});
       new MutationObserver(()=>enhanceModal()).observe(modal,{childList:true,subtree:false});
+      document.body.appendChild(modal);
     }
   }
 
@@ -381,51 +402,79 @@
       order:(state.catalog.products.length+1)*10,accent:'#E2231A',imageUrl:'',summary:'',badge:'',badgeTone:'trend',productFeatures:[],
       plans:[{id:uid('plan'),name:'Precio a consultar',price:null,billingLabel:'',active:true,availability:'on_request',badge:'',pointsCost:null,features:[],options:[]}]
     };
-    const modal=$('#crModal');
-    modal.hidden=false;
-    modal.innerHTML=`<div class="cr-sheet">
-      <h2>${existing?'Editar':'Nuevo'} producto</h2>
-      <div class="cr-form">
-        <label class="cr-field">Nombre<input id="cpeName" value="${esc(product.name)}"></label>
-        <label class="cr-field">Categoría<select id="cpeCat">${state.catalog.categories.map((category)=>`<option value="${esc(category.id)}" ${category.id===product.categoryId?'selected':''}>${esc(category.name)}</option>`).join('')}</select></label>
-        <label class="cr-field">Disponibilidad<select id="cpeAv">${Object.entries(A).map(([key,label])=>`<option value="${key}" ${key===product.availability?'selected':''}>${label}</option>`).join('')}</select></label>
-        <label class="cr-field">Orden<input id="cpeOrder" type="number" value="${Number(product.order)||0}"></label>
-        <label class="cr-field">Badge / etiqueta<input id="cpeBadge" value="${esc(product.badge||'')}" placeholder="En tendencia"></label>
-        <label class="cr-field">Tipo de badge<select id="cpeBadgeTone">${Object.entries(BADGE_TONES).map(([key,label])=>`<option value="${key}" ${key===(product.badgeTone||'trend')?'selected':''}>${label}</option>`).join('')}</select></label>
-        <label class="cr-field wide">Imagen URL<input id="cpeImg" value="${esc(product.imageUrl||'')}" placeholder="https://... o /assets/..."></label>
-        <label class="cr-field wide cr-upload-field">Subir imagen del producto<input id="cpeImgFile" type="file" accept="image/jpeg,image/png,image/webp"><span id="cpeUploadState" class="cr-upload-state">Puede subir JPG, PNG o WebP. Máximo 10 MB; se optimiza automáticamente.</span></label>
-        <div class="cr-image-preview wide" id="cpeImgPreview">${product.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa">`:'Sin imagen cargada'}</div>
-        <label class="cr-field wide">Descripción<textarea id="cpeSummary">${esc(product.summary||'')}</textarea></label>
-        <label class="cr-field wide">Características · una por línea<textarea id="cpeFeatures">${esc((product.productFeatures||[]).join('\n'))}</textarea></label>
-        <label class="cr-check"><input id="cpeActive" type="checkbox" ${product.active!==false?'checked':''}> Visible en catálogo</label>
-        <label class="cr-check"><input id="cpeStore" type="checkbox" ${product.storeEnabled!==false?'checked':''}> Disponible para compra</label>
-        <label class="cr-check"><input id="cpeRedeem" type="checkbox" ${product.redemptionOnly?'checked':''}> Solo canje por puntos</label>
-        <div class="cr-section">Planes y precios <button class="cr-btn ghost" id="cpeAddPlan" type="button">＋ Plan</button></div>
-        <div id="cpePlans" class="cr-plan-list"></div>
+    const modal=openModal(`<div class="cr-sheet cr-product-editor">
+      <div class="cr-editor-head">
+        <div><span class="cr-editor-kicker">${existing?'EDITANDO PRODUCTO':'NUEVO PRODUCTO'}</span><h2>${esc(product.name||'Producto')}</h2><p>Organizado por secciones para que encuentre rápido lo que necesita.</p></div>
       </div>
-      <div class="cr-modal-error" id="cpeError" hidden></div>
-      <div class="cr-actions"><button class="cr-btn ghost" id="cpeCancel">Cancelar</button><button class="cr-btn red" id="cpeOk">Guardar y publicar</button></div>
-    </div>`;
+      <nav class="cr-editor-nav" aria-label="Secciones del editor">
+        <button type="button" data-editor-jump="cpeBasic">1 · Información</button>
+        <button type="button" data-editor-jump="cpeImageSection">2 · Imagen</button>
+        <button type="button" data-editor-jump="cpePlansSection">3 · Planes y precios</button>
+      </nav>
+      <div class="cr-editor-scroll">
+        <section class="cr-editor-section" id="cpeBasic">
+          <div class="cr-section-title"><span>1</span><div><b>Información básica</b><small>Nombre, categoría, disponibilidad y cómo se mostrará en el catálogo.</small></div></div>
+          <div class="cr-editor-grid">
+            <label class="cr-field">Nombre del producto<input id="cpeName" value="${esc(product.name)}" placeholder="Ej. Netflix"></label>
+            <label class="cr-field">Categoría<select id="cpeCat">${state.catalog.categories.map((category)=>`<option value="${esc(category.id)}" ${category.id===product.categoryId?'selected':''}>${esc(category.name)}</option>`).join('')}</select></label>
+            <label class="cr-field">Disponibilidad<select id="cpeAv">${Object.entries(A).map(([key,label])=>`<option value="${key}" ${key===product.availability?'selected':''}>${label}</option>`).join('')}</select><span class="cr-field-help">Este estado aparece en la tarjeta pública.</span></label>
+            <label class="cr-field">Orden<input id="cpeOrder" type="number" value="${Number(product.order)||0}"><span class="cr-field-help">Número menor = aparece primero.</span></label>
+            <label class="cr-field">Badge / etiqueta<input id="cpeBadge" value="${esc(product.badge||'')}" placeholder="Ej. En tendencia"></label>
+            <label class="cr-field">Tipo de badge<select id="cpeBadgeTone">${Object.entries(BADGE_TONES).map(([key,label])=>`<option value="${key}" ${key===(product.badgeTone||'trend')?'selected':''}>${label}</option>`).join('')}</select></label>
+            <label class="cr-field wide">Descripción corta<textarea id="cpeSummary" rows="3" placeholder="Explique en una frase qué incluye el servicio.">${esc(product.summary||'')}</textarea></label>
+            <label class="cr-field wide">Características generales<textarea id="cpeFeatures" rows="4" placeholder="Una característica por línea">${esc((product.productFeatures||[]).join('\n'))}</textarea><span class="cr-field-help">Escriba una por línea. Ej.: 4K FHD / Acceso por código / 1 dispositivo.</span></label>
+          </div>
+          <div class="cr-publish-checks">
+            <label class="cr-check"><input id="cpeActive" type="checkbox" ${product.active!==false?'checked':''}> Visible en catálogo</label>
+            <label class="cr-check"><input id="cpeStore" type="checkbox" ${product.storeEnabled!==false?'checked':''}> Disponible para compra</label>
+            <label class="cr-check"><input id="cpeRedeem" type="checkbox" ${product.redemptionOnly?'checked':''}> Solo canje por puntos</label>
+          </div>
+        </section>
+
+        <section class="cr-editor-section" id="cpeImageSection">
+          <div class="cr-section-title"><span>2</span><div><b>Imagen del producto</b><small>Suba el logo o arte. Sublichat lo optimiza automáticamente.</small></div></div>
+          <div class="cr-image-editor">
+            <div class="cr-image-preview" id="cpeImgPreview">${product.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa">`:'<span>Sin imagen cargada</span>'}</div>
+            <div class="cr-image-controls">
+              <label class="cr-field cr-upload-field">Subir imagen<input id="cpeImgFile" type="file" accept="image/jpeg,image/png,image/webp"><span id="cpeUploadState" class="cr-upload-state">JPG, PNG o WebP · máximo 10 MB.</span></label>
+              <details class="cr-advanced">
+                <summary>Usar una URL de imagen</summary>
+                <label class="cr-field">Imagen URL<input id="cpeImg" value="${esc(product.imageUrl||'')}" placeholder="https://... o /assets/..."></label>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section class="cr-editor-section" id="cpePlansSection">
+          <div class="cr-section-title cr-section-title-actions"><span>3</span><div><b>Planes y precios</b><small>Cada plan queda en su propia tarjeta. Puede agregar duración, beneficios y precio.</small></div><button class="cr-btn ghost" id="cpeAddPlan" type="button">＋ Agregar plan</button></div>
+          <div id="cpePlans" class="cr-plan-list"></div>
+        </section>
+        <div class="cr-modal-error" id="cpeError" hidden></div>
+      </div>
+      <div class="cr-actions cr-editor-actions"><button class="cr-btn ghost" id="cpeCancel">Cancelar</button><button class="cr-btn red" id="cpeOk">Guardar y publicar</button></div>
+    </div>`);
+    if(!modal)return;
     enhanceModal();
 
     function renderPlans(){
       const box=$('#cpePlans');
-      box.innerHTML=(product.plans||[]).map((plan,index)=>`<div class="cr-plan" data-plan="${index}">
-        <div class="cr-plan-grid">
-          <input class="cr-mini" data-f="name" value="${esc(plan.name)}" placeholder="Plan">
-          <input class="cr-mini" data-f="price" type="number" min="0" step="0.01" value="${plan.price??''}" placeholder="Precio">
-          <select class="cr-mini" data-f="availability">${Object.entries(A).map(([key,label])=>`<option value="${key}" ${key===plan.availability?'selected':''}>${label}</option>`).join('')}</select>
-          <button class="cr-btn danger" data-remove-plan="${index}" type="button">Eliminar</button>
+      box.innerHTML=(product.plans||[]).map((plan,index)=>`<article class="cr-plan" data-plan="${index}">
+        <div class="cr-plan-head">
+          <div><span>PLAN ${index+1}</span><strong>${esc(plan.name||'Sin nombre')}</strong></div>
+          <button class="cr-btn danger" data-remove-plan="${index}" type="button">Eliminar plan</button>
         </div>
-        <div class="cr-plan-grid">
-          <input class="cr-mini" data-f="billingLabel" value="${esc(plan.billingLabel||'')}" placeholder="/mes">
-          <input class="cr-mini" data-f="badge" value="${esc(plan.badge||'')}" placeholder="Etiqueta">
-          <input class="cr-mini" data-f="pointsCost" type="number" min="0" value="${plan.pointsCost??''}" placeholder="Puntos">
-          <label class="cr-check"><input data-f="active" type="checkbox" ${plan.active!==false?'checked':''}> Activo</label>
+        <div class="cr-plan-fields">
+          <label class="cr-field">Nombre del plan<input class="cr-mini" data-f="name" value="${esc(plan.name)}" placeholder="Ej. Cuenta Premium"></label>
+          <label class="cr-field">Precio base<input class="cr-mini" data-f="price" type="number" min="0" step="0.01" value="${plan.price??''}" placeholder="130"></label>
+          <label class="cr-field">Disponibilidad<select class="cr-mini" data-f="availability">${Object.entries(A).map(([key,label])=>`<option value="${key}" ${key===plan.availability?'selected':''}>${label}</option>`).join('')}</select></label>
+          <label class="cr-field">Forma de cobro<input class="cr-mini" data-f="billingLabel" value="${esc(plan.billingLabel||'')}" placeholder="/mes, desde, 15 días..."></label>
+          <label class="cr-field">Etiqueta<input class="cr-mini" data-f="badge" value="${esc(plan.badge||'')}" placeholder="Premium, Oferta..."></label>
+          <label class="cr-field">Costo en puntos<input class="cr-mini" data-f="pointsCost" type="number" min="0" value="${plan.pointsCost??''}" placeholder="Opcional"></label>
         </div>
-        <input class="cr-mini" data-f="features" value="${esc((plan.features||[]).join(' | '))}" placeholder="Características separadas por |">
-        <textarea class="cr-mini" data-f="optionsText" placeholder="Opciones: Nombre=Precio=Beneficio · una por línea">${esc((plan.options||[]).map((option)=>`${option.label||''}=${option.price??''}=${option.bonus||''}`).join('\n'))}</textarea>
-      </div>`).join('')||'<div class="cr-empty">Agregue por lo menos un plan.</div>';
+        <label class="cr-field">Características del plan<input class="cr-mini" data-f="features" value="${esc((plan.features||[]).join(' | '))}" placeholder="1 dispositivo | Perfil con PIN | 4K FHD"><span class="cr-field-help">Sepárelas con el símbolo |</span></label>
+        <label class="cr-field">Duraciones u opciones<textarea class="cr-mini cr-options-editor" data-f="optionsText" placeholder="1 mes=130=&#10;3 meses=350=&#10;6 meses=650=+1 mes gratis">${esc((plan.options||[]).map((option)=>`${option.label||''}=${option.price??''}=${option.bonus||''}`).join('\n'))}</textarea><span class="cr-field-help">Una por línea: <b>Nombre=Precio=Beneficio</b>. Ej.: 3 meses=350=+15 días.</span></label>
+        <label class="cr-check cr-plan-active"><input data-f="active" type="checkbox" ${plan.active!==false?'checked':''}> Este plan está activo</label>
+      </article>`).join('')||'<div class="cr-empty">No hay planes. Presione “＋ Agregar plan”.</div>';
       box.querySelectorAll('[data-plan]').forEach((row)=>{
         row.querySelectorAll('[data-f]').forEach((input)=>{
           const update=()=>{
@@ -437,6 +486,10 @@
             else if(field==='optionsText')plan.options=parseOptions(input.value,plan.options||[]);
             else if(field==='active')plan.active=input.checked;
             else plan[field]=input.value;
+            if(field==='name'){
+              const title=row.querySelector('.cr-plan-head strong');
+              if(title)title.textContent=input.value.trim()||'Sin nombre';
+            }
           };
           input.oninput=update;input.onchange=update;
         });
@@ -445,6 +498,13 @@
         button.onclick=()=>{product.plans.splice(Number(button.dataset.removePlan),1);renderPlans();};
       });
     }
+
+    modal.querySelectorAll('[data-editor-jump]').forEach((button)=>{
+      button.onclick=()=>{
+        const target=modal.querySelector('#'+button.dataset.editorJump);
+        if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+      };
+    });
 
     const productFile=$('#cpeImgFile');
     if(productFile)productFile.onchange=async()=>{
@@ -458,14 +518,19 @@
       }catch(error){if(uploadState)uploadState.textContent=`⚠️ ${error.message}`;}
       finally{productFile.disabled=false;productFile.value='';}
     };
-    $('#cpeImg').oninput=()=>{const preview=$('#cpeImgPreview');if(preview){const url=$('#cpeImg').value.trim();preview.innerHTML=url?`<img src="${esc(url)}" alt="Vista previa">`:'Sin imagen cargada';}};
+    $('#cpeImg').oninput=()=>{const preview=$('#cpeImgPreview');if(preview){const url=$('#cpeImg').value.trim();preview.innerHTML=url?`<img src="${esc(url)}" alt="Vista previa">`:'<span>Sin imagen cargada</span>';}};
 
     renderPlans();
     $('#cpeAddPlan').onclick=()=>{
       product.plans.push({id:uid('plan'),name:'Nuevo plan',price:null,billingLabel:'',active:true,availability:'on_request',badge:'',pointsCost:null,features:[],options:[]});
       renderPlans();
+      requestAnimationFrame(()=>{
+        const rows=$('#cpePlans')?.querySelectorAll('[data-plan]');
+        const last=rows&&rows[rows.length-1];
+        if(last)last.scrollIntoView({behavior:'smooth',block:'center'});
+      });
     };
-    $('#cpeCancel').onclick=()=>{if(!state.saving)modal.hidden=true;};
+    $('#cpeCancel').onclick=()=>{if(!state.saving)closeModal();};
     $('#cpeOk').onclick=async()=>{
       if(state.saving)return;
       product.name=$('#cpeName').value.trim();
@@ -487,6 +552,7 @@
       if(errors.length){
         state.catalog=before;
         const errorBox=$('#cpeError');errorBox.hidden=false;errorBox.textContent=errors[0];
+        errorBox.scrollIntoView({behavior:'smooth',block:'center'});
         return;
       }
       const button=$('#cpeOk');button.disabled=true;button.textContent='Publicando…';
@@ -747,8 +813,12 @@
 
   function renderCarousel(){
     const body=$('#crBody');const slides=state.catalog.carousel||[];
-    body.innerHTML=`<div class="cr-tools"><span class="cr-note-inline">Suba aquí las nuevas imágenes del carrusel. JPG, PNG o WebP; se optimizan y se publican en el catálogo.</span><button class="cr-btn red" id="crAddSlide">＋ Banner</button></div>
-      <div class="cr-grid">${slides.map(carouselCard).join('')||'<div class="cr-empty"><b>Aún no hay banners administrables.</b><span>Presione “＋ Banner” para subir la primera imagen.</span></div>'}</div>`;
+    body.innerHTML=`<div class="cr-carousel-guide">
+        <div class="cr-carousel-guide-icon">▭</div>
+        <div><b>Tamaño recomendado: 1600 × 600 px</b><span>Relación 8:3 · JPG, PNG o WebP · máximo 10 MB. Mantenga textos y logos lejos de los bordes para que se vea bien en celular.</span></div>
+        <button class="cr-btn red" id="crAddSlide">＋ Nuevo banner</button>
+      </div>
+      <div class="cr-grid">${slides.map(carouselCard).join('')||'<div class="cr-empty"><b>Aún no hay banners administrables.</b><span>Presione “＋ Nuevo banner” para subir la primera imagen.</span></div>'}</div>`;
     $('#crAddSlide').onclick=()=>editCarouselSlide('');
     body.querySelectorAll('[data-edit-slide]').forEach((button)=>{button.onclick=()=>editCarouselSlide(button.dataset.editSlide);});
     body.querySelectorAll('[data-delete-slide]').forEach((button)=>{button.onclick=()=>deleteCarouselSlide(button.dataset.deleteSlide,button);});
@@ -760,16 +830,15 @@
       id:uid('banner'),title:'',subtitle:'',badge:'',buttonLabel:'',imageUrl:'',imageFit:'cover',active:true,
       order:(state.catalog.carousel.length+1)*10,actionType:'none',actionValue:'',accentFrom:'#E2231A',accentTo:'#7A0C08'
     };
-    const modal=$('#crModal');modal.hidden=false;
-    modal.innerHTML=`<div class="cr-sheet">
-      <h2>${existing?'Editar':'Nuevo'} banner del carrusel</h2>
-      <div class="cr-form">
+    const modal=openModal(`<div class="cr-sheet cr-carousel-editor">
+      <div class="cr-editor-head"><div><span class="cr-editor-kicker">CARRUSEL PÚBLICO</span><h2>${existing?'Editar':'Nuevo'} banner</h2><p>Formato recomendado: 1600 × 600 px (8:3). La vista previa usa la misma proporción.</p></div></div>
+      <div class="cr-editor-scroll"><div class="cr-form">
         <label class="cr-field">ID<input id="carId" value="${esc(slide.id)}" ${existing?'disabled':''}></label>
-        <label class="cr-field">Orden<input id="carOrder" type="number" value="${Number(slide.order)||0}"></label>
-        <label class="cr-field wide cr-upload-field">Subir nueva imagen<input id="carFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="cr-upload-state" id="carUploadState">Seleccione una imagen. Si pesa mucho, Sublichat la optimiza antes de subirla.</span></label>
+        <label class="cr-field">Orden<input id="carOrder" type="number" value="${Number(slide.order)||0}"><span class="cr-field-help">Número menor = aparece primero.</span></label>
+        <label class="cr-field wide cr-upload-field">Subir imagen del banner<input id="carFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="cr-upload-state" id="carUploadState"><b>1600 × 600 px recomendado</b> · JPG, PNG o WebP · máximo 10 MB.</span></label>
         <label class="cr-field wide">Imagen URL<input id="carImage" value="${esc(slide.imageUrl||'')}" placeholder="También puede pegar una URL https://..."></label>
         <div class="cr-image-preview cr-carousel-large wide" id="carPreview">${slide.imageUrl?`<img src="${esc(slide.imageUrl)}" alt="Vista previa">`:'Sin imagen cargada'}</div>
-        <label class="cr-field">Ajuste de imagen<select id="carFit"><option value="cover" ${slide.imageFit!=='contain'?'selected':''}>Cubrir (cover)</option><option value="contain" ${slide.imageFit==='contain'?'selected':''}>Completa (contain)</option></select></label>
+        <label class="cr-field">Ajuste de imagen<select id="carFit"><option value="cover" ${slide.imageFit!=='contain'?'selected':''}>Llenar el banner (recomendado)</option><option value="contain" ${slide.imageFit==='contain'?'selected':''}>Mostrar imagen completa</option></select></label>
         <label class="cr-field">Estado<label class="cr-check"><input id="carActive" type="checkbox" ${slide.active!==false?'checked':''}> Banner activo</label></label>
         <label class="cr-field wide">Título<input id="carTitle" value="${esc(slide.title||'')}" placeholder="Opcional si la imagen ya trae todo el texto"></label>
         <label class="cr-field wide">Subtítulo<textarea id="carSubtitle">${esc(slide.subtitle||'')}</textarea></label>
@@ -780,9 +849,10 @@
         <label class="cr-field">Color inicial<input id="carAccentFrom" type="color" value="${esc(slide.accentFrom||'#E2231A')}"></label>
         <label class="cr-field">Color final<input id="carAccentTo" type="color" value="${esc(slide.accentTo||'#7A0C08')}"></label>
       </div>
-      <div class="cr-modal-error" id="carError" hidden></div>
-      <div class="cr-actions cr-sticky-actions"><button class="cr-btn ghost" id="carCancel">Cancelar</button><button class="cr-btn red" id="carOk">Guardar y publicar</button></div>
-    </div>`;
+      <div class="cr-modal-error" id="carError" hidden></div></div>
+      <div class="cr-actions cr-editor-actions"><button class="cr-btn ghost" id="carCancel">Cancelar</button><button class="cr-btn red" id="carOk">Guardar y publicar</button></div>
+    </div>`);
+    if(!modal)return;
     enhanceModal();
     const fileInput=$('#carFile');
     fileInput.onchange=async()=>{
@@ -793,7 +863,7 @@
       finally{fileInput.disabled=false;fileInput.value='';}
     };
     $('#carImage').oninput=()=>{const url=$('#carImage').value.trim();$('#carPreview').innerHTML=url?`<img src="${esc(url)}" alt="Vista previa">`:'Sin imagen cargada';};
-    $('#carCancel').onclick=()=>{if(!state.saving)modal.hidden=true;};
+    $('#carCancel').onclick=()=>{if(!state.saving)closeModal();};
     $('#carOk').onclick=async()=>{
       if(state.saving)return;
       const newId=slugId($('#carId').value)||uid('banner');
