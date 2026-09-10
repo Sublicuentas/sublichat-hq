@@ -711,9 +711,21 @@
       g.inventoryAccounts.forEach((a)=>{const p=canonPlatform(a.plataforma);inventoryPlatformCounts[p]=(inventoryPlatformCounts[p]||0)+1;});
       const duplicateDocs=Object.values(inventoryPlatformCounts).some((n)=>n>1);
       const overCapacity=!!g.capacidad&&Math.max(g.invClients.length,g.services.length)>g.capacidad;
-      const rosterIssues=roster.filter((r)=>r.status!=='ok').length;
+      // Vista operativa simplificada: por perfil solo importa que el cliente
+      // esté registrado en la cuenta correcta dentro de Clientes/TG. La falta
+      // de vínculo de la CUENTA en Bodega se informa una sola vez a nivel de
+      // cuenta, no como el mismo aviso repetido en cada perfil.
       const requiresPassword=auditRequiresPassword(g.family);
       const requiresEmail=auditRequiresEmail(g.family);
+      const rosterIssues=roster.filter((r)=>{
+        const service=r.service||null;
+        if(!service)return true;
+        if(isExpired(service.fecha))return true;
+        const expected=email(g.email);
+        const actual=email(service._email||service.correo);
+        if(requiresEmail&&expected&&actual!==expected)return true;
+        return false;
+      }).length;
       const missingEmail=requiresEmail&&!g.email;
       // Las licencias sin correo conservan la llave estable creada al agrupar
       // la cuenta, de modo que también puedan marcarse como revisadas.
@@ -1115,7 +1127,8 @@
     const list=[];
     if(a.missingEmail)list.push('⛔ Sin correo');
     if(a.missingPassword)list.push('🔑 Sin clave');
-    if(a.missingInventory)list.push('📦 Falta en Bodega');
+    // La falta de vínculo de Bodega se muestra junto al estado de revisión
+    // de la cuenta, no repetida dentro de la lista de problemas de perfiles.
     if(a.duplicateDocs)list.push('📦 Cuenta repetida');
     if(a.overCapacity)list.push('🚨 Sobre capacidad');
     if(a.rosterIssues)list.push(`👥 ${a.rosterIssues} por revisar`);
@@ -1158,7 +1171,8 @@
   }
 
   function rosterRowHtml(r,account,accountIndex,rowIndex){
-    const s=ROSTER_STATUS[r.status]||{label:r.status||'Revisar',icon:'⚠️',tone:'bad'};
+    const s=rosterMatchSummary(account,r);
+    const statusIcon=s.complete?'✅':(s.tone==='warn'?'⚠️':'⛔');
     const rawProfile=fieldText(r.profile);
     const profile=rawProfile?(/^perfil\b/i.test(rawProfile)?rawProfile:`Perfil ${rawProfile}`):'Perfil sin indicar';
     const sources=[r.excel?`📘 Excel · ${r.excel.sheet} fila ${r.excel.row}`:'',r.service?'👤 Clientes':'',r.inv?'📦 Bodega':''].filter(Boolean);
@@ -1178,7 +1192,7 @@
       <div class="cm-roster-slot"><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small><div class="cm-roster-sources">${sources.map((x)=>`<i>${esc(x)}</i>`).join('')}</div></div>
       <button class="cm-roster-client" data-cm-audit-client="${accountIndex}:${rowIndex}" title="Abrir este cliente"><b>${esc(r.name||'Sin nombre')}</b><small>${esc(r.phone||'Sin teléfono')}${note?` · (${esc(note)})`:''}</small></button>
       <div class="cm-roster-date"><b>${esc(dateLabel(r.date))}</b><small>Vencimiento</small></div>
-      <span class="cm-roster-status ${s.tone}" title="${esc(r.detail||'')}">${s.icon} ${esc(s.label)}</span>
+      <span class="cm-roster-status ${s.tone}" title="${esc(s.detail||'')}">${statusIcon} ${esc(s.label)}</span>
       <div class="cm-roster-actions">${actions}${noteAction}</div>
       ${editingNote?`<div class="cm-roster-note-edit"><input type="text" class="cm-roster-note-input" data-cm-note-input="${pointer}" placeholder="Nota de referencia (solo en este navegador, no toca Firebase)" value="${esc(note)}"><button class="cm-row-action" data-cm-note-save="${pointer}">💾 Guardar</button><button class="cm-row-action" data-cm-note-cancel="1">✖ Cancelar</button></div>`:''}
     </div>`;
@@ -1340,45 +1354,31 @@
   }
 
   function rosterMatchSummary(account,row){
-    const status=ROSTER_STATUS[row.status]||{label:row.status||'Revisar',tone:'bad'};
-    if(!row.inv||!row.service||!['ok','vencido'].includes(row.status))return {...status,detail:row.detail,complete:false};
-    const inventory=auditIdentity(row.inv),service=auditIdentity(row.service,true);
-    const differences=[];
-    const compare=(list,label,a,b,required=false)=>{
-      if((required&&(!a||!b))||a!==b)list.push(label);
-    };
-    compare(differences,'nombre',inventory.name,service.name,true);
-    compare(differences,'perfil',inventory.profile,service.profile);
-    compare(differences,'PIN',inventory.pin,service.pin);
-    // Bodega no siempre guarda teléfono ni fecha: cuando existen se comparan;
-    // el teléfono y vencimiento de Clientes también se verifican con el Excel.
-    if(inventory.phone)compare(differences,'teléfono',inventory.phone,service.phone);
-    for(const key of ['clienteId','compraId','perfilId']){
-      if(inventory[key]&&service[key])compare(differences,'identificación',inventory[key],service[key]);
+    // Regla solicitada para Control Maestro (Sublicuentas y Geisell):
+    // el estado visible del PERFIL se basa solo en Clientes/TG + cuenta.
+    // Excel y el vínculo general de Bodega ya no convierten cada perfil en
+    // "Cuenta no vinculada". Ese aviso pertenece a la cuenta completa.
+    const service=row?.service||null;
+    const expectedAccount=email(account?.email);
+    const tgAccount=email(service?._email||service?.correo);
+    const requiresEmail=account?.requiresEmail!==false;
+
+    if(service&&requiresEmail&&expectedAccount&&tgAccount&&tgAccount!==expectedAccount){
+      return {label:'OTRA CUENTA',tone:'bad',complete:false,detail:`El cliente sí está en la base de datos del TG, pero figura en ${tgAccount}.`};
     }
-    compare(differences,'cuenta',email(row.inv._email),email(row.service._email||row.service.correo),account.requiresEmail);
-    compare(differences,'plataforma',row.inv._family,row.service._family);
-    const inventoryAccount=account.inventoryAccounts.find((x)=>String(x.id||'')===String(row.inv._accountId||''))||account.inventoryAccounts[0];
-    const currentPassword=String(inventoryAccount?.clave??'');
-    compare(differences,'clave',currentPassword,String(row.service.clave??''),account.requiresPassword);
-    const currentDate=dateKey(row.service.fecha);
-    if(!currentDate)differences.push('vencimiento sin indicar');
-    if(account.duplicateDocs)differences.push('cuenta duplicada');
-    if(account.overCapacity)differences.push('capacidad excedida');
-    if(differences.length)return {label:'DATOS POR REVISAR',tone:'warn',complete:false,detail:`Revise en la base actual: ${[...new Set(differences)].join(', ')}.`};
-    if(row.status==='vencido')return {...status,complete:false,detail:'La asignación coincide, pero el servicio está vencido.'};
-    if(!row.excel)return {label:'COINCIDE EN BASE ACTUAL',tone:'ok',complete:false,detail:'Los datos de Clientes y Bodega coinciden. Falta una fila del respaldo Excel para comprobar la coincidencia completa.'};
-    const historical=[];
-    compare(historical,'nombre',service.name,auditPersonKey(row.excel.name),true);
-    compare(historical,'teléfono',service.phone,phone(row.excel.phone),true);
-    compare(historical,'perfil',service.profile,auditPersonKey(row.excel.profile));
-    compare(historical,'PIN',service.pin,norm(fieldText(row.excel.pin)));
-    compare(historical,'cuenta',email(row.service._email||row.service.correo),email(row.excel.email),account.requiresEmail);
-    compare(historical,'plataforma',row.service._family,row.excel.family);
-    compare(historical,'clave',currentPassword,String(row.excel.password??''),account.requiresPassword);
-    compare(historical,'vencimiento',currentDate,dateKey(row.excel.date),true);
-    if(historical.length)return {label:'COINCIDE EN BASE ACTUAL',tone:'ok',complete:false,detail:`Clientes y Bodega coinciden. El Excel tiene datos distintos o incompletos: ${historical.join(', ')}. El respaldo histórico no modifica la base actual.`};
-    return {label:'Coincide',tone:'ok',complete:true,detail:'Coincide al 100% en Clientes, Bodega y el respaldo Excel: identidad, cuenta, perfil, PIN, teléfono, clave y vencimiento según corresponda.'};
+    if(service&&requiresEmail&&expectedAccount&&!tgAccount){
+      return {label:'REVISAR',tone:'warn',complete:false,detail:'El cliente está en la base de datos del TG, pero su registro no tiene una cuenta asociada para comprobar que pertenece a este correo.'};
+    }
+    if(service&&isExpired(service.fecha)){
+      return {label:'VENCIDO',tone:'warn',complete:false,detail:'El cliente está registrado en esta cuenta y en la base de datos del TG, pero el servicio está vencido.'};
+    }
+    if(service&&(!requiresEmail||!expectedAccount||tgAccount===expectedAccount)){
+      return {label:'COINCIDE',tone:'ok',complete:true,detail:'El cliente está registrado en esta cuenta y en la base de datos del TG.'};
+    }
+    if(!service&&(row?.inv||row?.excel)){
+      return {label:'NO ESTÁ EN TG',tone:'bad',complete:false,detail:'El cliente figura en la cuenta o en su respaldo, pero no aparece como servicio en la base de datos del TG.'};
+    }
+    return {label:'REVISAR',tone:'warn',complete:false,detail:'No hay información suficiente en la base del TG para confirmar este cliente.'};
   }
 
   function rosterRowsCompactHtml(account){
@@ -1412,11 +1412,12 @@
       <div class="cm-account-detail-head">
         <div>
           <h4>Clientes de esta cuenta</h4>
-          <p>Coincide en verde: todos los datos del perfil y del respaldo Excel son iguales.</p>
+          <p><b>COINCIDE</b> en verde: el cliente está registrado en esta cuenta y en la base de datos del TG.</p>
         </div>
         <div class="cm-detail-side">
           <span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>
           <span class="cm-detail-review ${esc(review.tone)}">${review.isReviewed?'Cuenta revisada':'Cuenta por revisar'}</span>
+          ${account.missingInventory?'<span class="cm-detail-review due">Cuenta no vinculada</span>':''}
         </div>
       </div>
       <div class="cm-account-summary">
