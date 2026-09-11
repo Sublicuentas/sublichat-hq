@@ -4,7 +4,10 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260910-61';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260911-62';
+  // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
+  // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
+  const REVIEW_CYCLE_DAYS=30;
   // Dibujar miles de filas de una sola vez bloqueaba el hilo principal y hacía
   // que hasta el botón de pantalla completa pareciera averiado. El conteo y la
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
@@ -740,7 +743,7 @@
       // proveedor. Sí se solicita otra revisión si cambian los clientes o aparecen
       // más diferencias que las guardadas anteriormente.
       const reviewDataChanged=!!revision&&(Number(revision.clientesEsperados)!==roster.length||internalIssueCount>Number(revision.diferencias||0));
-      const reviewDue=!revision||reviewAge>=15||reviewDataChanged;
+      const reviewDue=!revision||reviewAge>=REVIEW_CYCLE_DAYS||reviewDataChanged;
       const occupied=g.inventoryAccounts.length?g.invClients.length:(g.services.length||g.excelRows.length);
       const maxExcelProfile=Math.max(0,...g.excelRows.map((x)=>Number(x.profile)||0));
       const capacity=g.capacidad||Math.max(occupied,maxExcelProfile);
@@ -755,7 +758,7 @@
     const platforms={},platformRows={};accounts.forEach(a=>{platforms[a.family]=(platforms[a.family]||0)+1;platformRows[a.family]=(platformRows[a.family]||0)+a.roster.length;});
     return {
       accounts,platforms,platformRows,
-      metrics:{clientes:clients.size,servicios:allServices.length,filasExcel:allExcelRows.length,registros:accounts.reduce((n,a)=>n+a.roster.length,0),cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientes15:accounts.filter(a=>a.reviewDue).length,hasExcelAudit}
+      metrics:{clientes:clients.size,servicios:allServices.length,filasExcel:allExcelRows.length,registros:accounts.reduce((n,a)=>n+a.roster.length,0),cuentas:accounts.length,limpias:accounts.filter(a=>a.clean).length,conProblemas:accounts.filter(a=>a.issueCount>0).length,pendientesRevision:accounts.filter(a=>a.reviewDue).length,hasExcelAudit}
     };
   }
 
@@ -977,14 +980,14 @@
       const get=(type)=>parts.find((x)=>x.type===type)?.value||'';
       const year=Number(get('year')),month=Number(get('month')),day=Number(get('day'));
       if(!year||!month||!day)throw new Error('Fecha inválida');
-      const next=new Date(Date.UTC(year,month-1,day+15,12));
+      const next=new Date(Date.UTC(year,month-1,day+REVIEW_CYCLE_DAYS,12));
       const pad=(n)=>String(n).padStart(2,'0');
       return {
         reviewed:`${pad(day)}/${pad(month)}/${year}`,
         next:`${pad(next.getUTCDate())}/${pad(next.getUTCMonth()+1)}/${next.getUTCFullYear()}`
       };
     }catch(_){
-      const next=new Date(d);next.setDate(next.getDate()+15);
+      const next=new Date(d);next.setDate(next.getDate()+REVIEW_CYCLE_DAYS);
       const format=(x)=>`${String(x.getDate()).padStart(2,'0')}/${String(x.getMonth()+1).padStart(2,'0')}/${x.getFullYear()}`;
       return {reviewed:format(d),next:format(next)};
     }
@@ -2156,7 +2159,7 @@
       const saved=await api({accion:'control_guardar_revision_cuenta',accountKey:a.revisionKey,accountId:a.accountIds.filter(Boolean).join(','),plataforma:a.family,correo:a.email,resultado:result,nota,clientesEsperados:a.roster.length,diferencias:a.internalIssueCount});
       if(!saved.revision)throw new Error('Firebase respondió sin confirmar la revisión.');
       mergeAccountRevision(saved.revision);
-      const text=result==='incidencia'?'⚠️ Incidencia guardada en Firebase.':'✅ Revisión del proveedor guardada en Firebase. Las diferencias de Excel o Bodega seguirán visibles hasta corregirlas; esta revisión volverá a solicitarse dentro de 15 días.';
+      const text=result==='incidencia'?'⚠️ Incidencia guardada en Firebase.':'✅ Revisión del proveedor guardada en Firebase. Las diferencias de Excel o Bodega seguirán visibles hasta corregirlas; esta revisión volverá a solicitarse dentro de 1 mes.';
       state.accountFeedback={key:a.key,type:result==='incidencia'?'err':'good',text};state.status=text;state.statusType='good';
     }catch(e){
       const text='⚠️ '+(e.message||'No se pudo guardar la revisión.');
