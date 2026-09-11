@@ -42,7 +42,7 @@ module.exports = async function handler(req, res) {
     });
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), 55000);
   try {
     const payload = { action: body.action, owner: user.uid };
     for (const field of ['sessionId', 'requestId', 'platform', 'email', 'password', 'code', 'event']) {
