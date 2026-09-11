@@ -36,10 +36,9 @@ export class CloudSessionManager extends SessionManager {
         await this.close(s);
         throw new TVError(410, 'La sesión remota terminó. Vuelva a iniciar sesión.', 'TV_SESSION_GONE');
       }
-      // Browser I/O continues in the Durable Object. The HTTP request returns
-      // promptly, including while a platform asks for additional verification.
-      if (!s.busy && s.browser && s.state !== 'activated') return this.launch(s, async () => {}, { background: true });
-      return this.view(s);
+      // Do not start browser I/O after returning the HTTP response. Polling now
+      // performs its inspection inside this request, so screenshots and login
+      // state cannot be canceled between Worker invocations.
     }
     return super.dispatch(owner, input);
   }

@@ -38,15 +38,19 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
         finally { if (!browser || !browser.isConnected()) leases.delete(lease); }
       }
     };
+    let phase = 'launch';
     try {
       browser = await launch(binding, { keep_alive: 180000 }); lease.browser = browser;
+      phase = 'context';
       browser.on('disconnected', () => leases.delete(lease));
       context = await browser.newContext({
         viewport: { width: 1000, height: 760 }, locale: 'es-HN', timezoneId: 'America/Tegucigalpa',
         acceptDownloads: false, serviceWorkers: 'block', permissions: []
       });
+      phase = 'routing';
       await context.route('**/*', requestGuard(platform, resolve));
-      const page = await context.newPage(); page.setDefaultTimeout(4000);
+      phase = 'page';
+      const page = await context.newPage(); page.setDefaultTimeout(5000);
       context.on('page', popup => { if (popup !== page) void popup.close().catch(() => {}); });
       page.on('dialog', dialog => void dialog.dismiss().catch(() => {}));
       const adapter = new PlatformBrowser(platform, context, page);
@@ -69,7 +73,9 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
         // exhausted. Cloudflare also uses 429 for creation/rate limits.
         throw new TVError(429, 'Cloudflare rechazó temporalmente una nueva sesión de navegador (429 Rate limit exceeded). Esto no confirma que su cuota diaria esté agotada. Espere unos segundos y reintente.', 'TV_CLOUD_RATE_LIMIT');
       }
-      throw new TVError(503, 'Cloudflare no pudo abrir el navegador remoto. Reintente; si continúa, revise Browser Run.', 'TV_CLOUD_UNAVAILABLE');
+      if (phase === 'launch') throw new TVError(503, 'Cloudflare no pudo crear una sesión de Browser Run.', 'TV_CLOUD_LAUNCH_FAILED');
+      if (phase === 'context') throw new TVError(503, 'Browser Run abrió, pero no pudo preparar el contexto del navegador.', 'TV_CLOUD_CONTEXT_FAILED');
+      throw new TVError(503, 'Browser Run abrió, pero no pudo preparar la página remota.', 'TV_CLOUD_PAGE_FAILED');
     }
   };
 }
