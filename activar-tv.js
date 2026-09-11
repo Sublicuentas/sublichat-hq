@@ -33,7 +33,7 @@
     forget();
   }
   async function api(payload) {
-    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 30000);
+    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 60000);
     try {
       const response = await fetch(API, { method:'POST', headers:{ 'Content-Type':'application/json' },
         body:JSON.stringify(payload), signal:controller.signal, cache:'no-store' });
@@ -234,7 +234,7 @@
   }
   function schedule() {
     clearTimeout(state.timer);
-    if (active() && state.session && state.session.state !== 'activated' && !document.hidden) state.timer = setTimeout(poll, 2200);
+    if (active() && state.session && state.session.state !== 'activated' && !document.hidden) state.timer = setTimeout(poll, 3500);
   }
   async function poll() {
     if (!state.session || state.busy || state.polling || !active() || document.hidden) return schedule();

@@ -99,7 +99,7 @@
   ],
   "functions": {
     "api/activar-tv.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 }
