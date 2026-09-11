@@ -25,15 +25,24 @@ function requestGuard(platform, resolve, now = Date.now) {
           (url.port && !['80', '443'].includes(url.port))) return route.abort();
       const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
       if (/^(?:localhost|metadata\.google\.internal)$|\.(?:localhost|local|internal)$/.test(host)) return route.abort();
-      // Top-level redirects are allowed when they resolve only to public IPs.
-      // Streaming providers increasingly hand login/challenge flows to separate
-      // identity hosts. Automatic credential entry remains restricted in
-      // PlatformBrowser to the platform's trusted domains.
+
+      // Always reject literal private IPs, including subresources.
+      if (net.isIP(host) && !publicAddress(host)) return route.abort();
+
+      // DNS validation is needed for navigations, not every image/font/script.
+      // The previous implementation made two Worker fetches (A + AAAA) for each
+      // new asset hostname. Large streaming login pages can use many CDN hosts,
+      // which needlessly burns the Worker's external-subrequest budget and slows
+      // page loading. Provider subresources now load normally; top-level/iframe
+      // navigations still must resolve exclusively to public addresses.
+      const isNavigation = typeof request.isNavigationRequest === 'function' && request.isNavigationRequest();
+      if (!isNavigation || net.isIP(host)) return route.continue();
+
       let entry = addresses.get(host);
       if (!entry || now() - entry.at >= 60000) {
-        if (addresses.size >= 256) addresses.delete(addresses.keys().next().value);
+        if (addresses.size >= 128) addresses.delete(addresses.keys().next().value);
         entry = { at: now(), pending: (async () => {
-          const values = net.isIP(host) ? [{ address: host }] : await resolve(host);
+          const values = await resolve(host);
           return values.length > 0 && values.every(x => publicAddress(x.address));
         })().catch(() => false) };
         addresses.set(host, entry);

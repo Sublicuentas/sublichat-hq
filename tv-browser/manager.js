@@ -17,7 +17,7 @@ class SessionManager {
     this.now = now; this.idleMs = idleMs; this.lifetimeMs = lifetimeMs; this.maxSessions = maxSessions;
     this.sessions = new Map(); this.starts = new Map();
   }
-  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 3, build: 'tv-20260910-6' }; }
+  available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 3, build: 'tv-20260910-7' }; }
   view(s) {
     return { ok: true, sessionId: s.id, platform: s.platform.id, email: s.email, state: s.state,
       verifiedBy: s.verifiedBy || '', message: s.operationError || s.message || '', busy: !!s.busy && !s.refreshing,
@@ -87,10 +87,10 @@ class SessionManager {
     }
     s.frame = await s.browser.frame();
   }
-  launch(s, operation, { background = false } = {}) {
+  async launch(s, operation, { background = false } = {}) {
     if (s.busy) fail(409, 'Espere a que termine la operación actual.', 'TV_BUSY');
     s.busy = true; s.refreshing = background;
-    s.task = (async () => {
+    const task = (async () => {
       try { await operation(); if (!s.closed) await this.refresh(s); }
       catch (err) {
         if (!s.closed) {
@@ -102,6 +102,12 @@ class SessionManager {
         }
       } finally { s.busy = false; s.refreshing = false; }
     })();
+    s.task = task;
+    // Browser work that determines the response must finish before the HTTP
+    // response is returned. Cloudflare can cancel un-awaited promises once an
+    // invocation ends; that previously left Browser Run sessions open/idle
+    // while the login/navigation was cut off.
+    if (!background) await task;
     return this.view(s);
   }
   async start(owner, input) {
