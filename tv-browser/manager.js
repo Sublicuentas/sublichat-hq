@@ -8,8 +8,11 @@ class TVError extends Error {
 const fail = (status, message, code) => { throw new TVError(status, message, code); };
 const normalizeEmail = value => String(value || '').trim().toLowerCase();
 
-// No guarda claves, cookies, imágenes ni códigos en disco o en el CRM.
-// Cada sesión vive en un contexto nuevo y sólo pertenece a un UID firmado.
+// Nunca guarda claves, imágenes ni códigos del TV en disco o en el CRM.
+// Cloudflare puede guardar la sesión ya iniciada (cookies) de una cuenta,
+// plataforma por plataforma, para no repetir el login cada vez — ver
+// sessionReuseEligible/loadSavedSession/saveSession, sobreescritos en
+// CloudSessionManager. El servicio de Windows/Docker no guarda nada.
 class SessionManager {
   constructor({ createBrowser, enabled = [], now = Date.now, idleMs = 15 * 60000, lifetimeMs = 45 * 60000, maxSessions = 3 }) {
     this.createBrowser = createBrowser;
@@ -18,6 +21,13 @@ class SessionManager {
     this.sessions = new Map(); this.starts = new Map();
   }
   available() { return { ok: true, available: this.enabled.length > 0, platforms: this.enabled, version: 3, build: 'tv-20260910-7' }; }
+  // Overridden by CloudSessionManager, which backs these with Cloudflare storage.
+  // The Docker/Windows path never reuses a session: every login stays fresh.
+  sessionReuseEligible(_platformId) { return false; }
+  async loadSavedSession(_platformId, _email) { return null; }
+  async saveSession(_platformId, _email, _state) {}
+  async discardSession(_platformId, _email) {}
+  sessionKey(platformId, email) { return platformId + ':' + crypto.createHash('sha256').update(email).digest('hex'); }
   view(s) {
     return { ok: true, sessionId: s.id, platform: s.platform.id, email: s.email, state: s.state,
       verifiedBy: s.verifiedBy || '', message: s.operationError || s.message || '', busy: !!s.busy && !s.refreshing,
@@ -140,10 +150,22 @@ class SessionManager {
     return this.launch(s, async () => {
       try {
         if (old?.browser) await old.browser.close().catch(() => {});
-        const browser = await this.createBrowser(p);
+        let savedState = null;
+        if (this.sessionReuseEligible(p.id)) savedState = await this.loadSavedSession(p.id, email).catch(() => null);
+        const browser = await this.createBrowser(p, savedState);
         if (s.closed) { await browser.close(); return; }
         s.browser = browser;
-        await browser.login(email, password);
+        if (savedState) {
+          // Try the account's saved session first: jump straight to the code
+          // step without showing the login page. refresh() below detects a
+          // rejected/expired session (a login form appears) and falls back
+          // to the normal manual flow automatically.
+          s.resumedFrom = { platformId: p.id, email };
+          s.stage = 'activation'; s.confirmed = true; s.verifiedBy = 'session';
+          await browser.navigate(p.activation);
+        } else {
+          await browser.login(email, password);
+        }
       } finally { password = ''; }
     });
   }

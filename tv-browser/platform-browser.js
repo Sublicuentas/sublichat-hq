@@ -170,7 +170,7 @@ class PlatformBrowser {
       let target;
       for (const frame of this.page.frames()) {
         const active = frame.locator('input:focus,textarea:focus');
-        if (await active.count() === 1 && await active.isVisible() && await frame.evaluate(() => document.hasFocus())) { target = active; break; }
+        if (await active.count() === 1 && await active.isVisible()) { target = active; break; }
       }
       if (!target) throw new TVError(409, 'Toque primero el campo donde desea escribir.');
       await target.fill(event.text);
@@ -183,6 +183,7 @@ class PlatformBrowser {
     } else throw new TVError(400, 'Acción no válida.');
     await this.settle();
   }
+  async getStorageState() { return this.context.storageState(); }
   async close() { if (!this.closed) { this.closed = true; await this.context.clearCookies().catch(() => {}); await this.context.close(); } }
 }
 

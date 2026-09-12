@@ -11,10 +11,10 @@ function browserFactory(chromium) {
     }).catch(err => { browserPromise = null; throw err; });
     return browserPromise;
   };
-  const factory = async platform => {
+  const factory = async (platform, storageState) => {
     const browser = await launch();
     const context = await browser.newContext({ viewport: { width: 1000, height: 760 }, locale: 'es-HN', timezoneId: 'America/Tegucigalpa',
-      acceptDownloads: false, serviceWorkers: 'block', permissions: [] });
+      acceptDownloads: false, serviceWorkers: 'block', permissions: [], ...(storageState ? { storageState } : {}) });
     try {
       await context.route('**/*', requestGuard(platform, host => dns.lookup(host, { all: true })));
       const page = await context.newPage(); page.setDefaultTimeout(4000);
