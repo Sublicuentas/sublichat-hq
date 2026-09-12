@@ -16,13 +16,56 @@ export function readConfig(env) {
   return { enabled, idleMs, lifetimeMs, maxSessions: number('TV_MAX_SESSIONS', 3, 1, 3) };
 }
 
+// One coordinator per installation enforces the shared three-browser limit.
+// Login sessions are saved per (plataforma, correo) so repeat activations can
+// skip the login page entirely; Netflix is excluded on purpose (it revokes
+// sessions used from a different IP more aggressively than the rest).
+function createSessionStore(storage) {
+  const ttlMs = 30 * 24 * 60 * 60 * 1000;
+  const prefixed = key => 'tvsession:' + key;
+  return {
+    async get(key) {
+      const saved = await storage.get(prefixed(key));
+      if (!saved) return null;
+      if (Date.now() - saved.savedAt > ttlMs) { await storage.delete(prefixed(key)).catch(() => {}); return null; }
+      return saved.state;
+    },
+    async set(key, state) { await storage.put(prefixed(key), { state, savedAt: Date.now() }); },
+    async delete(key) { await storage.delete(prefixed(key)).catch(() => {}); }
+  };
+}
+
 export class CloudSessionManager extends SessionManager {
+  constructor(options) { super(options); this.sessionStore = options.sessionStore || null; }
+  sessionReuseEligible(platformId) { return !!this.sessionStore && platformId !== 'netflix'; }
+  async loadSavedSession(platformId, email) {
+    if (!this.sessionStore) return null;
+    return this.sessionStore.get(this.sessionKey(platformId, email)).catch(() => null);
+  }
+  async saveSession(platformId, email, state) {
+    if (!this.sessionStore) return;
+    await this.sessionStore.set(this.sessionKey(platformId, email), state).catch(() => {});
+  }
+  async discardSession(platformId, email) {
+    if (!this.sessionStore) return;
+    await this.sessionStore.delete(this.sessionKey(platformId, email)).catch(() => {});
+  }
   async refresh(s) {
     try { await super.refresh(s); }
     catch (error) { if (s.state !== 'activated') throw error; }
     finally {
+      if (s.resumedFrom && s.stage === 'login') {
+        // The saved session was rejected by the platform: forget it so future
+        // activations for this account do not keep retrying a stale login.
+        await this.discardSession(s.resumedFrom.platformId, s.resumedFrom.email);
+        s.resumedFrom = null;
+      }
       if (s.state === 'activated' && s.browser) {
         const browser = s.browser; s.browser = null;
+        if (this.sessionReuseEligible(s.platform.id)) {
+          const state = await browser.getStorageState().catch(() => null);
+          if (state) await this.saveSession(s.platform.id, s.email, state);
+        }
         // Keep the success receipt in memory for a retried poll, without billing
         // another browser minute while the operator reads the confirmation.
         await browser.close().catch(() => {});
@@ -50,7 +93,7 @@ export class CloudSessionManager extends SessionManager {
 export class CloudController {
   constructor({ storage, env, createBrowser, now = Date.now }) {
     this.storage = storage; this.now = now; this.tail = Promise.resolve();
-    this.manager = new CloudSessionManager({ ...readConfig(env), createBrowser, now });
+    this.manager = new CloudSessionManager({ ...readConfig(env), createBrowser, now, sessionStore: createSessionStore(storage) });
   }
   serial(operation) {
     const result = this.tail.then(operation);

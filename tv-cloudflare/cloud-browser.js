@@ -26,7 +26,7 @@ export async function resolvePublicDns(host, fetcher = fetch) {
 // connect() is intentionally not used (its close() only disconnects).
 export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve = resolvePublicDns }) {
   const leases = new Set();
-  return async platform => {
+  return async (platform, storageState) => {
     for (const lease of leases) if (lease.browser && !lease.browser.isConnected()) leases.delete(lease);
     if (leases.size >= maxSessions) throw new TVError(429, 'Activar TV está ocupado. Espere a que cierre otra sesión.');
     const lease = { browser: null }; leases.add(lease);
@@ -45,7 +45,8 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
       browser.on('disconnected', () => leases.delete(lease));
       context = await browser.newContext({
         viewport: { width: 1000, height: 760 }, locale: 'es-HN', timezoneId: 'America/Tegucigalpa',
-        acceptDownloads: false, serviceWorkers: 'block', permissions: []
+        acceptDownloads: false, serviceWorkers: 'block', permissions: [],
+        ...(storageState ? { storageState } : {})
       });
       phase = 'routing';
       await context.route('**/*', requestGuard(platform, resolve));
