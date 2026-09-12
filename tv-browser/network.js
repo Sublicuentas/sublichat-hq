@@ -44,13 +44,7 @@ function requestGuard(platform, resolve, now = Date.now) {
         entry = { at: now(), pending: (async () => {
           const values = await resolve(host);
           return values.length > 0 && values.every(x => publicAddress(x.address));
-        })().catch(err => {
-          // TEMPORARY DIAGNOSTIC LOG — remove once the real cause of the DNS
-          // check failure is found. Only the host and the raw error are
-          // logged, never credentials or full URLs.
-          console.error('TV_DNS_CHECK debug: host=', host, 'error=', err && err.name, err && err.message);
-          return false;
-        }) };
+        })().catch(() => false) };
         addresses.set(host, entry);
       }
       if (!(await entry.pending)) return route.abort();
