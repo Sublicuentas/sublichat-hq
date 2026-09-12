@@ -58,10 +58,16 @@ class PlatformBrowser {
       // keeps loading secondary resources past the timeout, keep the committed
       // page when a public URL is already visible instead of destroying it.
       await this.page.goto(url, { timeout: 30000 });
-    } catch (_) {
+    } catch (err) {
       // Some SPAs abort the original navigation after committing a usable URL.
       // Keep that page visible; only fail when Chromium never left a blank/error URL.
-      if (!this.visiblePage()) throw new TVError(502, 'No se pudo cargar la página de la plataforma. Pulse Recuperar página para reintentar.', 'TV_NAVIGATION_FAILED');
+      if (!this.visiblePage()) {
+        // TEMPORARY DIAGNOSTIC LOG — remove once the real cause of
+        // TV_NAVIGATION_FAILED is found. Only the error name/message is
+        // logged, never the URL, email or password.
+        console.error('TV_NAVIGATION_FAILED debug:', err && err.name, err && err.message);
+        throw new TVError(502, 'No se pudo cargar la página de la plataforma. Pulse Recuperar página para reintentar.', 'TV_NAVIGATION_FAILED');
+      }
     }
     await this.settle();
   }
