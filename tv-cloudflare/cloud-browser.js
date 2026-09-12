@@ -12,7 +12,7 @@ export async function resolvePublicDns(host, fetcher = fetch) {
     const url = new URL('https://cloudflare-dns.com/dns-query');
     url.searchParams.set('name', host); url.searchParams.set('type', type);
     const response = await fetcher(url.href, {
-      headers: { Accept: 'application/dns-json' }, redirect: 'error', signal: AbortSignal.timeout(5000)
+      headers: { Accept: 'application/dns-json' }, redirect: 'manual', signal: AbortSignal.timeout(5000)
     });
     if (!response.ok) throw new Error('DNS_FAILED');
     const result = await response.json();
@@ -65,10 +65,6 @@ export function cloudBrowserFactory({ launch, binding, maxSessions = 3, resolve 
       await closeBrowser().catch(() => {});
       if (error instanceof TVError) throw error;
       const detail = String(error?.message || error || '').toLowerCase();
-      // TEMPORARY DIAGNOSTIC LOG — remove once the real cause of the launch
-      // failure is found. Only the raw Cloudflare error is logged, never
-      // credentials, emails or platform URLs.
-      console.error('TV_CLOUD_LAUNCH debug: phase=', phase, 'status=', error?.status, 'message=', error?.message);
       if (detail.includes('browser time limit exceeded') || detail.includes('time limit exceeded for today')) {
         throw new TVError(429, 'Cloudflare confirmó que se alcanzó el límite diario de Browser Run del plan Free. La cuota vuelve al iniciar el siguiente día UTC.', 'TV_CLOUD_DAILY_LIMIT');
       }
