@@ -16,6 +16,6 @@
     "TV_IDLE_MINUTES": "3",
     "TV_LIFETIME_MINUTES": "30"
   },
-  "observability": { "enabled": false },
+  "observability": { "enabled": true },
   "send_metrics": false
 }
