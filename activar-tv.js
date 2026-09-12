@@ -35,7 +35,8 @@
   async function api(payload) {
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 60000);
     try {
-      const response = await fetch(API, { method:'POST', headers:{ 'Content-Type':'application/json' },
+      await cacheAuthToken();
+      const response = await fetch(API, { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + state.authToken },
         body:JSON.stringify(payload), signal:controller.signal, cache:'no-store' });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) { const error = new Error(data.error || 'No se pudo completar la operación.'); error.code = data.code; error.status = response.status; throw error; }
@@ -224,7 +225,6 @@
     $('tvSecret').value = '';
     state.requestId ||= newId(); const generation = state.generation;
     state.busy = true; update(); message('Abriendo una sesión para esta cuenta…');
-    await cacheAuthToken();
     try {
       const result = await api({ action:'start', platform:state.platform.id, email, password, requestId:state.requestId });
       if (generation !== state.generation) { void api({ action:'close', sessionId:result.sessionId }).catch(() => {}); return; }
