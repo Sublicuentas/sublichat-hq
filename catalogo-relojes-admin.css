@@ -551,6 +551,19 @@ body.cr-modal-open{overflow:hidden!important}
 }
 .cr-carousel-editor .cr-editor-scroll{padding-top:16px}
 
+/* Editores de 3 filas (head / scroll / actions, sin nav): categoría y, si en el
+   futuro se simplifica, promoción. Se usa el selector "#crModal .cr-sheet.X" (en
+   vez de ".X" solo) para que gane en especificidad a "#crModal .cr-sheet" y el
+   grid-template-rows realmente se aplique — con solo ".cr-carousel-editor" arriba
+   la regla nunca ganaba contra "#crModal .cr-sheet" por tener menor especificidad. */
+#crModal .cr-sheet.cr-category-editor{
+  height:min(520px,calc(100dvh - 36px))!important;
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+}
+#crModal .cr-sheet.cr-promotion-editor{
+  grid-template-rows:auto auto minmax(0,1fr) auto!important;
+}
+
 @media(max-width:760px){
   #crModal.cr-modal{padding:8px!important}
   #crModal .cr-sheet{
