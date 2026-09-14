@@ -11,7 +11,7 @@
 
 const API='/api/revendedores-admin';
 const TARIFA_ESPECIAL='propietarios_2026';
-const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,promociones:null,clienteQ:'',clienteSel:null,loading:false};
+const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,promociones:null,pedidos:null,pedidoFiltro:'todos',clienteQ:'',clienteSel:null,loading:false};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
@@ -58,10 +58,24 @@ function shell(){
       #rbac-revendedores .promo-live-box{background:#1f2937;color:#fff;border-radius:14px;padding:14px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
       #rbac-revendedores .promo-existing-image{display:flex;gap:10px;align-items:center;margin-top:8px}
       #rbac-revendedores .promo-existing-image img{width:76px;height:76px;object-fit:contain;border:1px solid #e4e7ec;border-radius:12px;background:#f8fafc}
+      #rbac-revendedores .order-grid{display:grid;gap:12px}
+      #rbac-revendedores .order-card{border-left:4px solid #d92d20}
+      #rbac-revendedores .order-card[data-status="entregado"]{border-left-color:#12b76a}
+      #rbac-revendedores .order-card[data-status="en proceso"]{border-left-color:#2e90fa}
+      #rbac-revendedores .order-card[data-status="falta información"]{border-left-color:#f79009}
+      #rbac-revendedores .order-card[data-status="cancelado"]{border-left-color:#667085}
+      #rbac-revendedores .order-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+      #rbac-revendedores .order-metric{padding:9px 10px;border-radius:11px;background:#f8fafc;font-size:12px;color:#475467}
+      #rbac-revendedores .order-metric b{display:block;color:#101828;font-size:14px}
+      #rbac-revendedores .order-status-tools{display:grid;grid-template-columns:minmax(150px,210px) minmax(180px,1fr) auto;gap:8px;align-items:end}
+      #rbac-revendedores .perm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;padding:10px;border:1px solid #e4e7ec;border-radius:12px;background:#f9fafb}
+      #rbac-revendedores .stock-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
       @media(max-width:600px){
         #rbac-revendedores .promo-grid{grid-template-columns:1fr}
         #rbac-revendedores .promo-summary{grid-template-columns:88px minmax(0,1fr)}
         #rbac-revendedores .promo-thumb{width:88px;height:88px}
+        #rbac-revendedores .order-metrics,#rbac-revendedores .stock-row,#rbac-revendedores .perm-grid{grid-template-columns:1fr}
+        #rbac-revendedores .order-status-tools{grid-template-columns:1fr}
       }
     </style>
     <div class="cr-admin">
@@ -72,6 +86,7 @@ function shell(){
         <button class="cr-tab on" data-rtab="precios">Precios</button>
         <button class="cr-tab" data-rtab="vendedores">Vendedores</button>
         <button class="cr-tab" data-rtab="clientes">Clientes</button>
+        <button class="cr-tab" data-rtab="pedidos">🛒 Pedidos</button>
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
       </div>
@@ -90,7 +105,50 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,promociones:renderPromociones,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
+}
+
+/* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
+async function loadPedidos(force){
+  if(state.pedidos&&!force)return renderPedidos();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando pedidos…</div>';
+  try{const d=await api('GET','compras',undefined,{limit:240});state.pedidos=Array.isArray(d)?d:(d.compras||d.items||[]);renderPedidos()}
+  catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+function pedidoEstado(v){const s=String(v||'pendiente').trim().toLowerCase();return ['pendiente','en proceso','falta información','entregado','cancelado'].includes(s)?s:'pendiente'}
+function pedidoFecha(v){if(!v)return'—';const d=new Date(typeof v==='number'?v:v._seconds?v._seconds*1000:v.seconds?v.seconds*1000:v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('es-HN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function pedidoCard(p){
+  const estado=pedidoEstado(p.estado),venta=Number(p.ventaCliente)||0,costo=Number(p.monto)||0,util=p.utilidadEstimada==null?(venta?venta-costo:null):Number(p.utilidadEstimada);
+  const productos=Array.isArray(p.productos)&&p.productos.length?p.productos.map(x=>x.servicio||x.nombre).filter(Boolean).join(' + '):(p.servicio||'Pedido');
+  return `<article class="cr-card order-card" data-status="${esc(estado)}">
+    <div class="cr-row"><h3>🛒 ${esc(productos)}</h3><span class="cr-badge ${estado==='entregado'?'':estado==='cancelado'?'paused':''}">${esc(estado)}</span></div>
+    <small>Socio: <b>${esc(p.socio||p.socio_norm||'—')}</b> · ${esc(p.destinoLabel||p.destino||'')} · ${esc(pedidoFecha(p.ts||p.createdAt))} · Ref ${esc(String(p.id||'').slice(-6))}</small>
+    <div class="order-metrics"><div class="order-metric">Costo<b>${money(costo)}</b></div><div class="order-metric">Venta cliente<b>${venta?money(venta):'No registrada'}</b></div><div class="order-metric">Utilidad est.<b>${util==null?'—':money(util)}</b></div></div>
+    ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
+    <div class="order-status-tools">
+      <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
+      <label class="cr-field">Mensaje al socio<input id="pedidoDetalle-${esc(p.id)}" maxlength="300" value="${esc(p.detalleEstado||'')}" placeholder="Ej. Listo, revise su correo"></label>
+      <button class="cr-btn red" data-pedido-save="${esc(p.id)}">Actualizar</button>
+    </div>
+  </article>`;
+}
+function renderPedidos(){
+  const b=$('#revBody');if(!state.pedidos)return loadPedidos();
+  const counts={};state.pedidos.forEach(p=>{const e=pedidoEstado(p.estado);counts[e]=(counts[e]||0)+1});
+  const filtros=[['todos','Todos'],['pendiente','Pendientes'],['en proceso','En proceso'],['falta información','Falta información'],['entregado','Entregados'],['cancelado','Cancelados']];
+  const list=state.pedidoFiltro==='todos'?state.pedidos:state.pedidos.filter(p=>pedidoEstado(p.estado)===state.pedidoFiltro);
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap"><div><b>Seguimiento de pedidos</b><br><small>Cambie el estado aquí. El socio lo ve en su panel y recibe aviso en Buzón/Telegram.</small></div><button class="cr-btn ghost" id="pedidoReload">Actualizar</button></div>
+    <div class="cr-tabs" style="margin-bottom:12px;overflow:auto">${filtros.map(([k,l])=>`<button class="cr-tab ${state.pedidoFiltro===k?'on':''}" data-pedido-filter="${k}">${l}${k==='todos'?` · ${state.pedidos.length}`:counts[k]?` · ${counts[k]}`:''}</button>`).join('')}</div>
+    <div class="order-grid">${list.map(pedidoCard).join('')||'<div class="cr-empty">No hay pedidos en este filtro.</div>'}</div>`;
+  $('#pedidoReload').onclick=()=>loadPedidos(true);
+  b.querySelectorAll('[data-pedido-filter]').forEach(x=>x.onclick=()=>{state.pedidoFiltro=x.dataset.pedidoFilter;renderPedidos()});
+  b.querySelectorAll('[data-pedido-save]').forEach(x=>x.onclick=()=>guardarEstadoPedido(x.dataset.pedidoSave,x));
+}
+async function guardarEstadoPedido(id,btn){
+  const estado=$('#pedidoEstado-'+id)?.value||'pendiente',detalle=$('#pedidoDetalle-'+id)?.value.trim()||'';
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Guardando…';
+  try{await api('PATCH',`compras/${id}/estado`,{estado,detalle});status('✅ Estado actualizado y socio notificado.','good');await loadPedidos(true)}
+  catch(e){status(e.message,'bad');btn.disabled=false;btn.textContent=old}
 }
 
 /* ═══════════ PROMOCIONES PARA SOCIOS ═══════════ */
@@ -302,6 +360,11 @@ function precioCard(p){
     <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
     <label class="cr-field">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Ej. 130"></label>
     <label class="cr-field">Detalle (se muestra al socio)<textarea id="pxDetalle-${esc(id)}" rows="3">${esc(p.detalle||'')}</textarea></label>
+    <div class="stock-row">
+      <label class="cr-field">Inventario<select id="pxStockModo-${esc(id)}"><option value="auto" ${String(p.stockModo||'auto')==='auto'?'selected':''}>Automático · Bodega</option><option value="manual" ${String(p.stockModo||'auto')==='manual'?'selected':''}>Manual</option></select></label>
+      <label class="cr-field">Estado manual<select id="pxStockEstado-${esc(id)}"><option value="" ${!p.stockEstado?'selected':''}>Según cantidad / consultar</option><option value="disponible" ${p.stockEstado==='disponible'?'selected':''}>Disponible</option><option value="bajo" ${p.stockEstado==='bajo'?'selected':''}>Poco inventario</option><option value="agotado" ${p.stockEstado==='agotado'?'selected':''}>Agotado</option><option value="consultar" ${p.stockEstado==='consultar'?'selected':''}>Consultar</option></select></label>
+    </div>
+    <label class="cr-field">Cantidad manual (opcional)<input type="number" min="0" step="1" id="pxStockCantidad-${esc(id)}" value="${p.stockCantidad??''}" placeholder="Ej. 4"></label>
     <label class="cr-check"><input type="checkbox" id="pxActivo-${esc(id)}" ${p.activo!==false?'checked':''}> Visible para los socios</label>
     <div class="cr-row">
       <button class="cr-btn danger" data-del-precio="${esc(id)}">Eliminar</button>
@@ -317,6 +380,9 @@ function leerFormPrecio(id){
     categoria:$('#pxCategoria-'+id)?.value.trim()||'',
     detalle:$('#pxDetalle-'+id)?.value.trim()||'',
     precio:precioRaw===''||precioRaw==null?null:Number(precioRaw),
+    stockModo:$('#pxStockModo-'+id)?.value||'auto',
+    stockEstado:$('#pxStockEstado-'+id)?.value||'',
+    stockCantidad:($('#pxStockCantidad-'+id)?.value??'')===''?null:Number($('#pxStockCantidad-'+id)?.value),
     activo:$('#pxActivo-'+id)?.checked!==false,
   };
 }
@@ -342,6 +408,9 @@ function nuevoPrecio(){
       <label class="cr-field wide">Variante (opcional)<input id="npVariante" placeholder="Ej. 3 dispositivos"></label>
       <label class="cr-field wide">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
       <label class="cr-field wide">Detalle (se muestra al socio)<textarea id="npDetalle" rows="3"></textarea></label>
+      <label class="cr-field wide">Inventario<select id="npStockModo"><option value="auto">Automático · Bodega</option><option value="manual">Manual</option></select></label>
+      <label class="cr-field wide">Estado manual<select id="npStockEstado"><option value="">Según cantidad / consultar</option><option value="disponible">Disponible</option><option value="bajo">Poco inventario</option><option value="agotado">Agotado</option><option value="consultar">Consultar</option></select></label>
+      <label class="cr-field wide">Cantidad manual (opcional)<input type="number" min="0" id="npStockCantidad"></label>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="npCancel">Cancelar</button><button class="cr-btn red" id="npOk">Crear</button></div>`);
   $('#npCancel').onclick=()=>m.remove();
@@ -355,6 +424,8 @@ function nuevoPrecio(){
         variante:$('#npVariante').value.trim(),
         detalle:$('#npDetalle').value.trim(),
         precio:precioRaw===''?null:Number(precioRaw),
+        stockModo:$('#npStockModo').value||'auto',stockEstado:$('#npStockEstado').value||'',
+        stockCantidad:$('#npStockCantidad').value===''?null:Number($('#npStockCantidad').value),
         activo:true,tarifaId:state.tarifa,
       },{tarifa:state.tarifa});
       m.remove(); await loadPrecios(true);
@@ -389,7 +460,8 @@ function vendedorCard(r){
   return `<article class="cr-card">
     <div class="cr-row"><h3>${esc(r.nombre)}</h3><span class="cr-badge ${activo?'':'paused'}">${activo?'Activo':'Inactivo — no puede entrar'}</span></div>
     <small>Usuario: ${esc(r.nombre_norm||r.id)} · WhatsApp: ${esc(r.telefono||'—')} · TG: ${esc(r.telegramId||'—')}</small>
-    <div class="cr-row"><small>${r.clientes||0} clientes · ${r.vencidos||0} vencidos</small></div>
+    <div class="cr-row"><small>${r.clientes||0} clientes · ${r.vencidos||0} vencidos · Tarifa: ${esc(r.tarifaId||'general')}</small></div>
+    <div class="cr-row"><small>Permisos: ${(r.capabilities?.canViewClients??true)?'Clientes ✓':'Clientes —'} · ${(r.capabilities?.canRenew??true)?'Renovar ✓':'Renovar —'} · ${(r.capabilities?.canBuy??!r.sinCompras)?'Comprar ✓':'Comprar —'} · ${(r.capabilities?.canUseAI??true)?'IA ✓':'IA —'}</small></div>
     <div class="cr-row">
       <button class="cr-btn ghost" data-edit-vend="${esc(r.id)}">Editar</button>
       <button class="cr-btn ghost" data-pin-vend="${esc(r.id)}">🔐 Nuevo PIN</button>
@@ -443,19 +515,33 @@ function nuevoVendedor(){
 }
 function editarVendedor(id){
   const r=state.vendedores.find(x=>x.id===id); if(!r) return;
+  const c=r.capabilities||r.permisos||{};
+  const checked=(k,def=true)=>(typeof c[k]==='boolean'?c[k]:def)?'checked':'';
   const m=modal(`<h2>Editar vendedor</h2>
     <div class="cr-form">
       <label class="cr-field wide">Nombre<input id="evNombre" value="${esc(r.nombre)}"></label>
       <label class="cr-field wide">WhatsApp<input id="evTelefono" value="${esc(r.telefono||'')}"></label>
       <label class="cr-field wide">ID de Telegram (opcional)<input id="evTelegram" value="${esc(r.telegramId||'')}"></label>
+      <label class="cr-field wide">Tarifa<select id="evTarifa"><option value="general" ${(r.tarifaId||'general')==='general'?'selected':''}>General</option><option value="${TARIFA_ESPECIAL}" ${r.tarifaId===TARIFA_ESPECIAL?'selected':''}>Sublicuentas · Relojes · Geisell</option></select></label>
+      <label class="cr-field wide">Texto del botón de renovación (opcional)<input id="evEtiqueta" maxlength="60" value="${esc(r.etiquetaRenovacion||'')}" placeholder="Ej. Mensaje de renovación"></label>
       <label class="cr-check"><input type="checkbox" id="evActivo" ${r.activo!==false?'checked':''}> Cuenta activa</label>
-      <small>Usuario de acceso (${esc(r.nombre_norm)}) no se puede cambiar acá — reasigná los clientes primero si hace falta.</small>
+      <div class="wide"><b style="font-size:13px">Permisos del panel</b><div class="perm-grid" style="margin-top:7px">
+        <label class="cr-check"><input type="checkbox" id="evCanClients" ${checked('canViewClients',true)}> Ver clientes</label>
+        <label class="cr-check"><input type="checkbox" id="evCanRenew" ${checked('canRenew',true)}> Renovar clientes</label>
+        <label class="cr-check"><input type="checkbox" id="evCanBuy" ${checked('canBuy',!r.sinCompras)}> Realizar compras</label>
+        <label class="cr-check"><input type="checkbox" id="evCanAI" ${checked('canUseAI',true)}> Subli IA / Aula</label>
+        <label class="cr-check"><input type="checkbox" id="evCanRewards" ${checked('recompensas',true)}> Recompensas</label>
+        <label class="cr-check"><input type="checkbox" id="evCanInbox" ${checked('buzon',true)}> Buzón</label>
+      </div></div>
+      <small>Los permisos nuevos se reflejan en sesiones abiertas cuando el panel sincroniza el perfil. El usuario de acceso (${esc(r.nombre_norm)}) no se cambia aquí.</small>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="evCancel">Cancelar</button><button class="cr-btn red" id="evOk">Guardar</button></div>`);
   $('#evCancel').onclick=()=>m.remove();
   $('#evOk').onclick=async()=>{
+    const canViewClients=$('#evCanClients').checked,canRenew=$('#evCanRenew').checked,canBuy=$('#evCanBuy').checked,canUseAI=$('#evCanAI').checked;
+    const capabilities={inicio:true,clientes:canViewClients,catalogo:true,renovar:canRenew,comprar:canBuy,aula:canUseAI,perfil:true,recompensas:$('#evCanRewards').checked,buzon:$('#evCanInbox').checked,canViewClients,canRenew,canBuy,canUseAI};
     try{
-      await api('PATCH','revendedores/'+id,{nombre:$('#evNombre').value.trim(),telefono:$('#evTelefono').value.trim(),telegramId:$('#evTelegram').value.trim(),activo:$('#evActivo').checked});
+      await api('PATCH','revendedores/'+id,{nombre:$('#evNombre').value.trim(),telefono:$('#evTelefono').value.trim(),telegramId:$('#evTelegram').value.trim(),activo:$('#evActivo').checked,tarifaId:$('#evTarifa').value,etiquetaRenovacion:$('#evEtiqueta').value.trim(),capabilities});
       m.remove(); await loadVendedores(true);
     }catch(e){ alert(e.message); }
   };
@@ -643,7 +729,7 @@ function init(){
   const screen=document.getElementById('screen-revendedores');
   if(screen?.classList.contains('active')) loadPrecios();
 }
-window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; render(); }};
+window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; render(); }};
 document.addEventListener('DOMContentLoaded',init);
 new MutationObserver(()=>{
   const s=document.getElementById('screen-revendedores');
