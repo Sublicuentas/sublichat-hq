@@ -1,4 +1,4 @@
-// api/tickets.js · VERSION 3 · avisos parciales sin ocultar el fallo del destinatario
+// api/tickets.js · VERSION 4 · evidencia con foto + conversación recíproca por Telegram
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -6,6 +6,7 @@
 // Todos los chat IDs deben configurarse como variables privadas de Vercel.
 
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -45,7 +46,9 @@ function ticketIdentity(user) {
     ? 'sublicuentas'
     : (['finanzas', 'relojes'].includes(role) || ['libni', 'relojes'].includes(usuario)
       ? 'relojes'
-      : (['auditor', 'auditoria', 'magdiel'].includes(role) || usuario === 'magdiel' ? 'magdiel' : role || usuario));
+      : (['geisell_admin', 'geisell', 'geissel'].includes(role) || ['geisell', 'geissel'].includes(usuario)
+        ? 'geisell'
+        : (['auditor', 'auditoria', 'magdiel'].includes(role) || usuario === 'magdiel' ? 'magdiel' : role || usuario)));
   return { usuario, role: canonicalRole };
 }
 
@@ -53,48 +56,80 @@ function clean(v, max = 1000) {
   return String(v == null ? '' : v).replace(/[\u0000-\u001F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function destinationKey(v) {
+  const raw = clean(v, 80).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_. -]+/g, '')
+    .replace(/\s+/g, ' ').trim();
+  if (raw === 'geissel') return 'geisell';
+  return raw;
+}
 function roleLabel(role) {
-  if (role === 'sublicuentas') return 'Sublicuentas';
-  if (role === 'relojes') return 'Relojes';
-  if (role === 'magdiel') return 'Magdiel';
-  if (role === 'yami') return 'Yami';
-  if (role === 'jimena') return 'Jimena';
-  if (role === 'manuel') return 'Manuel';
-  return clean(role || 'Usuario', 40);
+  const r = destinationKey(role);
+  if (r === 'sublicuentas') return 'Sublicuentas';
+  if (r === 'relojes') return 'Relojes';
+  if (r === 'geisell') return 'Geisell';
+  if (r === 'magdiel') return 'Magdiel';
+  if (r === 'yami') return 'Yami';
+  if (r === 'jimena') return 'Jimena';
+  if (r === 'manuel') return 'Manuel';
+  return clean(role || 'Usuario', 80);
 }
 
-const DESTINOS_VALIDOS = new Set(['sublicuentas', 'relojes', 'magdiel', 'yami', 'jimena', 'manuel']);
+const CORE_DESTINOS = new Set(['sublicuentas', 'relojes', 'geisell', 'magdiel']);
 
 function normalizeDestinos(destino, fromRol = '') {
-  const d = clean(destino, 40).toLowerCase();
-  const fr = clean(fromRol, 40).toLowerCase();
+  const d = destinationKey(destino);
+  const fr = destinationKey(fromRol);
   if (['sublicuentas_magdiel', 'magdiel_sublicuentas', 'admin_auditor'].includes(d)) return ['sublicuentas', 'magdiel'];
   if (['sublicuentas_relojes', 'relojes_sublicuentas', 'admin_relojes'].includes(d)) return ['sublicuentas', 'relojes'];
-  if (d === 'todos' || d === 'all') return ['sublicuentas', 'relojes', 'magdiel', 'yami', 'jimena', 'manuel'];
+  if (['sublicuentas_geisell', 'geisell_sublicuentas', 'admin_geisell'].includes(d)) return ['sublicuentas', 'geisell'];
   if (d === 'both' || d === 'ambos') {
-    if (fr === 'relojes') return ['sublicuentas', 'magdiel'];
+    if (fr === 'relojes') return ['sublicuentas', 'geisell'];
+    if (fr === 'geisell') return ['sublicuentas', 'relojes'];
     if (fr === 'magdiel') return ['sublicuentas', 'relojes'];
-    return ['relojes', 'magdiel'];
+    return ['relojes', 'geisell'];
   }
   if (d === 'sublicuentas' || d === 'naara' || d === 'admin') return ['sublicuentas'];
   if (d === 'relojes' || d === 'libni' || d === 'finanzas') return ['relojes'];
+  if (d === 'geisell' || d === 'geissel') return ['geisell'];
   if (d === 'magdiel' || d === 'auditoria') return ['magdiel'];
-  if (d === 'yami') return ['yami'];
-  if (d === 'jimena') return ['jimena'];
-  if (d === 'manuel') return ['manuel'];
-  return ['sublicuentas'];
+  return d ? [d] : ['sublicuentas'];
 }
 
 function normalizeDestinosBody(body, fromRol = '') {
   const explicit = Array.isArray(body && body.destinos)
-    ? body.destinos.map(v => clean(v, 40).toLowerCase()).filter(v => DESTINOS_VALIDOS.has(v))
+    ? body.destinos.map(destinationKey).filter(Boolean).slice(0, 100)
     : [];
   if (explicit.length) return [...new Set(explicit)];
   return normalizeDestinos(body && body.destino, fromRol);
 }
 
-function destinosLabel(destinos) {
-  return (destinos || []).map(roleLabel).join(' + ');
+function destinosLabel(destinos, labels = {}) {
+  return (destinos || []).map(k => labels[destinationKey(k)] || roleLabel(k)).join(' + ');
+}
+
+async function availableRecipients(db) {
+  const map = new Map([
+    ['relojes', { key: 'relojes', label: 'Relojes', kind: 'equipo' }],
+    ['geisell', { key: 'geisell', label: 'Geisell', kind: 'equipo' }],
+    ['magdiel', { key: 'magdiel', label: 'Magdiel', kind: 'equipo' }],
+  ]);
+  try {
+    const snap = await db.collection('revendedores').get();
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      if (d.activo === false) return;
+      const key = destinationKey(d.nombre_norm || doc.id || d.nombre);
+      if (!key || key === 'sublicuentas') return;
+      const label = clean(d.nombre || d.nombre_norm || doc.id, 100);
+      if (!map.has(key)) map.set(key, { key, label, kind: 'socio' });
+      else if (map.get(key).kind !== 'equipo' && label) map.set(key, { key, label, kind: 'socio' });
+    });
+  } catch (e) {
+    console.error('TICKET_RECIPIENTS_LIST_ERROR', e && e.message || e);
+  }
+  return [...map.values()].sort((a,b) => (a.kind === b.kind ? a.label.localeCompare(b.label,'es') : (a.kind === 'equipo' ? -1 : 1)));
 }
 
 // Chat IDs de Telegram por perfil. Nunca se incluyen identificadores reales en GitHub.
@@ -102,6 +137,7 @@ const CHAT_IDS = {
   magdiel: process.env.TELEGRAM_CHAT_ID_MAGDIEL || '',
   relojes: process.env.TELEGRAM_CHAT_ID_RELOJES || '',
   sublicuentas: process.env.TELEGRAM_CHAT_ID_SUBLICUENTAS || '',
+  geisell: process.env.TELEGRAM_CHAT_ID_GEISELL || process.env.TELEGRAM_CHAT_ID_GEISSEL || '',
   yami: process.env.TELEGRAM_CHAT_ID_YAMI || '',
   jimena: process.env.TELEGRAM_CHAT_ID_JIMENA || '',
   manuel: process.env.TELEGRAM_CHAT_ID_MANUEL || ''
@@ -112,8 +148,6 @@ const CHAT_IDS = {
 // TELEGRAM_CHAT_ID_<NOMBRE> de Vercel. Por eso Jimena podía mostrar su TG correcto
 // en Catálogo Socios y aun así los avisos fallaban. Las variables de entorno siguen
 // teniendo prioridad, pero para vendedores hacemos fallback automático a Firestore.
-const ROLES_REVENDEDORES_TG = new Set(['yami', 'jimena', 'manuel']);
-
 function telegramRoleKey(v) {
   return String(v == null ? '' : v)
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -122,10 +156,10 @@ function telegramRoleKey(v) {
 }
 
 async function resolveTelegramChatId(db, role) {
-  const r = clean(role, 40).toLowerCase();
+  const r = destinationKey(role);
   const envId = clean(CHAT_IDS[r] || '', 80);
   if (envId) return { chatId: envId, source: 'env' };
-  if (!db || !ROLES_REVENDEDORES_TG.has(r)) return { chatId: '', source: 'missing' };
+  if (!db) return { chatId: '', source: 'missing' };
 
   try {
     const wanted = telegramRoleKey(r);
@@ -155,25 +189,27 @@ function telegramHTML(v) {
     .replace(/>/g, '&gt;');
 }
 
-async function sendTelegramTo(chatId, text) {
+async function sendTelegramTo(chatId, text, options = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || '';
   if (!token || !chatId) return { ok: false, skipped: true, reason: 'telegram_env_missing' };
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true })
-  });
+  const imageUrl = clean(options.imageUrl || '', 1800);
+  const replyMarkup = options.replyMarkup && typeof options.replyMarkup === 'object' ? options.replyMarkup : undefined;
+  const method = imageUrl ? 'sendPhoto' : 'sendMessage';
+  const url = `https://api.telegram.org/bot${token}/${method}`;
+  const body = imageUrl
+    ? { chat_id: chatId, photo: imageUrl, caption: String(text || '').slice(0, 1000), parse_mode: 'HTML', ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }
+    : { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) };
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) return { ok: false, error: j.description || `Telegram HTTP ${r.status}` };
-  return { ok: true };
+  return { ok: true, messageId: Number(j.result && j.result.message_id) || 0 };
 }
 
-// Envía el mensaje a cada chat correspondiente a los roles en `destinos`.
-// Si no hay destinos (o no matchea ningún perfil conocido), cae a TELEGRAM_CHAT_ID genérico si existe.
-async function sendTelegram(db, text, destinos) {
-  const requested = [...new Set((Array.isArray(destinos) ? destinos : [])
-    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)))];
+// Envía el mensaje a cada destinatario. Para vendedores/revendedores busca el
+// telegramId directamente en Firestore; así no hace falta crear una variable
+// de Vercel por cada socio nuevo.
+async function sendTelegram(db, text, destinos, options = {}) {
+  const requested = [...new Set((Array.isArray(destinos) ? destinos : []).map(destinationKey).filter(Boolean))];
   const targets = new Map();
   const results = [];
 
@@ -194,16 +230,12 @@ async function sendTelegram(db, text, destinos) {
 
   const configuredResults = await Promise.all([...targets.entries()].map(async ([chatId, meta]) => {
     try {
-      return { ...(await sendTelegramTo(chatId, text)), roles: meta.roles, fallback: meta.fallback === true };
+      return { ...(await sendTelegramTo(chatId, text, options)), chatId: String(chatId), roles: meta.roles, fallback: meta.fallback === true };
     } catch (e) {
-      return { ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), roles: meta.roles, fallback: meta.fallback === true };
+      return { ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), chatId: String(chatId), roles: meta.roles, fallback: meta.fallback === true };
     }
   }));
   results.push(...configuredResults);
-
-  // Si un chat específico (por ejemplo, Jimena) devuelve error, no lo
-  // sustituimos silenciosamente por el chat general: eso haría parecer que la
-  // persona recibió el aviso cuando en realidad su chat sigue mal configurado.
 
   const delivered = new Set();
   results.filter(r => r.ok).forEach(r => (r.roles || []).forEach(role => delivered.add(role)));
@@ -213,6 +245,28 @@ async function sendTelegram(db, text, destinos) {
   const partial = deliveredRoles.length > 0 && failedRoles.length > 0;
   if (!results.length) return { ok: false, skipped: true, reason: 'sin_destinos', deliveredRoles, failedRoles };
   return { ok, partial, results, deliveredRoles, failedRoles };
+}
+
+async function saveTelegramMessageLinks(db, ticketId, telegram) {
+  const rows = Array.isArray(telegram && telegram.results) ? telegram.results.filter(r => r && r.ok && r.chatId && r.messageId) : [];
+  if (!rows.length) return;
+  const batch = db.batch();
+  rows.forEach(row => {
+    const safeChat = String(row.chatId).replace(/[^0-9-]/g, '').slice(0, 40);
+    const key = `${safeChat}_${Number(row.messageId)}`;
+    batch.set(db.collection('ticket_telegram_messages').doc(key), {
+      ticketId,
+      chatId: safeChat,
+      messageId: Number(row.messageId),
+      roles: Array.isArray(row.roles) ? row.roles.map(destinationKey).filter(Boolean) : [],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+  await batch.commit().catch(e => console.error('TICKET_TG_LINK_SAVE', e && e.message || e));
+}
+
+function ticketReplyMarkup(id, numero, tipo = 'ticket') {
+  return { inline_keyboard: [[{ text: tipo === 'aviso' ? '💬 Responder / consultar' : `💬 Responder ticket #${numero || ''}`.trim(), callback_data: `tk:reply:${id}` }]] };
 }
 
 // Nunca devuelve ni conserva chat_id en respuestas accesibles al navegador.
@@ -227,15 +281,15 @@ function safeTelegramInfo(info) {
     if (value.error) out.error = clean(value.error, 240);
     if (value.fallback === true) out.fallback = true;
     if (Array.isArray(value.roles)) out.roles = value.roles
-      .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+      .map(destinationKey).filter(Boolean).slice(0, 100);
     return out;
   };
   const out = safeResult(info);
   if (info.partial === true) out.partial = true;
   if (Array.isArray(info.deliveredRoles)) out.deliveredRoles = info.deliveredRoles
-    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+    .map(destinationKey).filter(Boolean).slice(0, 100);
   if (Array.isArray(info.failedRoles)) out.failedRoles = info.failedRoles
-    .map(r => clean(r, 40).toLowerCase()).filter(r => DESTINOS_VALIDOS.has(r)).slice(0, 20);
+    .map(destinationKey).filter(Boolean).slice(0, 100);
   if (Array.isArray(info.results)) out.results = info.results.slice(0, 20).map(safeResult);
   return out;
 }
@@ -249,10 +303,10 @@ function safeTicketForClient(item) {
 }
 
 function canAccessTicket(ticket, role) {
-  const actor = clean(role, 40).toLowerCase();
+  const actor = destinationKey(role);
   if (actor === 'sublicuentas') return true;
-  const destinos = Array.isArray(ticket && ticket.destinos) ? ticket.destinos.map(v => clean(v, 40).toLowerCase()) : [];
-  return destinos.includes(actor) || clean(ticket && ticket.creadoPorRol, 40).toLowerCase() === actor;
+  const destinos = Array.isArray(ticket && ticket.destinos) ? ticket.destinos.map(destinationKey).filter(Boolean) : [];
+  return destinos.includes(actor) || destinationKey(ticket && ticket.creadoPorRol) === actor;
 }
 
 async function listTickets(db, body) {
@@ -268,11 +322,12 @@ async function listTickets(db, body) {
     .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   if (rol && rol !== 'sublicuentas') {
     items = items.filter(t => {
-      const destinos = Array.isArray(t.destinos) ? t.destinos : [];
-      return destinos.includes(rol) || String(t.creadoPorRol || '') === rol;
+      const destinos = Array.isArray(t.destinos) ? t.destinos.map(destinationKey) : [];
+      return destinos.includes(destinationKey(rol)) || destinationKey(t.creadoPorRol) === destinationKey(rol);
     });
   }
-  return { ok: true, items: items.map(safeTicketForClient) };
+  const recipients = await availableRecipients(db);
+  return { ok: true, items: items.map(safeTicketForClient), recipients };
 }
 
 // Genera un número de ticket secuencial (#1, #2, #3...) usando un contador en Firestore.
@@ -296,6 +351,49 @@ function estadoLabel(estado) {
   return 'Abierto';
 }
 
+function ticketStorageCandidates() {
+  const projectId = process.env.FIREBASE_PROJECT_ID || '';
+  return [...new Set([
+    process.env.TICKETS_FIREBASE_STORAGE_BUCKET,
+    process.env.FIREBASE_STORAGE_BUCKET,
+    process.env.CATALOGO_FIREBASE_STORAGE_BUCKET,
+    projectId ? `${projectId}.firebasestorage.app` : '',
+    projectId ? `${projectId}.appspot.com` : '',
+  ].map(v => String(v || '').trim()).filter(Boolean))];
+}
+async function uploadTicketImage(dataUri, folder = 'tickets') {
+  const rawInput = String(dataUri || '').trim();
+  if (!rawInput) return { imageUrl: '' };
+  const m = rawInput.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i);
+  if (!m) throw Object.assign(new Error('Formato de imagen no permitido.'), { publicError: 'imagen_invalida' });
+  const mime = m[1].toLowerCase();
+  const buffer = Buffer.from(m[2].replace(/\s+/g,''), 'base64');
+  if (!buffer.length || buffer.length > 4 * 1024 * 1024) throw Object.assign(new Error('La imagen supera 4 MB.'), { publicError: 'imagen_muy_grande' });
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+  const token = crypto.randomBytes(18).toString('hex');
+  const path = `tickets/${clean(folder,40)}/${Date.now()}-${token.slice(0,12)}.${ext}`;
+  getApp();
+  let lastError = null;
+  for (const bucketName of ticketStorageCandidates()) {
+    try {
+      const bucket = admin.storage().bucket(bucketName);
+      const file = bucket.file(path);
+      await file.save(buffer, { resumable:false, validation:false, metadata:{ contentType:mime, cacheControl:'public,max-age=31536000,immutable', metadata:{ firebaseStorageDownloadTokens:token } } });
+      const imageUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(path)}?alt=media&token=${encodeURIComponent(token)}`;
+      return { imageUrl, bucket:bucket.name, path };
+    } catch (e) { lastError = e; }
+  }
+  throw Object.assign(new Error(`No se pudo subir la evidencia. ${String(lastError && lastError.message || 'Storage no configurado.')}`), { publicError:'imagen_storage' });
+}
+function ticketConversationTargets(ticket, actorRole) {
+  const actor = destinationKey(actorRole);
+  const all = new Set((Array.isArray(ticket && ticket.destinos) ? ticket.destinos : []).map(destinationKey).filter(Boolean));
+  const creator = destinationKey(ticket && ticket.creadoPorRol);
+  if (creator) all.add(creator);
+  if (actor) all.delete(actor);
+  return [...all];
+}
+
 function creationTelegramMessage(item = {}) {
   const esAviso = String(item.tipo || '').toLowerCase() === 'aviso' || item.seccion === 'avisos';
   return esAviso ? [
@@ -315,34 +413,34 @@ async function createTicket(db, body) {
   const titulo = clean(body.titulo, 160);
   const detalle = clean(body.detalle, 3000);
   if (!titulo || !detalle) return { status: 400, json: { ok: false, error: 'Falta título o detalle del ticket.' } };
-  const creadoRol = clean(body.rol || '', 40).toLowerCase();
-  const destinos = normalizeDestinosBody(body, creadoRol);
+  const creadoRol = destinationKey(body.rol || '');
+  let destinos = normalizeDestinosBody(body, creadoRol);
+  const recipients = await availableRecipients(db);
+  const recipientLabels = Object.fromEntries(recipients.map(r => [destinationKey(r.key), r.label]));
+  if (String(body.destino || '').toLowerCase() === 'todos' && !(Array.isArray(body.destinos) && body.destinos.length)) destinos = recipients.map(r => destinationKey(r.key)).filter(Boolean);
   const tipo = clean(body.tipo || 'ticket', 30).toLowerCase();
   const numero = await nextTicketNumero(db);
+  let imagenUrl = '';
+  if (body.imagen) imagenUrl = (await uploadTicketImage(body.imagen, tipo === 'aviso' ? 'avisos' : 'tickets')).imageUrl;
   const item = {
-    numero,
-    titulo,
-    detalle,
-    tipo,
-    destinos,
-    destinosLabel: destinosLabel(destinos),
+    numero, titulo, detalle, tipo, destinos,
+    destinosLabel: destinosLabel(destinos, recipientLabels),
     prioridad: clean(body.prioridad || 'normal', 30),
     seccion: clean(body.seccion || 'auditoria', 60),
     estado: 'abierto',
     creadoPor: clean(body.usuario || 'Sublichat', 80),
     creadoPorRol: creadoRol,
-    createdAt: now,
-    updatedAt: now,
-    resolucion: '',
-    resueltoPor: '',
-    resueltoAt: ''
+    imagenUrl,
+    createdAt: now, updatedAt: now,
+    resolucion: '', resueltoPor: '', resueltoAt: ''
   };
   const ref = await db.collection('tickets_auditoria').add(item);
   const msg = creationTelegramMessage(item);
-  const telegram = await sendTelegram(db, msg, item.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, item.destinos, { imageUrl, replyMarkup: ticketReplyMarkup(ref.id, numero, tipo) }).catch(e => ({ ok: false, error: e.message }));
+  await saveTelegramMessageLinks(db, ref.id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo }, { merge: true });
-  return { ok: true, id: ref.id, numero, telegramOk: !!telegram.ok, telegramInfo };
+  return { ok: true, id: ref.id, numero, imageUrl:imagenUrl, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 async function retryTelegramTicket(db, body) {
@@ -355,7 +453,8 @@ async function retryTelegramTicket(db, body) {
   if (clean(body.rol, 40).toLowerCase() !== 'sublicuentas' && !canAccessTicket(old, body.rol)) {
     return { status: 403, json: { ok: false, error: 'No tiene permiso para reenviar este aviso.' } };
   }
-  const telegram = await sendTelegram(db, creationTelegramMessage(old), old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, creationTelegramMessage(old), old.destinos, { imageUrl:old.imagenUrl||'', replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({
     telegramOk: !!telegram.ok,
@@ -391,7 +490,8 @@ async function setProcesoTicket(db, body) {
     `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
     `Lo puso en proceso: ${telegramHTML(update.procesoPor || '—')}`
   ].join('\n');
-  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramProcessOk: !!telegram.ok, telegramProcessInfo: telegramInfo }, { merge: true });
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
@@ -423,7 +523,8 @@ async function resolveTicket(db, body) {
     `Resuelto por: ${telegramHTML(update.resueltoPor || '—')}`,
     `<b>Resolución:</b> ${telegramHTML(resolucion)}`
   ].join('\n');
-  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramResolvedOk: !!telegram.ok, telegramResolvedInfo: telegramInfo }, { merge: true });
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
@@ -432,40 +533,44 @@ async function resolveTicket(db, body) {
 async function responderTicket(db, body) {
   const id = clean(body.id, 120);
   const respuesta = clean(body.respuesta, 3000);
-  if (!id || !respuesta) return { status: 400, json: { ok: false, error: 'Falta id o respuesta.' } };
+  if (!id || (!respuesta && !body.imagen)) return { status: 400, json: { ok: false, error: 'Falta id o respuesta.' } };
   const ref = db.collection('tickets_auditoria').doc(id);
   const snap = await ref.get();
   if (!snap.exists) return { status: 404, json: { ok: false, error: 'No encontré ese ticket.' } };
   const old = snap.data() || {};
   if (!canAccessTicket(old, body.rol)) return { status: 403, json: { ok: false, error: 'No tiene permiso para modificar ese ticket.' } };
   const now = new Date().toISOString();
+  let imagenUrl = '';
+  if (body.imagen) imagenUrl = (await uploadTicketImage(body.imagen, 'respuestas')).imageUrl;
   const entry = {
-    texto: respuesta,
+    texto: respuesta || (imagenUrl ? 'Evidencia adjunta' : ''),
     por: clean(body.usuario || 'Sublichat', 80),
-    porRol: clean(body.rol || '', 40).toLowerCase(),
+    porRol: destinationKey(body.rol || ''),
+    imagenUrl,
+    origen: 'sublichat',
     at: now
   };
   const respuestas = Array.isArray(old.respuestas) ? old.respuestas.slice() : [];
   respuestas.push(entry);
   const update = {
     respuestas,
-    ultimaRespuesta: respuesta,
+    ultimaRespuesta: entry.texto,
     ultimaRespuestaPor: entry.por,
     estado: String(old.estado || 'abierto') === 'resuelto' ? 'resuelto' : 'respondido',
     updatedAt: now
   };
   await ref.set(update, { merge: true });
   const msg = [
-    `💬 <b>Ticket #${old.numero || id.slice(-4)}</b> · ${estadoLabel(update.estado)}`,
+    `💬 <b>${String(old.tipo||'').toLowerCase()==='aviso'?'Respuesta al aviso':`Ticket #${old.numero || id.slice(-4)}`} · ${telegramHTML(estadoLabel(update.estado))}</b>`,
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
-    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
     `Respondió: ${telegramHTML(entry.por)}`,
-    telegramHTML(respuesta)
+    respuesta ? telegramHTML(respuesta) : '📎 Evidencia adjunta'
   ].join('\n');
-  const telegram = await sendTelegram(db, msg, old.destinos).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { imageUrl, replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegramInfo }, { merge: true });
-  return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
+  return { ok: true, id, imageUrl, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 module.exports = async function handler(req, res) {
