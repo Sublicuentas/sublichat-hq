@@ -677,14 +677,16 @@
     return `<article class="cr-card">
       <div class="cr-row"><h3>${esc(promotion.title)}</h3><span class="cr-card-badges"><span class="cr-badge ${promotion.active?'':'paused'}">${promotion.active?'Activa':'Pausada'}</span>${promotion.badge?`<span class="cr-badge promo">${esc(promotion.badge)}</span>`:''}</span></div>
       <small>${esc(promotion.description||'Sin descripción')}</small>
-      <div class="cr-row"><span>${(promotion.productIds||[]).length} producto(s)</span><span class="cr-card-actions"><button class="cr-btn ghost" data-edit-promotion="${esc(promotion.id)}">Editar</button><button class="cr-btn danger" data-delete-promotion="${esc(promotion.id)}">Eliminar</button></span></div>
+      <div class="cr-row"><span>${(promotion.productIds||[]).length} producto(s) · orden ${Number(promotion.order)||0}</span><span class="cr-card-actions"><button class="cr-btn ghost" data-edit-promotion="${esc(promotion.id)}">Editar</button><button class="cr-btn danger" data-delete-promotion="${esc(promotion.id)}">Eliminar</button></span></div>
     </article>`;
   }
 
   function renderPromotions(){
     const body=$('#crBody');
-    const promotions=state.catalog.promotions||[];
-    body.innerHTML=`<div class="cr-tools"><span class="cr-note-inline">Agregar, editar y eliminar se publica de inmediato.</span><button class="cr-btn red" id="crAddPromotion">＋ Promoción</button></div>
+    // Se ordena igual que en el catálogo público (número menor = aparece
+    // primero), así el orden que se ve aquí es el que verá el cliente.
+    const promotions=(state.catalog.promotions||[]).slice().sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0));
+    body.innerHTML=`<div class="cr-tools"><span class="cr-note-inline">Agregar, editar y eliminar se publica de inmediato. Use el campo Orden de cada promoción para acomodarlas.</span><button class="cr-btn red" id="crAddPromotion">＋ Promoción</button></div>
       <div class="cr-grid">${promotions.map(promotionCard).join('')||'<div class="cr-empty">No hay promociones públicas.</div>'}</div>`;
     $('#crAddPromotion').onclick=()=>editPromotion('');
     body.querySelectorAll('[data-edit-promotion]').forEach((button)=>{button.onclick=()=>editPromotion(button.dataset.editPromotion);});
@@ -708,7 +710,10 @@
   // Solo rellenan el formulario; el usuario sigue pudiendo editar todo antes
   // de publicar.
   const PROMO_TEMPLATES={
-    combo:{label:'🎁 Combo 2 plataformas',title:'Combo doble',description:'Lleve 2 plataformas juntas y ahorre.',badge:'Combo',badgeTone:'popular',features:['Ahorra pagando las 2 juntas','Un solo pago, dos accesos'],optionsText:'Combo mensual=180=Ahorro vs. comprar separado'},
+    combo2:{label:'🎁 Combo 2 plataformas',title:'Combo doble',description:'Lleve 2 plataformas juntas y ahorre.',badge:'Combo',badgeTone:'popular',features:['Ahorra pagando las 2 juntas','Un solo pago, dos accesos'],optionsText:'Combo mensual=180=Ahorro vs. comprar separado'},
+    combo3:{label:'🎁 Combo 3 plataformas',title:'Combo triple',description:'Lleve 3 plataformas juntas y ahorre más.',badge:'Combo',badgeTone:'popular',features:['Ahorra pagando las 3 juntas','Un solo pago, tres accesos'],optionsText:'Combo mensual=250=Ahorro vs. comprar separado'},
+    combo4:{label:'🎁 Combo 4 plataformas',title:'Combo Mega',description:'Lleve 4 plataformas juntas al mejor precio.',badge:'Combo',badgeTone:'popular',features:['Máximo ahorro combinando plataformas','Un solo pago, cuatro accesos'],optionsText:'Combo mensual=320=Ahorro vs. comprar separado'},
+    comboMusica:{label:'🎧 Combo Streaming + Música',title:'Combo Streaming + Música',description:'Combine su plataforma de streaming favorita con música ilimitada.',badge:'Combo',badgeTone:'popular',features:['Entretenimiento y música en un solo pago','Ahorra vs. comprar separado'],optionsText:'Combo mensual=200=Streaming + Música'},
     flash:{label:'⚡ Oferta relámpago',title:'Oferta relámpago',description:'Precio especial por tiempo limitado.',badge:'Promo limitada',badgeTone:'offer',features:['Cupos limitados','Precio válido solo por unos días'],optionsText:'Oferta=110=Precio especial por tiempo limitado'},
     ending:{label:'⏳ Se va pronto',title:'Últimos cupos',description:'Quedan pocos cupos con este precio.',badge:'Se va pronto',badgeTone:'offer',features:['Cupos limitados','Vuelve a precio normal al agotarse'],optionsText:'Oferta=100=Antes de que se acabe'},
     new:{label:'✨ Producto nuevo',title:'Recién llegado',description:'Nueva plataforma disponible en el catálogo.',badge:'Nuevo',badgeTone:'new',features:['Recién agregado al catálogo'],optionsText:'Lanzamiento=100=Precio de estreno'}
@@ -759,6 +764,7 @@
             <label class="cr-field">Final<input id="prEnd" type="datetime-local" value="${esc((promotion.endsAt||'').slice(0,16))}"></label>
             <label class="cr-field">Badge / etiqueta<input id="prBadge" value="${esc(promotion.badge||'')}" placeholder="Ej. Se va pronto"></label>
             <label class="cr-field">Tipo de badge<select id="prBadgeTone">${Object.entries(BADGE_TONES).map(([key,label])=>`<option value="${key}" ${key===(promotion.badgeTone||'offer')?'selected':''}>${label}</option>`).join('')}</select><span class="cr-field-help">El badge se muestra sobre la tarjeta de la promoción en el catálogo.</span></label>
+            <label class="cr-field">Orden<input id="prOrder" type="number" value="${Number(promotion.order)||0}"><span class="cr-field-help">Número menor = aparece primero en Ofertas.</span></label>
           </div>
           <div class="cr-publish-checks">
             <label class="cr-check"><input id="prActive" type="checkbox" ${promotion.active?'checked':''}> Promoción activa</label>
@@ -803,6 +809,7 @@
       promotion.active=$('#prActive').checked;
       promotion.badge=$('#prBadge').value.trim();
       promotion.badgeTone=$('#prBadgeTone').value;
+      promotion.order=Number($('#prOrder').value)||0;
       promotion.features=$('#prFeatures').value.split('\n').map((item)=>item.trim()).filter(Boolean);
       promotion.productIds=[...modal.querySelectorAll('[data-pr-product]:checked')].map((input)=>input.dataset.prProduct);
       promotion.options=parseOptions($('#prOptions').value,promotion.options||[]);
