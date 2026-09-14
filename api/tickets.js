@@ -1,4 +1,4 @@
-// api/tickets.js · VERSION 5 · evidencia + avisos múltiples + puente Telegram por Render
+// api/tickets.js · VERSION 6 · evidencia + avisos múltiples + restricciones por rol + puente Telegram por Render
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -479,6 +479,22 @@ async function createTicket(db, body) {
   if (!destinos.length) return { status: 400, json: { ok:false, error:'Seleccione al menos un destinatario.' } };
 
   const tipo = clean(body.tipo || 'ticket', 30).toLowerCase();
+
+  // Reglas de operación: los avisos masivos son exclusivos de Sublicuentas.
+  // Geisell participa en Tickets y Avisos, pero al CREAR tickets solo puede
+  // comunicarse con Sublicuentas o Relojes. Se valida en servidor para que
+  // la restricción no dependa únicamente de la interfaz.
+  if (tipo === 'aviso' && creadoRol !== 'sublicuentas') {
+    return { status: 403, json: { ok:false, error:'Solo Sublicuentas puede publicar avisos.' } };
+  }
+  if (creadoRol === 'geisell') {
+    const permitidos = new Set(['sublicuentas', 'relojes']);
+    const invalidos = destinos.filter(d => !permitidos.has(destinationKey(d)));
+    if (invalidos.length) {
+      return { status: 403, json: { ok:false, error:'Geisell solo puede enviar tickets a Sublicuentas o Relojes.' } };
+    }
+  }
+
   let numero = 0;
   try {
     numero = await nextTicketNumero(db);
