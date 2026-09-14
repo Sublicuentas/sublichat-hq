@@ -77,6 +77,84 @@ function shell(){
         #rbac-revendedores .order-metrics,#rbac-revendedores .stock-row,#rbac-revendedores .perm-grid{grid-template-columns:1fr}
         #rbac-revendedores .order-status-tools{grid-template-columns:1fr}
       }
+      /* Editor de promociones: el modal vive fuera de #rbac-revendedores, por eso
+         estos estilos son globales y no heredan el prefijo del módulo. */
+      .promo-editor-modal{align-items:center!important;justify-content:center!important;padding:18px!important;overflow:hidden!important}
+      .promo-editor-modal .cr-sheet.promo-editor-sheet{width:min(1180px,calc(100vw - 36px))!important;max-width:1180px!important;height:min(860px,calc(100dvh - 36px))!important;max-height:calc(100dvh - 36px)!important;padding:0!important;overflow:hidden!important;border-radius:24px!important;background:#f8fafc!important;box-shadow:0 30px 80px rgba(15,23,42,.28)!important;display:grid!important;grid-template-rows:auto minmax(0,1fr) auto!important}
+      .promo-editor-modal .promo-editor-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 22px;background:#fff;border-bottom:1px solid #e7ebf1}
+      .promo-editor-modal .promo-editor-title{min-width:0}
+      .promo-editor-modal .promo-editor-kicker{display:block;margin-bottom:3px;color:#e2231a;font-size:10px;font-weight:950;letter-spacing:.11em;text-transform:uppercase}
+      .promo-editor-modal .promo-editor-head h2{margin:0!important;color:#15264a;font-size:22px;line-height:1.1}
+      .promo-editor-modal .promo-editor-head p{margin:5px 0 0;color:#667085;font-size:12px;line-height:1.35}
+      .promo-editor-modal .promo-editor-close{width:40px;height:40px;flex:none;border:1px solid #dce3ec;border-radius:13px;background:#fff;color:#475467;font:900 20px/1 Arial;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.07)}
+      .promo-editor-modal .promo-editor-close:hover{border-color:#e2231a;color:#e2231a}
+      .promo-editor-modal .promo-editor-body{min-height:0;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr);overflow:hidden}
+      .promo-editor-modal .promo-editor-formpane{min-width:0;overflow:auto;padding:20px 22px 26px;background:#fff;scrollbar-gutter:stable}
+      .promo-editor-modal .promo-editor-formpane .cr-form{gap:12px}
+      .promo-editor-modal .promo-template-note{grid-column:1/-1;padding:12px 14px;border:1px solid #dbe5f3;background:#f7fbff;border-radius:14px;color:#475467;font-size:12px;line-height:1.45}
+      .promo-editor-modal .promo-template-note b{display:block;color:#15264a;margin-bottom:3px}
+      .promo-editor-modal .promo-template-library{grid-column:1/-1;padding:13px;border:1px solid #e6eaf0;background:#fff;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.04)}
+      .promo-editor-modal .promo-template-library-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}
+      .promo-editor-modal .promo-template-library-head b{color:#15264a;font-size:13px}
+      .promo-editor-modal .promo-template-library-head small{display:block;margin-top:2px;color:#7b8798;font-size:10px;font-weight:700}
+      .promo-editor-modal .promo-template-chips{display:flex;gap:7px;flex-wrap:wrap}
+      .promo-editor-modal .promo-template-chip{border:1px solid #dbe2eb;border-radius:999px;background:#fff;color:#344054;padding:7px 10px;font-family:inherit;font-size:11px;font-weight:850;line-height:1.1;cursor:pointer;transition:.16s ease}
+      .promo-editor-modal .promo-template-chip:hover,.promo-editor-modal .promo-template-chip.on{border-color:#e2231a;background:#fff5f4;color:#c81f17;transform:translateY(-1px)}
+      .promo-editor-modal .cr-field{font-size:11px;font-weight:900;color:#475467}
+      .promo-editor-modal .cr-field input,.promo-editor-modal .cr-field select,.promo-editor-modal .cr-field textarea{box-sizing:border-box;width:100%;border:1px solid #d9e0e9;border-radius:12px;background:#fff;color:#15264a;padding:10px 11px;font:inherit;outline:none}
+      .promo-editor-modal .cr-field input:focus,.promo-editor-modal .cr-field textarea:focus{border-color:#9bb8dc;box-shadow:0 0 0 3px rgba(32,113,196,.08)}
+      .promo-editor-modal .cr-field textarea{min-height:118px;resize:vertical;line-height:1.45}
+      .promo-editor-modal .cr-field small{color:#8491a3;font-size:9.5px;line-height:1.35;font-weight:700}
+      .promo-editor-modal .promo-existing-image{display:flex;gap:10px;align-items:center;margin-top:8px}
+      .promo-editor-modal .promo-existing-image img{width:64px;height:64px;object-fit:contain;border:1px solid #e4e7ec;border-radius:12px;background:#f8fafc}
+      .promo-editor-modal .promo-dest-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;margin-top:8px}
+      .promo-editor-modal .promo-preview-pane{min-width:0;overflow:auto;padding:20px;background:#eef3f8;border-left:1px solid #dde5ef;scrollbar-gutter:stable}
+      .promo-editor-modal .promo-preview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+      .promo-editor-modal .promo-preview-head b{display:block;color:#15264a;font-size:14px}
+      .promo-editor-modal .promo-preview-head small{display:block;color:#7c8a9b;font-size:10px;margin-top:2px}
+      .promo-editor-modal .promo-preview-tabs{display:flex;gap:5px;padding:4px;background:#e2e9f1;border-radius:12px}
+      .promo-editor-modal .promo-preview-tab{border:0;border-radius:9px;background:transparent;color:#667085;padding:7px 9px;font-family:inherit;font-size:10px;font-weight:900;line-height:1;cursor:pointer}
+      .promo-editor-modal .promo-preview-tab.on{background:#fff;color:#15264a;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+      .promo-editor-modal .promo-preview-canvas{display:grid;place-items:start center}
+      .promo-editor-modal .promo-panel-mock{width:min(100%,390px);background:#fff;border:1px solid #e0e6ee;border-radius:20px;overflow:hidden;box-shadow:0 14px 32px rgba(15,23,42,.12)}
+      .promo-editor-modal .promo-panel-media{aspect-ratio:1/1;background:linear-gradient(135deg,#f7f8fb,#e9eef5);display:grid;place-items:center;overflow:hidden;color:#8b98aa;font-size:11px;font-weight:850}
+      .promo-editor-modal .promo-panel-media img{width:100%;height:100%;object-fit:contain;display:block}
+      .promo-editor-modal .promo-panel-content{padding:15px;display:grid;gap:8px}
+      .promo-editor-modal .promo-panel-title{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+      .promo-editor-modal .promo-panel-title h3{margin:0;color:#15264a;font-size:17px;line-height:1.18}
+      .promo-editor-modal .promo-panel-badge{flex:none;border-radius:999px;background:#ecfdf3;color:#067647;padding:5px 7px;font-size:9px;font-weight:950}
+      .promo-editor-modal .promo-panel-platform{color:#475467;font-size:11px;font-weight:900}
+      .promo-editor-modal .promo-panel-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+      .promo-editor-modal .promo-panel-meta span{padding:8px 9px;border-radius:10px;background:#f6f8fb;color:#475467;font-size:10px;line-height:1.3}
+      .promo-editor-modal .promo-panel-benefits{margin:0;padding-left:18px;color:#667085;font-size:10.5px;line-height:1.45;display:grid;gap:3px}
+      .promo-editor-modal .promo-telegram-mock{width:min(100%,390px);padding:15px;border-radius:20px;background:#dfe9ef;box-shadow:inset 0 0 0 1px rgba(21,38,74,.05)}
+      .promo-editor-modal .promo-tg-bubble{overflow:hidden;border-radius:16px 16px 16px 5px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.10)}
+      .promo-editor-modal .promo-tg-media{aspect-ratio:1/1;background:#edf2f7;display:grid;place-items:center;color:#8b98aa;font-size:11px;font-weight:850;overflow:hidden}
+      .promo-editor-modal .promo-tg-media img{width:100%;height:100%;object-fit:contain;display:block}
+      .promo-editor-modal .promo-live-box{padding:13px 14px!important;background:#fff!important;color:#253858!important;border-radius:0!important;font:500 12px/1.48 Arial,sans-serif!important;white-space:pre-wrap;overflow-wrap:anywhere}
+      .promo-editor-modal [data-promo-preview-view][hidden]{display:none!important}
+      .promo-editor-modal .promo-preview-foot{margin-top:10px;padding:9px 10px;border-radius:11px;background:#fff;color:#758397;font-size:9.5px;line-height:1.35;border:1px solid #e1e7ee}
+      .promo-editor-modal .promo-editor-actions{margin:0!important;padding:12px 18px!important;background:#fff!important;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px;align-items:center;position:static!important}
+      .promo-editor-modal .promo-editor-actions .promo-action-note{margin-right:auto;color:#7d8a9a;font-size:10px;font-weight:750}
+      @media(max-width:900px){
+        .promo-editor-modal{padding:8px!important;align-items:flex-start!important;overflow:auto!important}
+        .promo-editor-modal .cr-sheet.promo-editor-sheet{width:100%!important;max-width:none!important;height:auto!important;min-height:calc(100dvh - 16px)!important;max-height:none!important;overflow:visible!important;border-radius:18px!important;display:block!important}
+        .promo-editor-modal .promo-editor-body{display:block;overflow:visible}
+        .promo-editor-modal .promo-editor-formpane,.promo-editor-modal .promo-preview-pane{overflow:visible}
+        .promo-editor-modal .promo-preview-pane{border-left:0;border-top:1px solid #dde5ef}
+        .promo-editor-modal .promo-editor-actions{position:sticky!important;bottom:0!important;z-index:10}
+      }
+      @media(max-width:600px){
+        .promo-editor-modal .promo-editor-head{padding:14px}
+        .promo-editor-modal .promo-editor-head h2{font-size:19px}
+        .promo-editor-modal .promo-editor-formpane,.promo-editor-modal .promo-preview-pane{padding:14px}
+        .promo-editor-modal .promo-template-library-head,.promo-editor-modal .promo-preview-head{display:block}
+        .promo-editor-modal .promo-preview-tabs{margin-top:8px;width:max-content}
+        .promo-editor-modal .promo-panel-meta{grid-template-columns:1fr}
+        .promo-editor-modal .promo-editor-actions{padding:10px!important}
+        .promo-editor-modal .promo-editor-actions .promo-action-note{display:none}
+        .promo-editor-modal .promo-editor-actions .cr-btn{flex:1}
+      }
     </style>
     <div class="cr-admin">
       <div class="cr-hero">
@@ -192,6 +270,22 @@ async function imageData(file){
     throw new Error('La imagen sigue demasiado pesada. Use una imagen menor de 5 MB.');
   }finally{URL.revokeObjectURL(url)}
 }
+const PROMO_APP_TEMPLATES=[
+  {id:'netflix',icon:'🎬',name:'Netflix',titulo:'Netflix Premium · Promo para socios',plataforma:'Netflix Premium',texto:'Perfil Premium para 1 pantalla\nSeries, películas y estrenos\nUna opción de alta demanda para su catálogo'},
+  {id:'disney',icon:'🏰',name:'Disney+',titulo:'Disney+ Premium · Promo para socios',plataforma:'Disney+ Premium',texto:'Disney, Pixar, Marvel y Star Wars\nPelículas, series y contenido familiar\nPerfil Premium listo para entregar'},
+  {id:'max',icon:'🎞️',name:'Max',titulo:'Max · Promo para socios',plataforma:'Max',texto:'Series HBO, Warner Bros. y DC\nPelículas, documentales y estrenos\nExcelente opción para ampliar su catálogo'},
+  {id:'prime',icon:'📺',name:'Prime Video',titulo:'Prime Video · Promo para socios',plataforma:'Prime Video',texto:'Series y películas internacionales\nCatálogo variado para toda la familia\nAcceso listo para asignar'},
+  {id:'crunchyroll',icon:'🍥',name:'Crunchyroll',titulo:'Crunchyroll · Promo para socios',plataforma:'Crunchyroll',texto:'Anime y estrenos de temporada\nAmplio catálogo de series japonesas\nIdeal para clientes fanáticos del anime'},
+  {id:'paramount',icon:'⛰️',name:'Paramount+',titulo:'Paramount+ · Promo para socios',plataforma:'Paramount+',texto:'Películas y series de Paramount\nContenido de entretenimiento internacional\nUna alternativa económica para su catálogo'},
+  {id:'vix',icon:'⚽',name:'ViX',titulo:'ViX Premium · Promo para socios',plataforma:'ViX Premium',texto:'Series, películas y entretenimiento en español\nDeportes disponibles según el plan vigente\nIdeal para público latino'},
+  {id:'canva',icon:'🎨',name:'Canva',titulo:'Canva Pro · Promo para socios',plataforma:'Canva Pro',texto:'Herramientas premium de diseño\nPlantillas y recursos avanzados\nIdeal para emprendedores, negocios y creadores'},
+  {id:'duolingo',icon:'🦉',name:'Duolingo',titulo:'Duolingo Super · Promo para socios',plataforma:'Duolingo Super',texto:'Experiencia sin anuncios\nVidas ilimitadas\nAprendizaje de idiomas y otras materias'},
+  {id:'gemini',icon:'✨',name:'Gemini',titulo:'Gemini Pro · Promo para socios',plataforma:'Gemini Pro',texto:'IA para productividad y creación de contenido\nApoyo para investigación, redacción e ideas\nIdeal para estudio y trabajo'},
+  {id:'youtube',icon:'▶️',name:'YouTube',titulo:'YouTube Premium · Promo para socios',plataforma:'YouTube Premium',texto:'YouTube sin anuncios\nReproducción en segundo plano\nMúsica y video en una sola suscripción'},
+  {id:'spotify',icon:'🎧',name:'Spotify',titulo:'Spotify Premium · Promo para socios',plataforma:'Spotify Premium',texto:'Música sin anuncios\nEscuche sus canciones y playlists favoritas\nProducto de alta rotación'},
+  {id:'tv',icon:'📡',name:'TV Digital',titulo:'TV Digital · Promo para socios',plataforma:'TV Digital',texto:'Canales, películas y series\nContenido deportivo disponible según servicio\nOpciones para Android TV y dispositivos compatibles'}
+];
+function promoTemplateChips(){return PROMO_APP_TEMPLATES.map(t=>`<button type="button" class="promo-template-chip" data-promo-template="${esc(t.id)}">${t.icon} ${esc(t.name)}</button>`).join('')}
 function promoDestinatariosHtml(selected=[]){
   const activos=(state.vendedores||[]).filter(v=>v.activo!==false);
   const sel=new Set((selected||[]).map(v=>String(v||'').trim().toLowerCase()));
@@ -199,40 +293,84 @@ function promoDestinatariosHtml(selected=[]){
   return activos.map(v=>{const value=String(v.nombre_norm||v.id||'');const checked=sel.has(value.toLowerCase())?' checked':'';return `<label class="cr-check"><input type="checkbox" data-pr-dest value="${esc(value)}"${checked}> ${esc(v.nombre||v.nombre_norm||v.id)}</label>`}).join('');
 }
 function promoPreviewText(m){
+  const titulo=m.querySelector('#prTitulo')?.value.trim()||'PROMOCIÓN PARA SOCIOS';
+  const plataforma=m.querySelector('#prPlataforma')?.value.trim()||'Plataforma';
+  const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
+  const vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'';
+  const lines=[`🔥 ${titulo}`,`🎯 Plataforma: ${plataforma}`,'','💎 Datos de la oferta'];
+  if(normal)lines.push(`• 🧾 Precio normal: L ${normal}`);if(promo)lines.push(`• 💰 Precio socio: L ${promo}`);if(cupos)lines.push(`• 📦 Cupos disponibles: ${cupos}`);if(vigencia)lines.push(`• ⏳ Vigencia: ${vigencia}`);
+  const details=promoTextLines(m.querySelector('#prTexto')?.value||'');if(details.length){lines.push('','✨ Detalles');details.forEach(x=>lines.push(`• ${x}`));}
+  lines.push('','📲 Cómo solicitar','• Solicítela desde su Panel de Socios.','• Si necesita apoyo, escriba a Sublicuentas.');
+  return lines.join('\n');
+}
+function promoPanelPreviewHtml(m){
   const titulo=m.querySelector('#prTitulo')?.value.trim()||'Título de la promoción';
   const plataforma=m.querySelector('#prPlataforma')?.value.trim()||'Plataforma';
   const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
   const vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'Sin vencimiento';
-  const lines=[`🔥 ${titulo}`,`🎯 Plataforma: ${plataforma}`,'','💎 DATOS DE LA OFERTA'];
-  if(normal)lines.push(`🧾 Precio normal: L ${normal}`);if(promo)lines.push(`💰 Precio socio: L ${promo}`);if(cupos)lines.push(`📦 Cupos disponibles: ${cupos}`);lines.push(`⏳ Vigencia: ${vigencia}`);
-  const details=promoTextLines(m.querySelector('#prTexto')?.value||'');if(details.length){lines.push('','✨ DETALLES');details.forEach(x=>lines.push(`• ${x}`));}
-  lines.push('','📲 CÓMO SOLICITAR','• Compártala por WhatsApp o desde su Panel de Socios.','• Disponible también dentro de su Panel de Socios.');
-  return lines.join('\n');
+  const details=promoTextLines(m.querySelector('#prTexto')?.value||'');
+  const meta=[];if(normal)meta.push(`<span>🧾 <b>Normal:</b><br>${money(normal)}</span>`);if(promo)meta.push(`<span>💰 <b>Socio:</b><br>${money(promo)}</span>`);if(cupos)meta.push(`<span>📦 <b>Cupos:</b><br>${cupos}</span>`);meta.push(`<span>⏳ <b>Vigencia:</b><br>${esc(vigencia)}</span>`);
+  return `<div class="promo-panel-content"><div class="promo-panel-title"><h3>🔥 ${esc(titulo)}</h3><span class="promo-panel-badge">PROMO</span></div><div class="promo-panel-platform">🎯 ${esc(plataforma)}</div><div class="promo-panel-meta">${meta.join('')}</div>${details.length?`<ul class="promo-panel-benefits">${details.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<small style="color:#98a2b3">Escriba los beneficios para verlos aquí.</small>'}</div>`;
 }
-function refreshPromoPreview(m){const box=m.querySelector('#prLiveText');if(box)box.textContent=promoPreviewText(m)}
+function promoSetPreviewImage(m,src=''){
+  const panel=m.querySelector('#prPanelMedia'),tg=m.querySelector('#prTgMedia');
+  const html=src?`<img src="${esc(src)}" alt="Vista previa de la promoción">`:'<span>La imagen promocional aparecerá aquí</span>';
+  if(panel)panel.innerHTML=html;if(tg)tg.innerHTML=html;
+}
+function refreshPromoPreview(m){
+  const live=m.querySelector('#prLiveText');if(live)live.textContent=promoPreviewText(m);
+  const panel=m.querySelector('#prPanelContent');if(panel)panel.innerHTML=promoPanelPreviewHtml(m);
+}
+function applyPromoTemplate(m,id){
+  const t=PROMO_APP_TEMPLATES.find(x=>x.id===id);if(!t)return;
+  const titulo=m.querySelector('#prTitulo'),plataforma=m.querySelector('#prPlataforma'),texto=m.querySelector('#prTexto');
+  if(titulo)titulo.value=t.titulo;if(plataforma)plataforma.value=t.plataforma;if(texto)texto.value=t.texto;
+  m.querySelectorAll('[data-promo-template]').forEach(x=>x.classList.toggle('on',x.dataset.promoTemplate===id));
+  refreshPromoPreview(m);
+}
+function bindPromoPreviewTabs(m){m.querySelectorAll('[data-promo-view]').forEach(btn=>btn.onclick=()=>{const view=btn.dataset.promoView;m.querySelectorAll('[data-promo-view]').forEach(x=>x.classList.toggle('on',x===btn));m.querySelectorAll('[data-promo-preview-view]').forEach(x=>x.hidden=x.dataset.promoPreviewView!==view)})}
 function editarPromocion(id){const p=(state.promociones||[]).find(x=>x.id===id);if(!p)return alert('Promoción no encontrada.');return abrirPromocion(p)}
 function nuevaPromocion(){return abrirPromocion(null)}
 async function abrirPromocion(p){
   const editing=!!p;
-  const m=modal(`<h2>${editing?'✏️ Editar promoción':'🔥 Nueva promoción para socios'}</h2><div class="cr-form">
-    <div class="promo-template-note"><b>💎 Plantilla Premium fija</b>El diseño del mensaje ya queda estandarizado para todas las promociones. Usted solo edita el contenido: título, plataforma, precios, cupos, vigencia, beneficios, imagen y destinatarios. Si configuró Custom Emoji Premium en el bot, se aplicarán automáticamente al enviar.</div>
-    <label class="cr-field wide">Imagen promocional<input id="prImagen" type="file" accept="image/jpeg,image/png,image/webp"><small>${editing&&p.imagenUrl?'Si no selecciona otra imagen, se conserva la actual.':'Se optimizará automáticamente para el panel y Telegram.'}</small>${editing&&p.imagenUrl?`<div class="promo-existing-image"><img src="${esc(p.imagenUrl)}" alt="Imagen actual"><span>Imagen actual<br><small>Seleccione otra únicamente si desea reemplazarla.</small></span></div>`:''}</label>
-    <label class="cr-field wide">Título<input id="prTitulo" maxlength="120" placeholder="Ej. Oferta relámpago para socios" value="${esc(p?.titulo||'')}"></label>
-    <label class="cr-field wide">Plataforma<input id="prPlataforma" maxlength="100" placeholder="Ej. Disney+ Premium" value="${esc(p?.plataforma||'')}"></label>
-    <label class="cr-field">Precio normal<input id="prNormal" type="number" min="0" value="${Number(p?.precioNormal)||''}"></label><label class="cr-field">Precio promocional<input id="prPromo" type="number" min="0" value="${Number(p?.precioPromo)||''}"></label>
-    <label class="cr-field">Cupos<input id="prCupos" type="number" min="0" value="${Number(p?.cupos)||''}"></label>
-    <label class="cr-field wide">Vigente hasta<input id="prVigencia" type="datetime-local" value="${esc(promoLocalDateValue(p?.vigencia))}"></label>
-    <label class="cr-field wide">Beneficios / condiciones<textarea id="prTexto" rows="6" maxlength="1200" placeholder="Escriba una ventaja por línea. Ej.:\nCuenta en correo personal\nVidas ilimitadas\nAprende idiomas y matemáticas\nCompra por WhatsApp o Panel de Socios">${esc(p?.texto||'')}</textarea><small>Una ventaja por línea = lista limpia en Telegram. Puede editar este texto cuando quiera.</small></label>
-    <div class="promo-live"><div class="promo-live-head"><b>👁️ Vista previa de la plantilla</b><small>Telegram aplicará los Custom Emoji Premium configurados.</small></div><div class="promo-live-box" id="prLiveText"></div></div>
-    <div class="cr-field wide"><b>Destinatarios</b><small>Sin marcar nombres se enviará a todos los socios activos.</small><div id="prDestinatarios" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px"><small>Cargando socios…</small></div></div>
-    <label class="cr-check wide"><input type="checkbox" id="prEnviar" ${editing?'':'checked'}> ${editing?'Reenviar por Telegram al guardar los cambios':'Publicar en el Panel de Socios y enviar ahora por Telegram'}</label>
-    <div id="prEstado" class="cr-field wide" style="min-height:18px"><small></small></div>
-  </div><div class="cr-actions"><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prGuardar">${editing?'Guardar cambios':'Guardar y enviar'}</button></div>`);
+  const m=modal(`<div class="promo-editor-head"><div class="promo-editor-title"><span class="promo-editor-kicker">Catálogo Socios · promociones</span><h2>${editing?'✏️ Editar promoción':'🔥 Nueva promoción para socios'}</h2><p>Prepare una oferta mayorista para sus vendedores y vea cómo quedará antes de publicarla.</p></div><button type="button" class="promo-editor-close" id="prClose" aria-label="Cerrar">×</button></div>
+  <div class="promo-editor-body">
+    <section class="promo-editor-formpane">
+      <div class="cr-form">
+        <div class="promo-template-note"><b>💎 Plantilla Premium conectada a Telegram</b>El precio que coloca aquí es su precio para el socio. No controla ni solicita el precio final que el revendedor cobra a su cliente. Al enviar, la misma promoción se publica en el Panel de Socios y Telegram.</div>
+        <div class="promo-template-library"><div class="promo-template-library-head"><div><b>⚡ Plantillas rápidas por app</b><small>Rellenan título, plataforma y beneficios. Los precios, cupos y vigencia quedan bajo su control.</small></div></div><div class="promo-template-chips">${promoTemplateChips()}</div></div>
+        <label class="cr-field wide">Imagen promocional<input id="prImagen" type="file" accept="image/jpeg,image/png,image/webp"><small>${editing&&p.imagenUrl?'Si no selecciona otra imagen, se conserva la actual.':'Se optimiza automáticamente para el panel y Telegram.'}</small>${editing&&p.imagenUrl?`<div class="promo-existing-image"><img src="${esc(p.imagenUrl)}" alt="Imagen actual"><span>Imagen actual<br><small>Seleccione otra únicamente si desea reemplazarla.</small></span></div>`:''}</label>
+        <label class="cr-field wide">Título<input id="prTitulo" maxlength="120" placeholder="Ej. Disney+ Premium · Promo para socios" value="${esc(p?.titulo||'')}"></label>
+        <label class="cr-field wide">Plataforma<input id="prPlataforma" maxlength="100" placeholder="Ej. Disney+ Premium" value="${esc(p?.plataforma||'')}"></label>
+        <label class="cr-field">Precio normal para socio<input id="prNormal" type="number" min="0" value="${Number(p?.precioNormal)||''}" placeholder="Ej. 100"></label><label class="cr-field">Precio promo para socio<input id="prPromo" type="number" min="0" value="${Number(p?.precioPromo)||''}" placeholder="Ej. 80"></label>
+        <label class="cr-field">Cupos<input id="prCupos" type="number" min="0" value="${Number(p?.cupos)||''}" placeholder="Ej. 10"></label>
+        <label class="cr-field">Vigente hasta<input id="prVigencia" type="datetime-local" value="${esc(promoLocalDateValue(p?.vigencia))}"></label>
+        <label class="cr-field wide">Beneficios / condiciones<textarea id="prTexto" rows="7" maxlength="1200" placeholder="Una ventaja por línea. Ej.:&#10;Perfil Premium para 1 pantalla&#10;Series, películas y estrenos&#10;Disponibilidad limitada">${esc(p?.texto||'')}</textarea><small>Una línea = un punto limpio en Telegram y en el Panel de Socios.</small></label>
+        <div class="cr-field wide"><b>Destinatarios</b><small>Si no marca nombres, se enviará a todos los socios activos.</small><div id="prDestinatarios" class="promo-dest-box"><small>Cargando socios…</small></div></div>
+        <label class="cr-check wide"><input type="checkbox" id="prEnviar" ${editing?'':'checked'}> ${editing?'Reenviar por Telegram al guardar los cambios':'Publicar en el Panel de Socios y enviar ahora por Telegram'}</label>
+        <div id="prEstado" class="cr-field wide" style="min-height:18px"><small></small></div>
+      </div>
+    </section>
+    <aside class="promo-preview-pane">
+      <div class="promo-preview-head"><div><b>👁️ Vista previa real</b><small>Cambie entre Panel de Socios y Telegram.</small></div><div class="promo-preview-tabs"><button type="button" class="promo-preview-tab on" data-promo-view="panel">Panel</button><button type="button" class="promo-preview-tab" data-promo-view="telegram">Telegram</button></div></div>
+      <div class="promo-preview-canvas" data-promo-preview-view="panel"><article class="promo-panel-mock"><div class="promo-panel-media" id="prPanelMedia"><span>La imagen promocional aparecerá aquí</span></div><div id="prPanelContent"></div></article></div>
+      <div class="promo-preview-canvas" data-promo-preview-view="telegram" hidden><div class="promo-telegram-mock"><div class="promo-tg-bubble"><div class="promo-tg-media" id="prTgMedia"><span>La imagen promocional aparecerá aquí</span></div><div class="promo-live-box" id="prLiveText"></div></div></div></div>
+      <div class="promo-preview-foot">La vista de Telegram reproduce la estructura real del mensaje. Si tiene Custom Emoji Premium configurados en el bot, Telegram sustituirá algunos iconos automáticamente.</div>
+    </aside>
+  </div>
+  <div class="cr-actions promo-editor-actions"><span class="promo-action-note">Los precios mostrados son exclusivamente precios de Sublicuentas para sus socios.</span><button class="cr-btn ghost" id="prCancel">Cancelar</button><button class="cr-btn red" id="prGuardar">${editing?'Guardar cambios':'Guardar y enviar'}</button></div>`,{className:'promo-editor-modal',sheetClass:'promo-editor-sheet',wide:true});
   const setEstado=(texto,tipo='')=>{const e=m.querySelector('#prEstado small');if(e){e.textContent=texto;e.style.color=tipo==='bad'?'#b42318':tipo==='good'?'#067647':'#667085'}};
   const btn=m.querySelector('#prGuardar'),enviarCheck=m.querySelector('#prEnviar');
-  m.querySelector('#prCancel').onclick=()=>m.remove();
+  const closePromo=()=>{if(typeof m._modalClose==='function')m._modalClose();else m.remove()};
+  m._modalCleanup=()=>{if(m._promoPreviewUrl)URL.revokeObjectURL(m._promoPreviewUrl)};
+  m.querySelector('#prCancel').onclick=closePromo;m.querySelector('#prClose').onclick=closePromo;
   enviarCheck.onchange=()=>{btn.textContent=editing?(enviarCheck.checked?'Guardar y reenviar':'Guardar cambios'):(enviarCheck.checked?'Guardar y enviar':'Guardar promoción')};
   ['#prTitulo','#prPlataforma','#prNormal','#prPromo','#prCupos','#prVigencia','#prTexto'].forEach(sel=>{const el=m.querySelector(sel);if(el)el.addEventListener('input',()=>refreshPromoPreview(m))});
+  m.querySelectorAll('[data-promo-template]').forEach(x=>x.onclick=()=>applyPromoTemplate(m,x.dataset.promoTemplate));
+  bindPromoPreviewTabs(m);
+  const imagenInput=m.querySelector('#prImagen');
+  imagenInput.addEventListener('change',()=>{const file=imagenInput.files?.[0];if(m._promoPreviewUrl){URL.revokeObjectURL(m._promoPreviewUrl);m._promoPreviewUrl=''}if(file){m._promoPreviewUrl=URL.createObjectURL(file);promoSetPreviewImage(m,m._promoPreviewUrl)}else promoSetPreviewImage(m,p?.imagenUrl||'')});
+  promoSetPreviewImage(m,p?.imagenUrl||'');
   refreshPromoPreview(m);
 
   (async()=>{
@@ -260,14 +398,14 @@ async function abrirPromocion(p){
       }else{
         const d=await api('POST','promociones',payload);promoId=d.id;setEstado('✅ Promoción guardada.','good');
       }
-      if(!enviarCheck.checked){m.remove();await loadPromociones(true);return;}
+      if(!enviarCheck.checked){closePromo();await loadPromociones(true);return;}
       btn.textContent='Enviando Telegram…';setEstado(editing?'Cambios guardados. Reenviando promoción…':'Promoción guardada. Enviando a Telegram…','good');
       try{
         const sent=await api('POST',`promociones/${promoId}/enviar`,{});
-        m.remove();await loadPromociones(true);
+        closePromo();await loadPromociones(true);
         alert(`${editing?'Promoción actualizada y reenviada':'Promoción publicada'}.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
       }catch(sendError){
-        m.remove();await loadPromociones(true);
+        closePromo();await loadPromociones(true);
         alert(`✅ Los cambios sí quedaron guardados.\n⚠️ No se pudo completar el envío por Telegram: ${sendError.message}\nPuede usar “Reenviar Telegram” para reintentarlo.`);
       }
     }catch(e){
@@ -714,11 +852,17 @@ function renderRecompensas(){
 async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+id,{estado});await loadRecompensas(true)}catch(e){alert(e.message)}}
 
 /* ═══════════ util modal ═══════════ */
-function modal(innerHtml){
+function modal(innerHtml,opts={}){
   const overlay=document.createElement('div');
-  overlay.className='cr-modal'; overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
-  overlay.innerHTML=`<div class="cr-sheet" style="background:#fff;border-radius:18px;padding:20px;max-width:460px;width:100%;max-height:85vh;overflow:auto">${innerHtml}</div>`;
-  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+  overlay.className=`cr-modal${opts.className?' '+opts.className:''}`;overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.48);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
+  const sheetClass=`cr-sheet${opts.sheetClass?' '+opts.sheetClass:''}`;
+  const widthStyle=opts.wide?'max-width:1180px;':'max-width:460px;';
+  overlay.innerHTML=`<div class="${sheetClass}" style="background:#fff;border-radius:18px;padding:20px;${widthStyle}width:100%;max-height:85vh;overflow:auto">${innerHtml}</div>`;
+  const close=()=>{try{overlay._modalCleanup?.()}catch(_){ }document.removeEventListener('keydown',onKey);overlay.remove()};
+  const onKey=e=>{if(e.key==='Escape'&&overlay.isConnected)close()};
+  overlay._modalClose=close;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  document.addEventListener('keydown',onKey);
   document.body.appendChild(overlay);
   return overlay;
 }
