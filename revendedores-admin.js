@@ -20,9 +20,9 @@ const money=v=>v==null?'—':`Lps. ${Number(v).toLocaleString('es-HN')}`;
 const fmtDate=v=>{if(!v)return'Sin vencimiento';const d=new Date(v);return Number.isNaN(d.getTime())?'Sin vencimiento':d.toLocaleString('es-HN',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})};
 function promoTextLines(v){const raw=String(v||'').replace(/\r/g,'\n').trim();if(!raw)return[];const byLine=raw.split(/\n+/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean);if(byLine.length>1)return byLine.slice(0,5);return raw.replace(/\s+/g,' ').split(/(?:\.\s+|!\s+|\?\s+|;\s+)/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean).slice(0,5)}
 function promoPreviewHtml(v){const lines=promoTextLines(v);return lines.length?`<ul class="promo-preview">${lines.map(line=>`<li>${esc(line)}</li>`).join('')}</ul>`:''}
-function promoMetaHtml(p){const profit=Math.max(0,Number(p.precioSugerido||0)-Number(p.precioPromo||0));const items=[];if(p.precioNormal)items.push(`🧾 <b>Normal:</b> ${money(p.precioNormal)}`);if(p.precioPromo)items.push(`💰 <b>Socio:</b> ${money(p.precioPromo)}`);if(p.precioSugerido)items.push(`📈 <b>Venta:</b> ${money(p.precioSugerido)}`);if(p.precioSugerido)items.push(`💵 <b>Ganancia:</b> ${money(profit)}`);if(p.cupos)items.push(`📦 <b>Cupos:</b> ${Number(p.cupos)}`);items.push(`⏳ <b>Vigencia:</b> ${esc(fmtDate(p.vigencia))}`);return `<div class="promo-meta">${items.map(item=>`<span>${item}</span>`).join('')}</div>`}
+function promoMetaHtml(p){const items=[];if(p.precioNormal)items.push(`🧾 <b>Normal:</b> ${money(p.precioNormal)}`);if(p.precioPromo)items.push(`💰 <b>Socio:</b> ${money(p.precioPromo)}`);if(p.cupos)items.push(`📦 <b>Cupos:</b> ${Number(p.cupos)}`);items.push(`⏳ <b>Vigencia:</b> ${esc(fmtDate(p.vigencia))}`);return `<div class="promo-meta">${items.map(item=>`<span>${item}</span>`).join('')}</div>`}
 function promoLocalDateValue(v){if(!v)return'';const d=new Date(v);if(Number.isNaN(d.getTime()))return'';const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
-function promoPayloadFromModal(m,imagenData,imagenUrl='',fallbackDestinatarios=[]){const all=[...m.querySelectorAll('[data-pr-dest]')];const destinatarios=all.length?[...m.querySelectorAll('[data-pr-dest]:checked')].map(x=>x.value):[...(fallbackDestinatarios||[])];return {titulo:m.querySelector('#prTitulo').value.trim(),plataforma:m.querySelector('#prPlataforma').value.trim(),precioNormal:Number(m.querySelector('#prNormal').value)||0,precioPromo:Number(m.querySelector('#prPromo').value)||0,precioSugerido:Number(m.querySelector('#prSugerido').value)||0,cupos:Number(m.querySelector('#prCupos').value)||0,vigencia:m.querySelector('#prVigencia').value?new Date(m.querySelector('#prVigencia').value).toISOString():'',texto:m.querySelector('#prTexto').value.trim(),destinatarios,imagenData,imagenUrl}}
+function promoPayloadFromModal(m,imagenData,imagenUrl='',fallbackDestinatarios=[]){const all=[...m.querySelectorAll('[data-pr-dest]')];const destinatarios=all.length?[...m.querySelectorAll('[data-pr-dest]:checked')].map(x=>x.value):[...(fallbackDestinatarios||[])];return {titulo:m.querySelector('#prTitulo').value.trim(),plataforma:m.querySelector('#prPlataforma').value.trim(),precioNormal:Number(m.querySelector('#prNormal').value)||0,precioPromo:Number(m.querySelector('#prPromo').value)||0,cupos:Number(m.querySelector('#prCupos').value)||0,vigencia:m.querySelector('#prVigencia').value?new Date(m.querySelector('#prVigencia').value).toISOString():'',texto:m.querySelector('#prTexto').value.trim(),destinatarios,imagenData,imagenUrl}}
 
 async function api(method,ruta,body,params){
   const qs=new URLSearchParams({ruta,...(params||{}),_ts:String(Date.now())});
@@ -118,12 +118,12 @@ async function loadPedidos(force){
 function pedidoEstado(v){const s=String(v||'pendiente').trim().toLowerCase();return ['pendiente','en proceso','falta información','entregado','cancelado'].includes(s)?s:'pendiente'}
 function pedidoFecha(v){if(!v)return'—';const d=new Date(typeof v==='number'?v:v._seconds?v._seconds*1000:v.seconds?v.seconds*1000:v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('es-HN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 function pedidoCard(p){
-  const estado=pedidoEstado(p.estado),venta=Number(p.ventaCliente)||0,costo=Number(p.monto)||0,util=p.utilidadEstimada==null?(venta?venta-costo:null):Number(p.utilidadEstimada);
+  const estado=pedidoEstado(p.estado),costo=Number(p.monto)||0;
   const productos=Array.isArray(p.productos)&&p.productos.length?p.productos.map(x=>x.servicio||x.nombre).filter(Boolean).join(' + '):(p.servicio||'Pedido');
   return `<article class="cr-card order-card" data-status="${esc(estado)}">
     <div class="cr-row"><h3>🛒 ${esc(productos)}</h3><span class="cr-badge ${estado==='entregado'?'':estado==='cancelado'?'paused':''}">${esc(estado)}</span></div>
     <small>Socio: <b>${esc(p.socio||p.socio_norm||'—')}</b> · ${esc(p.destinoLabel||p.destino||'')} · ${esc(pedidoFecha(p.ts||p.createdAt))} · Ref ${esc(String(p.id||'').slice(-6))}</small>
-    <div class="order-metrics"><div class="order-metric">Costo<b>${money(costo)}</b></div><div class="order-metric">Venta cliente<b>${venta?money(venta):'No registrada'}</b></div><div class="order-metric">Utilidad est.<b>${util==null?'—':money(util)}</b></div></div>
+    <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div></div>
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
     <div class="order-status-tools">
       <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
@@ -201,10 +201,10 @@ function promoDestinatariosHtml(selected=[]){
 function promoPreviewText(m){
   const titulo=m.querySelector('#prTitulo')?.value.trim()||'Título de la promoción';
   const plataforma=m.querySelector('#prPlataforma')?.value.trim()||'Plataforma';
-  const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,sugerido=Number(m.querySelector('#prSugerido')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
-  const profit=Math.max(0,sugerido-promo),vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'Sin vencimiento';
+  const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
+  const vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'Sin vencimiento';
   const lines=[`🔥 ${titulo}`,`🎯 Plataforma: ${plataforma}`,'','💎 DATOS DE LA OFERTA'];
-  if(normal)lines.push(`🧾 Precio normal: L ${normal}`);if(promo)lines.push(`💰 Precio socio: L ${promo}`);if(sugerido)lines.push(`📈 Venta sugerida: L ${sugerido}`,`💵 Ganancia estimada: L ${profit}`);if(cupos)lines.push(`📦 Cupos disponibles: ${cupos}`);lines.push(`⏳ Vigencia: ${vigencia}`);
+  if(normal)lines.push(`🧾 Precio normal: L ${normal}`);if(promo)lines.push(`💰 Precio socio: L ${promo}`);if(cupos)lines.push(`📦 Cupos disponibles: ${cupos}`);lines.push(`⏳ Vigencia: ${vigencia}`);
   const details=promoTextLines(m.querySelector('#prTexto')?.value||'');if(details.length){lines.push('','✨ DETALLES');details.forEach(x=>lines.push(`• ${x}`));}
   lines.push('','📲 CÓMO SOLICITAR','• Compártala por WhatsApp o desde su Panel de Socios.','• Disponible también dentro de su Panel de Socios.');
   return lines.join('\n');
@@ -220,7 +220,7 @@ async function abrirPromocion(p){
     <label class="cr-field wide">Título<input id="prTitulo" maxlength="120" placeholder="Ej. Oferta relámpago para socios" value="${esc(p?.titulo||'')}"></label>
     <label class="cr-field wide">Plataforma<input id="prPlataforma" maxlength="100" placeholder="Ej. Disney+ Premium" value="${esc(p?.plataforma||'')}"></label>
     <label class="cr-field">Precio normal<input id="prNormal" type="number" min="0" value="${Number(p?.precioNormal)||''}"></label><label class="cr-field">Precio promocional<input id="prPromo" type="number" min="0" value="${Number(p?.precioPromo)||''}"></label>
-    <label class="cr-field">Precio sugerido de venta<input id="prSugerido" type="number" min="0" value="${Number(p?.precioSugerido)||''}"></label><label class="cr-field">Cupos<input id="prCupos" type="number" min="0" value="${Number(p?.cupos)||''}"></label>
+    <label class="cr-field">Cupos<input id="prCupos" type="number" min="0" value="${Number(p?.cupos)||''}"></label>
     <label class="cr-field wide">Vigente hasta<input id="prVigencia" type="datetime-local" value="${esc(promoLocalDateValue(p?.vigencia))}"></label>
     <label class="cr-field wide">Beneficios / condiciones<textarea id="prTexto" rows="6" maxlength="1200" placeholder="Escriba una ventaja por línea. Ej.:\nCuenta en correo personal\nVidas ilimitadas\nAprende idiomas y matemáticas\nCompra por WhatsApp o Panel de Socios">${esc(p?.texto||'')}</textarea><small>Una ventaja por línea = lista limpia en Telegram. Puede editar este texto cuando quiera.</small></label>
     <div class="promo-live"><div class="promo-live-head"><b>👁️ Vista previa de la plantilla</b><small>Telegram aplicará los Custom Emoji Premium configurados.</small></div><div class="promo-live-box" id="prLiveText"></div></div>
@@ -232,7 +232,7 @@ async function abrirPromocion(p){
   const btn=m.querySelector('#prGuardar'),enviarCheck=m.querySelector('#prEnviar');
   m.querySelector('#prCancel').onclick=()=>m.remove();
   enviarCheck.onchange=()=>{btn.textContent=editing?(enviarCheck.checked?'Guardar y reenviar':'Guardar cambios'):(enviarCheck.checked?'Guardar y enviar':'Guardar promoción')};
-  ['#prTitulo','#prPlataforma','#prNormal','#prPromo','#prSugerido','#prCupos','#prVigencia','#prTexto'].forEach(sel=>{const el=m.querySelector(sel);if(el)el.addEventListener('input',()=>refreshPromoPreview(m))});
+  ['#prTitulo','#prPlataforma','#prNormal','#prPromo','#prCupos','#prVigencia','#prTexto'].forEach(sel=>{const el=m.querySelector(sel);if(el)el.addEventListener('input',()=>refreshPromoPreview(m))});
   refreshPromoPreview(m);
 
   (async()=>{
