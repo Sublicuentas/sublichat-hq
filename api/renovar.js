@@ -75,7 +75,7 @@ function validarMesesTvDigital(plataforma="",meses=1,{legacy=false}={}){
   let n=Math.max(1,Math.min(24,Math.round(Number(meses)||1)));
   if(legacy)n=normalizarMesesLegacyTvDigital(plataforma,n);
   if(permitidos.length&&!permitidos.includes(n)){
-    throw new Error(`Plan no válido para ${plataforma}: ${n} meses. Use ${permitidos.join(", ")} meses.`);
+    throw crmUserError(`Plan no válido para ${plataforma}: ${n} meses. Use ${permitidos.join(", ")} meses.`);
   }
   return n;
 }
@@ -1478,7 +1478,7 @@ export default async function handler(req, res) {
         servicios[idx] = {
           ...s,
           fechaRenovacion: nuevaFecha,
-          mesesContratados: validarMesesTvDigital(servicio.plataforma || "", mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha)),
+          mesesContratados: validarMesesTvDigital(s.plataforma || plataforma || "", mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha)),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
           updatedAt: isoNow()
