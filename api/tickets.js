@@ -413,15 +413,37 @@ async function createTicket(db, body) {
   const titulo = clean(body.titulo, 160);
   const detalle = clean(body.detalle, 3000);
   if (!titulo || !detalle) return { status: 400, json: { ok: false, error: 'Falta título o detalle del ticket.' } };
+
   const creadoRol = destinationKey(body.rol || '');
   let destinos = normalizeDestinosBody(body, creadoRol);
   const recipients = await availableRecipients(db);
   const recipientLabels = Object.fromEntries(recipients.map(r => [destinationKey(r.key), r.label]));
-  if (String(body.destino || '').toLowerCase() === 'todos' && !(Array.isArray(body.destinos) && body.destinos.length)) destinos = recipients.map(r => destinationKey(r.key)).filter(Boolean);
+  if (String(body.destino || '').toLowerCase() === 'todos' && !(Array.isArray(body.destinos) && body.destinos.length)) {
+    destinos = recipients.map(r => destinationKey(r.key)).filter(Boolean);
+  }
+  destinos = [...new Set(destinos.map(destinationKey).filter(Boolean))];
+  if (!destinos.length) return { status: 400, json: { ok:false, error:'Seleccione al menos un destinatario.' } };
+
   const tipo = clean(body.tipo || 'ticket', 30).toLowerCase();
-  const numero = await nextTicketNumero(db);
+  let numero = 0;
+  try {
+    numero = await nextTicketNumero(db);
+  } catch (e) {
+    // El contador nunca debe impedir que se cree el ticket.
+    console.error('TICKET_COUNTER_ERROR', e && e.message || e);
+    numero = Number(String(Date.now()).slice(-7));
+  }
+
   let imagenUrl = '';
-  if (body.imagen) imagenUrl = (await uploadTicketImage(body.imagen, tipo === 'aviso' ? 'avisos' : 'tickets')).imageUrl;
+  if (body.imagen) {
+    try {
+      imagenUrl = (await uploadTicketImage(body.imagen, tipo === 'aviso' ? 'avisos' : 'tickets')).imageUrl;
+    } catch (e) {
+      console.error('TICKET_IMAGE_ERROR', e && e.message || e);
+      return { status: 400, json: { ok:false, error: e.publicError === 'imagen_muy_grande' ? 'La foto supera el tamaño permitido.' : (e.publicError === 'imagen_invalida' ? 'La foto no tiene un formato válido.' : 'No se pudo subir la evidencia. Intente otra foto.') } };
+    }
+  }
+
   const item = {
     numero, titulo, detalle, tipo, destinos,
     destinosLabel: destinosLabel(destinos, recipientLabels),
@@ -434,13 +456,43 @@ async function createTicket(db, body) {
     createdAt: now, updatedAt: now,
     resolucion: '', resueltoPor: '', resueltoAt: ''
   };
-  const ref = await db.collection('tickets_auditoria').add(item);
-  const msg = creationTelegramMessage(item);
-  const telegram = await sendTelegram(db, msg, item.destinos, { imageUrl, replyMarkup: ticketReplyMarkup(ref.id, numero, tipo) }).catch(e => ({ ok: false, error: e.message }));
-  await saveTelegramMessageLinks(db, ref.id, telegram);
+
+  // La única parte que debe impedir la operación es no poder guardar el ticket.
+  let ref;
+  try {
+    ref = await db.collection('tickets_auditoria').add(item);
+  } catch (e) {
+    console.error('TICKET_CREATE_FIRESTORE_ERROR', e && e.message || e);
+    return { status: 500, json: { ok:false, error:'No se pudo guardar el ticket en la bandeja. Intente nuevamente.' } };
+  }
+
+  // Telegram es un canal adicional. Si Telegram, el vínculo de respuesta o el
+  // registro auxiliar falla, el ticket YA guardado sigue siendo válido.
+  let telegram = { ok:false, skipped:true, reason:'telegram_no_intentado', deliveredRoles:[], failedRoles:destinos.slice() };
+  try {
+    const msg = creationTelegramMessage(item);
+    telegram = await sendTelegram(db, msg, item.destinos, { imageUrl, replyMarkup: ticketReplyMarkup(ref.id, numero, tipo) });
+  } catch (e) {
+    console.error('TICKET_TELEGRAM_CREATE_ERROR', e && e.message || e);
+    telegram = { ok:false, error:clean(e && e.message || 'Error de Telegram', 240), deliveredRoles:[], failedRoles:destinos.slice() };
+  }
+
+  try { await saveTelegramMessageLinks(db, ref.id, telegram); }
+  catch (e) { console.error('TICKET_LINK_SAVE_ERROR', e && e.message || e); }
+
   const telegramInfo = safeTelegramInfo(telegram);
-  await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo }, { merge: true });
-  return { ok: true, id: ref.id, numero, imageUrl:imagenUrl, telegramOk: !!telegram.ok, telegramInfo };
+  try {
+    await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo, updatedAt: now }, { merge: true });
+  } catch (e) {
+    console.error('TICKET_META_SAVE_ERROR', e && e.message || e);
+  }
+
+  return {
+    ok: true, id: ref.id, numero, imageUrl: imagenUrl,
+    telegramOk: !!telegram.ok, telegramInfo,
+    destinos, destinosLabel: item.destinosLabel,
+    creadoPor: item.creadoPor, creadoPorRol: item.creadoPorRol
+  };
 }
 
 async function retryTelegramTicket(db, body) {
@@ -603,6 +655,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(out);
   } catch (e) {
     console.error('TICKETS_ERROR', e);
-    return res.status(500).json({ ok: false, error: 'No se pudo completar la operación de tickets.' });
+    const publicError = clean(e && e.publicError || '', 120);
+    return res.status(500).json({ ok: false, error: publicError || 'No se pudo completar la operación de tickets. Revise la conexión e intente otra vez.' });
   }
 };
