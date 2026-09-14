@@ -103,7 +103,7 @@ const PLAT_ALIASES = {
   windows11: "windows11", win11: "windows11",
   adobeexpress: "adobeexpress", adobe: "adobeexpress",
   eset: "eset", esetnod32: "eset",
-  stellatv: "stellatv", stella: "stellatv"
+  stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch4", evoutouch4: "evoutouch4"
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
@@ -114,11 +114,13 @@ function canonPlat(v) {
   if (oleada) return `oleadatv${oleada[1]}`;
   if (/^latintv[1234]$/.test(key)) return key;
   if (/^liontv[1235]$/.test(key)) return key;
+  if (/^evoutouch4?$/.test(key)) return "evoutouch4";
   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
   if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
   if (key.startsWith("liontv")) return "liontv";
+  if (key.startsWith("evoutouch")) return "evoutouch4";
   if (key.startsWith("iptv")) return "iptv";
   return key;
 }
@@ -220,6 +222,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("oleada") ||
     p.includes("latintv") ||
     p.includes("liontv") ||
+    p.includes("evoutouch") ||
     p.includes("iptv") ||
     p.includes("viki") ||
     p.includes("windows") ||
@@ -247,7 +250,7 @@ function servicioEsSerial(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = canonPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 
@@ -814,13 +817,25 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     ? String(principal.dispositivo)
     : "";
   const vendedor = vendedorEfectivoServicio(servicio, anterior);
+  const fechaRenovacionFinal = aFechaFB(servicio.fechaRenovacion || anterior.fechaRenovacion || "");
+  const mesesSolicitados = Number(servicio.mesesContratados);
+  const mesesAnteriores = Number(anterior.mesesContratados);
+  let mesesContratados = Number.isFinite(mesesSolicitados) && mesesSolicitados > 0 ? Math.round(mesesSolicitados) : 0;
+  if (!mesesContratados && fechaRenovacionFinal === String(anterior.fechaRenovacion || "") && Number.isFinite(mesesAnteriores) && mesesAnteriores > 0) mesesContratados = Math.round(mesesAnteriores);
+  if (!mesesContratados && fechaRenovacionFinal) {
+    const partes = new Intl.DateTimeFormat("en-US", { timeZone:"America/Tegucigalpa", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
+    const pick = t => partes.find(x => x.type === t)?.value || "";
+    mesesContratados = mesesPagadosEntre(`${pick("day")}/${pick("month")}/${pick("year")}`, fechaRenovacionFinal);
+  }
+  mesesContratados = Math.max(1, Math.min(24, mesesContratados || 1));
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
     modalidad: perfiles.length > 1 ? "multiperfil" : "individual",
     plataforma: plataformaFinal,
     precio: parseMoney(servicio.precio || servicio.precioLps || servicio.pago || servicio.monto),
-    fechaRenovacion: aFechaFB(servicio.fechaRenovacion || ""),
+    fechaRenovacion: fechaRenovacionFinal,
+    mesesContratados,
     correo: servicioRequiereCorreo(plataformaFinal) ? (principal.correo || servicio.correo || "") : "",
     clave: sinClave ? "" : (principal.clave || clave),
     perfil: principal.perfil || servicio.perfil || principal.nombre || "",
@@ -844,9 +859,9 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   };
 
   const familia = canonPlat(plataformaFinal);
-  if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("iptv")) {
-    out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? "");
-    out.iptvPantallas = Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
+  if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("evoutouch") || familia.startsWith("iptv")) {
+    out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : ""));
+    out.iptvPantallas = familia.startsWith("evoutouch") ? 4 : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
   }
@@ -1426,6 +1441,7 @@ export default async function handler(req, res) {
         servicios[idx] = {
           ...s,
           fechaRenovacion: nuevaFecha,
+          mesesContratados: mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
           updatedAt: isoNow()

@@ -77,7 +77,7 @@ function canonPlat(v) {
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
-    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv"
+    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch4", evoutouch4: "evoutouch4"
   };
   if (aliases[p]) return aliases[p];
   if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
@@ -86,10 +86,11 @@ function canonPlat(v) {
   if (stella) return `stellatv${stella[1]}`;
   const oleada = p.match(/^oleada(?:tv)?([13])$/);
   if (oleada) return `oleadatv${oleada[1]}`;
-  if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^iptv[134]$/.test(p)) return p;
+  if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^evoutouch4?$/.test(p) || /^iptv[134]$/.test(p)) return /^evoutouch/.test(p) ? "evoutouch4" : p;
   if (p.startsWith("stellatv") || p.startsWith("stella")) return "stellatv";
   if (p.startsWith("latintv")) return "latintv";
   if (p.startsWith("liontv")) return "liontv";
+  if (p.startsWith("evoutouch")) return "evoutouch4";
   return p;
 }
 
@@ -102,7 +103,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("office") || p.includes("paramount") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("stella") || p.includes("oleada") ||
-    p.includes("latintv") || p.includes("liontv") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
+    p.includes("latintv") || p.includes("liontv") || p.includes("evoutouch") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
     p.includes("adobe") || p.includes("eset")
   );
 }
@@ -122,7 +123,7 @@ function servicioRequiereCorreo(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 function servicioUsaSelectorDispositivo(plataforma) {
@@ -174,7 +175,7 @@ function termsFor(plataforma) {
   if (p === "netflixpremium") return TERMS.netflix;
   if (p === "vipnetflix" || (p.includes("netflix") && p.includes("vip"))) return TERMS.vipnetflix;
   if (p.startsWith("stellatv")) return TERMS.stellatv;
-  if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("iptv")) return TERMS.iptv;
+  if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return TERMS.iptv;
   if (p.startsWith("oleada")) return TERMS.oleada;
   if (p === "office2021") return TERMS.office;
   return TERMS[p] || TERMS.default;
@@ -191,6 +192,7 @@ const PLAT_LABELS = {
   oleada: "Oleada TV", oleadatv1: "Oleada TV (1 dispositivo)", oleadatv3: "Oleada TV (3 dispositivos)",
   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
+  evoutouch4: "EvouTouch (4 dispositivos)", evoutouch: "EvouTouch",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
 };
@@ -369,6 +371,39 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
   };
 }
 
+const TV_DIGITAL_URLS = {
+  latintv: "http://latgt.com:8080",
+  liontv: "http://liontv.es:80",
+  evoutouch4: "http://smarterstv99.dyndns.tv:25461/",
+  evoutouch: "http://smarterstv99.dyndns.tv:25461/"
+};
+function mesesHastaRenovacion(fechaRenovacion) {
+  const fin = fechaPartes(fechaRenovacion);
+  const ini = hoyHonduras();
+  if (!fin || !ini || fechaClave(fin) <= fechaClave(ini)) return 1;
+  let meses = (fin.y - ini.y) * 12 + (fin.m - ini.m);
+  if (fin.d > ini.d) meses += 1;
+  return Math.max(1, Math.min(24, meses || 1));
+}
+
+function tvDigitalInfo(servicio = {}) {
+  const p = canonPlat(servicio.plataforma || "");
+  const esTv = p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv");
+  if (!esTv) return { esTvDigital:false, mesesContratados:0, dispositivosContratados:0, urlServidor:"" };
+  const guardados = Number(servicio.mesesContratados || 0);
+  const meses = guardados > 0
+    ? Math.max(1, Math.min(24, Math.round(guardados)))
+    : mesesHastaRenovacion(servicio.fechaRenovacion);
+  let dispositivos = Number(servicio.iptvPantallas || servicio.oleadaDispositivos || servicio.stellaDispositivos || 0) || 0;
+  if (!dispositivos) { const m=p.match(/(\d)$/); if(m) dispositivos=Number(m[1]); }
+  if (p.startsWith("evoutouch")) dispositivos=4;
+  let url = "";
+  if (p.startsWith("latintv")) url = servicio.iptvProveedor === "latintv2" ? "http://enlatv.com" : TV_DIGITAL_URLS.latintv;
+  else if (p.startsWith("liontv")) url = TV_DIGITAL_URLS.liontv;
+  else if (p.startsWith("evoutouch")) url = TV_DIGITAL_URLS.evoutouch4;
+  return { esTvDigital:true, mesesContratados:meses, dispositivosContratados:dispositivos, urlServidor:url };
+}
+
 function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", beneficiarioNombre = "", limitarPerfil = false } = {}) {
   const plataforma = servicio.plataforma || "";
   const fechaRenovacion = servicio.fechaRenovacion || "";
@@ -417,6 +452,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     vendedorTel(vendedor) || ""
   ).trim();
 
+  const tvDigital = tvDigitalInfo(servicio);
   return {
     plataforma,
     plataformaLabel: platLabel(plataforma),
@@ -433,6 +469,11 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     visibilidadModo: principal.visibilidadModo || "plataforma",
     perfiles: perfilesPublicos,
     fechaRenovacion,
+    mesesContratados: tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1),
+    planDuracion: `${tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1)} mes${(tvDigital.mesesContratados || Number(servicio.mesesContratados || 1)) === 1 ? "" : "es"}`,
+    dispositivosContratados: tvDigital.dispositivosContratados || 0,
+    urlServidor: tvDigital.urlServidor || "",
+    esTvDigital: tvDigital.esTvDigital === true,
     stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     terminos: termsFor(plataforma),
     vendedor,
