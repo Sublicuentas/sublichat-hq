@@ -47,6 +47,39 @@ function parseFechaDMY(fechaStr) {
   return fecha;
 }
 
+const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
+  latintv:[1,4,8,12],
+  liontv:[1,3,5,12],
+  stellatv:[1,3,7],
+  oleadatv:[1,3,7,14],
+  evoutouch:[1,3],
+});
+function familiaMesesTvDigital(plataforma=""){
+  const p=canonPlat(plataforma||"");
+  if(p.startsWith("latintv"))return "latintv";
+  if(p.startsWith("liontv"))return "liontv";
+  if(p.startsWith("stellatv"))return "stellatv";
+  if(p.startsWith("oleada"))return "oleadatv";
+  if(p.startsWith("evoutouch"))return "evoutouch";
+  return "";
+}
+function mesesValidosTvDigital(plataforma=""){return TV_DIGITAL_MESES_VALIDOS[familiaMesesTvDigital(plataforma)]||[];}
+function normalizarMesesLegacyTvDigital(plataforma="",meses=1){
+  const familia=familiaMesesTvDigital(plataforma);
+  const n=Math.max(1,Math.min(24,Math.round(Number(meses)||1)));
+  const bonus={latintv:{3:4},liontv:{10:12},stellatv:{6:7},oleadatv:{6:7,12:14}};
+  return bonus[familia]?.[n]||n;
+}
+function validarMesesTvDigital(plataforma="",meses=1,{legacy=false}={}){
+  const permitidos=mesesValidosTvDigital(plataforma);
+  let n=Math.max(1,Math.min(24,Math.round(Number(meses)||1)));
+  if(legacy)n=normalizarMesesLegacyTvDigital(plataforma,n);
+  if(permitidos.length&&!permitidos.includes(n)){
+    throw new Error(`Plan no válido para ${plataforma}: ${n} meses. Use ${permitidos.join(", ")} meses.`);
+  }
+  return n;
+}
+
 function mesesPagadosEntre(inicio, fin) {
   const a = parseFechaDMY(inicio), b = parseFechaDMY(fin);
   if (!a || !b || b <= a) return 1;
@@ -828,6 +861,10 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     mesesContratados = mesesPagadosEntre(`${pick("day")}/${pick("month")}/${pick("year")}`, fechaRenovacionFinal);
   }
   mesesContratados = Math.max(1, Math.min(24, mesesContratados || 1));
+  const fechaSinCambio = fechaRenovacionFinal === String(anterior.fechaRenovacion || "");
+  mesesContratados = validarMesesTvDigital(plataformaFinal, mesesContratados, {
+    legacy: fechaSinCambio && Number.isFinite(mesesAnteriores) && mesesAnteriores > 0
+  });
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
@@ -1441,7 +1478,7 @@ export default async function handler(req, res) {
         servicios[idx] = {
           ...s,
           fechaRenovacion: nuevaFecha,
-          mesesContratados: mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
+          mesesContratados: validarMesesTvDigital(servicio.plataforma || "", mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha)),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
           updatedAt: isoNow()

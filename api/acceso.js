@@ -377,6 +377,29 @@ const TV_DIGITAL_URLS = {
   evoutouch4: "http://smarterstv99.dyndns.tv:25461/",
   evoutouch: "http://smarterstv99.dyndns.tv:25461/"
 };
+
+const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
+  latintv:[1,4,8,12],
+  liontv:[1,3,5,12],
+  stellatv:[1,3,7],
+  oleadatv:[1,3,7,14],
+  evoutouch:[1,3],
+});
+function familiaMesesTvDigital(plataforma=""){
+  const p=canonPlat(plataforma||"");
+  if(p.startsWith("latintv"))return "latintv";
+  if(p.startsWith("liontv"))return "liontv";
+  if(p.startsWith("stellatv"))return "stellatv";
+  if(p.startsWith("oleada"))return "oleadatv";
+  if(p.startsWith("evoutouch"))return "evoutouch";
+  return "";
+}
+function normalizarMesesLegacyTvDigital(plataforma="",meses=1){
+  const familia=familiaMesesTvDigital(plataforma);
+  const n=Math.max(1,Math.min(24,Math.round(Number(meses)||1)));
+  const bonus={latintv:{3:4},liontv:{10:12},stellatv:{6:7},oleadatv:{6:7,12:14}};
+  return bonus[familia]?.[n]||n;
+}
 function mesesHastaRenovacion(fechaRenovacion) {
   const fin = fechaPartes(fechaRenovacion);
   const ini = hoyHonduras();
@@ -392,7 +415,7 @@ function tvDigitalInfo(servicio = {}) {
   if (!esTv) return { esTvDigital:false, mesesContratados:0, dispositivosContratados:0, urlServidor:"" };
   const guardados = Number(servicio.mesesContratados || 0);
   const meses = guardados > 0
-    ? Math.max(1, Math.min(24, Math.round(guardados)))
+    ? normalizarMesesLegacyTvDigital(p, guardados)
     : mesesHastaRenovacion(servicio.fechaRenovacion);
   let dispositivos = Number(servicio.iptvPantallas || servicio.oleadaDispositivos || servicio.stellaDispositivos || 0) || 0;
   if (!dispositivos) { const m=p.match(/(\d)$/); if(m) dispositivos=Number(m[1]); }
