@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Su acceso — Sublicuentas</title>
-<meta name="sublicuentas-access-ui-version" content="20260904-destino-visible-v4">
+<meta name="sublicuentas-access-ui-version" content="20260914-tvdigital-v1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portal-cliente-publico.css?v=20260904-legibilidad-vix-3">
@@ -271,6 +271,7 @@
     oleada:{logo:"/assets/platformas/oleada.jpg",bg:"#e9faff",fallback:"TV",color:"#007f99"},
     latintv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LatinTV"},
     liontv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LionTV"},
+    evoutouch:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"EvouTouch"},
     iptv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"TV"},
     viki:{logo:"/assets/platformas/viki.jpg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
     appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"🍎"},
@@ -280,13 +281,13 @@
     eset:{logo:"/assets/platformas/eset.jpg",bg:"#0a909c",fallback:"ESET"}
   };
 
-  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset",stella:"stellatv"};
+  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset",stella:"stellatv",evoutouch4:"evoutouch",evoutouch:"evoutouch"};
 
   const PLAT_EMOJI={
     netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
-    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",iptv:"📺",
+    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",evoutouch:"📡",iptv:"📺",
     viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
   };
 
@@ -301,6 +302,7 @@
     if(k.startsWith("oleada"))return PLAT_VISUALS.oleada;
     if(k.startsWith("latintv"))return PLAT_VISUALS.latintv;
     if(k.startsWith("liontv"))return PLAT_VISUALS.liontv;
+    if(k.startsWith("evoutouch"))return PLAT_VISUALS.evoutouch;
     if(k.startsWith("iptv"))return PLAT_VISUALS.iptv;
     return PLAT_VISUALS[k]||{logo:"",bg:"#111827",fallback:"TV"};
   }
@@ -439,7 +441,7 @@
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
     const plataforma=platKey(d.plataforma);
-    const etiquetaAcceso=["oleada","latintv","liontv","iptv","stella"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
+    const etiquetaAcceso=["oleada","latintv","liontv","evoutouch","iptv","stella"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
     const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
@@ -505,6 +507,16 @@
     return index%2===0?"✓":"•";
   }
 
+  function tvDigitalPlanHtml(d){
+    if(d.esTvDigital!==true)return "";
+    const meses=Math.max(1,Number(d.mesesContratados||1)||1);
+    const dispositivos=Math.max(0,Number(d.dispositivosContratados||0)||0);
+    const filas=[infoRow("Plan contratado",`${meses} mes${meses===1?"":"es"}`,"🗓️")];
+    if(dispositivos)filas.push(infoRow("Dispositivos",`${dispositivos} dispositivo${dispositivos===1?"":"s"}`,"📺"));
+    if(d.urlServidor)filas.push(fieldRow("URL / servidor",d.urlServidor,`s${Math.max(0,Number(d._serviceIndex||0))}-servidor`));
+    return `<div class="section-title">Datos del plan</div><div class="profile-group">${filas.join("")}</div>`;
+  }
+
   function detalleServicioHtml(d,index){
     const estado=estadoServicio(d);
     if(estado.kind==="expired"){
@@ -515,8 +527,10 @@
     const avisoCodigoNetflix=platKey(d.plataforma)==="netflix"
       ? `<div class="netflix-code-alert" role="note"><b>⚠️ Aviso importante de Netflix</b>Es posible que en aproximadamente 15 días Netflix solicite un código temporal. Cuando le aparezca, comuníquese con su vendedor para recibirlo al instante.</div>`
       : "";
+    const tvPlan=tvDigitalPlanHtml({...d,_serviceIndex:index});
     return `${datosPerfilHtml(d,index)}
       ${perfiles.length>1?"":notaModo(d,perfiles[0])}
+      ${tvPlan}
       <div class="section-title">Condiciones del servicio</div>
       <div class="terms"><ul>${termsHtml}</ul></div>
       ${avisoCodigoNetflix}`;
