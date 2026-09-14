@@ -1,4 +1,4 @@
-// api/tickets.js · VERSION 4 · evidencia con foto + conversación recíproca por Telegram
+// api/tickets.js · VERSION 5 · evidencia + avisos múltiples + puente Telegram por Render
 // Guarda tickets internos en Firestore y envía aviso por Telegram si están configuradas las variables.
 // Variables esperadas en Vercel:
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -170,7 +170,8 @@ async function resolveTelegramChatId(db, role) {
       const data = doc.data() || {};
       if (data.activo === false) return;
       const aliases = [doc.id, data.nombre_norm, data.nombre, data.usuario, data.username]
-        .map(telegramRoleKey).filter(Boolean);
+        .flatMap(value => { const full=telegramRoleKey(value); if(!full)return []; const first=full.split(/\s+/)[0]; return first&&first!==full?[full,first]:[full]; })
+        .filter(Boolean);
       if (!aliases.includes(wanted)) return;
       const tg = clean(data.telegramId || data.telegramID || data.userId || '', 80);
       if (tg) found = tg;
@@ -180,6 +181,44 @@ async function resolveTelegramChatId(db, role) {
     console.error('TELEGRAM_CHAT_RESOLVE_ERROR', r, e && e.message || e);
     return { chatId: '', source: 'error' };
   }
+}
+
+
+// El bot real vive en Render. Sublichat ya usa REV_API_BASE + credenciales de
+// administrador para Catálogo Socios, así que Tickets reutiliza ese puente en
+// vez de exigir otro TELEGRAM_BOT_TOKEN dentro de Vercel.
+const REV_API_BASE_TICKETS = String(process.env.REV_API_BASE || 'https://sublicuentas-panel-api.onrender.com').replace(/\/$/, '');
+let revTicketAdminToken = '';
+let revTicketAdminTokenAt = 0;
+const REV_TICKET_TOKEN_TTL = 5 * 60 * 60 * 1000;
+async function getRevTicketAdminToken(force = false) {
+  if (!force && revTicketAdminToken && Date.now() - revTicketAdminTokenAt < REV_TICKET_TOKEN_TTL) return revTicketAdminToken;
+  const usuario = String(process.env.REV_ADMIN_USER || '').trim();
+  const password = String(process.env.REV_ADMIN_PASSWORD || '').trim();
+  if (!usuario || !password) throw Object.assign(new Error('Faltan REV_ADMIN_USER / REV_ADMIN_PASSWORD en Vercel.'), { code:'rev_admin_env_missing' });
+  const r = await fetch(`${REV_API_BASE_TICKETS}/rev/login`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usuario,password})
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.token) throw Object.assign(new Error(j.error || `Login Render HTTP ${r.status}`), { code:'rev_admin_login' });
+  revTicketAdminToken = j.token;
+  revTicketAdminTokenAt = Date.now();
+  return revTicketAdminToken;
+}
+async function sendTelegramViaRender(text, destinos, options = {}, forceLogin = false) {
+  const token = await getRevTicketAdminToken(forceLogin);
+  const r = await fetch(`${REV_API_BASE_TICKETS}/rev/admin/tickets-telegram`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+    body:JSON.stringify({ text, destinos, imageUrl:options.imageUrl || '', replyMarkup:options.replyMarkup || undefined })
+  });
+  if (r.status === 401 && !forceLogin) {
+    revTicketAdminToken = '';
+    return sendTelegramViaRender(text, destinos, options, true);
+  }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.detail || j.error || `Puente Telegram HTTP ${r.status}`), { code:'telegram_bridge_http' });
+  return j;
 }
 
 function telegramHTML(v) {
@@ -210,6 +249,21 @@ async function sendTelegramTo(chatId, text, options = {}) {
 // de Vercel por cada socio nuevo.
 async function sendTelegram(db, text, destinos, options = {}) {
   const requested = [...new Set((Array.isArray(destinos) ? destinos : []).map(destinationKey).filter(Boolean))];
+  if (!requested.length) return { ok:false, skipped:true, reason:'sin_destinos', deliveredRoles:[], failedRoles:[] };
+
+  // Camino principal: el bot de Render. Ahí ya existe BOT_TOKEN y el mismo
+  // directorio de revendedores; además devuelve el motivo real si Telegram
+  // rechaza a una persona. Si el puente todavía no está desplegado, conservamos
+  // el envío directo de Vercel como compatibilidad temporal.
+  try {
+    if (process.env.REV_ADMIN_USER && process.env.REV_ADMIN_PASSWORD) {
+      const viaRender = await sendTelegramViaRender(text, requested, options);
+      if (viaRender && Array.isArray(viaRender.results)) return viaRender;
+    }
+  } catch (e) {
+    console.error('TICKET_TELEGRAM_RENDER_BRIDGE', e && e.message || e);
+  }
+
   const targets = new Map();
   const results = [];
 
