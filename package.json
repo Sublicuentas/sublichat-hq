@@ -5,5 +5,9 @@
   "dependencies": {
     "firebase-admin": "^11.11.1",
     "@google/generative-ai": "^0.6.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "audit:clientes-fusionados": "node scripts/detectar_clientes_fusionados.mjs"
   }
 }
