@@ -118,6 +118,9 @@
   "functions": {
     "api/activar-tv.js": {
       "maxDuration": 60
+    },
+    "api/renovar.js": {
+      "includeFiles": "lib/**"
     }
   }
 }
