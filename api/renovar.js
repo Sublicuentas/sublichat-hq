@@ -8,7 +8,7 @@
 
 import admin from "firebase-admin";
 import { randomBytes } from "node:crypto";
-import { registrarEventoSorteosSeguro } from "../lib/sorteos-eventos.js";
+import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
