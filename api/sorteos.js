@@ -3,8 +3,8 @@ import { randomInt, randomBytes, createHash } from "node:crypto";
 import {
   reglasSorteo, nivelFidelidad, NIVELES_FIDELIDAD, sorteoClean, sorteoNorm, sorteoSafeId, sorteoFechaKey,
   sorteoVendorElegible, sorteoVendorGroup
-} from "./sorteos-lib.js";
-import { registrarEventoSorteosSeguro } from "./sorteos-eventos.js";
+} from "../lib/sorteos-lib.js";
+import { registrarEventoSorteosSeguro } from "../lib/sorteos-eventos.js";
 
 const PREMIOS_COLLECTION = "premios_digitales";
 const SORTEOS_COLLECTION = "sorteos";

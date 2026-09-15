@@ -6,6 +6,7 @@
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+import { financeMetadata } from "../lib/finance-schema.mjs";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -127,7 +128,9 @@ export default async function handler(req, res) {
       if (!monto) return res.status(200).json({ ok: false, error: "Falta el monto del cobro." });
 
       const financeDate = canonicalFinanceDate(body.fechaPago || body.fecha, now.slice(0, 10));
+      const movRef = db.collection("finanzas_movimientos").doc();
       const movimiento = {
+        ...financeMetadata({ docId: movRef.id, usuario: identity.usuario, userId: authUser.uid }),
         tipo: "ingreso",
         subtipo: "cobro_cliente",
         clienteNombre: cleanText(body.clienteNombre || body.nombrePerfil || body.nombre),
@@ -145,8 +148,8 @@ export default async function handler(req, res) {
         updatedAt: now
       };
 
-      const movRef = await db.collection("finanzas_movimientos").add(movimiento);
-      await db.collection("cobros").doc(movRef.id).set({ ...movimiento, movimientoId: movRef.id }, { merge: true });
+      await movRef.set(movimiento);
+      await db.collection("cobros").doc(movRef.id).set(movimiento, { merge: true });
       return res.status(200).json({ ok: true, accion, movimientoId: movRef.id });
     }
 
@@ -156,7 +159,9 @@ export default async function handler(req, res) {
       if (!motivo || !monto) return res.status(200).json({ ok: false, error: "Falta motivo o monto del egreso." });
 
       const financeDate = canonicalFinanceDate(body.fecha || body.fechaPago, now.slice(0, 10));
+      const movRef = db.collection("finanzas_movimientos").doc();
       const movimiento = {
+        ...financeMetadata({ docId: movRef.id, usuario: identity.usuario, userId: authUser.uid }),
         tipo: "egreso",
         subtipo: cleanText(body.subtipo || "egreso_operativo"),
         motivo,
@@ -170,8 +175,8 @@ export default async function handler(req, res) {
         updatedAt: now
       };
 
-      const movRef = await db.collection("finanzas_movimientos").add(movimiento);
-      await db.collection("egresos").doc(movRef.id).set({ ...movimiento, movimientoId: movRef.id }, { merge: true });
+      await movRef.set(movimiento);
+      await db.collection("egresos").doc(movRef.id).set(movimiento, { merge: true });
       return res.status(200).json({ ok: true, accion, movimientoId: movRef.id });
     }
 
