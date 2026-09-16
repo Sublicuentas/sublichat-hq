@@ -77,6 +77,7 @@ jobs:
         working-directory: mobile
         env:
           VITE_API_BASE_URL: https://sublichat-hq.vercel.app
+          VITE_BUILD_NUMBER: ${{ github.run_number }}
         run: npm run build
 
       - name: Create Android project
@@ -86,6 +87,33 @@ jobs:
       - name: Sync Capacitor Android
         working-directory: mobile
         run: npx cap sync android
+
+      - name: Set Android debug build number
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PYCODE'
+          import os, re
+          from pathlib import Path
+          path = Path("android/app/build.gradle")
+          if not path.exists():
+              raise SystemExit("ERROR: falta android/app/build.gradle")
+          run = os.environ["GITHUB_RUN_NUMBER"]
+          text = path.read_text()
+          text, n1 = re.subn(r"versionCode\s+\d+", f"versionCode {run}", text, count=1)
+          text, n2 = re.subn(r'versionName\s+"[^"]+"', f'versionName "1.0-debug.{run}"', text, count=1)
+          if n1 != 1 or n2 != 1:
+              raise SystemExit("ERROR: no se pudo actualizar versionCode/versionName")
+          path.write_text(text)
+          print(f"Android debug versionCode={run}, versionName=1.0-debug.{run}")
+          PYCODE
+
+      - name: Restore stable debug signing key
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: sublicuentas-android-debug-keystore-v1
 
       - name: Verify Android package
         working-directory: mobile
@@ -128,6 +156,6 @@ jobs:
             echo ''
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo '- Package: `com.sublicuentas.app`'
-            echo '- Versión: `1.0` / build `1`'
+            echo "- Versión: `1.0` / debug build `${GITHUB_RUN_NUMBER}`"
             echo '- Artefacto: `Sublicuentas-1.0-debug.apk`'
           } >> "$GITHUB_STEP_SUMMARY"
