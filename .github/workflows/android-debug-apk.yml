@@ -1,0 +1,122 @@
+name: Sublicuentas Android Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - android-v1-actions
+    paths:
+      - 'SUBLICUENTAS_ANDROID_SOURCE_1_0.zip'
+      - '.github/workflows/android-debug-apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sublicuentas-android-debug-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build Sublicuentas 1.0 Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Prepare mobile source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="SUBLICUENTAS_ANDROID_SOURCE_1_0.zip"
+          test -f "$ZIP" || { echo "ERROR: falta $ZIP en la raíz del repositorio"; exit 1; }
+          rm -rf mobile sublicuentas-android-bootstrap
+          unzip -q "$ZIP"
+          test -d sublicuentas-android-bootstrap || { echo 'ERROR: el ZIP no contiene sublicuentas-android-bootstrap/'; exit 1; }
+          mv sublicuentas-android-bootstrap mobile
+          test -f mobile/package.json || { echo 'ERROR: falta mobile/package.json'; exit 1; }
+          test -f mobile/capacitor.config.json || { echo 'ERROR: falta mobile/capacitor.config.json'; exit 1; }
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install
+
+      - name: Run mobile tests
+        working-directory: mobile
+        run: npm test
+
+      - name: Build web bundle
+        working-directory: mobile
+        env:
+          VITE_API_BASE_URL: https://sublichat-hq.vercel.app
+        run: npm run build
+
+      - name: Create Android project
+        working-directory: mobile
+        run: npx cap add android
+
+      - name: Sync Capacitor Android
+        working-directory: mobile
+        run: npx cap sync android
+
+      - name: Verify Android package
+        working-directory: mobile
+        run: |
+          grep -R "com.sublicuentas.app" android/app/build.gradle* android/app/src/main/AndroidManifest.xml >/dev/null || {
+            echo 'ERROR: no encontré com.sublicuentas.app';
+            exit 1;
+          }
+
+      - name: Build Debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Prepare artifact
+        working-directory: mobile
+        run: |
+          mkdir -p artifacts
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK" || { echo "ERROR: no se generó $APK"; exit 1; }
+          cp "$APK" artifacts/Sublicuentas-1.0-debug.apk
+          sha256sum artifacts/Sublicuentas-1.0-debug.apk > artifacts/Sublicuentas-1.0-debug.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Sublicuentas-1.0-debug
+          path: |
+            mobile/artifacts/Sublicuentas-1.0-debug.apk
+            mobile/artifacts/Sublicuentas-1.0-debug.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo '## Sublicuentas Android Debug'
+            echo ''
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo '- Package: `com.sublicuentas.app`'
+            echo '- Versión: `1.0` / build `1`'
+            echo '- Artefacto: `Sublicuentas-1.0-debug.apk`'
+          } >> "$GITHUB_STEP_SUMMARY"
