@@ -9,6 +9,27 @@
 const crypto = require("crypto");
 const admin = require("firebase-admin");
 
+const LOGIN_ALLOWED_ORIGINS = new Set([
+  "https://localhost",
+  "http://localhost",
+  "capacitor://localhost",
+  "https://sublichat.capuchino.lat",
+  "https://sublichat-hq.vercel.app",
+  "https://sublicuentas.com",
+  "https://www.sublicuentas.com",
+]);
+
+function applyLoginCors(req, res){
+  const origin = String((req.headers && req.headers.origin) || "");
+  if(origin){
+    res.setHeader("Vary", "Origin");
+    if(LOGIN_ALLOWED_ORIGINS.has(origin)){
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+  }
+  return { origin, allowed: !origin || LOGIN_ALLOWED_ORIGINS.has(origin) };
+}
+
 function initAdmin(){
   if(admin.apps.length) return admin.app();
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -86,6 +107,15 @@ async function clearThrottle(db, usuario){
 }
 
 module.exports = async function handler(req, res){
+  const cors = applyLoginCors(req, res);
+  if(req.method === "OPTIONS"){
+    if(!cors.allowed) return res.status(403).end();
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+    res.setHeader("Access-Control-Max-Age", "600");
+    return res.status(204).end();
+  }
+  if(!cors.allowed) return res.status(403).json({ error:"Origen no autorizado" });
   if(req.method !== "POST"){
     return res.status(405).json({ error:"Método no permitido" });
   }
