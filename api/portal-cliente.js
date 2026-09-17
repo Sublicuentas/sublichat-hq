@@ -57,7 +57,19 @@ function norm(value) {
 function directVendorGroup(value) {
   const valueNorm = norm(value);
   if (['relojes', 'reloj', 'libni'].includes(valueNorm)) return 'relojes';
-  if (['sublicuentas', 'sublicuenta', 'naara'].includes(valueNorm)) return 'sublicuentas';
+  // 2026-09-17 FIX: "los terceros de Elizabeth y Relojes no ven los métodos
+  // de pago vigentes". Causa: esta función solo reconocía las cadenas
+  // literales "relojes" y "sublicuentas" como marca; el nombre real de cada
+  // vendedor del equipo (Elizabeth, Abner, Geissel, etc.), que es lo que
+  // queda guardado en vendedor/vendedor_norm de cada servicio, nunca se
+  // traducía a una marca — así que vendorCanUsePayments() los rechazaba a
+  // todos, titulares y terceros por igual. Se agregan aquí los vendedores
+  // conocidos del equipo Sublicuentas para que todos cuenten como esa marca.
+  if ([
+    'sublicuentas', 'sublicuenta', 'naara',
+    'abner', 'elizabeth', 'geissel', 'geisell', 'heber', 'jimena',
+    'lucy', 'magdiel', 'manuel', 'wolfteam'
+  ].includes(valueNorm)) return 'sublicuentas';
   return valueNorm;
 }
 

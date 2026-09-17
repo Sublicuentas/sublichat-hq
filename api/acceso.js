@@ -235,10 +235,13 @@ function servicioVencido(fechaRenovacion) {
   return !!vence && fechaClave(vence) < fechaClave(hoyHonduras());
 }
 
+// 2026-09-17: alineado con normName() de api/renovar.js y normTxt() del bot
+// de Telegram — ya no quita puntuación, para que la clave de "tercero" en la
+// ficha URL coincida sin importar qué sistema la generó.
 function normName(v) {
-  return String(v || "").trim().toLowerCase()
+  return String(v || "").toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+    .replace(/\s+/g, " ").trim();
 }
 
 function keyBeneficiario(servicio = {}) {

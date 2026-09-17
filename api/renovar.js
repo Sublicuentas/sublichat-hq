@@ -297,13 +297,20 @@ function servicioRequiereCorreo(plataforma) {
   return !servicioEsSerial(p);
 }
 
+// 2026-09-17 FIX: este normalizador debe producir EXACTAMENTE el mismo
+// resultado que normTxt() del bot de Telegram (index_02_utils_roles.js,
+// index_03_clientes_crm.js, index_11_clientes_excel.js), porque nombre_norm
+// es la clave que ambos sistemas usan para reconocer que es el mismo
+// cliente. Antes esta función también quitaba la puntuación (guiones,
+// apóstrofes, puntos) y el bot nunca lo hacía — un nombre como "María-José"
+// o "D'Leon" normalizaba distinto en cada lado, así que una ficha creada en
+// Sublichat dejaba de "reconocerse" al tocarla desde el bot (y viceversa).
 function normName(v) {
   return String(v || "")
-    .trim()
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function canonicalVendedor(v = "") {
@@ -688,6 +695,66 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
     resultados,
     advertencias: resultados.filter((x) => x && !x.tocado && x.motivo).map((x) => x.motivo)
   };
+}
+
+// 2026-09-17: replica una clave nueva a todas las demás fichas que comparten
+// la misma cuenta (misma familia de plataforma + mismo correo/usuario), y
+// también a su registro en Bodega (colección "inventario"), para que quede
+// sincronizada sin importar desde qué pantalla se cambió la clave.
+async function propagarClaveCompartida(db, plan) {
+  if (!plan) return { documentos: 0 };
+  const familia = familiaInventario(plan.plataforma);
+  const correoNorm = normCorreo(plan.correo);
+  if (!familia || !correoNorm) return { documentos: 0 };
+  let documentos = 0;
+  try {
+    const snap = await db.collection("clientes").limit(5000).get();
+    let batch = db.batch();
+    let ops = 0;
+    for (const doc of snap.docs) {
+      if (doc.id === plan.excluirClienteId) continue;
+      const data = doc.data() || {};
+      const servicios = Array.isArray(data.servicios) ? data.servicios : [];
+      let changed = false;
+      const next = servicios.map((s) => {
+        if (!s || familiaInventario(s.plataforma) !== familia) return s;
+        if (normCorreo(s.correo) !== correoNorm) return s;
+        if (String(s.clave || "") === plan.claveNueva) return s;
+        changed = true;
+        const copy = { ...s, clave: plan.claveNueva, updatedAt: isoNow() };
+        if (Array.isArray(copy.perfiles) && copy.perfiles.length) {
+          copy.perfiles = copy.perfiles.map((p) => ({ ...(p || {}), clave: plan.claveNueva }));
+        }
+        return copy;
+      });
+      if (changed) {
+        batch.set(doc.ref, { servicios: next, updatedAt: isoNow() }, { merge: true });
+        documentos++; ops++;
+        if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+    }
+    if (ops) await batch.commit();
+  } catch (e) {
+    // No revierte la edición ya guardada; el próximo cambio de clave vuelve a intentar la réplica.
+  }
+  try {
+    const invSnap = await db.collection("inventario").where("correo", "==", plan.correo).get();
+    if (!invSnap.empty) {
+      const batch2 = db.batch();
+      let tocados = 0;
+      invSnap.docs.forEach((d) => {
+        const acc = d.data() || {};
+        if (familiaInventario(acc.plataforma) === familia && String(acc.clave || "") !== plan.claveNueva) {
+          batch2.set(d.ref, { clave: plan.claveNueva, updatedAt: isoNow() }, { merge: true });
+          tocados++;
+        }
+      });
+      if (tocados) await batch2.commit();
+    }
+  } catch (e) {
+    // idem: la edición de la ficha ya quedó guardada.
+  }
+  return { documentos };
 }
 
 // Ajusta los cupos de una cuenta del inventario buscándola por correo.
@@ -1460,7 +1527,8 @@ export default async function handler(req, res) {
       const compraIdBody = String(body.compraId || body.servicio?.compraId || "").trim();
       let fechaAnterior = null, fechaNueva = null, touchedIndex = null, touchedCompraId = "";
       let inventarioPlan = null, perfilEliminado = "";
-      let eliminarClienteCompleto = false; // ✅ "No renovó": si era su último servicio, se borra el documento entero.
+      let eliminarClienteCompleto = false; // 2026-09-17: ya no se borra la ficha del cliente nunca (ver acción "no_renovo").
+      let claveCompartidaPlan = null; // 2026-09-17: si cambia la clave de una cuenta compartida, se replica en las demás fichas (ver "editar" y propagarClaveCompartida()).
 
       if (acc === "renovar") {
         const { dias, fechaActual, fechaExacta, servicioIndex } = body;
@@ -1496,11 +1564,14 @@ export default async function handler(req, res) {
         inventarioPlan = { anterior, nuevo: null, nombreTitular };
 
       } else if (acc === "no_renovo") {
-        // ✅ NUEVO: botón "❌ No renovó" en Clientes. A diferencia de "eliminar"
-        // (que solo quita el servicio y deja la ficha vacía huérfana), esta
-        // acción borra el documento del cliente por completo cuando ese era
-        // su último servicio activo — que es lo que pidió el dueño del
-        // negocio: liberar tanto el cupo de inventario como el registro.
+        // 2026-09-17 FIX: botón "❌ No renovó" en Clientes. Antes, si esa era
+        // la única plataforma del cliente, esta acción BORRABA el documento
+        // completo (transaction.delete) — perdiendo antigüedad, historial y
+        // boletos de sorteos, obligando a recrear al cliente desde cero.
+        // Ahora nunca se borra la ficha: solo se da de baja la plataforma
+        // (igual que "eliminar") y se libera su cupo en Bodega. Si era su
+        // último servicio, el cliente queda con servicios: [] pero su ficha,
+        // antigüedad e historial permanecen intactos.
         const { servicioIndex } = body;
         if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Falta la plataforma que no renovó.");
         const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
@@ -1510,7 +1581,6 @@ export default async function handler(req, res) {
         touchedCompraId = String(anterior.compraId || compraIdBody || "");
         servicios.splice(idx, 1);
         inventarioPlan = { anterior, nuevo: null, nombreTitular };
-        eliminarClienteCompleto = servicios.length === 0;
 
       } else if (acc === "eliminar_perfil") {
         const { servicioIndex, perfilIndex, perfilId } = body;
@@ -1604,6 +1674,27 @@ export default async function handler(req, res) {
           if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
+        // 2026-09-17 FIX: "cuando actualizo la clave de una cuenta, se debe
+        // actualizar en todas las fichas de los clientes en automático" — esto
+        // ya existía SOLO al editar la cuenta desde Bodega (api/inventario.js);
+        // editando la clave aquí, desde la ficha del cliente, nunca se
+        // replicaba a nadie más. Si la plataforma+correo no cambiaron (sigue
+        // siendo la misma cuenta compartida) pero la clave sí, se arma el plan
+        // para replicarla después de guardar (ver propagarClaveCompartida()).
+        {
+          const correoNormAnterior = normCorreo(anterior.correo);
+          const correoNormNuevo = normCorreo(nuevo.correo);
+          const claveAnteriorVal = String(anterior.clave || anterior.pin || "");
+          const claveNuevaVal = String(nuevo.clave || "");
+          if (correoNormAnterior && correoNormAnterior === correoNormNuevo && claveAnteriorVal !== claveNuevaVal) {
+            claveCompartidaPlan = {
+              plataforma: nuevo.plataforma || anterior.plataforma || "",
+              correo: nuevo.correo || anterior.correo || "",
+              claveNueva: claveNuevaVal,
+              excluirClienteId: docRef.id
+            };
+          }
+        }
         servicios[idx] = aplicarNuevoServicio(anterior, nuevo);
         touchedIndex = idx;
         touchedCompraId = String(servicios[idx].compraId || compraIdBody || "");
@@ -1633,26 +1724,25 @@ export default async function handler(req, res) {
           precio: Number(servicioArchivado.precio || 0),
           fechaRenovacion: String(servicioArchivado.fechaRenovacion || ""),
           perfiles: Array.isArray(servicioArchivado.perfiles) ? servicioArchivado.perfiles : [],
-          servicio: servicioArchivado, clienteEliminado: !!eliminarClienteCompleto,
+          servicio: servicioArchivado, clienteEliminado: false,
           totalServiciosRestantes: serviciosLimpios.length,
           usuario: String(authUser.usuario || authUser.uid || "sublichat"), rol: String(authUser.role || ""),
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
       }
-      if (eliminarClienteCompleto) {
-        transaction.delete(docRef);
-      } else {
-        transaction.set(docRef, {
-          servicios: serviciosLimpios,
-          ...resumenVendedoresCliente(serviciosLimpios, data),
-          tokenAcceso: accesos.tokenTitular,
-          accesosBeneficiarios: accesos.registro,
-          updatedAt: isoNow()
-        }, { merge: true });
-      }
+      // La ficha del cliente nunca se borra (ver nota 2026-09-17 en "no_renovo"),
+      // incluso si se queda sin servicios activos: se conserva su antigüedad,
+      // historial y boletos de sorteos.
+      transaction.set(docRef, {
+        servicios: serviciosLimpios,
+        ...resumenVendedoresCliente(serviciosLimpios, data),
+        tokenAcceso: accesos.tokenTitular,
+        accesosBeneficiarios: accesos.registro,
+        updatedAt: isoNow()
+      }, { merge: true });
       return {
         serviciosLimpios, accesos, nombreTitular, inventarioPlan, perfilEliminado,
-        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto,
+        fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto, claveCompartidaPlan,
         clienteMeta: {
           nombre: String(data.nombrePerfil || data.nombre || nombreTitular || ""),
           telefono: String(data.telefono || data.whatsapp || ""),
@@ -1669,6 +1759,10 @@ export default async function handler(req, res) {
     if (mutation.inventarioPlan) {
       try { invResult = await sincronizarInventarioServicio(db, mutation.inventarioPlan); }
       catch (e) { invResult = { tocado: false, motivo: e.message }; }
+    }
+    if (mutation.claveCompartidaPlan) {
+      try { await propagarClaveCompartida(db, mutation.claveCompartidaPlan); }
+      catch (e) { /* la edición de esta ficha ya quedó guardada; no se revierte por esto */ }
     }
     if (mutation.perfilEliminado) invResult = { ...(invResult || {}), perfilEliminado: mutation.perfilEliminado };
     try {
@@ -1707,34 +1801,6 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         // La auditoría nunca debe tumbar una baja ya confirmada en Firestore.
-      }
-
-      if (mutation.eliminarClienteCompleto) {
-        // El cliente ya no existe: desactiva enlaces públicos viejos que
-        // apuntaban a él (portal-cliente.js igual los rechaza si el cliente
-        // no existe, esto solo evita dejarlos marcados "activo" para siempre).
-        try {
-          const enlacesSnap = await db.collection("enlaces").where("clienteId", "==", docRef.id).get();
-          if (!enlacesSnap.empty) {
-            const batch = db.batch();
-            enlacesSnap.docs.forEach((d) => batch.set(d.ref, { activo: false, updatedAt: isoNow() }, { merge: true }));
-            await batch.commit();
-          }
-        } catch (e) {
-          // No bloquea la baja ya confirmada.
-        }
-
-        return res.status(200).json({
-          ok: true,
-          verified: true,
-          accion: acc,
-          clienteEliminado: true,
-          totalServicios: 0,
-          inventario: invResult,
-          clienteId: docRef.id,
-          servicioIndex: mutation.touchedIndex,
-          compraId: mutation.touchedCompraId
-        });
       }
     }
 
