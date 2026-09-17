@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - android-v1-actions
+      - android-v1-r13-limpio
     paths:
       - 'SUBLICUENTAS_ANDROID_SOURCE_1_0.zip'
       - '.github/workflows/android-debug-apk.yml'
