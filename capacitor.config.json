@@ -1,0 +1,13 @@
+{
+  "appId": "com.sublicuentas.app",
+  "appName": "Sublicuentas",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
