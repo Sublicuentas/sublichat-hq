@@ -70,15 +70,9 @@
   function directVendorGroup(value){
     const normalized=normalizeVendor(value);
     if(['relojes','reloj','libni'].includes(normalized))return 'relojes';
-    // 2026-09-17 FIX: igual que en api/portal-cliente.js — hay que reconocer
-    // a cada vendedor del equipo como parte de la marca Sublicuentas, no solo
-    // la palabra literal "sublicuentas", o sus terceros (y titulares) no ven
-    // los métodos de pago mientras carga la respuesta real del servidor.
-    if([
-      'sublicuentas','sublicuenta','naara',
-      'abner','elizabeth','geissel','geisell','heber','jimena',
-      'lucy','magdiel','manuel','wolfteam'
-    ].includes(normalized))return 'sublicuentas';
+    // 2026-09-17 FIX (solo Elizabeth, igual que en api/portal-cliente.js):
+    // el resto del equipo se deja tal cual estaba.
+    if(['sublicuentas','sublicuenta','naara','elizabeth'].includes(normalized))return 'sublicuentas';
     return normalized;
   }
 
