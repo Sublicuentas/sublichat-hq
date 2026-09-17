@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - android-v1-actions
+      - android-v1-r13-limpio
     paths:
       - 'SUBLICUENTAS_ANDROID_SOURCE_1_0.zip'
       - '.github/workflows/android-debug-apk.yml'
@@ -96,17 +97,39 @@ jobs:
           python - <<'PYCODE'
           import os, re
           from pathlib import Path
+
           path = Path("android/app/build.gradle")
           if not path.exists():
               raise SystemExit("ERROR: falta android/app/build.gradle")
+
           run = os.environ["GITHUB_RUN_NUMBER"]
           text = path.read_text()
-          text, n1 = re.subn(r"versionCode\s+\d+", f"versionCode {run}", text, count=1)
-          text, n2 = re.subn(r'versionName\s+"[^"]+"', f'versionName "1.0-debug.{run}"', text, count=1)
+
+          text, n1 = re.subn(
+              r"versionCode\s+\d+",
+              f"versionCode {run}",
+              text,
+              count=1
+          )
+
+          text, n2 = re.subn(
+              r'versionName\s+"[^"]+"',
+              f'versionName "1.0-debug.{run}"',
+              text,
+              count=1
+          )
+
           if n1 != 1 or n2 != 1:
-              raise SystemExit("ERROR: no se pudo actualizar versionCode/versionName")
+              raise SystemExit(
+                  "ERROR: no se pudo actualizar versionCode/versionName"
+              )
+
           path.write_text(text)
-          print(f"Android debug versionCode={run}, versionName=1.0-debug.{run}")
+
+          print(
+              f"Android debug versionCode={run}, "
+              f"versionName=1.0-debug.{run}"
+          )
           PYCODE
 
       - name: Restore stable debug signing key
@@ -118,10 +141,12 @@ jobs:
       - name: Verify Android package
         working-directory: mobile
         run: |
-          grep -R "com.sublicuentas.app" android/app/build.gradle* android/app/src/main/AndroidManifest.xml >/dev/null || {
-            echo 'ERROR: no encontré com.sublicuentas.app';
-            exit 1;
-          }
+          grep -R "com.sublicuentas.app" \
+            android/app/build.gradle* \
+            android/app/src/main/AndroidManifest.xml >/dev/null || {
+              echo 'ERROR: no encontré com.sublicuentas.app'
+              exit 1
+            }
 
       - name: Build Debug APK
         working-directory: mobile/android
@@ -134,9 +159,17 @@ jobs:
         run: |
           mkdir -p artifacts
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$APK" || { echo "ERROR: no se generó $APK"; exit 1; }
+
+          test -f "$APK" || {
+            echo "ERROR: no se generó $APK"
+            exit 1
+          }
+
           cp "$APK" artifacts/Sublicuentas-1.0-debug.apk
-          sha256sum artifacts/Sublicuentas-1.0-debug.apk > artifacts/Sublicuentas-1.0-debug.sha256
+
+          sha256sum \
+            artifacts/Sublicuentas-1.0-debug.apk \
+            > artifacts/Sublicuentas-1.0-debug.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
@@ -156,6 +189,6 @@ jobs:
             echo ''
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo '- Package: `com.sublicuentas.app`'
-            echo "- Versión: `1.0` / debug build `${GITHUB_RUN_NUMBER}`"
+            echo "- Versión: \`1.0\` / debug build \`${GITHUB_RUN_NUMBER}\`"
             echo '- Artefacto: `Sublicuentas-1.0-debug.apk`'
           } >> "$GITHUB_STEP_SUMMARY"
