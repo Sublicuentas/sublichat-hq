@@ -784,10 +784,12 @@ function renderTable(){
   if(!window._clientesMenuCloseBound){window._clientesMenuCloseBound=true;document.addEventListener("click",()=>document.querySelectorAll(".client-actions-menu.show").forEach(x=>x.classList.remove("show")));}
 }
 // ❌ "No renovó": da de baja UNA plataforma del cliente y libera su cupo en
-// Bodega. Si esa era la única plataforma que tenía, el cliente se elimina
-// por completo (lo hace el backend en una sola operación, ver api/renovar.js
-// acción "no_renovo"). Si tenía más de una plataforma, se le pregunta cuál
-// no renovó y las demás quedan intactas.
+// Bodega. La ficha del cliente NUNCA se borra (2026-09-17: antes se borraba
+// por completo si era su única plataforma, perdiendo antigüedad, historial
+// y boletos de sorteos — ver api/renovar.js acción "no_renovo"). Si tenía
+// más de una plataforma, se le pregunta cuál no renovó y las demás quedan
+// intactas; si era la única, el cliente queda sin servicios activos pero
+// su ficha e historial se conservan.
 async function noRenovoCliente(g){
   if(!g)return;
   const servicios=g.servicios||[];
@@ -803,7 +805,7 @@ async function noRenovoCliente(g){
   }
   const esUnico=servicios.length===1;
   const advertencia=esUnico
-    ? `Esto va a ELIMINAR por completo a ${g.nombre} (era su único servicio) y va a liberar el cupo en Bodega.\n\nServicio: ${s.plataforma}\n\nEsta acción no se puede deshacer.`
+    ? `Esto va a dar de baja "${s.plataforma}" de ${g.nombre} (era su único servicio) y va a liberar el cupo en Bodega.\n\nLa ficha de ${g.nombre} NO se borra: su historial, antigüedad y boletos de sorteos se conservan, solo queda sin servicios activos.\n\nEsta acción no se puede deshacer.`
     : `Esto va a dar de baja "${s.plataforma}" de ${g.nombre} y va a liberar el cupo en Bodega. El cliente sigue existiendo con sus otros servicios.\n\nEsta acción no se puede deshacer.`;
   if(!confirm(`❌ No renovó\n\n${advertencia}`))return;
   try{
@@ -813,7 +815,7 @@ async function noRenovoCliente(g){
     if(j.ok){
       recuperacionLoaded=false;
       const ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:"";
-      if(typeof mostrarToast==="function")mostrarToast(j.clienteEliminado?`❌ ${g.nombre} eliminado (no renovó)${ex}`:`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}`);
+      if(typeof mostrarToast==="function")mostrarToast(`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}`);
       await load({forceServer:true});
     }else if(typeof mostrarToast==="function")mostrarToast("⚠️ "+(j.error||"No se pudo dar de baja."));
   }catch(e){if(typeof mostrarToast==="function")mostrarToast("⚠️ No pude conectar.");}
