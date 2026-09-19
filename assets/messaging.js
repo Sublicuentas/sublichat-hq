@@ -231,7 +231,7 @@ function addMeses(d,m){const x=new Date(d||Date.now());x.setHours(12,0,0,0);cons
 function baseCompFecha(){return (compCtx&&compCtx.fecha&&dias(compCtx.fecha)>0)?compCtx.fecha:new Date()}
 function setCompMeses(m){const inp=document.getElementById('compNuevaFecha');if(!inp)return;inp.value=dateInputValue(addMeses(baseCompFecha(),m));const info=document.getElementById('compFechaInfo');if(info)info.textContent='Se renovará hasta '+fmtFecha(parseFecha(inp.value))+'. También puede cambiar la fecha manualmente.'}
 function clearCompFecha(){const inp=document.getElementById('compNuevaFecha');if(inp)inp.value='';const info=document.getElementById('compFechaInfo');if(info)info.textContent='Solo se guardará el comprobante; no se modificará la fecha del cliente.'}
-function setCompDestino(d){compDestino=d==='relojes'?'relojes':'sublicuentas';document.querySelectorAll('#compDestinoSeg button').forEach(b=>b.classList.toggle('on',b.dataset.dest===compDestino))}
+function setCompDestino(d){const v=String(d||'').toLowerCase();compDestino=['sublicuentas','relojes','geisell'].includes(v)?v:'sublicuentas';document.querySelectorAll('#compDestinoSeg button').forEach(b=>b.classList.toggle('on',b.dataset.dest===compDestino))}
 function openComprobante(id,servicio,servicioIndex){
   const c=clientes.find(x=>x.id===id); if(!c)return;
   const svcs=Array.isArray(c.servicios)?c.servicios:[];
@@ -326,12 +326,12 @@ async function enviarComprobante(){
       nuevaFecha,
       imagen:compImg
     })});
-    msg.style.color='#1aa15a'; msg.textContent=res.renovado?(`✅ ${res.renovadosCantidad||servicios.length} servicio(s) renovado(s) hasta ${fmtFecha(parseFecha(res.nuevaFecha))}. Enviado a ${res.destinoLabel|| (compDestino==='relojes'?'Relojes':'Sublicuentas')}.`): `✅ Comprobante guardado y enviado a ${res.destinoLabel|| (compDestino==='relojes'?'Relojes':'Sublicuentas')}.`;
+    msg.style.color='#1aa15a'; msg.textContent=res.renovado?(`✅ ${res.renovadosCantidad||servicios.length} servicio(s) renovado(s) hasta ${fmtFecha(parseFecha(res.nuevaFecha))}. Enviado a ${res.destinoLabel|| ({relojes:'Relojes',geisell:'Geisell',sublicuentas:'Sublicuentas'}[compDestino]||'Sublicuentas')}.`): `✅ Comprobante guardado y enviado a ${res.destinoLabel|| ({relojes:'Relojes',geisell:'Geisell',sublicuentas:'Sublicuentas'}[compDestino]||'Sublicuentas')}.`;
     if(res.renovado) await refreshClientesPostRenew();
     setTimeout(closeComprobante,1100);
   }catch(e){
     msg.style.color='#e54848';
-    const map={imagen_muy_grande:'La foto pesa mucho, probá otra.',servicio_no_existe:'No encontré ese servicio del cliente.',servicio_no_permitido:'Esa cuenta no pertenece a este socio.',cliente_no_permitido:'Ese cliente no pertenece a este socio.',fecha_invalida:'La fecha no es válida.',sin_permiso_renovar:'Su usuario no tiene permiso para registrar renovaciones.'};
+    const map={imagen_muy_grande:'La foto pesa mucho, probá otra.',servicio_no_existe:'No encontré ese servicio del cliente.',servicio_no_permitido:'Esa cuenta no pertenece a este socio.',cliente_no_permitido:'Ese cliente no pertenece a este socio.',fecha_invalida:'La fecha no es válida.',sin_permiso_renovar:'Su usuario no tiene permiso para registrar renovaciones.',destino_invalido:'El destinatario seleccionado no es válido.',destino_sin_configurar:'Ese destinatario no tiene Telegram configurado. No se envió a otra persona.',renovacion_no_confirmada:'La renovación no quedó confirmada en la ficha; no se registró como completada.'};
     msg.textContent=map[e&&e.error]||('No se pudo guardar. '+((e&&e.detail)||(e&&e.error)||'Reintentá.'));
   }finally{ btn.disabled=false; btn.textContent='Guardar'; }
 }
