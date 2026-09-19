@@ -90,7 +90,7 @@ const PLAT_LABELS = {
   oleadatv1:"Oleada TV (1)", oleadatv3:"Oleada TV (3)", oleadatv4:"Oleada TV (4)",
   latintv:"LatinTV", latintv1:"LatinTV (1 dispositivo)", latintv2:"LatinTV (2 dispositivos)", latintv3:"LatinTV (3 dispositivos)", latintv4:"LatinTV (4 dispositivos)",
   liontv:"LionTV", liontv1:"LionTV (1 dispositivo)", liontv2:"LionTV (2 dispositivos)", liontv3:"LionTV (3 dispositivos)", liontv5:"LionTV (5 dispositivos)",
-  evoutouch:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
+  evoutouch:"Nanotech", nanotech:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
   iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
   canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
   viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32 · 1 año / 1 dispositivo"
@@ -202,7 +202,8 @@ function flattenCliente(doc, clienteId=""){
       iptvPantallas:Number(s.iptvPantallas||0)||0,
       iptvLista:String(s.iptvLista||s.listaIptv||""),
       iptvHora:String(s.iptvHora||s.horaIptv||""),
-      oleadaDispositivos:Number(s.oleadaDispositivos||0)||0,
+      mesesContratados:Number(s.mesesContratados||0)||0,
+       oleadaDispositivos:Number(s.oleadaDispositivos||0)||0,
       stellaDispositivos:Number(s.stellaDispositivos||0)||0,
       plataformaRaw:s[F.s_plataforma]||"",
       plataforma:platLabel(s[F.s_plataforma]),
@@ -835,9 +836,10 @@ const INV_PLAT_CANON=[
   ["stellatv1","Stella TV (1 dispositivo)"],["stellatv2","Stella TV (2 dispositivos)"],["stellatv3","Stella TV (3 dispositivos)"],
   ["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
   ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
-  ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"]
+  ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"],
+  ["evoutouch1","Nanotech (1 dispositivo)"],["evoutouch2","Nanotech (2 dispositivos)"],["evoutouch3","Nanotech (3 dispositivos)"]
 ];
-const invUsaUsuario=plataforma=>/^(stellatv|oleadatv|latintv|liontv|iptv)/.test(String(plataforma||"").toLowerCase().replace(/[^a-z0-9]/g,""));
+const invUsaUsuario=plataforma=>/^(stellatv|oleadatv|latintv|liontv|evoutouch|nanotech|iptv)/.test(String(plataforma||"").toLowerCase().replace(/[^a-z0-9]/g,""));
 function invNuevoActualizarIdentificador(){
   const plataforma=document.getElementById("invNPlat")?.value||"";
   const usaUsuario=invUsaUsuario(plataforma);
@@ -2757,6 +2759,7 @@ const PLATS_DISPONIBLES=[
   ["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
   ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
   ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"],
+  ["evoutouch1","Nanotech (1 dispositivo)"],["evoutouch2","Nanotech (2 dispositivos)"],["evoutouch3","Nanotech (3 dispositivos)"],
   ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],
   ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"]
 ];
@@ -4426,7 +4429,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(/^oleadatv[13]$/.test(p))return "oleada";
     if(/^latintv[1234]$/.test(p))return "latintv";
     if(/^liontv[1235]$/.test(p))return "liontv";
-    if(/^evoutouch[1-4]?$/.test(p))return "evoutouch";
+    if(/^(evoutouch|nanotech)[1-4]?$/.test(p))return "evoutouch";
     if(/^iptv[1234]$/.test(p))return "iptv";
     return p;
   };
@@ -4492,17 +4495,105 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const corte=new Date(a.getFullYear(),a.getMonth()+meses,a.getDate(),12); if(corte<b)meses+=1;
     return Math.max(1,Math.min(24,meses||1));
   };
-  const FICHA_TV_MESES_VALIDOS={latintv:[1,4,8,12],liontv:[1,3,5,12],stellatv:[1,3,7],oleada:[1,3,7,14],evoutouch:[1,3]};
+  // Planes reales de vigencia TOTAL por proveedor (deben coincidir con el bot y con api/renovar.js).
+  // Nanotech vende 1, 3, 6 y 12 meses.
+  const FICHA_TV_MESES_VALIDOS={latintv:[1,4,8,12],liontv:[1,3,5,12],stellatv:[1,3,7],oleada:[1,3,7,14],evoutouch:[1,3,6,12]};
+  const FICHA_TV_PLAN_NOTAS={latintv:{4:"3 + 1 gratis"},liontv:{12:"10 + 2 gratis"},stellatv:{7:"6 + 1 gratis"},oleada:{7:"6 + 1 gratis",14:"12 + 2 gratis"}};
   const fichaFamiliaMesesTv=plat=>{const p=fichaBaseRegla(plat);if(p==="latintv")return "latintv";if(p==="liontv")return "liontv";if(p==="stellatv")return "stellatv";if(p==="oleada")return "oleada";if(p==="evoutouch")return "evoutouch";return "";};
   const fichaMesesValidosTv=plat=>FICHA_TV_MESES_VALIDOS[fichaFamiliaMesesTv(plat)]||[];
+  const fichaEsTvDigital=plat=>!!fichaFamiliaMesesTv(plat);
   const fichaNormalizarMesesLegacyTv=(plat,n)=>{const f=fichaFamiliaMesesTv(plat),m=Math.max(1,Math.min(24,Math.round(Number(n)||1))),bonus={latintv:{3:4},liontv:{10:12},stellatv:{6:7},oleada:{6:7,12:14}};return bonus[f]?.[m]||m;};
+  const fichaHoyISO=()=>{const t=new Date();return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;};
+  // Hoy + N meses (mismo día del mes; si el mes destino es más corto, último día).
+  const fichaSumarMesesISO=meses=>{
+    const t=new Date(),y=t.getFullYear(),m=t.getMonth(),d=t.getDate(),n=Math.max(1,Math.round(Number(meses)||1));
+    const ultimo=new Date(y,m+n+1,0).getDate();
+    const f=new Date(y,m+n,Math.min(d,ultimo),12);
+    return `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,"0")}-${String(f.getDate()).padStart(2,"0")}`;
+  };
+  // Datos de la ficha tal como están guardados: se usan para NO recalcular ni bloquear
+  // el plan de una compra existente (creada en Telegram o en el CRM) mientras no cambie su fecha.
+  const fichaOriginalDesdeServicio=s=>{
+    const raw=s&&s.fechaRaw?String(s.fechaRaw):"";
+    let dmy="";
+    try{ dmy=raw?fichaISOToDMY(fbAISO(raw)):""; }catch(_){ dmy=""; }
+    return {
+      plataforma:(s&&(s.plataformaRaw||s.plataforma))||"",
+      correo:(s&&s.correo)||"",
+      fechaRenovacion:dmy,
+      mesesContratados:Number(s&&s.mesesContratados||0)||0
+    };
+  };
+  // Meses de vigencia según la fecha: si la fecha es la que ya estaba guardada, manda el plan guardado.
+  const fichaMesesPorFecha=fecha=>{
+    const f=String(fecha||"").trim(); if(!f) return 0;
+    const orig=fichaServicioOriginalActual||{};
+    const guardados=Number(orig.mesesContratados||0);
+    const plat=fichaGetVal("fichaPlat")||orig.plataforma||"";
+    if(guardados>0&&orig.fechaRenovacion&&(f===orig.fechaRenovacion||fichaISOToDMY(f)===orig.fechaRenovacion))return fichaNormalizarMesesLegacyTv(plat,guardados);
+    return fichaMesesEntreFechas(fichaHoyISO(),f);
+  };
+  // En TV Digital el plan elegido en el selector es el que se guarda; en el resto se deduce de la fecha.
   const fichaMesesContratadosActual=fecha=>{
-    const f=String(fecha||"").trim(); const original=String(fichaServicioOriginalActual?.fechaRenovacion||"").trim(); const guardados=Number(fichaServicioOriginalActual?.mesesContratados||0);
-    const plat=fichaGetVal("fichaPlataforma")||fichaServicioOriginalActual?.plataforma||"";
-    if(guardados>0&&f&&(f===original||fichaISOToDMY(f)===original))return fichaNormalizarMesesLegacyTv(plat,guardados);
-    const hoyISO=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`; return fichaMesesEntreFechas(hoyISO,f);
+    const plat=fichaGetVal("fichaPlat")||(fichaServicioOriginalActual&&fichaServicioOriginalActual.plataforma)||"";
+    const sel=fichaQ("fichaTvPlan");
+    if(fichaEsTvDigital(plat)&&sel&&sel.value){ const n=Number(sel.value); if(n>0)return n; }
+    return fichaMesesPorFecha(fecha)||1;
   };
   const fichaPlanMesesTexto=fecha=>{ const n=fichaMesesContratadosActual(fecha); return `${n} MES${n===1?"":"ES"}`; };
+  function fichaTvPlanRender(meses=0){
+    const plat=fichaGetVal("fichaPlat"),box=fichaQ("fichaTvPlanBox"),sel=fichaQ("fichaTvPlan"),hint=fichaQ("fichaTvPlanHint");
+    if(!box||!sel) return;
+    const validos=fichaMesesValidosTv(plat),fam=fichaFamiliaMesesTv(plat);
+    if(!validos.length){ box.style.display="none"; sel.innerHTML=""; sel.dataset.familia=""; return; }
+    box.style.display="block";
+    const etiqueta=n=>{ const nota=(FICHA_TV_PLAN_NOTAS[fam]||{})[n]; return `${n} mes${n===1?"":"es"}${nota?` (${nota})`:""}`; };
+    const actual=Math.round(Number(meses)||0)||Number(sel.value)||0;
+    const fuera=actual>0&&!validos.includes(actual);
+    const opciones=validos.map(n=>({n,txt:etiqueta(n)}));
+    if(fuera) opciones.push({n:actual,txt:`${actual} meses (según la fecha / guardado)`});
+    sel.innerHTML=opciones.map(o=>`<option value="${o.n}">${o.txt}</option>`).join("");
+    sel.value=String(actual>0?actual:validos[0]);
+    if(!sel.value) sel.value=String(validos[0]);
+    sel.dataset.familia=fam;
+    if(hint) hint.textContent=fuera
+      ? `⚠️ ${actual} meses no es un plan de ${fichaPlatformLabel(plat)} (${validos.join(", ")}). Elija un plan válido; si es una ficha ya guardada y no cambia la fecha, se guarda tal cual.`
+      : `Planes: ${validos.join(", ")} meses. Al elegir el plan se calcula la fecha de renovación.`;
+  }
+  // Mantiene visible/actualizado el selector sin pisar lo que ya eligió el vendedor.
+  function fichaTvPlanAsegurar(){
+    const plat=fichaGetVal("fichaPlat"),box=fichaQ("fichaTvPlanBox"),sel=fichaQ("fichaTvPlan");
+    if(!box||!sel) return;
+    if(!fichaEsTvDigital(plat)){ box.style.display="none"; return; }
+    if(sel.dataset.familia!==fichaFamiliaMesesTv(plat)||!sel.options.length){
+      const f=fichaGetVal("fichaFecha");
+      fichaTvPlanRender(f?fichaMesesPorFecha(f):0);
+    }
+    box.style.display="block";
+  }
+  function fichaTvPlanDesdeFecha(){
+    if(!fichaEsTvDigital(fichaGetVal("fichaPlat"))) return;
+    const f=fichaGetVal("fichaFecha");
+    fichaTvPlanRender(f?fichaMesesPorFecha(f):0);
+  }
+  function fichaTvPlanAlCambiarPlataforma(){
+    const plat=fichaGetVal("fichaPlat");
+    if(!fichaEsTvDigital(plat)){ fichaTvPlanRender(0); return; }
+    const f=fichaGetVal("fichaFecha");
+    if(f){ fichaTvPlanRender(fichaMesesPorFecha(f)); return; }
+    // Sin fecha todavía: arranca en el plan más corto y calcula la renovación.
+    const n=fichaMesesValidosTv(plat)[0]||1;
+    fichaTvPlanRender(n);
+    fichaQ("fichaFecha").value=fichaSumarMesesISO(n);
+    fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value);
+  }
+  function fichaTvPlanAlElegirPlan(){
+    const n=Number(fichaGetVal("fichaTvPlan"))||0; if(!n) return;
+    fichaQ("fichaFecha").value=fichaSumarMesesISO(n);
+    fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value);
+    fichaTvPlanRender(n);
+    fichaRefreshTemplate();
+  }
   const fichaNextDateFromDay=dia=>{
     const d=parseInt(dia,10); if(!d)return "";
     const y=today.getFullYear(), m=today.getMonth();
@@ -4698,6 +4789,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaPlatValue(raw){
     const n=fichaNorm(raw);
     if(!n) return "netflix";
+    // Nanotech (antes EvouTouch): evoutouch1/2/3, "Nanotech (2 dispositivos)", etc. Sin esta línea caía a Netflix.
+    if(n.includes("evoutouch")||n.includes("evotouch")||n.includes("nanotech")) return "evoutouch";
     if(n.includes("netflix") && (n.includes("vip") || n.includes("exclusivo"))) return "vipnetflix";
     if(n.includes("netflix")) return "netflix";
     // Los códigos internos también pasan por esta función al volver a editar.
@@ -4831,7 +4924,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   function fichaCantidadDesdePlataforma(raw, fallback="1"){
     const n=fichaNorm(raw);
-    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|iptv)([1-5])$/);
+    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|nanotech|iptv)([1-5])$/);
     return m?m[1]:String(fallback||"1");
   }
   function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
@@ -5093,6 +5186,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
 
   function fichaRefreshTemplate(){
+    fichaTvPlanAsegurar();
     fichaSetPrecioDefault(false);
     const plat=fichaGetVal("fichaPlat");
     // Los campos del CRM siguen mostrándose según la PLATAFORMA solamente (igual
@@ -5517,6 +5611,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaSetPrecioDefault(!s.precio);
     fichaQ("fichaFecha").value=fechaISO;
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
+    // TV Digital: el plan (meses) guardado en el CRM/Telegram se muestra tal cual, sin recalcularlo.
+    if(fichaEsTvDigital(fichaQ("fichaPlat").value)) fichaTvPlanRender(fechaISO?fichaMesesPorFecha(fechaISO):0); else fichaTvPlanRender(0);
     const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
     fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
@@ -5650,7 +5746,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaForzarNuevoServicioActual=false;
     fichaServicioPosActual=pos;
     fichaServicioIndexActual=(s.srvIndex!=null&&s.srvIndex!==""&&Number.isInteger(Number(s.srvIndex)))?Number(s.srvIndex):null;
-    fichaServicioOriginalActual={plataforma:s.plataformaRaw||s.plataforma||"",correo:s.correo||""};
+    fichaServicioOriginalActual=fichaOriginalDesdeServicio(s);
     fichaPrefillFromService(fichaGrupoActual||{},s);
     fichaRenderServicePicker();
     fichaActualizarModoNuevoServicio();
@@ -5659,7 +5755,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaSincronizarServiciosDesdeData(indicePreferido,payload){
     let lista=fichaServiciosCompletos({...(fichaGrupoActual||{}),clienteId:fichaClienteIdActual});
     if(!lista.length && payload&&payload.servicio){
-      lista=[{...payload.servicio,plataformaRaw:payload.servicio.plataforma,plataforma:fichaPlatformLabel(payload.servicio.plataforma),fechaRaw:payload.servicio.fechaRenovacion,fecha:parseDate(payload.servicio.fechaRenovacion),clave:payload.servicio.clave,pin:payload.servicio.clave,pinPerfil:payload.servicio.pinPerfil||"",beneficiarioTipo:payload.servicio.beneficiarioTipo||"titular",beneficiarioNombre:payload.servicio.beneficiarioNombre||"",srvIndex:indicePreferido,fichaTexto:payload.fichaTexto||""}];
+      lista=[{...payload.servicio,plataformaRaw:payload.servicio.plataforma,plataforma:fichaPlatformLabel(payload.servicio.plataforma),fechaRaw:payload.servicio.fechaRenovacion,fecha:parseDate(payload.servicio.fechaRenovacion),clave:payload.servicio.clave,pin:payload.servicio.clave,pinPerfil:payload.servicio.pinPerfil||"",beneficiarioTipo:payload.servicio.beneficiarioTipo||"titular",beneficiarioNombre:payload.servicio.beneficiarioNombre||"",srvIndex:indicePreferido,fichaTexto:payload.fichaTexto||"",mesesContratados:payload.servicio.mesesContratados||0}];
     }
     if(!lista.length)return;
     fichaServiciosActuales=lista;
@@ -5671,7 +5767,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaServicioPosActual=pos;
     const actual=lista[pos];
     fichaServicioIndexActual=(actual.srvIndex!=null&&actual.srvIndex!=="")?Number(actual.srvIndex):null;
-    fichaServicioOriginalActual={plataforma:actual.plataformaRaw||actual.plataforma||"",correo:actual.correo||""};
+    fichaServicioOriginalActual=fichaOriginalDesdeServicio(actual);
     fichaGrupoActual={
       ...(fichaGrupoActual||{}),
       clienteId:fichaClienteIdActual,
@@ -5824,6 +5920,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
             </div>
           </div>
           <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
+          <label class="ficha-field" id="fichaTvPlanBox" style="display:none"><span>Plan contratado (meses)</span><select class="ficha-select" id="fichaTvPlan"></select><small id="fichaTvPlanHint" style="display:block;margin-top:5px;color:var(--muted)"></small></label>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
           <label class="ficha-field"><span>Día de cada mes</span><input class="ficha-input" id="fichaDia" inputmode="numeric" placeholder="04"></label>
@@ -5906,7 +6003,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const hidden=fichaQ("fichaTexto");
       if(view && hidden) hidden.value=view.innerText;
     });
-    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaActualizarIptvOpciones("1",""); fichaActualizarTvDigitalOpciones("1"); fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
+    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaActualizarIptvOpciones("1",""); fichaActualizarTvDigitalOpciones("1"); fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaTvPlanAlCambiarPlataforma(); fichaRefreshTemplate(); });
     fichaQ("fichaDispositivo").addEventListener("change",()=>{
       const rokuBox=fichaQ("fichaRokuBox");
       if(rokuBox) rokuBox.style.display = fichaUsaSelectorDispositivo(fichaGetVal("fichaPlat"))&&fichaGetVal("fichaDispositivo")==="tv" ? "block" : "none";
@@ -5950,7 +6047,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaQ("fichaDispositivo").value=nuevo.dispositivo||"";fichaQ("fichaEsRoku").value=nuevo.esRoku===true?"si":"no";
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
     });
-    fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
+    fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaTvPlanDesdeFecha(); fichaRefreshTemplate(); });
+    fichaQ("fichaTvPlan").addEventListener("change",fichaTvPlanAlElegirPlan);
     fichaQ("fichaRegen").onclick=()=>{
       const tieneDatos=fichaGetVal("fichaNombre")||fichaGetVal("fichaCorreo")||fichaGetVal("fichaTelefono");
       if(tieneDatos && !confirm("¿Iniciar una ficha nueva para otro cliente? Se borrarán los datos de esta pantalla que no haya guardado en CRM."))return;
@@ -5984,7 +6082,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaForzarNuevoServicioActual=forceNewService;
     fichaServicioPosActual=serv?(preferredPos>=0?preferredPos:0):-1;
     fichaServicioIndexActual=(serv&&serv.srvIndex!=null&&serv.srvIndex!==""&&Number.isInteger(Number(serv.srvIndex)))?Number(serv.srvIndex):null;
-    fichaServicioOriginalActual=serv?{plataforma:serv.plataformaRaw||serv.plataforma||"",correo:serv.correo||""}:null;
+    fichaServicioOriginalActual=serv?fichaOriginalDesdeServicio(serv):null;
     fichaResetButtons();
     fichaPrefillFromService(grupo||{},serv||{plataformaRaw:"netflix"});
     if(forceNewService){
