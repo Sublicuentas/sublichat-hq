@@ -386,7 +386,7 @@ const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
   liontv:[1,3,5,12],
   stellatv:[1,3,7],
   oleadatv:[1,3,7,14],
-  evoutouch:[1,3],
+  evoutouch:[1,3,6,12],
 });
 function familiaMesesTvDigital(plataforma=""){
   const p=canonPlat(plataforma||"");
@@ -422,7 +422,7 @@ function tvDigitalInfo(servicio = {}) {
     : mesesHastaRenovacion(servicio.fechaRenovacion);
   let dispositivos = Number(servicio.iptvPantallas || servicio.oleadaDispositivos || servicio.stellaDispositivos || 0) || 0;
   if (!dispositivos) { const m=p.match(/(\d)$/); if(m) dispositivos=Number(m[1]); }
-  if (p.startsWith("evoutouch")) dispositivos=Math.max(1,Math.min(3,Number(s.iptvPantallas||1)||1));
+  if (p.startsWith("evoutouch")) dispositivos=Math.max(1,Math.min(3,Number(servicio.iptvPantallas||dispositivos||1)||1));
   let url = "";
   if (p.startsWith("latintv")) url = servicio.iptvProveedor === "latintv2" ? "http://enlatv.com" : TV_DIGITAL_URLS.latintv;
   else if (p.startsWith("liontv")) url = TV_DIGITAL_URLS.liontv;

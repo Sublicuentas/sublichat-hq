@@ -52,7 +52,7 @@ const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
   liontv:[1,3,5,12],
   stellatv:[1,3,7],
   oleadatv:[1,3,7,14],
-  evoutouch:[1,3],
+  evoutouch:[1,3,6,12], // Nanotech: 1, 3, 6 y 12 meses (sin meses gratis)
 });
 function familiaMesesTvDigital(plataforma=""){
   const p=canonPlat(plataforma||"");
@@ -78,6 +78,18 @@ function validarMesesTvDigital(plataforma="",meses=1,{legacy=false}={}){
     throw crmUserError(`Plan no válido para ${plataforma}: ${n} meses. Use ${permitidos.join(", ")} meses.`);
   }
   return n;
+}
+
+// Plan permitido más cercano (empate → el mayor). Solo se usa para fichas ya guardadas
+// cuyo plan no está en la tabla comercial y cuya fecha el vendedor no cambió.
+function planValidoMasCercanoTvDigital(plataforma="",meses=1){
+  const permitidos=mesesValidosTvDigital(plataforma);
+  const n=Math.max(1,Math.min(24,Math.round(Number(meses)||1)));
+  if(!permitidos.length||permitidos.includes(n))return n;
+  return permitidos.reduce((mejor,p)=>{
+    const d=Math.abs(p-n),dm=Math.abs(mejor-n);
+    return d<dm||(d===dm&&p>mejor)?p:mejor;
+  },permitidos[0]);
 }
 
 function mesesPagadosEntre(inicio, fin) {
@@ -929,9 +941,23 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   }
   mesesContratados = Math.max(1, Math.min(24, mesesContratados || 1));
   const fechaSinCambio = fechaRenovacionFinal === String(anterior.fechaRenovacion || "");
-  mesesContratados = validarMesesTvDigital(plataformaFinal, mesesContratados, {
-    legacy: fechaSinCambio && Number.isFinite(mesesAnteriores) && mesesAnteriores > 0
-  });
+  const legacyMeses = fechaSinCambio && Number.isFinite(mesesAnteriores) && mesesAnteriores > 0;
+  // Editar una compra que YA existe (creada en Telegram o en el CRM) sin cambiar su fecha
+  // nunca debe quedar bloqueado por la tabla de planes: la tabla solo protege altas nuevas
+  // y cambios de fecha. Así una ficha de Telegram se abre y se guarda igual en el CRM.
+  const familiaTvFinal = familiaMesesTvDigital(plataformaFinal);
+  const editandoSinCambioFecha = fechaSinCambio
+    && !!String(anterior.fechaRenovacion || "").trim()
+    && !!familiaTvFinal
+    && familiaTvFinal === familiaMesesTvDigital(anterior.plataforma || "");
+  try {
+    mesesContratados = validarMesesTvDigital(plataformaFinal, mesesContratados, { legacy: legacyMeses });
+  } catch (errorPlan) {
+    if (!editandoSinCambioFecha) throw errorPlan;
+    mesesContratados = legacyMeses
+      ? Math.round(mesesAnteriores)
+      : planValidoMasCercanoTvDigital(plataformaFinal, mesesContratados);
+  }
   const out = {
     schemaVersion: 2,
     compraId: String(servicio.compraId || anterior.compraId || recordId("compra")),
