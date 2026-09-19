@@ -4,7 +4,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260911-62';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260918-63';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -40,7 +40,7 @@
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const norm=(v)=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9@.+\s_-]/g,' ').replace(/\s+/g,' ').trim();
   const phone=(v)=>String(v??'').replace(/\D/g,'').replace(/^504(?=\d{8}$)/,'').slice(-8);
-  const email=(v)=>String(v??'').trim().toLowerCase().replace(/\s+/g,'');
+  const email=(v)=>String(v??'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase().replace(/\s+/g,'');
   // Varias plataformas usan usuario, número o identificador en vez de correo.
   // Control Maestro los trata igualmente como "cuenta" para no descartarlos.
   const excelEmail=(v)=>{
@@ -1440,6 +1440,7 @@
       <div class="cm-account-detail-actions">
         <button class="cm-btn good" data-cm-review-ok="${esc(account.key)}" ${state.busy?'disabled':''}>✅ Marcar revisada</button>
         <button class="cm-btn warn" data-cm-review-issue="${esc(account.key)}" ${state.busy?'disabled':''}>⚠️ Registrar incidencia</button>
+        <button class="cm-btn danger" data-cm-delete-account="${index}" ${state.busy?'disabled':''}>🗑️ Eliminar cuenta</button>
       </div>
       ${review?.nota?`<div class="cm-review-note"><b>Última nota:</b> ${esc(review.nota)}</div>`:''}
       <div class="cm-client-table">
@@ -2116,18 +2117,54 @@
 
   async function deleteAuditAccount(index){
     const account=state.accountVisible[index];if(!account||state.busy)return;
-    const ids=account.accountIds.filter(Boolean);
-    if(ids.length!==1)return alert('Esta cuenta no puede eliminarse desde aquí porque está duplicada o no existe en Bodega.');
+    const ids=[...new Set(account.accountIds.filter(Boolean))];
     if(account.invClients.length)return alert(`Esta cuenta todavía tiene ${account.invClients.length} cliente${account.invClients.length===1?'':'s'} asignado${account.invClients.length===1?'':'s'}. Use “Sacar” o “Eliminar” en cada fila primero.`);
     if(account.services.length)return alert(`Esta cuenta todavía tiene ${account.services.length} servicio${account.services.length===1?'':'s'} activo${account.services.length===1?'':'s'} en Clientes. Elimínelos o edítelos primero.`);
-    if(!confirm(`¿Eliminar definitivamente esta cuenta de Bodega?\n\n${account.platform}\n${account.email}\n\nEl correo ya está vacío. Esta acción no se puede deshacer.`))return;
+    if(ids.length>1)return alert('Hay más de un documento de Bodega para esta misma cuenta. Por seguridad no se borrará en bloque; corrija primero el duplicado de Bodega.');
+    const excelPointers=[...(account.excelAccountHeaders||[]),...(account.excelRows||[])];
+    if(!ids.length&&!excelPointers.length)return alert('Esta cuenta ya no existe en Bodega ni en el respaldo Excel. Presione “Actualizar datos”.');
+    const where=[ids.length?'Bodega':'',excelPointers.length?'Excel':''].filter(Boolean).join(' y ');
+    if(!confirm(`¿Eliminar definitivamente esta cuenta de ${where}?\n\n${account.platform}\n${account.email||'Sin correo'}\n\nSolo se permite cuando ya no tiene clientes ni servicios activos. Se guardará un respaldo del Excel antes de modificarlo.`))return;
     const view=captureControlView();
-    state.busy=true;mutationMessage('Eliminando cuenta vacía…','');render();restoreControlView(view);
+    state.busy=true;mutationMessage('Eliminando cuenta…','');render();restoreControlView(view);
     try{
-      await api({accion:'eliminarCuenta',docId:ids[0],confirmarCorreo:account.email},INVENTORY_API);
-      await reloadControlAfterMutation(`✅ Cuenta ${account.email} eliminada de Bodega.`,'');
+      // Primero Bodega: la API vuelve a comprobar que no existan clientes ni
+      // servicios ligados. No se toca esa lógica de seguridad.
+      if(ids.length)await api({accion:'eliminarCuenta',docId:ids[0],confirmarCorreo:account.email},INVENTORY_API);
+
+      if(excelPointers.length){
+        if(!window.ExcelJS)throw new Error('La cuenta salió de Bodega, pero no cargó el lector de Excel. Recargue y elimine el registro histórico restante.');
+        const originalBase64=await loadTemplateBase64(false);
+        const workbook=new ExcelJS.Workbook();
+        await workbook.xlsx.load(base64ToBuffer(originalBase64));
+        normalizeSharedFormulas(workbook);
+        let cleared=0;
+        const seen=new Set();
+        for(const item of excelPointers){
+          const sheetName=String(item.sheet||'').trim(),rowNumber=Number(item.row);
+          const pointer=`${sheetName}|${rowNumber}`;if(seen.has(pointer))continue;seen.add(pointer);
+          const ws=workbook.getWorksheet(sheetName);if(!ws||!Number.isInteger(rowNumber)||rowNumber<1)continue;
+          const header=findHeader(ws);if(!header)continue;
+          const row=ws.getRow(rowNumber);
+          // Borra solamente las columnas pertenecientes al registro de cuenta/
+          // cliente; conserva fórmulas, formato y cualquier otra sección.
+          const columns=[header.email,header.password,header.name,header.tel,header.profile,header.pin,header.expiry].filter(Boolean);
+          columns.forEach((column)=>{row.getCell(column).value=null;});
+          cleared++;
+        }
+        if(cleared){
+          try{await api({accion:'control_guardar_respaldo',filename:`ANTES-DE-ELIMINAR-CUENTA-${state.meta?.plantilla?.filename||'Sublicuentas.xlsx'}`,size:base64ToBuffer(originalBase64).byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:originalBase64,motivo:'antes_eliminar_cuenta_completa',metricas:state.analysis?.metrics||{}});}catch(_){}
+          const repairedAnalysis=parseWorkbook(workbook,{servicios:[],cuentas:[]});rebuildConditionalFormatting(repairedAnalysis);
+          const buffer=await workbook.xlsx.writeBuffer(),base64=bufferToBase64(buffer),filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
+          await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_completa',metricas:state.analysis?.metrics||{}});
+          state.templateBase64=base64;
+        }
+      }
+      state.analysis=null;state.accountAudit=null;state.expandedAccountKey='';
+      await refreshMeta();await analyze(true);
+      mutationMessage(`✅ Cuenta ${account.email||''} eliminada de ${where}.`,'good');
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
-    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
+    finally{state.busy=false;render();restoreControlView(view,{keepExpanded:false});}
   }
 
   function accountByKey(key){
