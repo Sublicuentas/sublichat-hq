@@ -5007,6 +5007,12 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     var chip=document.getElementById('rbacRoleChip');
     if(nombreEl)nombreEl.textContent=nombre;
     if(greetEl)greetEl.textContent=saludoActual()+', asesor';
+    // La foto configurada en Perfil debe verse en la cabecera para todos los usuarios.
+    var avatarEl=document.getElementById('avatarImg');
+    if(avatarEl){
+      var avatar=(p&&p.avatar)||'/assets/sublirobot-actualizado-transparente.png?v=20260830-3';
+      if(avatarEl.getAttribute('src')!==avatar)avatarEl.setAttribute('src',avatar);
+    }
     if(chip){
       var role=(typeof currentRole==='function'?currentRole():(p&&p.role))||'admin';
       var cargo=role==='finanzas'?'Finanzas':role==='auditor'?'Auditoría':'Admin';
