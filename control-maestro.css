@@ -581,5 +581,5 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
   .cm-account-detail-head{flex-wrap:wrap}
 }
 
-/* IPTV: logos completos dentro del mismo cuadro blanco, sin recortes. */
-.cm-platform-tile-logo img,.cm-selected-platform-logo img,.cm-account-logo img{object-fit:contain!important;object-position:center!important;background:#fff!important;padding:5px!important;box-sizing:border-box!important}
+/* LIC 20260919 · logos IPTV normalizados dentro del cuadro blanco */
+.cm-platform-tile-logo img,.cm-selected-platform-logo img,.cm-account-logo img{object-fit:contain!important;object-position:center!important;padding:4px!important;box-sizing:border-box!important;background:#fff!important}

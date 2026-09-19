@@ -1,10 +1,14 @@
 (function controlMaestroSublicuentas(){
   'use strict';
 
+  // Evita montar dos instancias de Control Maestro si el bundle se evalúa dos veces.
+  if(window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__) return;
+  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260919-64';
+
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260918-63';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260919-64';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -490,13 +494,12 @@
   function auditFamily(v){
     const p=canonPlatform(v);
     if(['disneyp','disneys','disney'].includes(p))return 'disney';
-    // Control Maestro: las variantes por cantidad de dispositivos pertenecen
-    // a una sola tarjeta/proveedor. La cantidad sigue viviendo en cada cuenta;
-    // aquí solo se compacta la navegación para no duplicar categorías.
-    if(/^stellatv[123]$/.test(p))return 'stellatv';
-    if(/^oleadatv[13]$/.test(p))return 'oleada';
-    if(/^latintv[1234]$/.test(p))return 'latintv';
-    if(/^liontv[1235]$/.test(p))return 'liontv';
+    // Control Maestro muestra una sola categoría por proveedor IPTV. Las variantes
+    // de dispositivos siguen existiendo en cada cuenta; solo se unifica la tarjeta.
+    if(['oleada','oleadatv','oleadatv1','oleadatv2','oleadatv3','oleadatv4'].includes(p))return 'oleada';
+    if(['liontv','liontv1','liontv2','liontv3','liontv4','liontv5'].includes(p))return 'liontv';
+    if(['latintv','latintv1','latintv2','latintv3','latintv4','latintv5'].includes(p))return 'latintv';
+    if(['stellatv','stellatv1','stellatv2','stellatv3'].includes(p))return 'stellatv';
     return p||'sin_plataforma';
   }
 
