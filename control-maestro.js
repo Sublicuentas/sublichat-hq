@@ -490,6 +490,13 @@
   function auditFamily(v){
     const p=canonPlatform(v);
     if(['disneyp','disneys','disney'].includes(p))return 'disney';
+    // Control Maestro: las variantes por cantidad de dispositivos pertenecen
+    // a una sola tarjeta/proveedor. La cantidad sigue viviendo en cada cuenta;
+    // aquí solo se compacta la navegación para no duplicar categorías.
+    if(/^stellatv[123]$/.test(p))return 'stellatv';
+    if(/^oleadatv[13]$/.test(p))return 'oleada';
+    if(/^latintv[1234]$/.test(p))return 'latintv';
+    if(/^liontv[1235]$/.test(p))return 'liontv';
     return p||'sin_plataforma';
   }
 
