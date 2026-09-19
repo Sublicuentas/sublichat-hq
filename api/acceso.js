@@ -77,7 +77,7 @@ function canonPlat(v) {
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
-    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch4", evoutouch4: "evoutouch4"
+    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1"
   };
   if (aliases[p]) return aliases[p];
   if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
@@ -86,11 +86,11 @@ function canonPlat(v) {
   if (stella) return `stellatv${stella[1]}`;
   const oleada = p.match(/^oleada(?:tv)?([13])$/);
   if (oleada) return `oleadatv${oleada[1]}`;
-  if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^evoutouch4?$/.test(p) || /^iptv[134]$/.test(p)) return /^evoutouch/.test(p) ? "evoutouch4" : p;
+  if (/^latintv[1234]$/.test(p) || /^liontv[1235]$/.test(p) || /^evoutouch[1-4]?$/.test(p) || /^iptv[134]$/.test(p)) return /^evoutouch/.test(p) ? (`evoutouch${(p.match(/([123])$/)||[])[1]||"1"}`) : p;
   if (p.startsWith("stellatv") || p.startsWith("stella")) return "stellatv";
   if (p.startsWith("latintv")) return "latintv";
   if (p.startsWith("liontv")) return "liontv";
-  if (p.startsWith("evoutouch")) return "evoutouch4";
+  if (p.startsWith("evoutouch")) { const m=p.match(/([123])$/); return `evoutouch${m?m[1]:"1"}`; }
   return p;
 }
 
@@ -192,7 +192,7 @@ const PLAT_LABELS = {
   oleada: "Oleada TV", oleadatv1: "Oleada TV (1 dispositivo)", oleadatv3: "Oleada TV (3 dispositivos)",
   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
-  evoutouch4: "EvouTouch (4 dispositivos)", evoutouch: "EvouTouch",
+  evoutouch1: "Nanotech (1 dispositivo)", evoutouch2: "Nanotech (2 dispositivos)", evoutouch3: "Nanotech (3 dispositivos)", evoutouch4: "Nanotech (1 dispositivo)", evoutouch: "Nanotech",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
 };
@@ -377,7 +377,7 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
 const TV_DIGITAL_URLS = {
   latintv: "http://latgt.com:8080",
   liontv: "http://liontv.es:80",
-  evoutouch4: "http://smarterstv99.dyndns.tv:25461/",
+  evoutouch1: "http://smarterstv99.dyndns.tv:25461/", evoutouch2: "http://smarterstv99.dyndns.tv:25461/", evoutouch3: "http://smarterstv99.dyndns.tv:25461/", evoutouch4: "http://smarterstv99.dyndns.tv:25461/",
   evoutouch: "http://smarterstv99.dyndns.tv:25461/"
 };
 
@@ -422,7 +422,7 @@ function tvDigitalInfo(servicio = {}) {
     : mesesHastaRenovacion(servicio.fechaRenovacion);
   let dispositivos = Number(servicio.iptvPantallas || servicio.oleadaDispositivos || servicio.stellaDispositivos || 0) || 0;
   if (!dispositivos) { const m=p.match(/(\d)$/); if(m) dispositivos=Number(m[1]); }
-  if (p.startsWith("evoutouch")) dispositivos=4;
+  if (p.startsWith("evoutouch")) dispositivos=Math.max(1,Math.min(3,Number(s.iptvPantallas||1)||1));
   let url = "";
   if (p.startsWith("latintv")) url = servicio.iptvProveedor === "latintv2" ? "http://enlatv.com" : TV_DIGITAL_URLS.latintv;
   else if (p.startsWith("liontv")) url = TV_DIGITAL_URLS.liontv;

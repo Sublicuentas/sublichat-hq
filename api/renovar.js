@@ -136,7 +136,7 @@ const PLAT_ALIASES = {
   windows11: "windows11", win11: "windows11",
   adobeexpress: "adobeexpress", adobe: "adobeexpress",
   eset: "eset", esetnod32: "eset",
-  stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch4", evoutouch4: "evoutouch4"
+  stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1"
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
@@ -147,13 +147,13 @@ function canonPlat(v) {
   if (oleada) return `oleadatv${oleada[1]}`;
   if (/^latintv[1234]$/.test(key)) return key;
   if (/^liontv[1235]$/.test(key)) return key;
-  if (/^evoutouch4?$/.test(key)) return "evoutouch4";
+  if (/^evoutouch[1-4]?$/.test(key)) return key.endsWith("2") ? "evoutouch2" : key.endsWith("3") ? "evoutouch3" : "evoutouch1";
   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
   if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
   if (key.startsWith("liontv")) return "liontv";
-  if (key.startsWith("evoutouch")) return "evoutouch4";
+  if (key.startsWith("evoutouch")) { const m=key.match(/([123])$/); return `evoutouch${m?m[1]:"1"}`; }
   if (key.startsWith("iptv")) return "iptv";
   return key;
 }
@@ -965,7 +965,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   const familia = canonPlat(plataformaFinal);
   if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("evoutouch") || familia.startsWith("iptv")) {
     out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : ""));
-    out.iptvPantallas = familia.startsWith("evoutouch") ? 4 : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
+    out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1)) : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
   }
