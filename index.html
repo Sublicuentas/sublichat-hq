@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:ital,wght@0,600;0,700;1,600&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-COMPARTIDO-20260919-64">
+<link rel="stylesheet" href="./control-maestro.css?v=CONTROL-MAESTRO-COMPARTIDO-20260910-61">
 <link rel="stylesheet" href="./activar-tv.css?v=20260910-3">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -2686,7 +2686,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20260919-64"></script>
+<script defer src="./control-maestro.js?v=20260910-61"></script>
 <script defer src="./activar-tv-platforms.js?v=20260910-3"></script>
 <script defer src="./activar-tv.js?v=20260910-3"></script>
 
@@ -4956,8 +4956,10 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
     clip-path:polygon(50% 0,93% 24%,93% 76%,50% 100%,7% 76%,7% 24%);
   }
   #sidebarWrap .av-brand img{
-    position:relative;z-index:1;width:100%!important;height:100%!important;border-radius:0!important;
-    object-fit:cover!important;clip-path:polygon(50% 0,93% 24%,93% 76%,50% 100%,7% 76%,7% 24%);
+    position:absolute!important;z-index:1;left:7px!important;top:7px!important;
+    width:calc(100% - 14px)!important;height:calc(100% - 14px)!important;border-radius:0!important;
+    object-fit:cover!important;object-position:center center!important;
+    clip-path:polygon(50% 0,93% 24%,93% 76%,50% 100%,7% 76%,7% 24%);
   }
   #sidebarWrap .av-brand::after{
     content:'';position:absolute;z-index:3;right:8px;bottom:18px;width:18px;height:18px;border-radius:50%;
