@@ -5252,11 +5252,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaToast("Seleccione la plataforma.");
       return null;
     }
-    const mesesPermitidos=fichaMesesValidosTv(payload.servicio.plataforma);
-    if(mesesPermitidos.length&&!mesesPermitidos.includes(Number(payload.servicio.mesesContratados||1))){
-      fichaToast(`Plan no válido. Para ${fichaGetVal("fichaPlataforma")||payload.servicio.plataforma} use ${mesesPermitidos.join(", ")} meses.`);
-      return null;
-    }
+    // La ficha CRM guarda la fecha exacta elegida por el vendedor.
+    // No bloquear el guardado por una tabla comercial de meses: Telegram también
+    // permite ajustar la fecha directamente y ambas interfaces deben guardar igual.
     if(payload.servicio.beneficiarioTipo==="tercero"&&!String(payload.servicio.beneficiarioNombre||"").trim()){
       fichaToast("Escriba el nombre de la persona que usará este acceso.");
       return null;
