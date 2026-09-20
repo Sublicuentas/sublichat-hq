@@ -62,6 +62,72 @@ async function checkChatLimit(db, uid) {
   return { blocked: bloqueado, retryAfterSeconds };
 }
 
+// ───────────── Cifras exactas + formato limpio ─────────────
+// El modelo NO debe sumar ni contar a ojo (se equivocaba y mezclaba el desorden): las cifras vienen calculadas aquí.
+const TZ_HN = "America/Tegucigalpa";
+function fechaHN(d = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ_HN, year: "numeric", month: "2-digit", day: "2-digit" }).format(d); // AAAA-MM-DD
+}
+function fechaLargaHN(iso) {
+  const d = new Date(iso + "T12:00:00Z");
+  return new Intl.DateTimeFormat("es-HN", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(d);
+}
+const fmtLps = n => "Lps. " + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function diasEntre(hoyISO, iso) {
+  const a = Date.parse(hoyISO + "T12:00:00Z"), b = Date.parse(String(iso || "").slice(0, 10) + "T12:00:00Z");
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
+}
+function buildResumen(clientes, hoyISO) {
+  const cuentas = [];
+  const clientesSet = new Set();
+  for (const c of Array.isArray(clientes) ? clientes : []) {
+    clientesSet.add(String(c?.nombre || "") + "|" + String(c?.tel || ""));
+    for (const q of Array.isArray(c?.cuentas) ? c.cuentas : []) {
+      cuentas.push({ vendedor: String(q?.vendedor || c?.vendedor || "Sin vendedor"), plataforma: String(q?.plataforma || "—"), precio: Number(q?.precio) || 0, dias: diasEntre(hoyISO, q?.renueva) });
+    }
+  }
+  const suma = l => l.reduce((t, x) => t + x.precio, 0);
+  const bloque = l => ({ servicios: l.length, total: fmtLps(suma(l)) });
+  const conFecha = cuentas.filter(x => x.dias !== null);
+  const mesActual = hoyISO.slice(0, 7);
+  const isoDe = dias => new Date(Date.parse(hoyISO + "T12:00:00Z") + dias * 86400000).toISOString().slice(0, 10);
+  const delMes = conFecha.filter(x => isoDe(x.dias).slice(0, 7) === mesActual);
+  const porClave = (fn, max) => {
+    const m = new Map();
+    for (const x of cuentas) { const k = fn(x); const e = m.get(k) || { servicios: 0, suma: 0 }; e.servicios++; e.suma += x.precio; m.set(k, e); }
+    return [...m.entries()].sort((a, b) => b[1].suma - a[1].suma).slice(0, max).map(([nombre, e]) => ({ nombre, servicios: e.servicios, total: fmtLps(e.suma) }));
+  };
+  const proximosDias = [];
+  for (let i = 0; i <= 7; i++) {
+    const f = isoDe(i);
+    proximosDias.push({ fecha: f, dia: fechaLargaHN(f), ...bloque(conFecha.filter(x => x.dias === i)) });
+  }
+  return {
+    hoy: hoyISO,
+    clientes: clientesSet.size,
+    servicios: cuentas.length,
+    vencen_hoy: bloque(conFecha.filter(x => x.dias === 0)),
+    vencen_manana: bloque(conFecha.filter(x => x.dias === 1)),
+    vencen_proximos_7_dias_sin_hoy: bloque(conFecha.filter(x => x.dias >= 1 && x.dias <= 7)),
+    vencen_de_hoy_a_7_dias: bloque(conFecha.filter(x => x.dias >= 0 && x.dias <= 7)),
+    vencidos_sin_renovar: bloque(conFecha.filter(x => x.dias < 0)),
+    esperado_este_mes: bloque(delMes),
+    por_dia_proximos_7_dias: proximosDias,
+    por_plataforma_top: porClave(x => x.plataforma, 12),
+    por_vendedor: porClave(x => x.vendedor, 15),
+  };
+}
+// Deja la respuesta lista para pintarse: viñetas "- ", sin saltos de más.
+function normalizarRespuesta(t) {
+  return String(t || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/^[ \t]*[•·]\s+/gm, "- ")
+    .replace(/^([ \t]*)\*(?!\*)\s+/gm, "$1- ")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default async function handler(req, res) {
   const API_KEY = (process.env.GEMINI_API_KEY || "").trim();
 
@@ -194,6 +260,9 @@ export default async function handler(req, res) {
   if (!API_KEY) return res.status(500).json({ error: "Falta GEMINI_API_KEY en Vercel" });
 
   const isRewrite = String(mode || "").toLowerCase() === "rewrite";
+  // La fecha viene del servidor (Honduras): el teléfono/navegador mandaba la fecha UTC y desde las 6 p. m. ya era "mañana".
+  const hoyISO = fechaHN();
+  const resumen = isRewrite ? null : buildResumen(clientes, hoyISO);
   // Contexto: le damos a Gemini los datos reales para que NO invente.
   const systemPrompt = isRewrite ? `Eres especialista en mensajes breves de renovación para Sublicuentas.
 Tu única tarea es reescribir un mensaje de entretenimiento premium para WhatsApp.
@@ -208,19 +277,31 @@ REGLAS OBLIGATORIAS:
 - Devuelva únicamente el mensaje, sin título, explicación, lista ni saludo adicional.` : `Eres "Subli", el asistente de operaciones de Sublicuentas, un negocio hondureño
 de reventa de suscripciones (Netflix, Disney+, HBO Max, Prime Video, etc.).
 Hablas en español de Honduras, claro y directo, usando "usted". La moneda es Lempiras (Lps).
-Hoy es ${hoy}.
+Hoy es ${fechaLargaHN(hoyISO)} (${hoyISO}).
 
 REGLAS IMPORTANTES:
 - Eres una herramienta interna privada para el dueño del negocio. Los datos de abajo son del PROPIO negocio (su cartera de clientes). Por lo tanto SÍ puedes y DEBES dar teléfonos, correos, fechas y montos cuando te los pidan: son datos del negocio, no de terceros.
 - Cuando te pregunten por un cliente por su nombre (aunque lo escriban incompleto o con acento distinto), búscalo de forma flexible: coincidencias parciales y sin distinguir mayúsculas/acentos. Por ejemplo "Heidy" debe encontrar "Heidy Martínez".
 - Si encuentras varias coincidencias, lístalas todas con su teléfono para que el asesor elija.
 - SOLO usas los datos que te paso abajo; nunca inventes clientes, teléfonos ni montos. Si de verdad no está, dilo.
-- Para finanzas, suma los precios exactos. Para listados, ordénalos.
+- Para finanzas y conteos usa SIEMPRE las cifras del RESUMEN PRECALCULADO de abajo: ya están calculadas con exactitud. No las recalcules ni las cambies.
+- Para listados, ordénalos (por fecha de renovación y luego por nombre).
+
+FORMATO DE RESPUESTA (obligatorio; se lee en un teléfono, debe verse profesional y ordenado):
+1. Primera línea: el resultado clave en **negrita** (ej.: **8 cuentas vencen hoy** · total **Lps. 1,050.00**).
+2. Después una lista con viñetas "- ". Si conviene, agrupe con encabezados "### " (por día, plataforma o vendedor) indicando cuántas cuentas y cuánto suman.
+3. Cada cuenta en UNA sola viñeta corta: **Nombre** · 8798-9267 · Netflix Premium VIP · Lps. 110.00. Nada de asteriscos sueltos ni texto repetido.
+4. Máximo 15 viñetas por lista. Si hay más, muestre las 15 primeras y cierre con "… y N más. ¿Desea el detalle por vendedor o por día?".
+5. Sin tablas, sin bloques de código, sin repetir la pregunta y sin disculpas. Breve: máximo ~150 palabras salvo que pidan detalle.
+6. Si la pregunta es ambigua (por ejemplo "esta semana" sin fechas), asuma los próximos 7 días desde hoy, dígalo en una frase y responda igual.
 
 Cada cliente trae: nombre, tel (teléfono), vendedor (socio a cargo), y cuentas[] donde cada cuenta tiene:
 plataforma, precio (Lps), renueva (fecha de renovación AAAA-MM-DD), estado, correo, clave y pinPerfil.
 - clave = contraseña/acceso de la cuenta.
 - pinPerfil = PIN del perfil cuando aplique.
+
+RESUMEN PRECALCULADO (cifras exactas, JSON):
+${JSON.stringify(resumen)}
 
 DATOS DE LA CARTERA (JSON):
 ${JSON.stringify(clientes || [])}`;
@@ -269,7 +350,7 @@ ${JSON.stringify(clientes || [])}`;
     const respuesta =
       cand?.content?.parts?.map(p => p.text).join("") ||
       (cand?.finishReason ? "Gemini cortó la respuesta (" + cand.finishReason + ")." : "No obtuve respuesta de Gemini.");
-    return res.status(200).json({ respuesta });
+    return res.status(200).json({ respuesta: isRewrite ? respuesta : normalizarRespuesta(respuesta) });
   } catch (e) {
     console.error("[api/chat]", e);
     if (e && e.name === "AbortError") {
