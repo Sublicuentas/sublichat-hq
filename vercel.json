@@ -123,7 +123,8 @@
       "includeFiles": "lib/**"
     },
     "api/sorteos.js": {
-      "includeFiles": "lib/**"
+      "includeFiles": "lib/**",
+      "maxDuration": 60
     },
     "api/finanzas.js": {
       "includeFiles": "lib/**"
