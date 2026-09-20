@@ -2374,18 +2374,22 @@ function pintar(ps){
   }).join("");
 }
 async function pedir(body){
-  matchResults.innerHTML=`<div class="empty"><span class="typing"><i></i><i></i><i></i></span></div>`;
+  matchResults.innerHTML=`<div class="empty"><span class="typing"><i></i><i></i><i></i></span><div id="matchWait" style="margin-top:8px;font-size:12px;opacity:.7">Cargando partidos…</div></div>`;
+  let seg=0; const tick=setInterval(()=>{seg++;const w=document.getElementById("matchWait");if(w)w.textContent="Cargando partidos… "+seg+" s";},1000);
   // Tiempo límite: antes, si el servidor no respondía, quedaban los puntos animados para siempre.
   const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),25000);
+  // Partidos es información pública: se pide SIN esperar la sesión de Firebase (la petición autenticada podía quedar esperando el token).
+  const red=typeof sublichatNativeFetch==="function"?sublichatNativeFetch:fetch;
+  const llamar=()=>red(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
   try{
-    const r=await fetch(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
+    let r; try{ r=await llamar(); }catch(e){ if(e&&e.name==="AbortError")throw e; r=await llamar(); } // un reintento si falló la red
     const j=await r.json();
-    if(j.error){matchResults.innerHTML=`<div class="empty">⚠️ ${j.error}${Array.isArray(j.detalle)&&j.detalle.length?` <small>(${j.detalle[0]})</small>`:""}</div>`;return;}
+    if(j.error){partidosCargados=false;matchResults.innerHTML=`<div class="empty">⚠️ ${j.error}${Array.isArray(j.detalle)&&j.detalle.length?` <small>(${j.detalle[0]})</small>`:""}</div>`;return;}
     pintar(j.partidos||[]);
     const nota=(j.partidos||[]).length&&j.soloProximos?"Hoy no hay partidos disponibles: se muestran los próximos eventos.":(j.parcial?"Algunas fuentes no respondieron a tiempo; puede faltar información."+(Array.isArray(j.detalle)&&j.detalle.length?" <small>("+j.detalle.slice(0,3).join(" · ")+")</small>":""):"");
     if(nota)matchResults.insertAdjacentHTML("afterbegin",`<div class="empty">ℹ️ ${nota}</div>`);
-  }catch(e){matchResults.innerHTML=`<div class="empty">⚠️ ${e&&e.name==="AbortError"?"Tardó demasiado en responder. Toque «Hoy» para reintentar.":"No pude cargar. Verificá /api/partidos en Vercel."}</div>`;}
-  finally{clearTimeout(timer);}
+  }catch(e){partidosCargados=false;matchResults.innerHTML=`<div class="empty">⚠️ ${e&&e.name==="AbortError"?"Tardó demasiado en responder. Toque «Hoy» para reintentar.":"No pude cargar. Verificá /api/partidos en Vercel."}</div>`;}
+  finally{clearTimeout(timer);clearInterval(tick);}
 }
 function buscarEquipo(text){ pedir({modo:"equipo", q:text}); }
 
@@ -6455,6 +6459,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     window.scrollTo({top:0,behavior:'smooth'});
     renderRBACAll();
     if(screen==='tickets') tkLoad();
+    if(screen==='partidos') initPartidos();
     if(screen==='catalogo-relojes'&&window.SublichatCatalogoRelojes)window.SublichatCatalogoRelojes.open();
     if(screen==='revendedores'&&window.SublichatRevendedores)window.SublichatRevendedores.open();
     if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
@@ -7022,7 +7027,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function tkTelegramField(t){const estado=String(t.estado||'abierto');if(estado==='resuelto')return {ok:t.telegramResolvedOk,info:t.telegramResolvedInfo,label:'el aviso de resuelto'};if(estado==='respondido')return {ok:t.telegramReplyOk,info:t.telegramReplyInfo,label:'el aviso de la respuesta'};if(estado==='proceso')return {ok:t.telegramProcessOk,info:t.telegramProcessInfo,label:'el aviso de "en proceso"'};return {ok:t.telegramOk,info:t.telegramInfo,label:'el aviso de creación'};}
   function tkImageHtml(url,alt='Evidencia'){return url?`<a class="tk-evidence" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="${esc(alt)}"><span>🔎 Ver evidencia completa</span></a>`:'';}
   function tkThreadHtml(t){
-    const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.por||tkRoleLabel(x.porRol))}${x.origen==='telegram'?' · Telegram':''}</b>${x.texto?`<span>${esc(x.texto)}</span>`:''}${tkImageHtml(x.imagenUrl,'Evidencia de respuesta')}<small>${esc(tkWhen(x.at))}</small></div>`).join('');
+    const thread=(Array.isArray(t.respuestas)?t.respuestas:[]).map(x=>`<div class="tk-msg"><b>${esc(x.origen==='telegram'?(x.por||tkRoleLabel(x.porRol)):(x.porRol?tkRoleLabel(x.porRol):(x.por||'')))}${x.origen==='telegram'?' · Telegram':' · Sublichat'}${x.paraLabel?` → ${esc(x.paraLabel)}`:''}</b>${x.texto?`<span>${esc(x.texto)}</span>`:''}${tkImageHtml(x.imagenUrl,'Evidencia de respuesta')}<small>${esc(tkWhen(x.at))}</small></div>`).join('');
     const done=String(t.estado||'')==='resuelto',resol=(done&&t.resolucion)?`<div class="tk-msg ok"><b>✅ Resuelto · ${esc(t.resueltoPor||tkRoleLabel(t.resueltoPorRol))}</b><span>${esc(t.resolucion)}</span><small>${esc(tkWhen(t.resueltoAt))}</small></div>`:'';
     return (thread||resol)?`<div class="tk-thread">${thread}${resol}</div>`:'';
   }
