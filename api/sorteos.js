@@ -618,14 +618,14 @@ async function collectHistoricalCandidates(db, draw, month = CARGA_AGOSTO_2026) 
         item.fecha_inicio, item.createdAt, item.created_at
       ], month)) mark({
         clientId: id, tipo: "compra", fuente: "fichas", evidenciaId: `servicio-${serviceIndex}`,
-        compraId: eventKey, servicioIndex, plataforma: item.plataforma, vendedor: vendor,
+        compraId: eventKey, servicioIndex: serviceIndex, plataforma: item.plataforma, vendedor: vendor,
         fechaOperacion: item.fechaCompra || item.fechaVenta || item.fechaContratacion || item.fechaInicio || item.fecha_inicio || item.createdAt || item.created_at
       });
       if (valuesContainHistoricalMonth([
         item.ultimaRenovacionAt, item.renovadoAt, item.fechaUltimaRenovacion
       ], month)) mark({
         clientId: id, tipo: "renovacion", fuente: "fichas", evidenciaId: `servicio-${serviceIndex}`,
-        compraId: eventKey, servicioIndex, plataforma: item.plataforma, vendedor: vendor,
+        compraId: eventKey, servicioIndex: serviceIndex, plataforma: item.plataforma, vendedor: vendor,
         fechaOperacion: item.ultimaRenovacionAt || item.renovadoAt || item.fechaUltimaRenovacion,
         fechaObjetivo: item.fechaRenovacion || item.renovacion || item.vence || item.fechaVencimiento
       });

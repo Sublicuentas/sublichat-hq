@@ -154,32 +154,60 @@ function telegramRoleKey(v) {
     .trim();
 }
 
-async function resolveTelegramChatId(db, role) {
-  const r = destinationKey(role);
-  const envId = clean(CHAT_IDS[r] || '', 80);
-  if (envId) return { chatId: envId, source: 'env' };
-  if (!db) return { chatId: '', source: 'missing' };
+const CORE_TELEGRAM_ROLES = new Set(['sublicuentas', 'relojes', 'geisell', 'magdiel']);
 
-  try {
-    const wanted = telegramRoleKey(r);
-    const snap = await db.collection('revendedores').get();
-    let found = null;
-    snap.forEach((doc) => {
-      if (found) return;
-      const data = doc.data() || {};
-      if (data.activo === false) return;
-      const aliases = [doc.id, data.nombre_norm, data.nombre, data.usuario, data.username]
-        .flatMap(value => { const full=telegramRoleKey(value); if(!full)return []; const first=full.split(/\s+/)[0]; return first&&first!==full?[full,first]:[full]; })
-        .filter(Boolean);
-      if (!aliases.includes(wanted)) return;
-      const tg = clean(data.telegramId || data.telegramID || data.userId || '', 80);
-      if (tg) found = tg;
+function telegramCanonRole(v) {
+  const k = telegramRoleKey(v);
+  return k === 'geissel' ? 'geisell' : k;
+}
+
+// Lee UNA sola vez el directorio de revendedores por envío. Antes se leía la
+// colección completa por cada destinatario (N lecturas de N documentos).
+// Coincidencia exacta primero; el primer nombre solo sirve si no hay exacta.
+async function loadRevendedoresTelegramIndex(db) {
+  const exact = new Map();
+  const first = new Map();
+  const snap = await db.collection('revendedores').get();
+  snap.forEach((doc) => {
+    const data = doc.data() || {};
+    if (data.activo === false) return;
+    const tg = clean(data.telegramId || data.telegramID || data.telegramChatId || data.chatId || data.userId || '', 80);
+    if (!tg) return;
+    [doc.id, data.nombre_norm, data.nombre, data.usuario, data.username].forEach((value) => {
+      const full = telegramCanonRole(value);
+      if (!full) return;
+      if (!exact.has(full)) exact.set(full, tg);
+      const spaced = String(value == null ? '' : value)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const firstName = telegramCanonRole(spaced.split(' ')[0] || '');
+      if (firstName && firstName !== full && !first.has(firstName)) first.set(firstName, tg);
     });
-    return found ? { chatId: found, source: 'revendedores' } : { chatId: '', source: 'missing' };
+  });
+  return { exact, first };
+}
+
+// Orden de resolución:
+//  - Equipo (sublicuentas, relojes, geisell, magdiel): variable de entorno primero.
+//  - Socios/vendedores: el ID guardado en su ficha (Firestore) manda; la variable
+//    TELEGRAM_CHAT_ID_<NOMBRE> solo es respaldo. Antes una variable vieja ganaba
+//    sobre el ID actualizado en la ficha y el aviso llegaba a otro chat.
+async function resolveTelegramChatId(getIndex, role) {
+  const r = destinationKey(role);
+  const envId = Object.prototype.hasOwnProperty.call(CHAT_IDS, r) ? clean(CHAT_IDS[r] || '', 80) : '';
+  if (envId && CORE_TELEGRAM_ROLES.has(r)) return { chatId: envId, source: 'env' };
+  try {
+    const idx = await getIndex();
+    const wanted = telegramCanonRole(r);
+    const hit = idx.exact.get(wanted) || idx.first.get(wanted);
+    if (hit) return { chatId: hit, source: 'revendedores' };
   } catch (e) {
     console.error('TELEGRAM_CHAT_RESOLVE_ERROR', r, e && e.message || e);
-    return { chatId: '', source: 'error' };
+    if (envId) return { chatId: envId, source: 'env' };
+    return { chatId: '', source: 'error', error: clean(e && e.message || 'Error leyendo revendedores', 240) };
   }
+  if (envId) return { chatId: envId, source: 'env' };
+  return { chatId: '', source: 'missing' };
 }
 
 
@@ -190,14 +218,28 @@ const REV_API_BASE_TICKETS = String(process.env.REV_API_BASE || 'https://sublicu
 let revTicketAdminToken = '';
 let revTicketAdminTokenAt = 0;
 const REV_TICKET_TOKEN_TTL = 5 * 60 * 60 * 1000;
+async function fetchWithTimeout(url, init, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw Object.assign(new Error('Render tardó demasiado en responder.'), { code: 'telegram_bridge_timeout' });
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function getRevTicketAdminToken(force = false) {
   if (!force && revTicketAdminToken && Date.now() - revTicketAdminTokenAt < REV_TICKET_TOKEN_TTL) return revTicketAdminToken;
   const usuario = String(process.env.REV_ADMIN_USER || '').trim();
   const password = String(process.env.REV_ADMIN_PASSWORD || '').trim();
   if (!usuario || !password) throw Object.assign(new Error('Faltan REV_ADMIN_USER / REV_ADMIN_PASSWORD en Vercel.'), { code:'rev_admin_env_missing' });
-  const r = await fetch(`${REV_API_BASE_TICKETS}/rev/login`, {
+  const r = await fetchWithTimeout(`${REV_API_BASE_TICKETS}/rev/login`, {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usuario,password})
-  });
+  }, 20000);
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.token) throw Object.assign(new Error(j.error || `Login Render HTTP ${r.status}`), { code:'rev_admin_login' });
   revTicketAdminToken = j.token;
@@ -206,12 +248,12 @@ async function getRevTicketAdminToken(force = false) {
 }
 async function sendTelegramViaRender(text, destinos, options = {}, forceLogin = false) {
   const token = await getRevTicketAdminToken(forceLogin);
-  const r = await fetch(`${REV_API_BASE_TICKETS}/rev/admin/tickets-telegram`, {
+  const r = await fetchWithTimeout(`${REV_API_BASE_TICKETS}/rev/admin/tickets-telegram`, {
     method:'POST',
     headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
     body:JSON.stringify({ text, destinos, imageUrl:options.imageUrl || '', replyMarkup:options.replyMarkup || undefined })
-  });
-  if (r.status === 401 && !forceLogin) {
+  }, 35000);
+  if ((r.status === 401 || r.status === 403) && !forceLogin) {
     revTicketAdminToken = '';
     return sendTelegramViaRender(text, destinos, options, true);
   }
@@ -243,67 +285,112 @@ async function sendTelegramTo(chatId, text, options = {}) {
   return { ok: true, messageId: Number(j.result && j.result.message_id) || 0 };
 }
 
-// Envía el mensaje a cada destinatario. Para vendedores/revendedores busca el
-// telegramId directamente en Firestore; así no hace falta crear una variable
-// de Vercel por cada socio nuevo.
+// Envía el mensaje a cada destinatario.
+// Camino principal: el bot de Render (puente). Si el puente falla, se intenta el
+// envío directo desde Vercel (necesita TELEGRAM_BOT_TOKEN). Reglas:
+//  - Un rol solo cuenta como entregado si Telegram aceptó el mensaje en SU chat.
+//  - La copia al chat admin de respaldo NUNCA cuenta como entrega.
+//  - Si el puente falló y el envío directo no es posible, el motivo real del
+//    puente llega hasta la pantalla en vez de un error genérico.
 async function sendTelegram(db, text, destinos, options = {}) {
   const requested = [...new Set((Array.isArray(destinos) ? destinos : []).map(destinationKey).filter(Boolean))];
   if (!requested.length) return { ok:false, skipped:true, reason:'sin_destinos', deliveredRoles:[], failedRoles:[] };
 
   try {
-  // Camino principal: el bot de Render. Ahí ya existe BOT_TOKEN y el mismo
-  // directorio de revendedores; además devuelve el motivo real si Telegram
-  // rechaza a una persona. Si el puente todavía no está desplegado, conservamos
-  // el envío directo de Vercel como compatibilidad temporal.
-  try {
+    let bridgeError = null;
     if (process.env.REV_ADMIN_USER && process.env.REV_ADMIN_PASSWORD) {
-      const viaRender = await sendTelegramViaRender(text, requested, options);
-      if (viaRender && Array.isArray(viaRender.results)) return viaRender;
+      try {
+        const viaRender = await sendTelegramViaRender(text, requested, options);
+        if (viaRender && Array.isArray(viaRender.results)) return { ...viaRender, via: 'render' };
+        bridgeError = { code: 'telegram_bridge_error', message: 'El puente de Render devolvió una respuesta inesperada.' };
+      } catch (e) {
+        console.error('TICKET_TELEGRAM_RENDER_BRIDGE', e && e.code || '', e && e.message || e);
+        if (e && e.code === 'telegram_bridge_timeout') {
+          // Render pudo haber enviado igual: no se reintenta por otro camino para no duplicar.
+          const msg = 'Render tardó demasiado en responder; el mensaje pudo haber salido. Revise antes de reintentar.';
+          return {
+            ok:false, via:'render', error:msg,
+            results: requested.map(role => ({ ok:false, reason:'telegram_bridge_timeout', error:msg, roles:[role] })),
+            deliveredRoles:[], failedRoles:requested.slice()
+          };
+        }
+        bridgeError = {
+          code: e && e.code === 'telegram_bridge_http' ? 'telegram_bridge_http' : 'telegram_bridge_error',
+          message: clean((e && e.message) || 'Error en el puente de Render', 240)
+        };
+      }
     }
+
+    const token = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || '';
+    let indexPromise = null;
+    const getIndex = () => (indexPromise ||= loadRevendedoresTelegramIndex(db));
+
+    const targets = new Map();
+    const results = [];
+    for (const role of requested) {
+      const resolved = await resolveTelegramChatId(getIndex, role);
+      if (!resolved.chatId) {
+        results.push({
+          ok:false, skipped:true,
+          reason: resolved.source === 'error' ? 'resolver_error' : 'chat_id_missing',
+          error: resolved.error || '', roles:[role], source: resolved.source
+        });
+        continue;
+      }
+      const cur = targets.get(resolved.chatId) || { roles: [], source: resolved.source };
+      cur.roles.push(role);
+      targets.set(resolved.chatId, cur);
+    }
+
+    if (!token) {
+      // Sin token en Vercel no hay envío directo posible.
+      for (const [, meta] of targets) {
+        results.push({
+          ok:false, skipped:true,
+          reason: bridgeError ? bridgeError.code : 'telegram_env_missing',
+          error: bridgeError ? bridgeError.message : '',
+          roles: meta.roles, source: meta.source
+        });
+      }
+      targets.clear();
+    }
+
+    const entries = [...targets.entries()];
+    for (let i = 0; i < entries.length; i += 10) {
+      const chunk = await Promise.all(entries.slice(i, i + 10).map(async ([chatId, meta]) => {
+        try {
+          return { ...(await sendTelegramTo(chatId, text, options)), chatId: String(chatId), roles: meta.roles, source: meta.source };
+        } catch (e) {
+          return { ok:false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), chatId: String(chatId), roles: meta.roles, source: meta.source };
+        }
+      }));
+      results.push(...chunk);
+    }
+
+    // Copia de aviso al admin cuando NADIE tiene Telegram resuelto. Es solo una
+    // alerta para el admin: no cuenta como entrega a ningún destinatario.
+    const fallbackChat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_AUDIT_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
+    if (token && fallbackChat && !results.some(r => r.ok)) {
+      const nota = `⚠️ <b>No se pudo entregar a:</b> ${telegramHTML(requested.join(', '))}\n\n`;
+      try {
+        const copy = await sendTelegramTo(fallbackChat, nota + text, options);
+        results.push({ ...copy, chatId: String(fallbackChat), roles: [], fallback: true });
+      } catch (e) {
+        results.push({ ok:false, error: clean(e && e.message || 'Error enviando copia al admin', 240), chatId: String(fallbackChat), roles: [], fallback: true });
+      }
+    }
+
+    const delivered = new Set();
+    results.filter(r => r.ok && !r.fallback).forEach(r => (r.roles || []).forEach(role => delivered.add(role)));
+    const deliveredRoles = requested.filter(role => delivered.has(role));
+    const failedRoles = requested.filter(role => !delivered.has(role));
+    const ok = failedRoles.length === 0;
+    const partial = deliveredRoles.length > 0 && failedRoles.length > 0;
+    const out = { ok, partial, results, deliveredRoles, failedRoles, via: 'vercel' };
+    if (bridgeError) out.bridgeError = bridgeError.message;
+    return out;
   } catch (e) {
-    console.error('TICKET_TELEGRAM_RENDER_BRIDGE', e && e.message || e);
-  }
-
-  const targets = new Map();
-  const results = [];
-
-  for (const role of requested) {
-    const resolved = await resolveTelegramChatId(db, role);
-    const chatId = resolved.chatId;
-    if (!chatId) {
-      results.push({ ok: false, skipped: true, reason: 'chat_id_missing', roles: [role] });
-      continue;
-    }
-    const old = targets.get(chatId) || { roles: [] };
-    old.roles.push(role);
-    targets.set(chatId, old);
-  }
-
-  const fallback = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_AUDIT_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
-  if (!targets.size && fallback) targets.set(fallback, { roles: requested.slice(), fallback: true });
-
-  const configuredResults = await Promise.all([...targets.entries()].map(async ([chatId, meta]) => {
-    try {
-      return { ...(await sendTelegramTo(chatId, text, options)), chatId: String(chatId), roles: meta.roles, fallback: meta.fallback === true };
-    } catch (e) {
-      return { ok: false, error: clean(e && e.message || 'Error de conexión con Telegram', 240), chatId: String(chatId), roles: meta.roles, fallback: meta.fallback === true };
-    }
-  }));
-  results.push(...configuredResults);
-
-  const delivered = new Set();
-  results.filter(r => r.ok).forEach(r => (r.roles || []).forEach(role => delivered.add(role)));
-  const deliveredRoles = requested.filter(role => delivered.has(role));
-  const failedRoles = requested.filter(role => !delivered.has(role));
-  const ok = requested.length ? failedRoles.length === 0 : results.some(r => r.ok);
-  const partial = deliveredRoles.length > 0 && failedRoles.length > 0;
-  if (!results.length) return { ok: false, skipped: true, reason: 'sin_destinos', deliveredRoles, failedRoles };
-  return { ok, partial, results, deliveredRoles, failedRoles };
-  } catch (e) {
-    // Red de seguridad: así el llamador siempre recibe una forma reconocible
-    // (con results/deliveredRoles/failedRoles) y el motivo real queda tanto en
-    // los logs de Vercel como en el campo "error" que ve el usuario, en vez de
-    // perderse en un "falló para X" sin ningún detalle.
+    // Red de seguridad: el llamador siempre recibe una forma reconocible.
     console.error('TICKET_TELEGRAM_SEND_UNCAUGHT', e && e.message || e);
     return { ok:false, error: clean((e && e.message) || 'Error inesperado al enviar por Telegram.', 240), results:[], deliveredRoles:[], failedRoles:requested };
   }
@@ -342,12 +429,15 @@ function safeTelegramInfo(info) {
     if (value.reason) out.reason = clean(value.reason, 80);
     if (value.error) out.error = clean(value.error, 240);
     if (value.fallback === true) out.fallback = true;
+    if (value.source) out.source = clean(value.source, 40);
     if (Array.isArray(value.roles)) out.roles = value.roles
       .map(destinationKey).filter(Boolean).slice(0, 100);
     return out;
   };
   const out = safeResult(info);
   if (info.partial === true) out.partial = true;
+  if (info.via) out.via = clean(info.via, 20);
+  if (info.bridgeError) out.bridgeError = clean(info.bridgeError, 240);
   if (Array.isArray(info.deliveredRoles)) out.deliveredRoles = info.deliveredRoles
     .map(destinationKey).filter(Boolean).slice(0, 100);
   if (Array.isArray(info.failedRoles)) out.failedRoles = info.failedRoles
@@ -696,11 +786,11 @@ async function responderTicket(db, body) {
     `Respondió: ${telegramHTML(entry.por)}`,
     respuesta ? telegramHTML(respuesta) : '📎 Evidencia adjunta'
   ].join('\n');
-  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { imageUrl, replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { imageUrl: imagenUrl, replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
   await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegramInfo }, { merge: true });
-  return { ok: true, id, imageUrl, telegramOk: !!telegram.ok, telegramInfo };
+  return { ok: true, id, imageUrl: imagenUrl, telegramOk: !!telegram.ok, telegramInfo };
 }
 
 module.exports = async function handler(req, res) {
