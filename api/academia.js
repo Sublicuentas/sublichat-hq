@@ -86,7 +86,25 @@ module.exports = async (req, res) => {
       const snap = await ref.get();
       const data = snap.exists ? snap.data() || {} : {};
       const progress = Array.isArray(data.progress) ? data.progress : [];
-      res.status(200).json({ ok: true, progress });
+      // avatar / mascota elegidos en la Academia (mismos números que usa la web; null = por defecto)
+      const avatar = Number.isInteger(data.avatar) ? data.avatar : null;
+      const mascot = Number.isInteger(data.mascot) ? data.mascot : null;
+      res.status(200).json({ ok: true, progress, avatar, mascot });
+      return;
+    }
+
+    if (accion === 'ajustes') {
+      const avatar = Number(body.avatar);
+      const mascot = Number(body.mascot);
+      const valid = (n) => Number.isInteger(n) && n >= 0 && n < 64;
+      if (!valid(avatar) || !valid(mascot)) {
+        res.status(400).json({ ok: false, error: 'Avatar o mascota inválidos.' });
+        return;
+      }
+      const snap = await ref.get();
+      const data = snap.exists ? snap.data() || {} : {};
+      await ref.set({ avatar, mascot, name: data.name || user.usuario || key, updatedAt: Date.now() }, { merge: true });
+      res.status(200).json({ ok: true, avatar, mascot });
       return;
     }
 
