@@ -68,14 +68,21 @@ export default async function handler(req, res) {
     return "Consultá en tu proveedor";
   };
 
+  // Caché de la instancia (sobrevive entre llamadas mientras la función esté tibia): última respuesta buena por URL.
+  const CACHE = (globalThis.__partidosCache = globalThis.__partidosCache || new Map());
+  const CACHE_FRESCO_MS = 10 * 60 * 1000, CACHE_VIEJO_MS = 6 * 60 * 60 * 1000;
   // Fuentes que no respondieron (se informa a las apps en `fallas` y en el log de Vercel).
   const fallas = [];
+  const enCache = [];
   const fuenteCorta = url => { const m = String(url).match(/\/sports\/([^?]+)/); return m ? m[1].replace(/\/scoreboard$/, "") : String(url).slice(0, 60); };
   // fetch con timeout y UN reintento: nunca cuelga la función. Antes un timeout de 6 s o un 429/5xx
   // dejaba la liga vacía en silencio y "Hoy" caía a los próximos eventos (UFC/F1) sin partidos del día.
   async function jget(url, opt = {}) {
     const ms = opt.ms || 10000;
     const tries = opt.tries || 2;
+    const usaCache = !opt.headers && !opt.allowNotOk;
+    const hit = usaCache ? CACHE.get(url) : null;
+    if (hit && Date.now() - hit.t < CACHE_FRESCO_MS) return hit.d;
     for (let n = 1; n <= tries; n++) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), ms);
@@ -84,20 +91,23 @@ export default async function handler(req, res) {
         if (!r.ok && !opt.allowNotOk) {
           console.error("PARTIDOS_HTTP", r.status, url.slice(0, 140));
           const reintentable = r.status === 429 || r.status >= 500;
-          if (reintentable && n < tries) { await new Promise(x => setTimeout(x, 500)); continue; }
+          if (reintentable && n < tries) { await new Promise(x => setTimeout(x, 400)); continue; }
           if (r.status !== 404) fallas.push(fuenteCorta(url) + " HTTP " + r.status); // 404 = liga sin calendario, no es falla
-          return null;
+          break;
         }
-        return await r.json();
+        const d = await r.json();
+        if (usaCache) CACHE.set(url, { t: Date.now(), d });
+        return d;
       } catch (e) {
         console.error("PARTIDOS_FETCH", (e && e.name) || "error", url.slice(0, 140));
-        if (n < tries) { await new Promise(x => setTimeout(x, 500)); continue; }
+        if (n < tries) { await new Promise(x => setTimeout(x, 400)); continue; }
         fallas.push(fuenteCorta(url) + " " + ((e && e.name === "AbortError") ? "tiempo agotado" : "sin respuesta"));
-        return null;
       } finally {
         clearTimeout(t);
       }
     }
+    // Falló: se usa lo último bueno (si es de las últimas 6 h) y se avisa que es caché.
+    if (hit && Date.now() - hit.t < CACHE_VIEJO_MS) { enCache.push(fuenteCorta(url)); return hit.d; }
     return null;
   }
 
@@ -190,6 +200,12 @@ export default async function handler(req, res) {
     };
   }
 
+  // Un solo día: respuesta chica (ESPN la sirve rápido). "Hoy" usa esto en vez de rangos de varios días con limit=300.
+  async function espnScoreboardDia(path, ymd) {
+    const d = await jget(`${ESPN_BASE}/${path}/scoreboard?dates=${ymd}`, { ms: 7000, tries: 2 });
+    return (d && d.events) || [];
+  }
+
   async function cargarNBA(dias) {
     const evs = await espnScoreboardRango("basketball/nba", dias);
     return evs.map(ev => parseEspnGeneric(ev, "NBA", canalDe("nba"))).filter(Boolean);
@@ -266,6 +282,27 @@ export default async function handler(req, res) {
     await Promise.race([
       Promise.all(jobs),
       new Promise(r => { timer = setTimeout(() => { cargaParcial = true; r(); }, TOPE_MS); })
+    ]);
+    clearTimeout(timer);
+    return acum.filter(x => x && x.dObj && !isNaN(x.dObj));
+  }
+
+  // "Hoy": todas las fuentes, SOLO el día de hoy (hora Honduras). Tope global propio.
+  async function cargarHoy(ymd) {
+    const acum = [];
+    const jobs = [];
+    const add = (p, fn) => jobs.push(Promise.resolve(p).then(evs => { acum.push(...evs.map(fn).filter(Boolean)); }).catch(e => { fallas.push("datos de ESPN ilegibles: " + ((e && e.message) || "error")); }));
+    for (const lg of LIGAS_FUTBOL) add(espnScoreboardDia("soccer/" + lg.slug, ymd), ev => parseEspnGeneric(ev, lg.nombre, canalDe(lg.nombre)));
+    add(espnScoreboardDia("basketball/nba", ymd), ev => parseEspnGeneric(ev, "NBA", canalDe("nba")));
+    add(espnScoreboardDia("baseball/mlb", ymd), ev => parseEspnGeneric(ev, "MLB", canalDe("mlb")));
+    add(espnScoreboardDia("mma/ufc", ymd), ev => parseEspnGeneric(ev, "UFC" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("ufc")));
+    add(espnScoreboardDia("tennis/atp", ymd), ev => parseEspnGeneric(ev, "ATP" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis")));
+    add(espnScoreboardDia("tennis/wta", ymd), ev => parseEspnGeneric(ev, "WTA" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis")));
+    add(espnScoreboardDia("racing/f1", ymd), ev => parseEspnF1(ev, canalDe("f1")));
+    let timer;
+    await Promise.race([
+      Promise.all(jobs),
+      new Promise(r => { timer = setTimeout(() => { cargaParcial = true; r(); }, Math.min(TOPE_MS, 9000)); })
     ]);
     clearTimeout(timer);
     return acum.filter(x => x && x.dObj && !isNaN(x.dObj));
@@ -367,7 +404,14 @@ export default async function handler(req, res) {
 
     // ===== HOY (pestaña por defecto) — mezcla todo =====
     const hoy = diaHN(new Date());
-    const todo = await cargarTodo();
+    const hoyDia = await cargarHoy(hoy.replace(/-/g, ""));
+    let todo = hoyDia;
+    if (!hoyDia.some(x => diaHN(x.dObj) === hoy)) {
+      // Hoy no hay nada (o no cargó): se buscan los próximos días para no dejar la pantalla en blanco.
+      const proximos = await cargarTodo();
+      const vistos = new Set();
+      todo = [...hoyDia, ...proximos].filter(x => { const k = x.p.liga + "|" + x.p.local + "|" + x.p.visita + "|" + x.dObj.getTime(); if (vistos.has(k)) return false; vistos.add(k); return true; });
+    }
     if (!todo.length && fallas.length) {
       // Todas las fuentes fallaron: se dice claro (antes quedaba una lista vacía que parecía "hoy no hay partidos").
       console.error("PARTIDOS_SIN_DATOS", fallas.slice(0, 8).join(" | "));
@@ -384,7 +428,8 @@ export default async function handler(req, res) {
     }
     // soloProximos = hoy no se pudo cargar/no hay partidos: las apps lo muestran como "Próximos", no como "Hoy".
     if (fallas.length) console.error("PARTIDOS_FUENTES_FALLIDAS", fallas.length, fallas.slice(0, 8).join(" | "));
-    return res.status(200).json({ partidos: lista.map(x => x.p), hoy, soloProximos: !hoyList.length, parcial: cargaParcial || fallas.length > 0, fallas: fallas.length });
+    const detalle = [...fallas.slice(0, 5), ...(enCache.length ? ["se usó la última respuesta guardada de " + enCache.length + " fuente(s)"] : [])];
+    return res.status(200).json({ partidos: lista.map(x => x.p), hoy, soloProximos: !hoyList.length, parcial: cargaParcial || fallas.length > 0, fallas: fallas.length, detalle });
 
   } catch (e) {
     console.error(e);
