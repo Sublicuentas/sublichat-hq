@@ -250,6 +250,7 @@ async function sendTelegram(db, text, destinos, options = {}) {
   const requested = [...new Set((Array.isArray(destinos) ? destinos : []).map(destinationKey).filter(Boolean))];
   if (!requested.length) return { ok:false, skipped:true, reason:'sin_destinos', deliveredRoles:[], failedRoles:[] };
 
+  try {
   // Camino principal: el bot de Render. Ahí ya existe BOT_TOKEN y el mismo
   // directorio de revendedores; además devuelve el motivo real si Telegram
   // rechaza a una persona. Si el puente todavía no está desplegado, conservamos
@@ -298,6 +299,14 @@ async function sendTelegram(db, text, destinos, options = {}) {
   const partial = deliveredRoles.length > 0 && failedRoles.length > 0;
   if (!results.length) return { ok: false, skipped: true, reason: 'sin_destinos', deliveredRoles, failedRoles };
   return { ok, partial, results, deliveredRoles, failedRoles };
+  } catch (e) {
+    // Red de seguridad: así el llamador siempre recibe una forma reconocible
+    // (con results/deliveredRoles/failedRoles) y el motivo real queda tanto en
+    // los logs de Vercel como en el campo "error" que ve el usuario, en vez de
+    // perderse en un "falló para X" sin ningún detalle.
+    console.error('TICKET_TELEGRAM_SEND_UNCAUGHT', e && e.message || e);
+    return { ok:false, error: clean((e && e.message) || 'Error inesperado al enviar por Telegram.', 240), results:[], deliveredRoles:[], failedRoles:requested };
+  }
 }
 
 async function saveTelegramMessageLinks(db, ticketId, telegram) {
