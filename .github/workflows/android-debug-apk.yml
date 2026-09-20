@@ -1,4 +1,4 @@
-name: Sublicuentas Android Debug APK
+name: Sublichat Android Debug APK
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   build-debug-apk:
-    name: Build Sublicuentas 1.0 Debug APK
+    name: Build Sublichat 1.0 Debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -135,16 +135,16 @@ jobs:
           mkdir -p artifacts
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK" || { echo "ERROR: no se generó $APK"; exit 1; }
-          cp "$APK" artifacts/Sublicuentas-1.0-debug.apk
-          sha256sum artifacts/Sublicuentas-1.0-debug.apk > artifacts/Sublicuentas-1.0-debug.sha256
+          cp "$APK" artifacts/Sublichat-1.0-debug.apk
+          sha256sum artifacts/Sublichat-1.0-debug.apk > artifacts/Sublichat-1.0-debug.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Sublicuentas-1.0-debug
+          name: Sublichat-1.0-debug
           path: |
-            mobile/artifacts/Sublicuentas-1.0-debug.apk
-            mobile/artifacts/Sublicuentas-1.0-debug.sha256
+            mobile/artifacts/Sublichat-1.0-debug.apk
+            mobile/artifacts/Sublichat-1.0-debug.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -152,10 +152,10 @@ jobs:
         if: always()
         run: |
           {
-            echo '## Sublicuentas Android Debug'
+            echo '## Sublichat Android Debug'
             echo ''
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo '- Package: `com.sublicuentas.app`'
             echo "- Versión: `1.0` / debug build `${GITHUB_RUN_NUMBER}`"
-            echo '- Artefacto: `Sublicuentas-1.0-debug.apk`'
+            echo '- Artefacto: `Sublichat-1.0-debug.apk`'
           } >> "$GITHUB_STEP_SUMMARY"
