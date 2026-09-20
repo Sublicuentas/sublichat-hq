@@ -13,4 +13,7 @@ test('api/academia.js existe y comparte academia_progreso con la Academia web', 
   assert.match(web, /ACA_COL\s*=\s*'academia_progreso'/);
   assert.match(api, /accion === 'obtener'/);
   assert.match(api, /accion === 'completar'/);
+  // avatar y mascota (los mismos números que guarda la Academia web) viajan a la app
+  assert.match(api, /accion === 'ajustes'/);
+  assert.match(api, /res\.status\(200\)\.json\(\{ ok: true, progress, avatar, mascot \}\)/);
 });
