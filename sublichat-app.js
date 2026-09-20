@@ -48,6 +48,79 @@ async function sublichatCurrentAuthUser(){
 // sorteos, portal) pueden solicitar el mismo token sin duplicar Firebase Auth.
 window.sublichatCurrentAuthUser = sublichatCurrentAuthUser;
 
+/* SUBLI-MD:START · respuestas de Subli en Markdown seguro (mismo código que la app Android: src/markdown.js) */
+const sbEscHtml = (v = '') => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+function sbInlineMd(raw) {
+  let s = sbEscHtml(raw);
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_\n]+?)__/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[\s(])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[\s(])_([^_\s][^_\n]*?)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
+  return s.replace(/\*\*/g, ''); // asteriscos dobles sueltos que quedaron sin pareja
+}
+
+function sbRenderList(list, maxItems) {
+  const tag = list.type;
+  const li = list.items.map(t => `<li>${sbInlineMd(t)}</li>`);
+  if (li.length <= maxItems + 3) return `<${tag}>${li.join('')}</${tag}>`;
+  const rest = li.length - maxItems;
+  return `<${tag}>${li.slice(0, maxItems).join('')}</${tag}><details class="md-more"><summary>Ver ${rest} más</summary><${tag}${tag === 'ol' ? ` start="${maxItems + 1}"` : ''}>${li.slice(maxItems).join('')}</${tag}></details>`;
+}
+
+const sbMdCells = row => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+
+function sbMdToHtml(text, { maxItems = 15 } = {}) {
+  const src = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+  if (!src) return '';
+  const lines = src.split('\n');
+  const out = [];
+  let para = [];
+  let list = null;
+  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(sbInlineMd).join('<br>')}</p>`); para = []; } };
+  const flushList = () => { if (list) { out.push(sbRenderList(list, maxItems)); list = null; } };
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    const h = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (h) { flushPara(); flushList(); out.push(`<h4 class="md-h">${sbInlineMd(h[2])}</h4>`); continue; }
+    if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { flushPara(); flushList(); out.push('<hr>'); continue; }
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i + 1] || '') && /-/.test(lines[i + 1] || '')) {
+      flushPara(); flushList();
+      const head = sbMdCells(line); const rows = []; let j = i + 2;
+      while (j < lines.length && /^\s*\|.*\|\s*$/.test(lines[j])) { rows.push(sbMdCells(lines[j])); j += 1; }
+      out.push(`<div class="md-table"><table><thead><tr>${head.map(c => `<th>${sbInlineMd(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${sbInlineMd(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      i = j - 1; continue;
+    }
+    const ul = line.match(/^\s*[-*•·]\s+(.+)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (ul || ol) {
+      flushPara();
+      const type = ul ? 'ul' : 'ol';
+      if (list && list.type !== type) flushList();
+      list = list || { type, items: [] };
+      list.items.push((ul || ol)[1]);
+      continue;
+    }
+    flushList();
+    para.push(line.trim());
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
+
+function sbMdToPlain(text) {
+  return String(text ?? '').replace(/\r\n?/g, '\n')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*([-*•·])\s+/gm, '• ')
+    .replace(/\*\*([^*\n]+?)\*\*/g, '$1').replace(/__([^_\n]+?)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1').replace(/\*\*/g, '')
+    .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, '').replace(/\|/g, ' · ')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
+/* SUBLI-MD:END */
+
 window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
   const rawUrl = typeof input === "string"
     ? input
@@ -3110,7 +3183,7 @@ async function send(){
   try{
     const r=await fetch(CONFIG.chatEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pregunta:text,hoy:today.toISOString().slice(0,10),clientes:contexto})});
     const j=await r.json();
-    typing.remove(); const resp=j.respuesta||j.error||"Sin respuesta."; add(resp,"bot"); hablar(resp);
+    typing.remove(); const resp=j.respuesta||j.error||"Sin respuesta."; const conFormato=Boolean(j.respuesta); add(conFormato?sbMdToHtml(resp):sbEscHtml(resp),conFormato?"bot md":"bot note"); hablar(conFormato?sbMdToPlain(resp):resp);
   }catch(e){typing.remove();add("⚠️ No pude contactar a Gemini. Verificá <b>/api/chat</b> en Vercel.","bot note");}
   btn.disabled=false;
 }

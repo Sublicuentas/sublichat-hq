@@ -327,6 +327,25 @@
   .botline .bav img{width:155%;height:155%;object-fit:cover;object-position:50% 5%}
   .msg.bot{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:5px}
   .msg.bot.note{border-color:var(--warn);color:#ffd98a}
+  /* Respuestas de Subli en Markdown: negritas, listas y encabezados ordenados (antes se veían los asteriscos) */
+  .msg.md{white-space:normal;max-width:100%;overflow-wrap:anywhere}
+  .msg.md p{margin:0 0 8px}.msg.md p:last-child{margin-bottom:0}
+  .msg.md strong{font-weight:800}
+  .msg.md code{padding:1px 6px;border-radius:6px;background:rgba(127,127,127,.18);font-size:12.5px}
+  .msg.md .md-h{margin:12px 0 6px;padding:6px 10px;border-radius:10px;background:rgba(56,140,255,.16);font-size:13px;font-weight:800;line-height:1.25}
+  .msg.md .md-h:first-child{margin-top:0}
+  .msg.md ul,.msg.md ol{margin:0 0 9px;padding:0;list-style:none;display:grid;gap:5px}
+  .msg.md ol{counter-reset:md}
+  .msg.md li{position:relative;padding:7px 10px 7px 24px;border-radius:10px;background:rgba(127,127,127,.09);border:1px solid var(--line);font-size:13.5px;line-height:1.4}
+  .msg.md ul li:before{content:'';position:absolute;left:10px;top:14px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .msg.md ol li{counter-increment:md}
+  .msg.md ol li:before{content:counter(md);position:absolute;left:8px;top:7px;font-weight:800;color:var(--accent);font-size:12.5px}
+  .msg.md hr{border:0;border-top:1px solid var(--line);margin:9px 0}
+  .msg.md details.md-more summary{cursor:pointer;padding:8px 11px;border-radius:10px;background:rgba(56,140,255,.16);font-weight:700;font-size:13px;list-style:none}
+  .msg.md details.md-more summary::-webkit-details-marker{display:none}
+  .msg.md details.md-more[open] summary{margin-bottom:6px}
+  .msg.md .md-table{overflow-x:auto;margin:0 0 9px}.msg.md table{border-collapse:collapse;font-size:12.5px;min-width:100%}
+  .msg.md th,.msg.md td{padding:6px 8px;border:1px solid var(--line);text-align:left}.msg.md th{font-weight:800;background:rgba(127,127,127,.12)}
   .input-row{flex:none;display:flex;gap:10px;padding:11px 0 4px;background:var(--bg)}
   .input-row input{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;color:var(--txt);font-family:var(--fb);font-size:14px;outline:none;box-shadow:var(--sh)}
   .input-row input:focus{border-color:var(--accent)}
