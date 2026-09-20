@@ -113,7 +113,6 @@ async function availableRecipients(db) {
   const map = new Map([
     ['relojes', { key: 'relojes', label: 'Relojes', kind: 'equipo' }],
     ['geisell', { key: 'geisell', label: 'Geisell', kind: 'equipo' }],
-    ['magdiel', { key: 'magdiel', label: 'Magdiel', kind: 'equipo' }],
   ]);
   try {
     const snap = await db.collection('revendedores').get();
