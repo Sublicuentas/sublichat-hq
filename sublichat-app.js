@@ -2382,7 +2382,7 @@ async function pedir(body){
     const j=await r.json();
     if(j.error){matchResults.innerHTML=`<div class="empty">⚠️ ${j.error}${Array.isArray(j.detalle)&&j.detalle.length?` <small>(${j.detalle[0]})</small>`:""}</div>`;return;}
     pintar(j.partidos||[]);
-    const nota=(j.partidos||[]).length&&j.soloProximos?"Hoy no hay partidos disponibles: se muestran los próximos eventos.":(j.parcial?"Algunas fuentes no respondieron a tiempo; puede faltar información.":"");
+    const nota=(j.partidos||[]).length&&j.soloProximos?"Hoy no hay partidos disponibles: se muestran los próximos eventos.":(j.parcial?"Algunas fuentes no respondieron a tiempo; puede faltar información."+(Array.isArray(j.detalle)&&j.detalle.length?" <small>("+j.detalle.slice(0,3).join(" · ")+")</small>":""):"");
     if(nota)matchResults.insertAdjacentHTML("afterbegin",`<div class="empty">ℹ️ ${nota}</div>`);
   }catch(e){matchResults.innerHTML=`<div class="empty">⚠️ ${e&&e.name==="AbortError"?"Tardó demasiado en responder. Toque «Hoy» para reintentar.":"No pude cargar. Verificá /api/partidos en Vercel."}</div>`;}
   finally{clearTimeout(timer);}
