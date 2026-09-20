@@ -2763,7 +2763,13 @@ const PLATS_DISPONIBLES=[
 const VENDEDORES_SERVICIO=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
 const VENDEDORES_SERVICIO_TEL={relojes:"32126332",sublicuentas:"89464277","sublicuentas 2":"89464328",yami:"96877246",jimena:"88501036",heber:"32174922",abner:"94306551",manuel:"87989267"};
 function vendedorServicioSesion(){
-  const usuario=clienteSearchNorm(typeof currentUser==="function"?currentUser():"");
+  // `currentUser` vive dentro de otro alcance (IIFE) y aquí nunca existía: siempre
+  // devolvía "" y el vendedor no se preseleccionaba. Se lee la misma sesión directo.
+  let sesionUsuario="";
+  for(const k of ["sublichat_user","subli_usuario","usuario","subli_user","active_user"]){
+    try{const v=localStorage.getItem(k);if(v&&String(v).trim()){sesionUsuario=String(v).trim().toLowerCase();break;}}catch(_){}
+  }
+  const usuario=clienteSearchNorm(sesionUsuario);
   if(["sublicuentas","naara"].includes(usuario))return "Sublicuentas";
   if(["relojes","libni","daniela","finanzas"].includes(usuario))return "Relojes";
   if(usuario==="geissel"||usuario==="geisell")return "Geisell";
@@ -6992,12 +6998,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       if(reason==='imagen_no_disponible')return 'Telegram no pudo abrir la imagen adjunta';
       if(reason==='resolver_error')return 'no se pudo resolver su Telegram en la base';
       if(reason==='telegram_env_missing')return 'el bot no está configurado en este servidor';
-      if(reason==='telegram_bridge_error'||reason==='telegram_bridge_http')return 'falló el puente con el bot de Render';
+      if(reason==='telegram_bridge_timeout')return 'Render tardó demasiado; el mensaje pudo haber salido, revise antes de reintentar';
+      if(reason==='telegram_bridge_error'||reason==='telegram_bridge_http')return 'falló el puente con el bot de Render'+(err?' ('+err+')':'');
       return err||reason||'error desconocido';};
     if(info.skipped&&info.reason==='sin_destinos')return 'no hay destinatarios para enviar';
     const entregados=(Array.isArray(info.deliveredRoles)?info.deliveredRoles:[]).map(tkRoleLabel),fallidos=(Array.isArray(info.failedRoles)?info.failedRoles:[]).map(tkRoleLabel),results=Array.isArray(info.results)?info.results:[];
     const detalles=[];results.filter(r=>!r.ok).forEach(r=>{const roles=(Array.isArray(r.roles)?r.roles:[]).map(tkRoleLabel);detalles.push(`${roles.join(' / ')||'Destinatario'}: ${reasonText(r)}`);});
     const partes=[];if(entregados.length)partes.push('llegó a '+entregados.join(', '));if(fallidos.length)partes.push('falló para '+fallidos.join(', '));if(detalles.length)partes.push(detalles.join(' · '));else if(!results.length&&(info.error||info.reason))partes.push(reasonText(info));return partes.join('. ')||reasonText(info);
+  }
+  function tkEntregadosTexto(info){
+    const list=(info&&Array.isArray(info.deliveredRoles)?info.deliveredRoles:[]).map(tkRoleLabel);
+    if(!list.length)return '';
+    return ' · llegó a '+(list.length>6?list.slice(0,6).join(', ')+' y '+(list.length-6)+' más':list.join(', '));
   }
   function tkTelegramField(t){const estado=String(t.estado||'abierto');if(estado==='resuelto')return {ok:t.telegramResolvedOk,info:t.telegramResolvedInfo,label:'el aviso de resuelto'};if(estado==='respondido')return {ok:t.telegramReplyOk,info:t.telegramReplyInfo,label:'el aviso de la respuesta'};if(estado==='proceso')return {ok:t.telegramProcessOk,info:t.telegramProcessInfo,label:'el aviso de "en proceso"'};return {ok:t.telegramOk,info:t.telegramInfo,label:'el aviso de creación'};}
   function tkImageHtml(url,alt='Evidencia'){return url?`<a class="tk-evidence" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="${esc(alt)}"><span>🔎 Ver evidencia completa</span></a>`:'';}
@@ -7043,13 +7055,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function tkRemovePhoto(kind){if(kind==='ticket')tk.formImage='';else if(kind==='notice')tk.noticeImage='';else tk.replyImage='';renderTickets(true);}
   async function tkCreate(){
     const g=id=>document.getElementById(id),titulo=((g('tkTitulo')?.value)||'').trim(),detalle=((g('tkDetalle')?.value)||'').trim(),destino=(g('tkDestino')?.value)||tkDefaultDest(),prioridad=(g('tkPrioridad')?.value)||'normal';if(!titulo||!detalle){mostrarToast('Escriba asunto y mensaje.');return;}tk.status='Enviando ticket…';tkShowStatus();
-    try{const j=await tkApi({accion:'crear',titulo,detalle,destino,prioridad,seccion:'tickets',imagen:tk.formImage||''});tk.formTitulo='';tk.formDetalle='';tk.formImage='';tk.status=j.telegramOk===false?'✅ Ticket guardado; Telegram no completó todos los destinatarios.':'✅ Ticket enviado con evidencia.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
+    try{const j=await tkApi({accion:'crear',titulo,detalle,destino,prioridad,seccion:'tickets',imagen:tk.formImage||''});tk.formTitulo='';tk.formDetalle='';tk.formImage='';tk.status=j.telegramOk===false?'✅ Ticket guardado. ⚠️ Telegram: '+tkTelegramMotivo(j.telegramInfo):'✅ Ticket enviado'+tkEntregadosTexto(j.telegramInfo)+'.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
   }
   async function tkCreateNotice(){
     if(tkRole()!=='sublicuentas'){mostrarToast('Solo Sublicuentas puede publicar avisos.');return;}
     const titulo=(document.getElementById('tkAvisoTitulo')?.value||tk.noticeTitulo||'').trim(),detalle=(document.getElementById('tkAvisoDetalle')?.value||tk.noticeDetalle||'').trim(),delivery=tkNoticeDelivery();
     if(!titulo||!detalle){mostrarToast('Escriba el título y el contenido del aviso.');return;}if(!delivery.destinos.length){mostrarToast('Seleccione al menos un destinatario para el aviso.');return;}tk.status='Publicando aviso…';tkShowStatus();
-    try{const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos',imagen:tk.noticeImage||''},delivery));tk.noticeImage='';tk.noticeTitulo='';tk.noticeDetalle='';tk.noticeMode='all';tk.noticeDestinos=[];tk.status=j.telegramOk===false?'✅ Aviso guardado. Telegram: '+tkTelegramMotivo(j.telegramInfo):`✅ Aviso enviado a ${delivery.destinos.length} destinatario${delivery.destinos.length===1?'':'s'}.`;mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
+    try{const j=await tkApi(Object.assign({accion:'crear',tipo:'aviso',titulo:'AVISO · '+titulo,detalle,prioridad:'alta',seccion:'avisos',imagen:tk.noticeImage||''},delivery));tk.noticeImage='';tk.noticeTitulo='';tk.noticeDetalle='';tk.noticeMode='all';tk.noticeDestinos=[];tk.status=j.telegramOk===false?'✅ Aviso guardado. Telegram: '+tkTelegramMotivo(j.telegramInfo):`✅ Aviso enviado${tkEntregadosTexto(j.telegramInfo)||' a '+delivery.destinos.length+' destinatario'+(delivery.destinos.length===1?'':'s')}.`;mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}
   }
   async function tkRetryTelegram(id){if(!id)return;tk.status='Reintentando Telegram…';tkShowStatus();try{const j=await tkApi({accion:'reenviar_telegram',id});tk.status=j.telegramOk===false?'⚠️ Telegram: '+tkTelegramMotivo(j.telegramInfo):'✅ Reenviado por Telegram.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}}
   async function tkSend(id){const txt=((document.getElementById('tkReplyText')?.value)||tk.replyText||'').trim();if(!txt&&!tk.replyImage){mostrarToast('Escriba la respuesta o adjunte una foto.');return;}tk.status='Enviando respuesta…';tkShowStatus();try{await tkApi({accion:'responder',id,respuesta:txt,imagen:tk.replyImage||''});tk.replyFor='';tk.replyText='';tk.replyImage='';tk.status='✅ Respuesta enviada.';mostrarToast(tk.status);tk.loaded=false;await tkLoad();}catch(e){mostrarToast('⚠️ '+e.message);tkErr(e.message);}}

@@ -129,6 +129,9 @@
     },
     "api/finanzas.js": {
       "includeFiles": "lib/**"
+    },
+    "api/tickets.js": {
+      "maxDuration": 60
     }
   }
 }
