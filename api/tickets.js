@@ -673,8 +673,36 @@ async function retryTelegramTicket(db, body) {
   if (clean(body.rol, 40).toLowerCase() !== 'sublicuentas' && !canAccessTicket(old, body.rol)) {
     return { status: 403, json: { ok: false, error: 'No tiene permiso para reenviar este aviso.' } };
   }
-  const telegram = await sendTelegram(db, creationTelegramMessage(old), old.destinos, { imageUrl:old.imagenUrl||'', replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
-  await saveTelegramMessageLinks(db, id, telegram);
+  // Reintento solo para quienes NO recibieron el mensaje original: reenviar a todos
+  // duplicaba el aviso a los que sí lo habían recibido (envíos parciales).
+  const oldDest = [...new Set((Array.isArray(old.destinos) ? old.destinos : []).map(destinationKey).filter(Boolean))];
+  const prev = old.telegramInfo && typeof old.telegramInfo === 'object' ? old.telegramInfo : {};
+  const prevResults = Array.isArray(prev.results) ? prev.results : [];
+  const prevDelivered = new Set();
+  if (prevResults.some(r => r && r.fallback === true)) {
+    // Registros antiguos: la copia al admin se contaba como entrega a todos. Solo se confía en los resultados reales.
+    prevResults.filter(r => r && r.ok === true && r.fallback !== true)
+      .forEach(r => (Array.isArray(r.roles) ? r.roles : []).forEach(role => prevDelivered.add(destinationKey(role))));
+  } else {
+    (Array.isArray(prev.deliveredRoles) ? prev.deliveredRoles : []).forEach(role => prevDelivered.add(destinationKey(role)));
+  }
+  const pending = oldDest.filter(role => !prevDelivered.has(role));
+  const targets = pending.length ? pending : oldDest;
+  const sent = await sendTelegram(db, creationTelegramMessage(old), targets, { imageUrl:old.imagenUrl||'', replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message, deliveredRoles: [], failedRoles: targets.slice() }));
+  await saveTelegramMessageLinks(db, id, sent);
+  const keepPrev = pending.length ? oldDest.filter(role => prevDelivered.has(role)) : [];
+  const deliveredRoles = [...new Set([...keepPrev, ...(Array.isArray(sent.deliveredRoles) ? sent.deliveredRoles : [])])];
+  const failedRoles = oldDest.filter(role => !deliveredRoles.includes(role));
+  const telegram = {
+    ...sent,
+    deliveredRoles, failedRoles,
+    ok: oldDest.length ? failedRoles.length === 0 : !!sent.ok,
+    partial: deliveredRoles.length > 0 && failedRoles.length > 0,
+    results: [
+      ...(pending.length ? prevResults.filter(r => r && r.ok === true && r.fallback !== true) : []),
+      ...(Array.isArray(sent.results) ? sent.results : [])
+    ]
+  };
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({
     telegramOk: !!telegram.ok,
