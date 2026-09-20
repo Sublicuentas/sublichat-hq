@@ -121,6 +121,12 @@
     },
     "api/renovar.js": {
       "includeFiles": "lib/**"
+    },
+    "api/sorteos.js": {
+      "includeFiles": "lib/**"
+    },
+    "api/finanzas.js": {
+      "includeFiles": "lib/**"
     }
   }
 }
