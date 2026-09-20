@@ -2375,12 +2375,17 @@ function pintar(ps){
 }
 async function pedir(body){
   matchResults.innerHTML=`<div class="empty"><span class="typing"><i></i><i></i><i></i></span></div>`;
+  // Tiempo límite: antes, si el servidor no respondía, quedaban los puntos animados para siempre.
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),25000);
   try{
-    const r=await fetch(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const r=await fetch(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
     const j=await r.json();
-    if(j.error){matchResults.innerHTML=`<div class="empty">⚠️ ${j.error}</div>`;return;}
+    if(j.error){matchResults.innerHTML=`<div class="empty">⚠️ ${j.error}${Array.isArray(j.detalle)&&j.detalle.length?` <small>(${j.detalle[0]})</small>`:""}</div>`;return;}
     pintar(j.partidos||[]);
-  }catch(e){matchResults.innerHTML=`<div class="empty">⚠️ No pude cargar. Verificá /api/partidos en Vercel.</div>`;}
+    const nota=(j.partidos||[]).length&&j.soloProximos?"Hoy no hay partidos disponibles: se muestran los próximos eventos.":(j.parcial?"Algunas fuentes no respondieron a tiempo; puede faltar información.":"");
+    if(nota)matchResults.insertAdjacentHTML("afterbegin",`<div class="empty">ℹ️ ${nota}</div>`);
+  }catch(e){matchResults.innerHTML=`<div class="empty">⚠️ ${e&&e.name==="AbortError"?"Tardó demasiado en responder. Toque «Hoy» para reintentar.":"No pude cargar. Verificá /api/partidos en Vercel."}</div>`;}
+  finally{clearTimeout(timer);}
 }
 function buscarEquipo(text){ pedir({modo:"equipo", q:text}); }
 

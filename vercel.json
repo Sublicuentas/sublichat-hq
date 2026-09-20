@@ -132,6 +132,9 @@
     },
     "api/tickets.js": {
       "maxDuration": 60
+    },
+    "api/partidos.js": {
+      "maxDuration": 30
     }
   }
 }
