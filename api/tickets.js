@@ -546,6 +546,17 @@ function ticketConversationTargets(ticket, actorRole) {
   return [...all];
 }
 
+// A quién va una respuesta hecha desde Sublichat:
+//  - Si alguien respondió por Telegram, la respuesta va SOLO a esa persona (aunque sea la misma que ahora
+//    responde desde la app: su conversación vive en Telegram). Así un aviso a 30 socios no se reenvía a los 30.
+//  - Si nadie ha respondido todavía, va a los participantes del aviso/ticket.
+function ticketReplyTargets(ticket, actorRole) {
+  const previas = Array.isArray(ticket && ticket.respuestas) ? ticket.respuestas : [];
+  const ultimaTelegram = [...previas].reverse().find(r => r && r.origen === 'telegram' && destinationKey(r.porRol));
+  if (ultimaTelegram) return [destinationKey(ultimaTelegram.porRol)];
+  return ticketConversationTargets(ticket, actorRole);
+}
+
 function creationTelegramMessage(item = {}) {
   const esAviso = String(item.tipo || '').toLowerCase() === 'aviso' || item.seccion === 'avisos';
   return esAviso ? [
@@ -790,10 +801,13 @@ async function responderTicket(db, body) {
   const now = new Date().toISOString();
   let imagenUrl = '';
   if (body.imagen) imagenUrl = (await uploadTicketImage(body.imagen, 'respuestas')).imageUrl;
+  const paraRoles = ticketReplyTargets(old, body.rol);
   const entry = {
     texto: respuesta || (imagenUrl ? 'Evidencia adjunta' : ''),
     por: clean(body.usuario || 'Sublichat', 80),
     porRol: destinationKey(body.rol || ''),
+    para: paraRoles,
+    paraLabel: destinosLabel(paraRoles),
     imagenUrl,
     origen: 'sublichat',
     at: now
@@ -811,10 +825,10 @@ async function responderTicket(db, body) {
   const msg = [
     `💬 <b>${String(old.tipo||'').toLowerCase()==='aviso'?'Respuesta al aviso':`Ticket #${old.numero || id.slice(-4)}`} · ${telegramHTML(estadoLabel(update.estado))}</b>`,
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
-    `Respondió: ${telegramHTML(entry.por)}`,
+    `Respondió: ${telegramHTML(roleLabel(body.rol) || entry.por)}`,
     respuesta ? telegramHTML(respuesta) : '📎 Evidencia adjunta'
   ].join('\n');
-  const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { imageUrl: imagenUrl, replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
+  const telegram = await sendTelegram(db, msg, paraRoles, { imageUrl: imagenUrl, replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
   await saveTelegramMessageLinks(db, id, telegram);
   const telegramInfo = safeTelegramInfo(telegram);
   await ref.set({ telegramReplyOk: !!telegram.ok, telegramReplyInfo: telegramInfo }, { merge: true });

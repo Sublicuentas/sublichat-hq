@@ -51,7 +51,8 @@ function canRead(resource, user) {
   const a = accessFor(user);
   if (resource === 'clientes') return a.sublicuentas || a.relojes || a.geisell;
   if (resource === 'inventario') return a.sublicuentas || a.geisell;
-  if (resource === 'finanzas_movimientos') return a.sublicuentas || a.relojes;
+  // `finanzas` = histórico; `finanzas_movimientos` = movimientos actuales. Control financiero (web y app) une las dos.
+  if (resource === 'finanzas_movimientos' || resource === 'finanzas') return a.sublicuentas || a.relojes;
   return false;
 }
 
@@ -70,7 +71,7 @@ async function listResource(req, res) {
   if (!user) return;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const resource = String(body.resource || '').trim();
-  if (!['clientes','inventario','finanzas_movimientos'].includes(resource)) {
+  if (!['clientes','inventario','finanzas_movimientos','finanzas'].includes(resource)) {
     return res.status(400).json({ ok:false, error:'Recurso no válido.' });
   }
   if (!canRead(resource, user)) {

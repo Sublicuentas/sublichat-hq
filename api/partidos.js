@@ -268,22 +268,31 @@ export default async function handler(req, res) {
   // Tope global: nunca se espera a la fuente más lenta. Con lo que ya llegó se responde y se marca `parcial`.
   const TOPE_MS = Number(process.env.PARTIDOS_TOPE_MS) || 12000;
   let cargaParcial = false;
+  // Espera a las fuentes pero NO a la más lenta: con el 80 % listo y 1,5 s se responde con lo que ya llegó
+  // (lo demás sigue en segundo plano y queda en caché para la próxima consulta). Tope duro: topeMs.
+  async function esperarFuentes(jobs, hechos, topeMs) {
+    const t0 = Date.now();
+    await new Promise(resolve => {
+      let fin = false, iv, to;
+      const listo = () => { if (fin) return; fin = true; clearInterval(iv); clearTimeout(to); resolve(); };
+      iv = setInterval(() => { if (hechos.n >= jobs.length || (hechos.n / jobs.length >= 0.8 && Date.now() - t0 >= 1500)) listo(); }, 100);
+      to = setTimeout(listo, topeMs);
+      Promise.all(jobs).then(listo);
+    });
+    if (hechos.n < jobs.length) cargaParcial = true;
+  }
   async function cargarTodo() {
     const acum = [];
     const jobs = [];
-    const add = p => jobs.push(Promise.resolve(p).then(arr => { acum.push(...(arr || [])); }).catch(() => {}));
+    const hechos = { n: 0 };
+    const add = p => jobs.push(Promise.resolve(p).then(arr => { acum.push(...(arr || [])); }).catch(() => {}).then(() => { hechos.n++; }));
     for (const lg of LIGAS_FUTBOL) add(cargarLigaFutbol(lg, 4));
     add(cargarNBA(4));
     add(cargarMLB(4));
     add(cargarUFC(10));
     add(cargarTenis(4));
     add(cargarF1(14));
-    let timer;
-    await Promise.race([
-      Promise.all(jobs),
-      new Promise(r => { timer = setTimeout(() => { cargaParcial = true; r(); }, TOPE_MS); })
-    ]);
-    clearTimeout(timer);
+    await esperarFuentes(jobs, hechos, TOPE_MS);
     return acum.filter(x => x && x.dObj && !isNaN(x.dObj));
   }
 
@@ -291,7 +300,8 @@ export default async function handler(req, res) {
   async function cargarHoy(ymd) {
     const acum = [];
     const jobs = [];
-    const add = (p, fn) => jobs.push(Promise.resolve(p).then(evs => { acum.push(...evs.map(fn).filter(Boolean)); }).catch(e => { fallas.push("datos de ESPN ilegibles: " + ((e && e.message) || "error")); }));
+    const hechos = { n: 0 };
+    const add = (p, fn) => jobs.push(Promise.resolve(p).then(evs => { acum.push(...evs.map(fn).filter(Boolean)); }).catch(e => { fallas.push("datos de ESPN ilegibles: " + ((e && e.message) || "error")); }).then(() => { hechos.n++; }));
     for (const lg of LIGAS_FUTBOL) add(espnScoreboardDia("soccer/" + lg.slug, ymd), ev => parseEspnGeneric(ev, lg.nombre, canalDe(lg.nombre)));
     add(espnScoreboardDia("basketball/nba", ymd), ev => parseEspnGeneric(ev, "NBA", canalDe("nba")));
     add(espnScoreboardDia("baseball/mlb", ymd), ev => parseEspnGeneric(ev, "MLB", canalDe("mlb")));
@@ -299,12 +309,7 @@ export default async function handler(req, res) {
     add(espnScoreboardDia("tennis/atp", ymd), ev => parseEspnGeneric(ev, "ATP" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis")));
     add(espnScoreboardDia("tennis/wta", ymd), ev => parseEspnGeneric(ev, "WTA" + (ev.shortName ? " · " + ev.shortName : ""), canalDe("tenis")));
     add(espnScoreboardDia("racing/f1", ymd), ev => parseEspnF1(ev, canalDe("f1")));
-    let timer;
-    await Promise.race([
-      Promise.all(jobs),
-      new Promise(r => { timer = setTimeout(() => { cargaParcial = true; r(); }, Math.min(TOPE_MS, 9000)); })
-    ]);
-    clearTimeout(timer);
+    await esperarFuentes(jobs, hechos, Math.min(TOPE_MS, 9000));
     return acum.filter(x => x && x.dObj && !isNaN(x.dObj));
   }
 
