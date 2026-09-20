@@ -68,20 +68,37 @@ export default async function handler(req, res) {
     return "Consultá en tu proveedor";
   };
 
-  // fetch con timeout: nunca cuelga la función
+  // Fuentes que no respondieron (se informa a las apps en `fallas` y en el log de Vercel).
+  const fallas = [];
+  const fuenteCorta = url => { const m = String(url).match(/\/sports\/([^?]+)/); return m ? m[1].replace(/\/scoreboard$/, "") : String(url).slice(0, 60); };
+  // fetch con timeout y UN reintento: nunca cuelga la función. Antes un timeout de 6 s o un 429/5xx
+  // dejaba la liga vacía en silencio y "Hoy" caía a los próximos eventos (UFC/F1) sin partidos del día.
   async function jget(url, opt = {}) {
-    const ms = opt.ms || 6000;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), ms);
-    try {
-      const r = await fetch(url, { signal: ctrl.signal, headers: opt.headers || {} });
-      if (!r.ok && !opt.allowNotOk) return null;
-      return await r.json();
-    } catch (e) {
-      return null;
-    } finally {
-      clearTimeout(t);
+    const ms = opt.ms || 10000;
+    const tries = opt.tries || 2;
+    for (let n = 1; n <= tries; n++) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), ms);
+      try {
+        const r = await fetch(url, { signal: ctrl.signal, headers: opt.headers || {} });
+        if (!r.ok && !opt.allowNotOk) {
+          console.error("PARTIDOS_HTTP", r.status, url.slice(0, 140));
+          const reintentable = r.status === 429 || r.status >= 500;
+          if (reintentable && n < tries) { await new Promise(x => setTimeout(x, 500)); continue; }
+          if (r.status !== 404) fallas.push(fuenteCorta(url) + " HTTP " + r.status); // 404 = liga sin calendario, no es falla
+          return null;
+        }
+        return await r.json();
+      } catch (e) {
+        console.error("PARTIDOS_FETCH", (e && e.name) || "error", url.slice(0, 140));
+        if (n < tries) { await new Promise(x => setTimeout(x, 500)); continue; }
+        fallas.push(fuenteCorta(url) + " " + ((e && e.name === "AbortError") ? "tiempo agotado" : "sin respuesta"));
+        return null;
+      } finally {
+        clearTimeout(t);
+      }
     }
+    return null;
   }
 
   // ===== ESPN — API pública, sin key =====
@@ -92,7 +109,7 @@ export default async function handler(req, res) {
     const start = new Date();
     const end = new Date(Date.now() + diasAdelante * 86400000);
     const url = `${ESPN_BASE}/${path}/scoreboard?dates=${ymdCompact(start)}-${ymdCompact(end)}&limit=300`;
-    const d = await jget(url, { ms: 6000 });
+    const d = await jget(url, { ms: 10000, tries: 2 });
     return (d && d.events) || [];
   }
 
@@ -143,6 +160,7 @@ export default async function handler(req, res) {
         golesVisita: estado === "NS" ? null : scoreDe(away),
         estado,
         horaHN: fmtHN(dObj) + cardTxt,
+        ts: dObj.getTime(), dia: diaHN(dObj),
         canal: canalTxt
       }
     };
@@ -166,6 +184,7 @@ export default async function handler(req, res) {
         golesLocal: null, golesVisita: null,
         estado,
         horaHN: fmtHN(dObj),
+        ts: dObj.getTime(), dia: diaHN(dObj),
         canal: canalTxt
       }
     };
@@ -230,22 +249,35 @@ export default async function handler(req, res) {
 
   // Carga TODAS las ligas de fútbol + NBA + MLB + UFC + Tenis + F1 en paralelo.
   // La usan "Hoy" y la búsqueda de equipo/jugador.
+  // Tope global: nunca se espera a la fuente más lenta. Con lo que ya llegó se responde y se marca `parcial`.
+  const TOPE_MS = Number(process.env.PARTIDOS_TOPE_MS) || 12000;
+  let cargaParcial = false;
   async function cargarTodo() {
+    const acum = [];
     const jobs = [];
-    for (const lg of LIGAS_FUTBOL) jobs.push(cargarLigaFutbol(lg, 4).catch(() => []));
-    jobs.push(cargarNBA(4).catch(() => []));
-    jobs.push(cargarMLB(4).catch(() => []));
-    jobs.push(cargarUFC(10).catch(() => []));
-    jobs.push(cargarTenis(4).catch(() => []));
-    jobs.push(cargarF1(14).catch(() => []));
-    const arrs = await Promise.all(jobs);
-    return arrs.flat().filter(x => x && x.dObj && !isNaN(x.dObj));
+    const add = p => jobs.push(Promise.resolve(p).then(arr => { acum.push(...(arr || [])); }).catch(() => {}));
+    for (const lg of LIGAS_FUTBOL) add(cargarLigaFutbol(lg, 4));
+    add(cargarNBA(4));
+    add(cargarMLB(4));
+    add(cargarUFC(10));
+    add(cargarTenis(4));
+    add(cargarF1(14));
+    let timer;
+    await Promise.race([
+      Promise.all(jobs),
+      new Promise(r => { timer = setTimeout(() => { cargaParcial = true; r(); }, TOPE_MS); })
+    ]);
+    clearTimeout(timer);
+    return acum.filter(x => x && x.dObj && !isNaN(x.dObj));
   }
 
   // Arma la respuesta de una lista ya cargada: prioriza próximos, si no hay
   // muestra los más recientes para no dejar la pantalla en blanco.
   function responder(res, todos, limite) {
-    if (!todos.length) return res.status(200).json({ error: "No pude cargar el calendario ahora (intentá más tarde)." });
+    if (!todos.length) {
+      if (fallas.length) console.error("PARTIDOS_SIN_DATOS", fallas.slice(0, 8).join(" | "));
+      return res.status(200).json({ error: "No pude cargar el calendario ahora (intentá más tarde).", detalle: fallas.slice(0, 4) });
+    }
     const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const fut = todos.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj);
     const lista = (fut.length ? fut : todos.sort((a, b) => b.dObj - a.dObj)).slice(0, limite);
@@ -326,6 +358,7 @@ export default async function handler(req, res) {
           golesLocal: fx.goals?.home, golesVisita: fx.goals?.away,
           estado: fx.fixture?.status?.short,
           horaHN: fmtHN(fecha),
+          ts: fecha.getTime(), dia: diaHN(fecha),
           canal: canalDe(ligaN)
         };
       });
@@ -335,6 +368,11 @@ export default async function handler(req, res) {
     // ===== HOY (pestaña por defecto) — mezcla todo =====
     const hoy = diaHN(new Date());
     const todo = await cargarTodo();
+    if (!todo.length && fallas.length) {
+      // Todas las fuentes fallaron: se dice claro (antes quedaba una lista vacía que parecía "hoy no hay partidos").
+      console.error("PARTIDOS_SIN_DATOS", fallas.slice(0, 8).join(" | "));
+      return res.status(200).json({ error: "No pude cargar el calendario ahora (intentá más tarde).", detalle: fallas.slice(0, 4) });
+    }
     const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const hoyList = todo.filter(x => diaHN(x.dObj) === hoy).sort((a, b) => a.dObj - b.dObj);
     let lista;
@@ -344,7 +382,9 @@ export default async function handler(req, res) {
       // si hoy no hay nada, mostramos los próximos para no dejar la pantalla en blanco
       lista = todo.filter(x => x.dObj >= ahora).sort((a, b) => a.dObj - b.dObj).slice(0, 30);
     }
-    return res.status(200).json({ partidos: lista.map(x => x.p) });
+    // soloProximos = hoy no se pudo cargar/no hay partidos: las apps lo muestran como "Próximos", no como "Hoy".
+    if (fallas.length) console.error("PARTIDOS_FUENTES_FALLIDAS", fallas.length, fallas.slice(0, 8).join(" | "));
+    return res.status(200).json({ partidos: lista.map(x => x.p), hoy, soloProximos: !hoyList.length, parcial: cargaParcial || fallas.length > 0, fallas: fallas.length });
 
   } catch (e) {
     console.error(e);
