@@ -549,7 +549,7 @@ async function createTicket(db, body) {
   let telegram = { ok:false, skipped:true, reason:'telegram_no_intentado', deliveredRoles:[], failedRoles:destinos.slice() };
   try {
     const msg = creationTelegramMessage(item);
-    telegram = await sendTelegram(db, msg, item.destinos, { imageUrl, replyMarkup: ticketReplyMarkup(ref.id, numero, tipo) });
+    telegram = await sendTelegram(db, msg, item.destinos, { imageUrl: imagenUrl, replyMarkup: ticketReplyMarkup(ref.id, numero, tipo) });
   } catch (e) {
     console.error('TICKET_TELEGRAM_CREATE_ERROR', e && e.message || e);
     telegram = { ok:false, error:clean(e && e.message || 'Error de Telegram', 240), deliveredRoles:[], failedRoles:destinos.slice() };
