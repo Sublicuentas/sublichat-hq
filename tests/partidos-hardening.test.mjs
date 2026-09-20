@@ -14,6 +14,9 @@ test('api/partidos: tope global, reintento y diagnóstico de fuentes', () => {
   assert.match(api, /soloProximos: !hoyList\.length/, 'las apps saben cuándo "Hoy" es solo próximos');
   assert.match(api, /parcial: cargaParcial \|\| fallas\.length > 0/);
   assert.match(api, /detalle: fallas\.slice\(0, 4\)/, 'si todo falla, el error trae el motivo');
+  assert.match(api, /espnScoreboardDia\("soccer\/" \+ lg\.slug, ymd\)/, '"Hoy" pide un solo día por fuente');
+  assert.match(api, /globalThis\.__partidosCache/, 'caché de la última respuesta buena');
+  assert.match(api, /detalle,\s*\}\)|fallas: fallas\.length, detalle/, 'el diagnóstico llega a las apps');
   const cfg = JSON.parse(read('vercel.json'));
   assert.equal(cfg.functions['api/partidos.js']?.maxDuration, 30);
 });
