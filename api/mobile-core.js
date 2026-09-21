@@ -50,7 +50,7 @@ function accessFor(user) {
 function canRead(resource, user) {
   const a = accessFor(user);
   if (resource === 'clientes') return a.sublicuentas || a.relojes || a.geisell;
-  if (resource === 'inventario') return a.sublicuentas || a.geisell;
+  if (resource === 'inventario') return a.sublicuentas || a.geisell || a.relojes; // Relojes y Geisell ven Inventario en la app (pedido del dueño)
   // `finanzas` = histórico; `finanzas_movimientos` = movimientos actuales. Control financiero (web y app) une las dos.
   if (resource === 'finanzas_movimientos' || resource === 'finanzas') return a.sublicuentas || a.relojes;
   return false;
