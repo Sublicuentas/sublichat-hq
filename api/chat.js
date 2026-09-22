@@ -164,7 +164,7 @@ export default async function handler(req, res) {
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 20,
-            thinkingConfig: { thinkingBudget: 0 }
+            thinkingConfig: /^gemini-3/.test(model) ? { thinkingLevel: "low" } : { thinkingBudget: 0 }
           }
         })
       });
@@ -330,7 +330,10 @@ ${JSON.stringify(clientes || [])}`;
           generationConfig: {
             temperature: isRewrite ? 1.0 : 0.4,
             maxOutputTokens: isRewrite ? 160 : 2048,
-            thinkingConfig: { thinkingBudget: 0 }
+            // Gemini 3.x (p. ej. gemini-3.5-flash, gemini-3.1-flash-lite) no admite apagar el pensamiento con
+            // thinkingBudget: usa thinkingLevel y da error si recibe ambos campos a la vez. Los modelos 2.5 y
+            // anteriores siguen usando thinkingBudget. Se detecta por el nombre del modelo para no romper ninguno.
+            thinkingConfig: /^gemini-3/.test(model) ? { thinkingLevel: "low" } : { thinkingBudget: 0 }
           }
         })
       });
