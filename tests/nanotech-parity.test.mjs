@@ -20,3 +20,16 @@ test('Nanotech: el CRM web guarda evoutouch1/2/3 según dispositivos (ya no evou
   assert.match(web, /plat==="evoutouch"\?\[1,2,3\]/, 'dispositivos permitidos de Nanotech: 1, 2 y 3');
   assert.match(web, /evoutouch2:"Nanotech \(2 dispositivos\)"/, 'etiqueta visible Nanotech');
 });
+
+
+test('Nanotech: una compra creada en TG se abre como Nanotech y nunca cae al fallback Netflix', () => {
+  const web = read('sublichat-app.js');
+  assert.match(web, /n\.includes\("evoutouch"\).*n\.includes\("nanotech"\).*return "evoutouch"/s);
+  assert.match(web, /nanotech\|iptv\)\(\[1-5\]\)\$\//, 'debe recuperar también la cantidad desde alias Nanotech');
+});
+
+test('Nanotech: si la visibilidad personalizada no muestra credenciales, tampoco expone URL/servidor', () => {
+  const api = read('api/acceso.js');
+  assert.match(api, /function tvDigitalOcultaServidor\(servicio = \{\}\)/);
+  assert.match(api, /urlServidor: tvDigitalOcultaServidor\(servicio\) \? "" : \(tvDigital\.urlServidor \|\| ""\)/);
+});
