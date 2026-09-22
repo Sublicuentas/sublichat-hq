@@ -4780,7 +4780,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(p.includes("office")||p.includes("windows"))return "🪟";
     if(p.includes("adobe"))return "🅰️";
     if(p.includes("eset"))return "🛡️";
-    if(p.includes("oleada")||p.includes("iptv")||p.includes("latintv")||p.includes("liontv"))return "📺";
+    if(p.includes("oleada")||p.includes("iptv")||p.includes("latintv")||p.includes("liontv")||p.includes("evoutouch")||p.includes("nanotech"))return "📺";
     return "📱";
   }
   function fichaPlatValue(raw){
@@ -4821,6 +4821,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(n.includes("oleada") || n.includes("magis")) return "oleada";
     if(n.includes("latintv")) return "latintv";
     if(n.includes("liontv") || n.includes("lion")) return "liontv";
+    // Nanotech se guarda internamente como evoutouch1/2/3 en Telegram y Firebase.
+    // Debe resolverse ANTES del fallback; de lo contrario la ficha termina en
+    // Netflix (primer elemento del selector) al abrir una compra creada en TG.
+    if(n.includes("evoutouch") || n.includes("evotouch") || n.includes("nanotech")) return "evoutouch";
     if(n.includes("iptv") || n.includes("icomplay") || n.includes("tvgo") || n.includes("titan")) return "iptv";
     const hit=FICHA_PLATS.find(([v,l])=>fichaNorm(v)===n || fichaNorm(l)===n);
     return hit?hit[0]:"netflix";
@@ -4919,7 +4923,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   function fichaCantidadDesdePlataforma(raw, fallback="1"){
     const n=fichaNorm(raw);
-    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|iptv)([1-5])$/);
+    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/);
     return m?m[1]:String(fallback||"1");
   }
   function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
