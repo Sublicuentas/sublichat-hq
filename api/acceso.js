@@ -412,6 +412,19 @@ function mesesHastaRenovacion(fechaRenovacion) {
   return Math.max(1, Math.min(24, meses || 1));
 }
 
+function tvDigitalOcultaServidor(servicio = {}) {
+  // La opción personalizada con todas las credenciales desmarcadas significa
+  // “no mostrar datos de acceso”. En Nanotech la URL del servidor también es
+  // un dato de acceso y no debe filtrarse por separado en “Datos del plan”.
+  const p = canonPlat(servicio.plataforma || "");
+  if (!p.startsWith("evoutouch")) return false;
+  const raw = servicio.visibilidadUrl;
+  const fuente = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { modo: raw };
+  if (String(fuente?.modo || "") !== "personalizado") return false;
+  const campos = fuente.campos && typeof fuente.campos === "object" && !Array.isArray(fuente.campos) ? fuente.campos : fuente;
+  return campos.correo !== true && campos.clave !== true && campos.pin !== true;
+}
+
 function tvDigitalInfo(servicio = {}) {
   const p = canonPlat(servicio.plataforma || "");
   const esTv = p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv");
@@ -498,7 +511,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     mesesContratados: tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1),
     planDuracion: `${tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1)} mes${(tvDigital.mesesContratados || Number(servicio.mesesContratados || 1)) === 1 ? "" : "es"}`,
     dispositivosContratados: tvDigital.dispositivosContratados || 0,
-    urlServidor: tvDigital.urlServidor || "",
+    urlServidor: tvDigitalOcultaServidor(servicio) ? "" : (tvDigital.urlServidor || ""),
     esTvDigital: tvDigital.esTvDigital === true,
     stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     terminos: termsFor(plataforma),
