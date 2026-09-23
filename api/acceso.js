@@ -277,7 +277,8 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
       clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? "").trim(),
       pinPerfil: String(p?.pinPerfil ?? p?.pin_perfil ?? p?.perfilPin ?? (index === 0 ? (servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || "") : "")).trim(),
       dispositivo,
-      esRoku: dispositivo === "tv" && esRokuRaw === true
+      esRoku: dispositivo === "tv" && esRokuRaw === true,
+      visibilidadUrl:p?.visibilidadUrl!=null?p.visibilidadUrl:(index===0?(servicio.visibilidadUrl||{modo:"plataforma"}):{modo:"plataforma"})
     };
   });
 }
@@ -365,13 +366,28 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
     elegidos = { correo: c.correo === true, clave: c.clave === true, pin: c.pin === true };
   }
 
-  return {
+  const salida = {
     ...camposAutomaticos,
     mostrarCorreo: servicioRequiereCorreo(servicio.plataforma) && elegidos.correo,
     mostrarClave: !servicioNoUsaClave(servicio.plataforma) && elegidos.clave,
     mostrarPin: !servicioNoUsaPinPerfil(servicio.plataforma) && elegidos.pin,
     visibilidadModo: modo
   };
+
+  // Regla de seguridad de Disney: TV + No es Roku significa cuenta ya
+  // vinculada. La URL nunca debe enseñar correo ni contraseña, incluso si una
+  // compra 2x1 usa una visibilidad manual distinta en otro perfil.
+  const plataformaCanon = canonPlat(servicio.plataforma);
+  const disneyTvNoRoku = (plataformaCanon === "disneyp" || plataformaCanon === "disneys")
+    && String(servicio.dispositivo || "") === "tv"
+    && servicio.esRoku !== true;
+  if (disneyTvNoRoku) {
+    salida.mostrarCorreo = false;
+    salida.mostrarClave = false;
+    salida.mostrarPin = !servicioNoUsaPinPerfil(servicio.plataforma);
+    salida.modo = "perfil";
+  }
+  return salida;
 }
 
 const TV_DIGITAL_URLS = {
@@ -460,9 +476,15 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
   }
 
   const perfilesPublicos = perfiles.map(p => {
+    const servicioPerfil = {
+      ...servicio,
+      dispositivo:p.dispositivo,
+      esRoku:p.esRoku,
+      visibilidadUrl:p.visibilidadUrl!=null?p.visibilidadUrl:(servicio.visibilidadUrl||{modo:"plataforma"})
+    };
     const campos = aplicarVisibilidadUrl(
-      servicio,
-      resolverModo({ ...servicio, dispositivo: p.dispositivo, esRoku: p.esRoku })
+      servicioPerfil,
+      resolverModo(servicioPerfil)
     );
     return {
       nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,

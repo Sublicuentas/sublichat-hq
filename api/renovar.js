@@ -623,7 +623,11 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
       clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? servicio.password ?? servicio.contrasena ?? "").trim(),
       pinPerfil: perfilPinRaw(p) || (index === 0 ? perfilPinRaw(servicio) : ""),
       dispositivo,
-      esRoku: dispositivo === "tv" && esRokuRaw === true
+      esRoku: dispositivo === "tv" && esRokuRaw === true,
+      visibilidadUrl: normalizarVisibilidadUrl(
+        p?.visibilidadUrl,
+        index === 0 ? (servicio.visibilidadUrl || { modo:"plataforma" }) : { modo:"plataforma" }
+      )
     };
   });
 }
@@ -668,6 +672,10 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       ? raw.esRoku
       : (previo.esRoku != null ? previo.esRoku : (servicio.esRoku != null ? servicio.esRoku : anterior.esRoku));
     out.esRoku = out.dispositivo === "tv" && esRokuRaw === true;
+    out.visibilidadUrl = normalizarVisibilidadUrl(
+      raw.visibilidadUrl,
+      previo.visibilidadUrl || (index === 0 ? (servicio.visibilidadUrl ?? anterior.visibilidadUrl ?? { modo:"plataforma" }) : { modo:"plataforma" })
+    );
     const pin = sinPin ? "" : String(
       topPin ?? raw.pinPerfil ?? raw.pin_perfil ?? raw.perfilPin ?? raw.pin ?? previo.pinPerfil ?? ""
     ).trim();
@@ -1045,6 +1053,10 @@ function limpiarServicioCRM(servicio = {}) {
       const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
       if (pPin) p.pinPerfil = pPin;
       else delete p.pinPerfil;
+      p.visibilidadUrl = normalizarVisibilidadUrl(
+        p.visibilidadUrl,
+        index === 0 ? (s.visibilidadUrl || { modo:"plataforma" }) : { modo:"plataforma" }
+      );
       if (usaDispositivo) {
         p.dispositivo = ["tv", "cel"].includes(String(p.dispositivo || ""))
           ? String(p.dispositivo)
