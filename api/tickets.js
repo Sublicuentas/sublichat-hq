@@ -789,6 +789,18 @@ async function resolveTicket(db, body) {
   return { ok: true, id, telegramOk: !!telegram.ok, telegramInfo };
 }
 
+async function deleteTicket(db, body) {
+  const id = clean(body.id, 120);
+  if (!id) return { status: 400, json: { ok: false, error: 'Falta id del ticket.' } };
+  const ref = db.collection('tickets_auditoria').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: true, id, yaNoExistia: true }; // ya no está: para el usuario, el resultado es el mismo (idempotente)
+  const old = snap.data() || {};
+  if (!canAccessTicket(old, body.rol)) return { status: 403, json: { ok: false, error: 'No tiene permiso para eliminar ese ticket.' } };
+  await ref.delete();
+  return { ok: true, id };
+}
+
 async function responderTicket(db, body) {
   const id = clean(body.id, 120);
   const respuesta = clean(body.respuesta, 3000);
@@ -860,6 +872,7 @@ module.exports = async function handler(req, res) {
     else if (accion === 'proceso') out = await setProcesoTicket(db, body);
     else if (accion === 'responder') out = await responderTicket(db, body);
     else if (accion === 'resolver') out = await resolveTicket(db, body);
+    else if (accion === 'eliminar') out = await deleteTicket(db, body);
     else out = { status: 400, json: { ok: false, error: 'Acción no soportada: ' + accion } };
     if (out && out.status) return res.status(out.status).json(out.json);
     return res.status(200).json(out);
