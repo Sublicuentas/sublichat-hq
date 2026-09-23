@@ -222,7 +222,11 @@ function perfilesDeCompra(servicio,nombreTitular=""){
     const esRoku=dispositivo==="tv"&&(p?.esRoku!=null?!!p.esRoku:!!s.esRoku);
     return {
       perfilId:String(p?.perfilId||p?.id||""),nombre,perfil:String(p?.perfil||p?.nombrePerfil||p?.nombre||nombre).trim(),
-      correo:String(p?.correo??s.correo??"").trim(),clave,pinPerfil,dispositivo,esRoku
+      correo:String(p?.correo??s.correo??"").trim(),clave,pinPerfil,dispositivo,esRoku,
+      // Cada perfil de una compra 2x1 puede decidir por separado qué datos
+      // aparecen en la URL. El perfil principal hereda la configuración del
+      // servicio; los perfiles extra usan la regla automática por defecto.
+      visibilidadUrl:p?.visibilidadUrl!=null?p.visibilidadUrl:(index===0?(s.visibilidadUrl||{modo:"plataforma"}):{modo:"plataforma"})
     };
   });
 }
@@ -4690,7 +4694,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const disponible=esApple
       ? {correo:false,clave:false,pin:true}
       : {correo:fichaNeedsCorreo(plat),clave:fichaNeedsClave(plat),pin:fichaNeedsPin(plat)};
-    const v=fichaVisibilidadUrlActual();
+    const v=perfil&&perfil.visibilidadUrl!=null
+      ? fichaNormalizarVisibilidadUrl(perfil.visibilidadUrl)
+      : fichaVisibilidadUrlActual();
     if(v.modo==="plataforma")return {...auto,visibilidadModo:v.modo};
     let elegidos={correo:false,clave:false,pin:false};
     if(v.modo==="todos")elegidos={correo:true,clave:true,pin:true};
@@ -4702,13 +4708,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       clave:v.campos&&v.campos.clave===true,
       pin:v.campos&&v.campos.pin===true
     };
-    return {
+    const salida={
       ...auto,
       correo:disponible.correo&&elegidos.correo,
       clave:disponible.clave&&elegidos.clave,
       pin:disponible.pin&&elegidos.pin,
       visibilidadModo:v.modo
     };
+    // Disney en TV no Roku nunca debe exponer correo ni contraseña en la URL,
+    // aun cuando un modo manual del servicio/perfil haya quedado más abierto.
+    const dispositivo=perfil&&typeof perfil==="object"?String(perfil.dispositivo||"").trim():fichaGetVal("fichaDispositivo");
+    const esRoku=perfil&&typeof perfil==="object"?(dispositivo==="tv"&&perfil.esRoku===true):(fichaGetVal("fichaEsRoku")==="si");
+    if(["disneyp","disneys"].includes(fichaNorm(plat))&&dispositivo==="tv"&&!esRoku){
+      salida.correo=false;
+      salida.clave=false;
+      salida.pin=disponible.pin;
+      salida.modo="perfil";
+    }
+    return salida;
   }
   function fichaActualizarVisibilidadUrl(actualizarAviso=true){
     const select=fichaQ("fichaVisibilidadUrl");
@@ -4864,7 +4881,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       nombre:p.nombre||p.perfil||titular||`Perfil ${index+1}`,
       perfil:p.perfil||p.nombre||titular||`Perfil ${index+1}`,
       correo:p.correo||"",clave:p.clave||"",pinPerfil:p.pinPerfil||"",
-      dispositivo:p.dispositivo||"",esRoku:p.dispositivo==="tv"&&p.esRoku===true
+      dispositivo:p.dispositivo||"",esRoku:p.dispositivo==="tv"&&p.esRoku===true,
+      visibilidadUrl:p.visibilidadUrl!=null?p.visibilidadUrl:(index===0?(s.visibilidadUrl||{modo:"plataforma"}):{modo:"plataforma"})
     }));
   }
   function fichaRecolectarPerfiles(){
@@ -4877,7 +4895,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       correo:fichaNeedsCorreo(plat)?fichaGetVal("fichaCorreo"):"",clave:fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"",
       pinPerfil:fichaNeedsPin(plat)?fichaGetVal("fichaPinPerfil"):"",
       dispositivo:fichaUsaSelectorDispositivo(plat)?fichaGetVal("fichaDispositivo"):"",
-      esRoku:fichaUsaSelectorDispositivo(plat)&&fichaGetVal("fichaDispositivo")==="tv"&&fichaGetVal("fichaEsRoku")==="si"
+      esRoku:fichaUsaSelectorDispositivo(plat)&&fichaGetVal("fichaDispositivo")==="tv"&&fichaGetVal("fichaEsRoku")==="si",
+      visibilidadUrl:fichaVisibilidadUrlActual()
     };
     fichaPerfilPrincipalIdActual=principal.perfilId;
     return [principal,...fichaPerfilesExtraActuales.map((p,index)=>({
@@ -4886,8 +4905,30 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       clave:fichaNeedsClave(plat)?String(p.clave||"").trim():"",
       pinPerfil:fichaNeedsPin(plat)?String(p.pinPerfil||"").trim():"",
       dispositivo:fichaUsaSelectorDispositivo(plat)?String(p.dispositivo||"").trim():"",
-      esRoku:fichaUsaSelectorDispositivo(plat)&&String(p.dispositivo||"").trim()==="tv"&&p.esRoku===true
+      esRoku:fichaUsaSelectorDispositivo(plat)&&String(p.dispositivo||"").trim()==="tv"&&p.esRoku===true,
+      visibilidadUrl:fichaNormalizarVisibilidadUrl(p.visibilidadUrl||{modo:"plataforma"})
     }))];
+  }
+  function fichaVisibilidadPerfilExtraHtml(p,index,plat){
+    const v=fichaNormalizarVisibilidadUrl(p&&p.visibilidadUrl||{modo:"plataforma"});
+    const permiteCorreo=fichaNeedsCorreo(plat),permiteClave=fichaNeedsClave(plat),permitePin=fichaNeedsPin(plat);
+    const opt=(value,label,disabled=false)=>`<option value="${value}"${v.modo===value?" selected":""}${disabled?" disabled":""}>${label}</option>`;
+    return `<div class="ficha-profile-visibility" data-ficha-profile-visibility-box="${index}">
+      <div class="ficha-profile-visibility-title"><b>👁️ Datos visibles en la URL · Perfil ${index+2}</b><small>Solo afecta este perfil del 2x1.</small></div>
+      <select class="ficha-select" data-ficha-profile-visibility-mode="${index}">
+        ${opt("plataforma","Según plataforma y dispositivo")}
+        ${opt("todos","Todos los datos guardados")}
+        ${opt("correo_clave","Correo y clave",!(permiteCorreo&&permiteClave))}
+        ${opt("solo_correo","Solo correo / usuario",!permiteCorreo)}
+        ${opt("solo_pin","Solo PIN",!permitePin)}
+        ${opt("personalizado","Personalizado…")}
+      </select>
+      <div class="ficha-visibility-custom ficha-profile-visibility-custom" style="${v.modo==="personalizado"?"display:flex":"display:none"}">
+        <label class="ficha-visibility-check${permiteCorreo?"":" disabled"}"><input type="checkbox" data-ficha-profile-visible="correo" data-ficha-profile-visible-index="${index}"${v.correo?" checked":""}${permiteCorreo?"":" disabled"}> Correo / usuario</label>
+        <label class="ficha-visibility-check${permiteClave?"":" disabled"}"><input type="checkbox" data-ficha-profile-visible="clave" data-ficha-profile-visible-index="${index}"${v.clave?" checked":""}${permiteClave?"":" disabled"}> Clave / serial</label>
+        <label class="ficha-visibility-check${permitePin?"":" disabled"}"><input type="checkbox" data-ficha-profile-visible="pin" data-ficha-profile-visible-index="${index}"${v.pin?" checked":""}${permitePin?"":" disabled"}> PIN</label>
+      </div>
+    </div>`;
   }
   function fichaRenderPerfilesExtra(){
     const list=fichaQ("fichaPerfilesExtraList"),count=fichaQ("fichaPerfilesCount"),removePrimary=fichaQ("fichaRemovePrimary");
@@ -4904,6 +4945,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         <label class="ficha-field" style="${showPin?"":"display:none"}"><span>PIN individual</span><input class="ficha-input" data-ficha-profile-field="pinPerfil" value="${fichaEsc(p.pinPerfil||"")}" placeholder="0000"></label>
         <label class="ficha-field" style="${showDispositivo?"":"display:none"}"><span>📺📱 ¿Dónde va a usar este perfil?</span><select class="ficha-select" data-ficha-profile-field="dispositivo"><option value=""${!p.dispositivo?" selected":""}>Pregunte al cliente…</option><option value="tv"${p.dispositivo==="tv"?" selected":""}>TV</option><option value="cel"${p.dispositivo==="cel"?" selected":""}>Celular</option></select></label>
         <label class="ficha-field" style="${showDispositivo&&p.dispositivo==="tv"?"":"display:none"}"><span>¿El TV de este perfil es Roku?</span><select class="ficha-select" data-ficha-profile-field="esRoku"><option value="no"${p.esRoku!==true?" selected":""}>No es Roku</option><option value="si"${p.esRoku===true?" selected":""}>Sí, es Roku</option></select></label>
+        ${fichaVisibilidadPerfilExtraHtml(p,index,plat)}
       </div>
     </div>`).join("");
     list.querySelectorAll("[data-ficha-profile-field]").forEach(input=>input.addEventListener(input.tagName==="SELECT"?"change":"input",()=>{
@@ -4914,6 +4956,24 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       if(campo==="dispositivo"&&input.value!=="tv")fichaPerfilesExtraActuales[i].esRoku=false;
       if(input.dataset.fichaProfileField==="nombre")fichaPerfilesExtraActuales[i].perfil=input.value;
       if(campo==="dispositivo"){fichaRenderPerfilesExtra();fichaRefreshTemplate();return;}
+      fichaRefreshTemplate();
+    }));
+    list.querySelectorAll("[data-ficha-profile-visibility-mode]").forEach(select=>select.addEventListener("change",()=>{
+      const i=Number(select.dataset.fichaProfileVisibilityMode);
+      if(!Number.isInteger(i)||!fichaPerfilesExtraActuales[i])return;
+      const previa=fichaNormalizarVisibilidadUrl(fichaPerfilesExtraActuales[i].visibilidadUrl||{modo:"plataforma"});
+      fichaPerfilesExtraActuales[i].visibilidadUrl=select.value==="personalizado"
+        ? {modo:"personalizado",campos:{correo:previa.correo,clave:previa.clave,pin:previa.pin}}
+        : {modo:select.value};
+      fichaRenderPerfilesExtra();fichaRefreshTemplate();
+    }));
+    list.querySelectorAll("[data-ficha-profile-visible]").forEach(input=>input.addEventListener("change",()=>{
+      const i=Number(input.dataset.fichaProfileVisibleIndex);
+      if(!Number.isInteger(i)||!fichaPerfilesExtraActuales[i])return;
+      const actual=fichaNormalizarVisibilidadUrl(fichaPerfilesExtraActuales[i].visibilidadUrl||{modo:"personalizado"});
+      const campos={correo:actual.correo,clave:actual.clave,pin:actual.pin};
+      campos[input.dataset.fichaProfileVisible]=input.checked;
+      fichaPerfilesExtraActuales[i].visibilidadUrl={modo:"personalizado",campos};
       fichaRefreshTemplate();
     }));
     list.querySelectorAll("[data-ficha-profile-remove]").forEach(btn=>btn.addEventListener("click",()=>{
@@ -5617,7 +5677,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
     fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
-    fichaAplicarVisibilidadUrl(s.visibilidadUrl||{modo:"plataforma"});
+    fichaAplicarVisibilidadUrl(principal.visibilidadUrl||s.visibilidadUrl||{modo:"plataforma"});
     const rokuBox=fichaQ("fichaRokuBox");
     if(rokuBox) rokuBox.style.display=dispositivo==="tv"?"block":"none";
     fichaQ("fichaCorreo").value=principal.correo||s.correo||"";
@@ -5857,7 +5917,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .ficha-profiles-editor{margin:5px 0 14px;padding:13px;border:1px solid rgba(37,211,102,.38);border-radius:18px;background:rgba(37,211,102,.07)}
       .ficha-profiles-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.ficha-profiles-editor-head b{font-size:14px}.ficha-profiles-editor-head span{font-size:11px;font-weight:900;color:#25a956}.ficha-remove-primary{display:none;align-items:center;border:1px solid rgba(232,49,63,.35);background:rgba(232,49,63,.1);color:var(--accent);border-radius:10px;padding:7px 9px;font-weight:800;cursor:pointer;margin:0 0 9px auto}
       .ficha-profiles-help{font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:10px}.ficha-add-profile{width:100%;border:1px dashed rgba(37,211,102,.7);background:rgba(37,211,102,.12);color:var(--txt);border-radius:13px;padding:11px;font-weight:900;cursor:pointer}
-      .ficha-profile-extra{margin-top:10px;padding:11px;border:1px solid var(--line);border-radius:15px;background:var(--card)}.ficha-profile-extra-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.ficha-profile-extra-head b{font-size:13px}.ficha-profile-extra-head button{border:1px solid rgba(232,49,63,.35);background:rgba(232,49,63,.1);color:var(--accent);border-radius:10px;padding:7px 9px;font-weight:800;cursor:pointer}.ficha-profile-extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ficha-profile-extra-grid .ficha-field{margin-bottom:0}
+      .ficha-profile-extra{margin-top:10px;padding:11px;border:1px solid var(--line);border-radius:15px;background:var(--card)}.ficha-profile-extra-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.ficha-profile-extra-head b{font-size:13px}.ficha-profile-extra-head button{border:1px solid rgba(232,49,63,.35);background:rgba(232,49,63,.1);color:var(--accent);border-radius:10px;padding:7px 9px;font-weight:800;cursor:pointer}.ficha-profile-extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ficha-profile-extra-grid .ficha-field{margin-bottom:0}.ficha-profile-visibility{grid-column:1/-1;margin-top:2px;padding:10px;border:1px dashed rgba(47,155,224,.35);border-radius:12px;background:rgba(47,155,224,.06)}.ficha-profile-visibility-title{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}.ficha-profile-visibility-title b{font-size:12.5px}.ficha-profile-visibility-title small{font-size:11px;color:var(--muted)}
       @media(max-width:560px){
         .ficha-overlay{padding:9px}
         .ficha-sheet{max-height:calc(100dvh - 18px);padding:14px;border-radius:21px}
@@ -6031,7 +6091,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaAddProfile").addEventListener("click",()=>{
       fichaPerfilesExtraActuales.push({
         perfilId:fichaNuevoId("perfil"),nombre:"",perfil:"",correo:fichaGetVal("fichaCorreo"),
-        clave:fichaGetVal("fichaClave"),pinPerfil:"",dispositivo:"",esRoku:false
+        clave:fichaGetVal("fichaClave"),pinPerfil:"",dispositivo:"",esRoku:false,
+        visibilidadUrl:{modo:"plataforma"}
       });
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
       const rows=fichaQ("fichaPerfilesExtraList")?.querySelectorAll("[data-ficha-profile-row]");
@@ -6045,6 +6106,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaQ("fichaPerfil").value=nuevo.nombre||nuevo.perfil||"";
       fichaQ("fichaCorreo").value=nuevo.correo||"";fichaQ("fichaClave").value=nuevo.clave||"";fichaQ("fichaPinPerfil").value=nuevo.pinPerfil||"";
       fichaQ("fichaDispositivo").value=nuevo.dispositivo||"";fichaQ("fichaEsRoku").value=nuevo.esRoku===true?"si":"no";
+      fichaAplicarVisibilidadUrl(nuevo.visibilidadUrl||{modo:"plataforma"});
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
     });
     fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
