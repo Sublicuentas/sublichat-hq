@@ -76,7 +76,7 @@ jobs:
       - name: Build web bundle
         working-directory: mobile
         env:
-          VITE_API_BASE_URL: https://sublichat-hq.vercel.app
+          VITE_API_BASE_URL: https://sublichat.capuchino.lat
           VITE_BUILD_NUMBER: ${{ github.run_number }}
         run: npm run build
 
