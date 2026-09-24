@@ -21,3 +21,9 @@ test('Dardos PRO servidor: 301, bust restaura el turno, 0 exacto gana; recalcula
   const pts = FORMULAS.DARTS(sanitizeMetrics('DARTS', { throws: [T20, T20, T20, T20, T20, ONE] })).awardedPoints;
   assert.ok(pts > 800 && pts <= 1000, 'misma economía que los otros juegos (máx 1000 por partida)');
 });
+
+test('Dardos PRO servidor: si se acabó el tiempo no cuenta como ganada', () => {
+  const ok = FORMULAS.DARTS(sanitizeMetrics('DARTS', { throws: [T20, T20, T20, T20, T20, ONE], elapsedMs: 60000, timeLimitMs: 120000 })).awardedPoints;
+  const tarde = FORMULAS.DARTS(sanitizeMetrics('DARTS', { throws: [T20, T20, T20, T20, T20, ONE], elapsedMs: 200000, timeLimitMs: 120000 })).awardedPoints;
+  assert.ok(ok > tarde, 'fuera de tiempo pierde el bono de ganar');
+});
