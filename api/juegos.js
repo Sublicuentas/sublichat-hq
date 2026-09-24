@@ -64,6 +64,42 @@ function hnWeekStartStr(d = new Date()) {
   return local.toISOString().slice(0, 10);
 }
 
+/* ───────────── Sopa de Letras PRO (especificación 24/09/2026) ───────────── */
+// Balance central (configurable): palabra +20, completar +30, sin pistas +15, rapidez 0..+25, pista −10.
+const SOPA_SCORE = Object.freeze({ WORD_FOUND: 20, ROUND_COMPLETE: 30, NO_HINT_BONUS: 15, HINT_COST: 10, MAX_SPEED_BONUS: 25 });
+const SOPA_LEVELS = Object.freeze({ atencion: { grid: 6, words: 3, targetMs: 60000 }, intermedio: { grid: 8, words: 5, targetMs: 120000 }, pro: { grid: 10, words: 7, targetMs: 180000 } });
+// El servidor vuelve a leer cada trazo en el tablero: solo cuenta palabras objetivo, sin repetir, dentro del grid y en línea recta.
+function sopaValidate(raw) {
+  const level = SOPA_LEVELS[String(raw.levelId || '')];
+  const bad = motivo => ({ pro: true, valid: false, motivo, found: 0, total: 0, hints: 0, elapsedMs: 0, targetMs: 60000 });
+  if (!level) return bad('nivel');
+  const n = level.grid;
+  const grid = raw.grid.slice(0, n + 1).map(r => String(r || '').toUpperCase());
+  if (grid.length !== n || grid.some(r => [...r].length !== n || /[^A-ZÑ]/.test(r))) return bad('tablero');
+  const rows = grid.map(r => [...r]);
+  const words = raw.words.slice(0, level.words + 1).map(w => String(w || '').toUpperCase());
+  if (words.length !== level.words || words.some(w => !/^[A-ZÑ]{3,}$/.test(w) || [...w].length > n) || new Set(words).size !== words.length) return bad('palabras');
+  const found = new Set();
+  for (const sel of raw.selections.slice(0, 20)) {
+    const r1 = Math.trunc(Number(sel?.r1)), c1 = Math.trunc(Number(sel?.c1)), r2 = Math.trunc(Number(sel?.r2)), c2 = Math.trunc(Number(sel?.c2));
+    if (![r1, c1, r2, c2].every(v => Number.isInteger(v) && v >= 0 && v < n)) continue;
+    const dr = r2 - r1, dc = c2 - c1;
+    if (!(dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc))) continue;
+    const len = Math.max(Math.abs(dr), Math.abs(dc)) + 1, sr = Math.sign(dr), sc = Math.sign(dc);
+    let text = ''; for (let i = 0; i < len; i++) text += rows[r1 + sr * i][c1 + sc * i];
+    const rev = [...text].reverse().join('');
+    const hit = words.find(w => !found.has(w) && (w === text || w === rev));
+    if (hit) found.add(hit);
+  }
+  return { pro: true, valid: true, found: found.size, total: words.length, hints: clamp(Math.trunc(Number(raw.hintsUsed) || 0), 0, 50), elapsedMs: clamp(Number(raw.elapsedMs) || 0, 0, 3600000), targetMs: level.targetMs };
+}
+function sopaProPoints(m) {
+  if (!m.valid || m.found < m.total || m.total === 0) return { rawScore: m.found || 0, awardedPoints: 0, detalle: { motivo: m.valid ? 'ronda_incompleta' : `invalida_${m.motivo}` } };
+  const speed = m.elapsedMs > 0 && m.elapsedMs < m.targetMs ? round(SOPA_SCORE.MAX_SPEED_BONUS * (1 - m.elapsedMs / m.targetMs)) : 0;
+  const p = m.found * SOPA_SCORE.WORD_FOUND + SOPA_SCORE.ROUND_COMPLETE + (m.hints ? 0 : SOPA_SCORE.NO_HINT_BONUS) + speed - m.hints * SOPA_SCORE.HINT_COST;
+  return { rawScore: m.found, awardedPoints: clamp(p, 0, 1000), detalle: { found: m.found, hints: m.hints, elapsedMs: m.elapsedMs, speed } };
+}
+
 /* ───────────── Dardos PRO (Sublichat - Dardos PRO v2): geometría y 301 del lado servidor ───────────── */
 const DART_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const DARTS_MAX_ROUNDS = 12;
@@ -122,6 +158,7 @@ const round = n => Math.round(n);
    Los puntos siguen exactamente las tablas de la sección 7-12 del PDF, con clamp(0,1000) final. */
 const FORMULAS = {
   WORD_SEARCH(m) {
+    if (m.pro) return sopaProPoints(m);
     const words = clamp(m.foundWords, 0, 12), wrong = clamp(m.wrongSelections, 0, 999), hints = clamp(m.hintsUsed, 0, 12), maxCombo = clamp(m.maxCombo, 0, 12);
     const timeLimit = clamp(m.timeLimitSec, 60, 600) || 240, remain = clamp(m.timeRemainingSec, 0, timeLimit);
     const p = clamp(words * 60, 0, 720) + round(clamp(180 * remain / timeLimit, 0, 180)) + clamp(maxCombo * 20, 0, 100) - wrong * 20 - hints * 50;
@@ -164,7 +201,8 @@ function sanitizeMetrics(gameCode, raw = {}) {
   const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
   const bool = v => Boolean(v);
   switch (gameCode) {
-    case 'WORD_SEARCH': return { foundWords: num(raw.foundWords), wrongSelections: num(raw.wrongSelections), hintsUsed: num(raw.hintsUsed), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 240), timeRemainingSec: num(raw.timeRemainingSec) };
+    case 'WORD_SEARCH': if (Array.isArray(raw.selections) && Array.isArray(raw.grid) && Array.isArray(raw.words)) return sopaValidate(raw);
+      return { foundWords: num(raw.foundWords), wrongSelections: num(raw.wrongSelections), hintsUsed: num(raw.hintsUsed), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 240), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'HANGMAN': return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'MEMORY_PAIRS': return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
@@ -289,4 +327,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
