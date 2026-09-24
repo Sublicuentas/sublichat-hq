@@ -29,7 +29,27 @@ async function requireFirebaseUser(req, res) {
   } catch (_) { res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' }); return null; }
 }
 const playerId = user => String(user?.usuario || user?.uid || 'jugador').toLowerCase();
-const displayName = id => id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Jugador';
+// R58: en el ranking cada jugador aparece con el nombre de su ACCESO (Sublicuentas, Relojes, Geisell).
+// Usuarios internos del mismo acceso (p. ej. naara → Sublicuentas; libni/daniela → Relojes) se suman en una fila.
+const ACCESS_OF = Object.freeze({ naara: 'Sublicuentas', sublicuentas: 'Sublicuentas', admin: 'Sublicuentas', libni: 'Relojes', relojes: 'Relojes', daniela: 'Relojes', finanzas: 'Relojes', geisell: 'Geisell', geissel: 'Geisell' });
+const accessName = id => ACCESS_OF[String(id || '').toLowerCase().trim()] || '';
+const displayName = id => accessName(id) || (id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Jugador');
+// Junta filas del mismo acceso y descarta cualquier jugador que no sea de los 3 accesos. mode: 'sum' | 'max'.
+function mergeByAccess(entries, uid, mode = 'sum') {
+  const map = new Map();
+  for (const e of entries) {
+    const name = accessName(e.userId); if (!name) continue;
+    const prev = map.get(name);
+    if (!prev) { map.set(name, { ...e, userId: name.toLowerCase(), displayName: name, ids: [e.userId] }); continue; }
+    prev.score = mode === 'max' ? Math.max(prev.score, e.score) : prev.score + e.score;
+    if (e.streak != null) prev.streak = Math.max(Number(prev.streak) || 0, Number(e.streak) || 0);
+    prev.ids.push(e.userId);
+  }
+  const list = [...map.values()].sort((a, b) => b.score - a.score);
+  if (list.length && list[0].badge != null) list.forEach(r => { r.badge = badgeFor(r.score).name; });
+  const meIdx = list.findIndex(r => r.ids.includes(uid));
+  return { list: list.map(({ ids, ...r }) => r), meIdx, meRow: meIdx >= 0 ? list[meIdx] : null };
+}
 
 /* ───────────── zona horaria del negocio (América/Tegucigalpa) ───────────── */
 const TZ = 'America/Tegucigalpa';
@@ -184,25 +204,22 @@ module.exports = async function handler(req, res) {
         snap.forEach(d => { const r = d.data(); const k = `${r.uid}|${r.gameCode}|${r.localDate}`; best.set(k, Math.max(best.get(k) || 0, Number(r.awardedPoints) || 0)); });
         const totals = new Map();
         for (const [k, pts] of best) { const uidKey = k.split('|')[0]; totals.set(uidKey, (totals.get(uidKey) || 0) + pts); }
-        const entries = [...totals.entries()].map(([id, score]) => ({ userId: id, displayName: displayName(id), score })).sort((a, b) => b.score - a.score);
-        const rank = entries.findIndex(e => e.userId === uid) + 1;
-        return res.status(200).json({ ok: true, scope, period: { from: weekStart }, me: { rank: rank || null, score: totals.get(uid) || 0 }, entries: entries.slice(0, limit) });
+        const m = mergeByAccess([...totals.entries()].map(([id, score]) => ({ userId: id, displayName: displayName(id), score })), uid, 'sum');
+        return res.status(200).json({ ok: true, scope, period: { from: weekStart }, me: { rank: m.meIdx >= 0 ? m.meIdx + 1 : null, score: m.meRow ? m.meRow.score : (totals.get(uid) || 0) }, entries: m.list.slice(0, limit) });
       }
       if (scope === 'porJuego') {
         const gameCode = String(req.body?.gameCode || '');
         if (!GAMES[gameCode]) return res.status(400).json({ ok: false, error: 'Juego no reconocido.' });
         const snap = await db.collection('juegos_resultados').where('gameCode', '==', gameCode).get();
         const best = new Map(); snap.forEach(d => { const r = d.data(); best.set(r.uid, Math.max(best.get(r.uid) || 0, Number(r.awardedPoints) || 0)); });
-        const entries = [...best.entries()].map(([id, score]) => ({ userId: id, displayName: displayName(id), score })).sort((a, b) => b.score - a.score);
-        const rank = entries.findIndex(e => e.userId === uid) + 1;
-        return res.status(200).json({ ok: true, scope, gameCode, me: { rank: rank || null, score: best.get(uid) || 0 }, entries: entries.slice(0, limit) });
+        const m = mergeByAccess([...best.entries()].map(([id, score]) => ({ userId: id, displayName: displayName(id), score })), uid, 'max');
+        return res.status(200).json({ ok: true, scope, gameCode, me: { rank: m.meIdx >= 0 ? m.meIdx + 1 : null, score: m.meRow ? m.meRow.score : (best.get(uid) || 0) }, entries: m.list.slice(0, limit) });
       }
       // general (lifetime)
       const snap = await db.collection('juegos_puntos').get();
       const entries = []; snap.forEach(d => { const v = d.data(); entries.push({ userId: d.id, displayName: displayName(d.id), score: Number(v.totalPoints) || 0, streak: Number(v.streak?.current) || 0, badge: badgeFor(Number(v.totalPoints) || 0).name }); });
-      entries.sort((a, b) => b.score - a.score);
-      const rank = entries.findIndex(e => e.userId === uid) + 1;
-      return res.status(200).json({ ok: true, scope: 'general', total: entries.length, me: entries.find(e => e.userId === uid) ? { ...entries.find(e => e.userId === uid), rank } : { rank: null, score: 0 }, entries: entries.slice(0, limit) });
+      const m = mergeByAccess(entries, uid, 'sum');
+      return res.status(200).json({ ok: true, scope: 'general', total: m.list.length, me: m.meRow ? { ...m.list[m.meIdx], rank: m.meIdx + 1 } : { rank: null, score: 0 }, entries: m.list.slice(0, limit) });
     }
 
     return res.status(400).json({ ok: false, error: 'Acción no reconocida.' });
@@ -212,4 +229,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };

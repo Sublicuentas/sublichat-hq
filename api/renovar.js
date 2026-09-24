@@ -1002,6 +1002,12 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1)) : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
+    // R58 · Max Player: app aparte con SU PROPIO usuario y contraseña (distintos a los de la lista IPTV).
+    // Si quien guarda no manda el campo (bot de Telegram o versiones anteriores), se conserva lo que ya tenía la ficha.
+    const mpActivo = (servicio.maxPlayer ?? anterior.maxPlayer) === true;
+    out.maxPlayer = mpActivo;
+    out.maxPlayerUsuario = mpActivo ? String(servicio.maxPlayerUsuario ?? anterior.maxPlayerUsuario ?? "").trim().slice(0, 120) : "";
+    out.maxPlayerClave = mpActivo ? String(servicio.maxPlayerClave ?? anterior.maxPlayerClave ?? "").trim().slice(0, 120) : "";
   }
   if (familia.startsWith("oleada")) {
     out.oleadaDispositivos = Math.max(1, Number(servicio.oleadaDispositivos ?? anterior.oleadaDispositivos ?? 1) || 1);

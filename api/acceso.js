@@ -428,6 +428,28 @@ function mesesHastaRenovacion(fechaRenovacion) {
   return Math.max(1, Math.min(24, meses || 1));
 }
 
+// R58 · IPTV (LatinTV, LionTV, Nanotech, IPTV): el enlace del cliente muestra por defecto SOLO dispositivos y
+// fecha de renovación. Con Max Player muestra el usuario y la contraseña DE MAX PLAYER (no los de la lista).
+// Si el vendedor eligió otros datos en "Datos visibles en la ficha URL", se respetan (y entonces sí va la URL).
+function esFamiliaIptv(plataforma = "") {
+  const p = canonPlat(plataforma || "");
+  return p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv");
+}
+function iptvModoVisibilidad(servicio = {}) {
+  const raw = servicio.visibilidadUrl;
+  const fuente = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { modo: raw };
+  return String(fuente?.modo || "plataforma");
+}
+// true = el vendedor NO eligió mostrar credenciales de la lista (modo por defecto o personalizado sin marcar nada).
+function iptvSoloPlan(servicio = {}) {
+  if (!esFamiliaIptv(servicio.plataforma)) return false;
+  if (servicio.maxPlayer === true) return true;
+  const modo = iptvModoVisibilidad(servicio);
+  if (modo === "plataforma") return true;
+  if (modo !== "personalizado") return false;
+  const raw = servicio.visibilidadUrl || {}; const c = raw.campos || raw;
+  return !(c.correo === true || c.clave === true);
+}
 function tvDigitalOcultaServidor(servicio = {}) {
   // La opción personalizada con todas las credenciales desmarcadas significa
   // “no mostrar datos de acceso”. En Nanotech la URL del servidor también es
@@ -486,11 +508,12 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
       servicioPerfil,
       resolverModo(servicioPerfil)
     );
+    const soloPlan = iptvSoloPlan(servicio);
     return {
       nombre: p.nombre || p.perfil || beneficiarioNombre || titularCliente,
       perfil: p.perfil || p.nombre || "",
-      correo: !vencido && campos.mostrarCorreo ? p.correo : "",
-      clave: !vencido && campos.mostrarClave ? p.clave : "",
+      correo: !vencido && !soloPlan && campos.mostrarCorreo ? p.correo : "",
+      clave: !vencido && !soloPlan && campos.mostrarClave ? p.clave : "",
       pin: !vencido && campos.mostrarPin ? p.pinPerfil : "",
       usaPin: campos.mostrarPin === true,
       modo: campos.modo,
@@ -533,7 +556,12 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     mesesContratados: tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1),
     planDuracion: `${tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1)} mes${(tvDigital.mesesContratados || Number(servicio.mesesContratados || 1)) === 1 ? "" : "es"}`,
     dispositivosContratados: tvDigital.dispositivosContratados || 0,
-    urlServidor: tvDigitalOcultaServidor(servicio) ? "" : (tvDigital.urlServidor || ""),
+    urlServidor: (tvDigitalOcultaServidor(servicio) || iptvSoloPlan(servicio)) ? "" : (tvDigital.urlServidor || ""),
+    esIptv: esFamiliaIptv(plataforma),
+    iptvLista: esFamiliaIptv(plataforma) && !iptvSoloPlan(servicio) ? String(servicio.iptvLista || "") : "",
+    maxPlayer: esFamiliaIptv(plataforma) && servicio.maxPlayer === true,
+    maxPlayerUsuario: !vencido && esFamiliaIptv(plataforma) && servicio.maxPlayer === true ? String(servicio.maxPlayerUsuario || "") : "",
+    maxPlayerClave: !vencido && esFamiliaIptv(plataforma) && servicio.maxPlayer === true ? String(servicio.maxPlayerClave || "") : "",
     esTvDigital: tvDigital.esTvDigital === true,
     stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     terminos: termsFor(plataforma),
