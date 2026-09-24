@@ -208,7 +208,14 @@ function sanitizeMetrics(gameCode, raw = {}) {
     case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
     case 'DARTS': {
       // Dardos PRO: si llegan coordenadas, el servidor RECALCULA todo (zona, puntaje, 301, bust) y no confía en nada más.
-      if (Array.isArray(raw.throws) && raw.throws.length) return dartsReplay(raw.throws, num(raw.maxRounds, DARTS_MAX_ROUNDS));
+      if (Array.isArray(raw.throws) && raw.throws.length) {
+        const m = dartsReplay(raw.throws, num(raw.maxRounds, DARTS_MAX_ROUNDS));
+        // R62 · contrarreloj: si se acabó el tiempo (2 min por defecto), la partida cuenta como perdida.
+        const limit = clamp(num(raw.timeLimitMs, 120000), 30000, 600000), elapsed = num(raw.elapsedMs, 0);
+        if (m.won && (raw.timeUp === true || elapsed > limit + 3000)) { m.won = false; m.timeUp = true; }
+        if (!m.won && (raw.timeUp === true || elapsed >= limit) && m.dartsUsed >= 3) m.completed = true; // jugó hasta que se acabó el reloj
+        return m;
+      }
       return { finished: bool(raw.finished), dartsUsed: num(raw.dartsUsed, 9), avgAccuracy: num(raw.avgAccuracy), bonusHits: num(raw.bonusHits) };
     }
     case 'COLOR_CHALLENGE': return { completed: bool(raw.completed), precisionPct: num(raw.precisionPct), wrongChanges: num(raw.wrongChanges), finePremium: bool(raw.finePremium) };
