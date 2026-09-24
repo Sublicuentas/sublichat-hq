@@ -1,3 +1,0 @@
-{$TV_PUBLIC_HOST} {
-  reverse_proxy browser:8080
-}
