@@ -68,6 +68,29 @@ function hnWeekStartStr(d = new Date()) {
   return local.toISOString().slice(0, 10);
 }
 
+/* ───────────── Memoria PRO (antes Pares de cartas) · tabla del pack oficial ───────────── */
+const MEMORIA_MODES = Object.freeze({
+  EASY: { pairs: 6, seconds: 75, pairPoints: 10, completionBonus: 30, maxTimeBonus: 20 },
+  MEDIUM: { pairs: 8, seconds: 55, pairPoints: 15, completionBonus: 50, maxTimeBonus: 30 },
+  HARD: { pairs: 10, seconds: 40, pairPoints: 20, completionBonus: 80, maxTimeBonus: 40 },
+});
+// El servidor no acepta el total del teléfono: recalcula con límites del modo y descarta tiempos imposibles.
+function memoriaValidate(raw) {
+  const cfg = MEMORIA_MODES[String(raw.mode)];
+  const pairs = clamp(Math.trunc(Number(raw.pairsFound) || 0), 0, cfg.pairs);
+  const elapsedMs = clamp(Number(raw.elapsedMs) || 0, 0, cfg.seconds * 1000);
+  const secondsRemaining = clamp(Math.trunc(Number(raw.secondsRemaining) || 0), 0, Math.max(0, cfg.seconds - Math.floor(elapsedMs / 1000)));
+  const humanOk = elapsedMs >= pairs * 450; // cada par exige voltear 2 cartas con animación: menos que esto no es humano
+  const completed = raw.completed === true && pairs === cfg.pairs && humanOk;
+  return { pro: true, mode: String(raw.mode), pairs: humanOk ? pairs : 0, completed, secondsRemaining: completed ? secondsRemaining : 0, mistakes: clamp(Math.trunc(Number(raw.mistakes) || 0), 0, 999) };
+}
+function memoriaProPoints(m) {
+  const cfg = MEMORIA_MODES[m.mode];
+  const pairs = m.pairs * cfg.pairPoints, completion = m.completed ? cfg.completionBonus : 0;
+  const timeBonus = m.completed ? Math.min(cfg.maxTimeBonus, Math.floor(m.secondsRemaining / 2)) : 0;
+  return { rawScore: m.pairs, awardedPoints: clamp(pairs + completion + timeBonus, 0, 1000), detalle: { mode: m.mode, pairs, completion, timeBonus } };
+}
+
 /* ───────────── Sopa de Letras PRO (especificación 24/09/2026) ───────────── */
 // Balance central (configurable): palabra +20, completar +30, sin pistas +15, rapidez 0..+25, pista −10.
 const SOPA_SCORE = Object.freeze({ WORD_FOUND: 20, ROUND_COMPLETE: 30, NO_HINT_BONUS: 15, HINT_COST: 10, MAX_SPEED_BONUS: 25 });
@@ -152,7 +175,7 @@ function dartsProPoints(m) {
 
 /* ───────────── catálogo y presupuestos por juego (números del PDF) ───────────── */
 const GAMES = Object.freeze({
-  WORD_SEARCH: 'Sopa de letras', HANGMAN: 'El ahorcado', MEMORY_PAIRS: 'Pares de cartas',
+  WORD_SEARCH: 'Sopa de letras', HANGMAN: 'El ahorcado', MEMORY_PAIRS: 'Memoria',
   BASKETBALL: 'Básquet', DARTS: 'Dardos', COLOR_CHALLENGE: 'Colorear',
 });
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(Number(n)) ? Number(n) : 0));
@@ -175,6 +198,7 @@ const FORMULAS = {
     return { rawScore: solved, awardedPoints: clamp(p, 0, 1000), detalle: { solved, totalErrors, hints } };
   },
   MEMORY_PAIRS(m) {
+    if (m.pro) return memoriaProPoints(m);
     const pairs = clamp(m.pairsFound, 0, 12), moves = clamp(m.moves, 12, 999), maxCombo = clamp(m.maxCombo, 0, 12);
     const timeLimit = clamp(m.timeLimitSec, 30, 600) || 120, remain = clamp(m.timeRemainingSec, 0, timeLimit);
     const eff = clamp(round(200 * (12 / Math.max(12, moves))), 0, 200);
@@ -208,7 +232,8 @@ function sanitizeMetrics(gameCode, raw = {}) {
     case 'WORD_SEARCH': if (Array.isArray(raw.selections) && Array.isArray(raw.grid) && Array.isArray(raw.words)) return sopaValidate(raw);
       return { foundWords: num(raw.foundWords), wrongSelections: num(raw.wrongSelections), hintsUsed: num(raw.hintsUsed), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 240), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'HANGMAN': return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
-    case 'MEMORY_PAIRS': return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
+    case 'MEMORY_PAIRS': if (raw.pro === true && MEMORIA_MODES[String(raw.mode || '')]) return memoriaValidate(raw);
+      return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
     case 'DARTS': {
       // Dardos PRO: si llegan coordenadas, el servidor RECALCULA todo (zona, puntaje, 301, bust) y no confía en nada más.
@@ -343,4 +368,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { memoriaValidate, memoriaProPoints, sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
