@@ -3,12 +3,12 @@
 
   // Evita montar dos instancias de Control Maestro si el bundle se evalúa dos veces.
   if(window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__) return;
-  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260919-64';
+  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260924-65';
 
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260919-64';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260924-65';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -141,8 +141,8 @@
   function source(){
     try{
       const x=typeof window.sublichatControlData==='function'?window.sublichatControlData():{};
-      return {version:Number(x.version)||0,error:String(x.error||''),servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
-    }catch(_){return {version:0,servicios:[],cuentas:[]};}
+      return {version:Number(x.version)||0,ready:x.ready===true,error:String(x.error||''),servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
+    }catch(_){return {version:0,ready:false,error:'',servicios:[],cuentas:[]};}
   }
 
   async function api(payload,endpoint=API){
@@ -1607,8 +1607,14 @@
       state.status=state.pendingSyncMessage;state.statusType='good';state.pendingSyncMessage='';
     }
     if(!isAdmin()){host.innerHTML='<div class="cm-empty">Este módulo está habilitado únicamente para Sublicuentas y Geisell.</div>';return;}
-    if(state.loading&&!state.meta){host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando Control Maestro…</div></div>';return;}
     const liveSource=source();
+    const needsHistoricalAnalysis=!!state.meta?.plantilla;
+    const initialReady=!!state.meta&&liveSource.ready&&(!needsHistoricalAnalysis||!!state.analysis);
+    if(!initialReady){
+      if(liveSource.error&&!liveSource.ready){host.innerHTML=`<div class="cm-empty">⚠️ ${esc(liveSource.error)}<br><small>Control Maestro no mostrará porcentajes parciales. Vuelva a intentarlo cuando regrese la conexión.</small><div style="margin-top:12px"><button class="cm-btn primary" id="cmInitialRetry">🔄 Reintentar</button></div></div>`;const retry=host.querySelector('#cmInitialRetry');if(retry)retry.onclick=()=>{state.status='';state.statusType='';state.metaRetryCount=0;state.booted=false;boot();};return;}
+      if(state.statusType==='error'&&state.status){host.innerHTML=`<div class="cm-empty">⚠️ ${esc(state.status.replace(/^⚠️\s*/,''))}<br><small>No se mostrará una vista parcial ni porcentajes provisionales.</small><div style="margin-top:12px"><button class="cm-btn primary" id="cmInitialRetry">🔄 Reintentar carga completa</button></div></div>`;const retry=host.querySelector('#cmInitialRetry');if(retry)retry.onclick=()=>{state.status='';state.statusType='';state.metaRetryCount=0;if(!state.meta)state.booted=false;if(state.meta?.plantilla&&!state.analysis)autoAnalyzeWithRetry(0);else boot();render();};return;}
+      host.innerHTML='<div class="cm-loading"><div><div class="cm-spinner"></div>Cargando datos reales de Control Maestro…<small style="display:block;margin-top:8px">Clientes + Bodega + cruce histórico</small></div></div>';return;
+    }
     if(!state.accountAudit||state.accountAudit._forAnalysis!==state.analysis||state.accountAudit._sourceVersion!==liveSource.version){
       state.accountAudit=buildAccountAudit(liveSource,state.analysis);
       state.accountAudit._forAnalysis=state.analysis;
@@ -2250,7 +2256,9 @@
   }
 
   async function refreshMeta(){
-    state.loading=true;render();
+    state.loading=true;
+    if(!state.meta){state.status='';state.statusType='';}
+    render();
     try{
       const previousTemplateId=String(state.meta?.plantilla?.id||'');
       const nextMeta=await api({accion:'control_estado'});

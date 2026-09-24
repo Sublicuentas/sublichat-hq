@@ -70,33 +70,6 @@
       ]
     },
     {
-      "source": "/activar-tv.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/activar-tv-platforms.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/activar-tv.css",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
-    },
-    {
       "source": "/sublichat-app.js",
       "headers": [
         {
@@ -116,9 +89,6 @@
     }
   ],
   "functions": {
-    "api/activar-tv.js": {
-      "maxDuration": 60
-    },
     "api/renovar.js": {
       "includeFiles": "lib/**"
     },

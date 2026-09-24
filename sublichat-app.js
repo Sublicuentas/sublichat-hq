@@ -121,15 +121,50 @@ function sbMdToPlain(text) {
 }
 /* SUBLI-MD:END */
 
+function sublichatAuditPayload(rawUrl, method, init){
+  let parsed;try{parsed=new URL(rawUrl,window.location.href);}catch(_){return null;}
+  if(parsed.origin!==window.location.origin||!parsed.pathname.startsWith('/api/')||['/api/login','/api/auditoria'].includes(parsed.pathname))return null;
+  const verbo=String(method||'GET').toUpperCase();
+  if(['GET','HEAD','OPTIONS'].includes(verbo))return null;
+  let body={};
+  try{if(typeof init?.body==='string')body=JSON.parse(init.body)||{};}catch(_){body={};}
+  const accion=String(body.accion||body.tipoAccion||body.action||'').trim();
+  const mod=parsed.pathname.replace(/^\/api\//,'').replace(/\.js$/,'');
+  const modulosOperacion=new Set(['renovar','inventario','finanzas','importar','tickets','sorteos','revendedores-admin','portal-cliente','catalogo-relojes','perfil','recuperacion','acceso','migraciones']);
+  if(!modulosOperacion.has(mod))return null;
+  // Solo registrar operaciones que cambian datos. Muchas APIs usan POST también
+  // para leer; auditarlas inflaría las estadísticas con simples aperturas de pantalla.
+  const mutacion=/(^|_)(crear|guardar|editar|eliminar|quitar|registrar|finalizar|iniciar|restaurar|actualizar|responder|resolver|reenviar|cerrar|girar|marcar|corregir|preparar|elegir|subir|proceso|migrar|unificar|renovar|transferir)(_|$)/i.test(accion)
+    || /^cargar_agosto_2026$/i.test(accion)
+    || (!accion && ['renovar','finanzas','recuperacion','acceso'].includes(mod));
+  if(!mutacion)return null;
+  const safe={};
+  for(const k of ['clienteId','servicioIndex','servicioId','inventarioId','ticketId','id','sorteoId','plataforma','vendedor','seccion','tipo','motivo']){
+    if(body[k]!=null&&typeof body[k]!== 'object')safe[k]=String(body[k]).slice(0,160);
+  }
+  return {modulo:mod,accion:accion||`${verbo.toLowerCase()}_${mod}`,metodo:verbo,ruta:parsed.pathname,detalle:safe};
+}
+
+async function sublichatRegistrarActividad(payload, authHeader){
+  if(!payload)return;
+  const h={'Content-Type':'application/json'};if(authHeader)h.Authorization=authHeader;
+  const controller=typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=controller?setTimeout(()=>controller.abort(),2200):null;
+  try{await sublichatNativeFetch('/api/auditoria',{method:'POST',headers:h,body:JSON.stringify(payload),keepalive:true,...(controller?{signal:controller.signal}:{})});}
+  catch(_){/* la bitácora nunca debe impedir la operación principal */}
+  finally{if(timer)clearTimeout(timer);}
+}
+
 window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
   const rawUrl = typeof input === "string"
     ? input
     : (input instanceof URL ? input.href : (input && input.url) || "");
   let isPrivateApi = false;
+  let parsedUrl = null;
   try {
-    const parsed = new URL(rawUrl, window.location.href);
-    isPrivateApi = parsed.origin === window.location.origin &&
-      parsed.pathname.startsWith("/api/") && parsed.pathname !== "/api/login";
+    parsedUrl = new URL(rawUrl, window.location.href);
+    isPrivateApi = parsedUrl.origin === window.location.origin &&
+      parsedUrl.pathname.startsWith("/api/") && parsedUrl.pathname !== "/api/login";
   } catch (_) {}
 
   if (!isPrivateApi) return sublichatNativeFetch(input, init);
@@ -143,7 +178,15 @@ window.fetch = async function sublichatAuthenticatedFetch(input, init = {}) {
       if (user) headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
     } catch (_) {}
   }
-  return sublichatNativeFetch(input, { ...init, headers });
+  const method=String(init.method||(typeof Request!=="undefined"&&input instanceof Request?input.method:'GET')||'GET').toUpperCase();
+  const response=await sublichatNativeFetch(input, { ...init, headers });
+  const auditPayload=sublichatAuditPayload(rawUrl,method,init);
+  if(auditPayload&&response.ok){
+    let logicalOk=true;
+    try{const clone=await response.clone().json();if(clone&&clone.ok===false)logicalOk=false;}catch(_){}
+    if(logicalOk)await sublichatRegistrarActividad(auditPayload,headers.get('Authorization')||'');
+  }
+  return response;
 };
 
 const PLAT_LABELS = {
@@ -182,6 +225,7 @@ const DEMO = [
 
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
 let CONTROL_DATA_VERSION=0; // cambia cada vez que Clientes/Bodega reciben una lectura nueva
+let CONTROL_DATA_READY=false; // evita dibujar Control Maestro con datos parciales antes de completar Clientes + Bodega
 let CONTROL_SESSION_VERSION=0, CONTROL_DATA_ERROR="", controlLiveFallback=null;
 const controlSharedRequests=new Map();
 function bumpControlDataVersion(){ CONTROL_DATA_VERSION=(CONTROL_DATA_VERSION+1)%1000000000; return CONTROL_DATA_VERSION; }
@@ -239,6 +283,20 @@ function clienteBeneficiarioKey(servicio={}){
     .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80)||"persona";
   return `tercero-${nombre}`;
 }
+function canonicalVendedorNombre(v){
+  const raw=String(v||"").replace(/\s+/g," ").trim();
+  const n=clienteSearchNorm(raw);
+  return (n==="geissel"||n==="geisell")?"Geisell":raw;
+}
+function canonicalVendedorNorm(v){
+  const n=clienteSearchNorm(v);
+  return n==="geissel"?"geisell":n;
+}
+function canonicalVendedoresLista(lista,fallback=""){
+  const src=Array.isArray(lista)?lista:(fallback?[fallback]:[]), out=[], seen=new Set();
+  src.forEach(v=>{const nombre=canonicalVendedorNombre(v),k=canonicalVendedorNorm(nombre);if(!nombre||!k||seen.has(k))return;seen.add(k);out.push(nombre);});
+  return out;
+}
 function flattenCliente(doc, clienteId=""){
   // Las fichas absorbidas quedan como alias recuperable en Firebase, pero no
   // deben volver a aparecer como un segundo cliente en Sublichat.
@@ -252,9 +310,8 @@ function flattenCliente(doc, clienteId=""){
   const accesos=doc.accesosBeneficiarios&&typeof doc.accesosBeneficiarios==="object"&&!Array.isArray(doc.accesosBeneficiarios)?doc.accesosBeneficiarios:{};
   const tokenTitular=String(doc.tokenAcceso||accesos.titular?.token||"");
   return servs.map((s,srvIndex)=>{
-    let vendedor=String(s.vendedor||vendedorCliente||"—").trim();
-    if(clienteSearchNorm(vendedor)==="geissel")vendedor="Geisell";
-    const vendedorNorm=clienteSearchNorm(s.vendedor_norm||vendedor);
+    let vendedor=canonicalVendedorNombre(s.vendedor||vendedorCliente||"—");
+    const vendedorNorm=canonicalVendedorNorm(s.vendedor_norm||vendedor);
     const vendedorTelefono=String(s.vendedorTelefono||(vendedorNorm===clienteSearchNorm(doc.vendedor_norm||vendedorCliente)?vendedorTelefonoCliente:"")||"").trim();
     const perfiles=perfilesDeCompra(s,nombre);
     const principal=perfiles[0]||{};
@@ -268,8 +325,8 @@ function flattenCliente(doc, clienteId=""){
     const tokenGrupo=String(accesos[beneficiarioKey]?.token||(beneficiarioKey==="titular"?tokenTitular:"")||s.token||"");
     return {
       nombre,vendedor,vendedorNorm,telefono,vendedorTelefono,nombreNorm,clienteId,
-      vendedores:Array.isArray(doc.vendedores)?doc.vendedores.slice():[vendedor],
-      clienteCompartido:doc.clienteCompartido===true||(Array.isArray(doc.vendedores_norm)&&doc.vendedores_norm.length>1),
+      vendedores:canonicalVendedoresLista(doc.vendedores,vendedor),
+      clienteCompartido:doc.clienteCompartido===true||canonicalVendedoresLista(doc.vendedores,vendedor).length>1,
       srvIndex,
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
@@ -402,7 +459,7 @@ function detenerClientesEnVivo(){
   CONTROL_SESSION_VERSION++;
   if(controlLiveFallback)clearInterval(controlLiveFallback);
   controlLiveFallback=null;controlSharedRequests.clear();CONTROL_DATA_ERROR='';
-  DATA=[];INVENTARIO=[];FINANZAS=[];bumpControlDataVersion();
+  DATA=[];INVENTARIO=[];FINANZAS=[];CONTROL_DATA_READY=false;bumpControlDataVersion();
   try{if(typeof clientesLiveUnsubscribe==="function")clientesLiveUnsubscribe();}catch(_){ }
   clientesLiveUnsubscribe=null;
   clientesLiveStarted=false;
@@ -444,7 +501,7 @@ async function load(options={}){
       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       if(session!==CONTROL_SESSION_VERSION)return;
-      DATA=nextData;INVENTARIO=nextInventory;CONTROL_DATA_ERROR='';
+      DATA=nextData;INVENTARIO=nextInventory;CONTROL_DATA_ERROR='';CONTROL_DATA_READY=true;
       bumpControlDataVersion();
       // Control Maestro puede abrirse antes de que termine la primera lectura de
       // Bodega. Avisamos inmediatamente cuando la lectura atómica de Clientes +
@@ -489,7 +546,7 @@ async function load(options={}){
     }
   }else{
     if(requireServer)throw new Error('Firebase no está configurado en esta sesión.');
-    DATA=DEMO.flatMap(flattenCliente);document.getElementById("srcLabel").textContent="Modo demo";
+    DATA=DEMO.flatMap(flattenCliente);CONTROL_DATA_READY=true;document.getElementById("srcLabel").textContent="Modo demo";
   }
   // Control Maestro ya vuelve a dibujar su propia mesa con DATA e INVENTARIO.
   // Durante sacar/eliminar no reconstruimos también Clientes, Inventario y
@@ -508,6 +565,7 @@ async function load(options={}){
 // colecciones; la API valida su sesión antes de servir datos o respaldos.
 window.sublichatControlData=()=>({
   version:CONTROL_DATA_VERSION,
+  ready:CONTROL_DATA_READY,
   error:CONTROL_DATA_ERROR,
   servicios:DATA.flatMap(c=>(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre)).map((p,perfilIndex)=>({
     clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
@@ -6224,14 +6282,14 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   };
   const ROLE_LABEL={finanzas:'Relojes · Finanzas', admin:'Sublicuentas · Admin', auditor:'Magdiel · Auditor', geisell_admin:'Geisell · Admin Control'};
   const ROLE_NAV={
-    finanzas:['inicio','activar-tv','clientes','portal-cliente','catalogo-relojes','sorteos','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
-    admin:['inicio','activar-tv','clientes','portal-cliente','control-cuentas','catalogo-relojes','sorteos','revendedores','agenda','objetivos','importar','tickets','inventario','egresos','pelis','partidos','chat','perfil','configuracion'],
+    finanzas:['inicio','clientes','portal-cliente','catalogo-relojes','sorteos','agenda','objetivos','importar','tickets','pelis','partidos','chat','perfil'],
+    admin:['inicio','clientes','portal-cliente','control-cuentas','catalogo-relojes','sorteos','revendedores','agenda','objetivos','importar','tickets','inventario','egresos','pelis','partidos','chat','perfil','actividad','configuracion'],
     auditor:['inicio','crm-master','objetivos','importar','auditoria','estadisticas','tickets','clientes','chat','perfil'],
-    geisell_admin:['inicio','activar-tv','clientes','control-cuentas','tickets','perfil']
+    geisell_admin:['inicio','clientes','control-cuentas','tickets','perfil']
   };
   const NAV_META={
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
-    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], 'activar-tv':['📺','Activar TV'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
+    importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], actividad:['🧾','Actividad'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'], configuracion:['⚙️','Config'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
   };
@@ -6265,14 +6323,28 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function isRelojesAccount(){return ['relojes','libni'].includes(norm(currentUser()));}
   function canPortalCliente(){return isSublicuentasAccount()||isRelojesAccount();}
   function can(screen){
-    if(screen==='activar-tv')return canControlMaestro()||isRelojesAccount();
     if(screen==='control-cuentas')return canControlMaestro();
+    if(screen==='actividad')return isSublicuentasAccount();
     if(screen==='revendedores')return isSublicuentasAccount();
     if(screen==='portal-cliente')return canPortalCliente();
     if(screen==='sorteos')return canPortalCliente();
     if(screen==='catalogo-relojes')return canPortalCliente();
     return (ROLE_NAV[currentRole()]||ROLE_NAV.admin).includes(screen);
   }
+  let geisellMigrationTried=false;
+  async function unificarGeisellLegacy(){
+    if(geisellMigrationTried||!isSublicuentasAccount())return;
+    geisellMigrationTried=true;
+    try{
+      const r=await fetch('/api/migraciones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'unificar_geisell'})});
+      const j=await r.json().catch(()=>({}));
+      if(j.ok&&Number(j.actualizados||0)>0){
+        try{await load({forceServer:true,controlOnly:false});}catch(_){}
+        mostrarToast(`✅ Geisell unificada: ${j.actualizados} cliente${Number(j.actualizados)===1?'':'s'} corregido${Number(j.actualizados)===1?'':'s'}.`);
+      }
+    }catch(e){console.warn('Migración Geisell',e);}
+  }
+
   const dateDMY=d=>{
     if(!d)return '';
     const x=(d instanceof Date)?d:parseDate(d);
@@ -6560,8 +6632,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ensureScreen('importar','Módulos de trabajo','Bodega, Auditoría y Flujo diario como hoja de cálculo dentro de Sublichat (se trabaja desde la Web). Sublicuentas migra los archivos completos y ve el trabajo de todos.','');
     ensureScreen('egresos','Gestor de egresos','Registre gastos diarios de banco, compras, recargas o soporte.','');
     ensureScreen('cierre','Cierre de caja','Suma ingresos, resta egresos y deja listo el cuadre semanal.','');
-    ensureScreen('activar-tv','Activar TV','Primero inicie sesión. Después introduzca el código del televisor.','');
     ensureScreen('control-cuentas','Control Maestro','Cuentas, revisiones y respaldos compartidos por Sublicuentas y Geisell.','');
+    ensureScreen('actividad','Actividad del sistema','Bitácora de acciones realizadas por los usuarios dentro de Sublichat.','');
     ensureScreen('revendedores','Catálogo Socios','Precios, vendedores y clientes de toda la red de socios — conectado al Panel de Socios.','');
     ensureScreen('portal-cliente','Portal del cliente','Administre las promociones segmentadas y los métodos de pago que aparecen exclusivamente en las URL de acceso.','');
     ensureScreen('catalogo-relojes','Catálogo Relojes','Administre productos, precios, promociones públicas, disponibilidad y apariencia del catálogo desde Sublichat.','');
@@ -7069,9 +7141,37 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     bindExcelSavedPanel(el);
   }
 
+  const actividadState={loaded:false,loading:false,error:'',eventos:[],resumen:null};
+  const actividadLabel=s=>String(s||'Acción').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const actividadActor=e=>String(e.actorLabel||e.usuario||'Usuario');
+  function actividadFecha(v){const d=new Date(v||'');if(isNaN(d))return '—';try{return d.toLocaleString('es-HN',{timeZone:'America/Tegucigalpa',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return d.toLocaleString('es-HN');}}
+  async function loadActividad(force=false){
+    if(!isSublicuentasAccount()||actividadState.loading||(actividadState.loaded&&!force))return;
+    actividadState.loading=true;actividadState.error='';renderActividad();
+    try{
+      const r=await fetch('/api/auditoria?limit=500',{cache:'no-store'}),j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.ok)throw new Error(j.error||'No se pudo leer la bitácora.');
+      actividadState.eventos=Array.isArray(j.eventos)?j.eventos:[];actividadState.resumen=j.resumen||{};actividadState.loaded=true;
+    }catch(e){actividadState.error=e.message||'No se pudo leer la bitácora.';}finally{actividadState.loading=false;renderActividad();}
+  }
+  function renderActividad(){
+    const el=document.getElementById('rbac-actividad');if(!el)return;
+    const active=!!document.getElementById('screen-actividad')?.classList.contains('active');if(!active)return;
+    if(!isSublicuentasAccount()){el.innerHTML='<div class="empty">Esta bitácora es privada de Sublicuentas.</div>';return;}
+    if(!actividadState.loaded&&!actividadState.loading){loadActividad();return;}
+    if(actividadState.loading&&!actividadState.loaded){el.innerHTML='<div class="empty">⏳ Cargando actividad real de los usuarios…</div>';return;}
+    if(actividadState.error&&!actividadState.loaded){el.innerHTML=`<div class="empty">⚠️ ${esc(actividadState.error)}<br><button class="rbac-btn" id="actividadRetry" style="margin-top:10px">Reintentar</button></div>`;document.getElementById('actividadRetry').onclick=()=>loadActividad(true);return;}
+    const r=actividadState.resumen||{},eventos=actividadState.eventos||[],porUsuario=Array.isArray(r.porUsuario)?r.porUsuario:[];
+    el.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${Number(r.hoy||0)}</b><span>Acciones hoy</span></div><div class="rbac-card"><b>${Number(r.ultimos7Dias||0)}</b><span>Últimos 7 días</span></div><div class="rbac-card"><b>${Number(r.eliminaciones30Dias||0)}</b><span>Eliminaciones · 30 días</span></div><div class="rbac-card"><b>${Number(r.usuariosActivos30Dias||0)}</b><span>Usuarios activos · 30 días</span></div></div>
+      <div class="profile-actions" style="margin:12px 0"><button class="rbac-btn" id="actividadRefresh">↻ Actualizar bitácora</button></div>
+      <div class="rbac-card"><b>Actividad por usuario · últimos 30 días</b><div class="rbac-list" style="margin-top:10px">${porUsuario.length?porUsuario.map(x=>`<div class="rbac-row"><div><h3>${esc(x.actorLabel||x.usuario||'Usuario')}</h3><p>${Number(x.total||0)} acciones registradas</p><small>${Number(x.eliminaciones||0)} eliminaciones · ${Number(x.ediciones||0)} ediciones/cambios</small></div><span class="rbac-badge">${Number(x.total||0)}</span></div>`).join(''):'<div class="empty">Sin actividad registrada todavía.</div>'}</div></div>
+      <div class="rbac-card" style="margin-top:12px"><b>Historial reciente</b><div class="rbac-list" style="margin-top:10px">${eventos.length?eventos.slice(0,120).map(e=>`<div class="rbac-row"><div><h3>${esc(actividadActor(e))} · ${esc(actividadLabel(e.accion))}</h3><p>${esc(actividadLabel(e.modulo))}${e.detalleTexto?' · '+esc(e.detalleTexto):''}</p><small>${esc(actividadFecha(e.createdAtIso||e.createdAt))}</small></div><span class="rbac-badge">${esc(String(e.metodo||'POST'))}</span></div>`).join(''):'<div class="empty">Sin eventos recientes.</div>'}</div></div>`;
+    const b=document.getElementById('actividadRefresh');if(b)b.onclick=()=>loadActividad(true);
+  }
+
   function renderSoporteConfig(){
     const s=document.getElementById('rbac-soporte'); if(s) s.innerHTML=`<div class="rbac-grid"><div class="rbac-card"><b>${INVENTARIO.filter(c=>invDisp(c)<=0).length}</b><span>Cuentas llenas/sin cupo</span></div><div class="rbac-card"><b>${DATA.filter(c=>c.fecha&&daysTo(c.fecha)<0).length}</b><span>Clientes vencidos</span></div><div class="rbac-card"><b>${window._invError?'Error':'OK'}</b><span>Estado inventario Firebase</span></div></div><div class="empty">Aquí se conectarán reportes de caídas, reemplazos y compras de emergencia. La base ya queda separada para que el bot Telegram pueda leer las mismas alertas.</div>`;
-    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones y auditoria_eventos.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor, geisell=geisell_admin.</p></div><span class="rbac-badge">Roles</span></div></div>`;
+    const c=document.getElementById('rbac-configuracion'); if(c) c.innerHTML=`<div class="rbac-list"><div class="rbac-row"><div><h3>Firebase</h3><p>Proyecto: ${esc(CONFIG.firebase.projectId)} · Colección clientes: ${esc(CONFIG.collection)}</p></div><span class="rbac-badge">Activo</span></div><div class="rbac-row"><div><h3>Bot Telegram</h3><p>El bot debe leer las mismas colecciones: clientes, servicios, finanzas_movimientos, inventario, respaldos_excel, importaciones, auditoria_eventos y actividad_usuarios.</p></div><span class="rbac-badge">Compartido</span></div><div class="rbac-row"><div><h3>Usuarios / RBAC</h3><p>Configure los roles desde AUTH_USERS_JSON: relojes=finanzas, sublicuentas=admin, magdiel=auditor, geisell=geisell_admin.</p></div><span class="rbac-badge">Roles</span></div></div>`;
   }
 
   /* ===== TICKETS Y AVISOS · texto + evidencia + Telegram recíproco ===== */
@@ -7232,11 +7332,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function renderRBACAll(){
     updateTopAdvisor(); renderPerfil();
-    renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderSoporteConfig(); renderTickets(); renderObjetivos();
+    renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderActividad(); renderSoporteConfig(); renderTickets(); renderObjetivos();
     if(typeof window.sublichatPortalClienteRender==='function')window.sublichatPortalClienteRender();
   }
 
-  function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); window.SublichatActivarTV?.refreshAccess(); }
+  function applyRBAC(){ ensureRBACCss(); ensureRoleChip(); ensureScreens(); buildNav(); renderRBACAll(); if(isSublicuentasAccount())unificarGeisellLegacy(); }
   const _oldEnterApp=enterApp;
   enterApp=function(){ _oldEnterApp(); setTimeout(applyRBAC,50); setTimeout(loadProfileFromServer,300); };
   const _oldRender=render;
