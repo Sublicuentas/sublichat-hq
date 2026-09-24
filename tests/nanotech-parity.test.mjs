@@ -31,5 +31,5 @@ test('Nanotech: una compra creada en TG se abre como Nanotech y nunca cae al fal
 test('Nanotech: si la visibilidad personalizada no muestra credenciales, tampoco expone URL/servidor', () => {
   const api = read('api/acceso.js');
   assert.match(api, /function tvDigitalOcultaServidor\(servicio = \{\}\)/);
-  assert.match(api, /urlServidor: tvDigitalOcultaServidor\(servicio\) \? "" : \(tvDigital\.urlServidor \|\| ""\)/);
+  assert.match(api, /urlServidor: \(tvDigitalOcultaServidor\(servicio\) \|\| iptvSoloPlan\(servicio\)\) \? "" : \(tvDigital\.urlServidor \|\| ""\)/); // R58: IPTV por defecto solo plan
 });

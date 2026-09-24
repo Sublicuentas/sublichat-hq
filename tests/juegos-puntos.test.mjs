@@ -76,15 +76,16 @@ test('ranking: general (lifetime), semanal (mejor por juego y por día) y por ju
   await call({ accion: 'registrar', gameCode: 'HANGMAN', roundId: 'a1', metrics: METRICS.HANGMAN }, '{"usuario":"naara"}');
   await call({ accion: 'registrar', gameCode: 'HANGMAN', roundId: 'b1', metrics: { ...METRICS.HANGMAN, solvedWords: 1 } }, '{"usuario":"libni"}');
   let r = await call({ accion: 'ranking', scope: 'general' });
-  assert.equal(r.body.entries[0].userId, 'naara'); assert.ok(r.body.entries[0].score > r.body.entries[1].score);
-  assert.equal(r.body.entries[0].displayName, 'Naara');
+  assert.equal(r.body.entries[0].userId, 'sublicuentas'); assert.ok(r.body.entries[0].score > r.body.entries[1].score);
+  assert.equal(r.body.entries[0].displayName, 'Sublicuentas', 'R58: nombre del acceso, nunca el nombre personal');
+  assert.equal(r.body.entries[1].displayName, 'Relojes');
 
   admin.__reset();
   await call({ accion: 'registrar', gameCode: 'MEMORY_PAIRS', roundId: 'w1', metrics: METRICS.MEMORY_PAIRS }, '{"usuario":"naara"}');
   await call({ accion: 'registrar', gameCode: 'HANGMAN', roundId: 'w2', metrics: { ...METRICS.HANGMAN, totalWrongLetters: 5, timeRemainingSec: 60 } }, '{"usuario":"naara"}');
   r = await call({ accion: 'ranking', scope: 'semanal' });
   assert.equal(r.body.period.from, hnWeekStartStr());
-  assert.equal(r.body.entries[0].userId, 'naara'); assert.ok(r.body.entries[0].score > 1000, 'suma el mejor resultado de CADA juego, no solo el más alto');
+  assert.equal(r.body.entries[0].userId, 'sublicuentas'); assert.ok(r.body.entries[0].score > 1000, 'suma el mejor resultado de CADA juego, no solo el más alto');
   r = await call({ accion: 'ranking', scope: 'porJuego', gameCode: 'MEMORY_PAIRS' });
   assert.equal(r.body.entries[0].score, 1000);
   r = await call({ accion: 'ranking', scope: 'porJuego', gameCode: 'NOPE' });
