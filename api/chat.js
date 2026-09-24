@@ -117,6 +117,61 @@ function buildResumen(clientes, hoyISO) {
     por_vendedor: porClave(x => x.vendedor, 15),
   };
 }
+// ───────────── R63 · respuestas rápidas sin Gemini + contexto reducido ─────────────
+// Las preguntas de fechas (hoy, mañana, semana, vencidos) se responden aquí al instante y con cifras exactas.
+// Así Subli nunca se queda "pensando" por mandarle a Gemini toda la cartera.
+const normQ = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const PLAT_LABEL = { vipnetflix: "Netflix Premium VIP", netflix: "Netflix", disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN", hbomax: "HBO Max", primevideo: "Prime Video", paramount: "Paramount+", vix: "ViX+", crunchyroll: "Crunchyroll", spotify: "Spotify", youtube: "YouTube Premium", deezer: "Deezer", canva: "Canva", appletv: "Apple TV", universal: "Universal+", oleadatv: "Oleada TV", oleada: "Oleada TV", evoutouch: "Nanotech", evoutouch1: "Nanotech 1", evoutouch2: "Nanotech 2", evoutouch3: "Nanotech 3", latintv: "LatinTV", liontv: "LionTV", stellatv: "Stella TV" };
+const platLabel = p => PLAT_LABEL[String(p || "").toLowerCase().trim()] || String(p || "—");
+function filasConFecha(clientes, hoyISO) {
+  const out = [];
+  for (const c of Array.isArray(clientes) ? clientes : []) for (const q of Array.isArray(c?.cuentas) ? c.cuentas : []) {
+    const dias = diasEntre(hoyISO, q?.renueva); if (dias === null) continue;
+    out.push({ nombre: String(c?.nombre || "Cliente"), tel: String(c?.tel || ""), vendedor: String(q?.vendedor || c?.vendedor || ""), plataforma: platLabel(q?.plataforma), precio: Number(q?.precio) || 0, dias, renueva: String(q?.renueva || "").slice(0, 10) });
+  }
+  return out;
+}
+function respuestaLocal(pregunta, clientes, hoyISO) {
+  const q = normQ(pregunta);
+  const pideDetalleCliente = /\b(clave|contrasena|correo|pin|telefono de|numero de)\b/.test(q);
+  if (pideDetalleCliente) return null;
+  let rango = null, titulo = "";
+  if (/vencid|atrasad|no renov|sin renovar|morosos?/.test(q)) { rango = [-3650, -1]; titulo = "vencidas sin renovar"; }
+  else if (/pasado manana/.test(q)) { rango = [2, 2]; titulo = "vencen pasado mañana"; }
+  else if (/manana/.test(q)) { rango = [1, 1]; titulo = "vencen mañana"; }
+  else if (/\bhoy\b/.test(q) && /(venc|renuev|cobr|pag)/.test(q)) { rango = [0, 0]; titulo = "vencen hoy"; }
+  else if (/(esta semana|proximos 7|7 dias|semana)/.test(q) && /(venc|renuev|cobr)/.test(q)) { rango = [0, 7]; titulo = "vencen en los próximos 7 días"; }
+  if (!rango) return null;
+  const filas = filasConFecha(clientes, hoyISO).filter(f => f.dias >= rango[0] && f.dias <= rango[1]).sort((a, b) => a.dias - b.dias || a.nombre.localeCompare(b.nombre, "es"));
+  const total = filas.reduce((t, f) => t + f.precio, 0);
+  const nClientes = new Set(filas.map(f => f.nombre + "|" + f.tel)).size;
+  if (!filas.length) return `**No hay cuentas que ${titulo.replace(/^vencen /, "venzan ").replace(/^vencidas/, "estén vencidas")}.**`;
+  const linea = f => `- **${f.nombre}** · ${f.tel || "sin teléfono"} · ${f.plataforma} · ${fmtLps(f.precio)}${f.vendedor ? ` · ${f.vendedor}` : ""}`;
+  const tit = filas.length === 1 ? titulo.replace(/^vencen/, "vence").replace(/^vencidas/, "vencida") : titulo;
+  const partes = [`**${filas.length} cuenta${filas.length === 1 ? "" : "s"} ${tit}** · ${nClientes} cliente${nClientes === 1 ? "" : "s"} · total **${fmtLps(total)}**`];
+  const mostrar = filas.slice(0, 15);
+  if (rango[0] !== rango[1] && rango[0] >= 0) {
+    const porDia = new Map(); for (const f of mostrar) { const k = f.renueva; (porDia.get(k) || porDia.set(k, []).get(k)).push(f); }
+    for (const [fecha, l] of porDia) { const todas = filas.filter(f => f.renueva === fecha); partes.push(`### ${fechaLargaHN(fecha)} · ${todas.length} · ${fmtLps(todas.reduce((t, f) => t + f.precio, 0))}`); l.forEach(f => partes.push(linea(f))); }
+  } else mostrar.forEach(f => partes.push(linea(f)));
+  if (filas.length > 15) partes.push(`… y ${filas.length - 15} más. ¿Desea el detalle por vendedor o por día?`);
+  return partes.join("\n");
+}
+// Solo manda a Gemini lo que la pregunta necesita: clientes mencionados por nombre/teléfono o, si no hay, la cartera
+// sin claves ni correos (más liviana = responde rápido y no se pasa del tiempo).
+const STOP = new Set(["que", "cual", "cuales", "cuanto", "cuantos", "cuantas", "clientes", "cliente", "tengo", "tiene", "para", "con", "del", "los", "las", "una", "uno", "por", "como", "donde", "cuando", "vence", "vencen", "hoy", "esta", "este", "semana", "dame", "decime", "dime", "quien", "quienes", "cuenta", "cuentas", "plataforma", "netflix", "disney"]);
+function contextoRelevante(pregunta, clientes) {
+  const lista = Array.isArray(clientes) ? clientes : [];
+  const q = normQ(pregunta);
+  const tokens = q.split(/[^a-z0-9ñ]+/).filter(t => t.length >= 3 && !STOP.has(t));
+  const digits = String(pregunta || "").replace(/\D/g, "");
+  const quiereCred = /(clave|contrasena|correo|pin|acceso|usuario)/.test(q);
+  const coinciden = lista.filter(c => { const n = normQ(c?.nombre); return tokens.some(t => n.includes(t)) || (digits.length >= 4 && String(c?.tel || "").replace(/\D/g, "").includes(digits)); });
+  const base = coinciden.length && coinciden.length <= 60 ? coinciden : lista;
+  const conCred = quiereCred && base === coinciden;
+  return base.slice(0, 700).map(c => ({ nombre: c?.nombre, tel: c?.tel, vendedor: c?.vendedor, cuentas: (Array.isArray(c?.cuentas) ? c.cuentas : []).map(k => conCred ? k : { plataforma: k?.plataforma, precio: k?.precio, renueva: k?.renueva, estado: k?.estado, vendedor: k?.vendedor }) }));
+}
+
 // Deja la respuesta lista para pintarse: viñetas "- ", sin saltos de más.
 function normalizarRespuesta(t) {
   return String(t || "")
@@ -263,6 +318,8 @@ export default async function handler(req, res) {
   // La fecha viene del servidor (Honduras): el teléfono/navegador mandaba la fecha UTC y desde las 6 p. m. ya era "mañana".
   const hoyISO = fechaHN();
   const resumen = isRewrite ? null : buildResumen(clientes, hoyISO);
+  if (!isRewrite) { const rapida = respuestaLocal(pregunta, clientes, hoyISO); if (rapida) return res.status(200).json({ respuesta: normalizarRespuesta(rapida), fuente: "local" }); }
+  const clientesCtx = isRewrite ? [] : contextoRelevante(pregunta, clientes);
   // Contexto: le damos a Gemini los datos reales para que NO invente.
   const systemPrompt = isRewrite ? `Eres especialista en mensajes breves de renovación para Sublicuentas.
 Tu única tarea es reescribir un mensaje de entretenimiento premium para WhatsApp.
@@ -304,7 +361,7 @@ RESUMEN PRECALCULADO (cifras exactas, JSON):
 ${JSON.stringify(resumen)}
 
 DATOS DE LA CARTERA (JSON):
-${JSON.stringify(clientes || [])}`;
+${JSON.stringify(clientesCtx)}`;
 
   try {
     const model = isRewrite
@@ -313,7 +370,7 @@ ${JSON.stringify(clientes || [])}`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), isRewrite ? 8000 : 20000);
+    const timeout = setTimeout(() => controller.abort(), isRewrite ? 12000 : 25000);
 
     let r;
     try {
@@ -357,8 +414,11 @@ ${JSON.stringify(clientes || [])}`;
   } catch (e) {
     console.error("[api/chat]", e);
     if (e && e.name === "AbortError") {
+      // En vez de un error, devuelve el resumen exacto ya calculado para que el asesor siempre tenga respuesta.
+      if (!isRewrite && resumen) return res.status(200).json({ respuesta: normalizarRespuesta(`**Resumen de su cartera (${fechaLargaHN(hoyISO)})**\n- Clientes: **${resumen.clientes}** · servicios: **${resumen.servicios}**\n- Vencen hoy: **${resumen.vencen_hoy.servicios}** · ${resumen.vencen_hoy.total}\n- Vencen mañana: **${resumen.vencen_manana.servicios}** · ${resumen.vencen_manana.total}\n- Próximos 7 días: **${resumen.vencen_proximos_7_dias_sin_hoy.servicios}** · ${resumen.vencen_proximos_7_dias_sin_hoy.total}\n- Vencidos sin renovar: **${resumen.vencidos_sin_renovar.servicios}** · ${resumen.vencidos_sin_renovar.total}\nGemini tardó en contestar su pregunta exacta; pruebe de nuevo o pregunte por un cliente por su nombre.`), fuente: "resumen" });
       return res.status(504).json({ error: "Gemini tardó demasiado en responder. Intente nuevamente.", provider: "gemini" });
     }
     return res.status(500).json({ error: "Error al contactar Gemini: " + (e.message || "") });
   }
 }
+export const __chatInternal = { respuestaLocal, contextoRelevante, buildResumen };

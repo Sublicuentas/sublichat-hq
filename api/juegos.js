@@ -32,7 +32,11 @@ const playerId = user => String(user?.usuario || user?.uid || 'jugador').toLower
 // R58: en el ranking cada jugador aparece con el nombre de su ACCESO (Sublicuentas, Relojes, Geisell).
 // Usuarios internos del mismo acceso (p. ej. naara → Sublicuentas; libni/daniela → Relojes) se suman en una fila.
 const ACCESS_OF = Object.freeze({ naara: 'Sublicuentas', sublicuentas: 'Sublicuentas', admin: 'Sublicuentas', libni: 'Relojes', relojes: 'Relojes', daniela: 'Relojes', finanzas: 'Relojes', geisell: 'Geisell', geissel: 'Geisell' });
-const accessName = id => ACCESS_OF[String(id || '').toLowerCase().trim()] || '';
+const ACCESS_BY_ROLE = Object.freeze({ admin: 'Sublicuentas', administrador: 'Sublicuentas', owner: 'Sublicuentas', superadmin: 'Sublicuentas', sublicuentas: 'Sublicuentas', relojes: 'Relojes', finanzas: 'Relojes', geisell_admin: 'Geisell', geisell: 'Geisell' });
+// Mapa uid → acceso que se llena en cada lectura/registro (el usuario de login puede ser cualquier clave; el rol decide).
+const ACCESS_CACHE = new Map();
+const accessName = id => ACCESS_CACHE.get(String(id || '').toLowerCase().trim()) || ACCESS_OF[String(id || '').toLowerCase().trim()] || '';
+const accessForUser = user => ACCESS_OF[String(user?.usuario || '').toLowerCase().trim()] || ACCESS_BY_ROLE[String(user?.role || '').toLowerCase().trim()] || '';
 const displayName = id => accessName(id) || (id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Jugador');
 // Junta filas del mismo acceso y descarta cualquier jugador que no sea de los 3 accesos. mode: 'sum' | 'max'.
 function mergeByAccess(entries, uid, mode = 'sum') {
@@ -244,12 +248,15 @@ module.exports = async function handler(req, res) {
   try { getApp(); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   const user = await requireFirebaseUser(req, res); if (!user) return;
   const uid = playerId(user);
+  const myAccess = accessForUser(user);
+  if (myAccess) ACCESS_CACHE.set(uid, myAccess);
   const db = admin.firestore();
   const { accion } = req.body || {};
 
   try {
     if (accion === 'resumen') {
       const doc = await db.collection('juegos_puntos').doc(uid).get();
+      if (myAccess && doc.exists && doc.data()?.access !== myAccess) { try { await db.collection('juegos_puntos').doc(uid).set({ access: myAccess }, { merge: true }); } catch (_) {} }
       const data = doc.exists ? doc.data() : {};
       const totalPoints = Number(data.totalPoints) || 0;
       return res.status(200).json({ ok: true, catalogo: GAMES, jugador: uid, totalPoints, byGame: data.byGame || {}, streak: data.streak || { current: 0, best: 0 }, badge: badgeFor(totalPoints) });
@@ -292,7 +299,7 @@ module.exports = async function handler(req, res) {
           st.bestTurnScore = Math.max(Number(st.bestTurnScore) || 0, clean.bestTurn);
           extra.stats = { ...(prev.stats || {}), darts: st };
         }
-        tx.set(userRef, { totalPoints, byGame, streak, dailyDate: todayStr, daily, ...extra, updatedAt: new Date().toISOString() }, { merge: true });
+        tx.set(userRef, { totalPoints, byGame, streak, dailyDate: todayStr, daily, ...extra, ...(myAccess ? { access: myAccess } : {}), updatedAt: new Date().toISOString() }, { merge: true });
         return { uid, gameCode, roundId, rawScore, awardedPoints, totalPoints, streak, badge: badgeFor(totalPoints), repetido: false };
       });
       const totalPoints = Number(out.totalPoints) || 0;
@@ -300,6 +307,8 @@ module.exports = async function handler(req, res) {
     }
 
     if (accion === 'ranking') {
+      // Carga el acceso guardado de cada jugador (Sublicuentas / Relojes / Geisell) para nombrar y agrupar el ranking.
+      try { const acc = await db.collection('juegos_puntos').get(); acc.forEach(d => { const a = d.data()?.access; if (a) ACCESS_CACHE.set(d.id, a); }); } catch (_) {}
       const scope = String(req.body?.scope || 'general');
       const limit = Math.min(50, Math.max(1, Number(req.body?.limit) || 10));
       if (scope === 'semanal') {
