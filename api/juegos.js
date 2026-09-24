@@ -64,6 +64,52 @@ function hnWeekStartStr(d = new Date()) {
   return local.toISOString().slice(0, 10);
 }
 
+/* ───────────── Dardos PRO (Sublichat - Dardos PRO v2): geometría y 301 del lado servidor ───────────── */
+const DART_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const DARTS_MAX_ROUNDS = 12;
+function dartScore(nx, ny) {
+  const x = Number(nx) || 0, y = Number(ny) || 0, r = Math.sqrt(x * x + y * y);
+  if (!(r <= 1)) return { number: 0, multiplier: 0, score: 0, zone: 'MISS' };
+  if (r <= 0.03735) return { number: 50, multiplier: 1, score: 50, zone: 'BULL' };
+  if (r <= 0.09353) return { number: 25, multiplier: 1, score: 25, zone: 'OUTER_BULL' };
+  let angle = Math.atan2(x, -y) * 180 / Math.PI; if (angle < 0) angle += 360;
+  const number = DART_NUMBERS[Math.floor((angle + 9) / 18) % 20];
+  if (r >= 0.58235 && r <= 0.62941) return { number, multiplier: 3, score: number * 3, zone: 'TRIPLE' };
+  if (r >= 0.95294) return { number, multiplier: 2, score: number * 2, zone: 'DOUBLE' };
+  return { number, multiplier: 1, score: number, zone: 'SINGLE' };
+}
+// Repite la partida 301 (3 dardos por turno, bust restaura el turno, 0 exacto gana) a partir de las coordenadas.
+function dartsReplay(rawThrows, maxRoundsIn) {
+  const maxRounds = clamp(maxRoundsIn, 1, 20) || DARTS_MAX_ROUNDS;
+  const list = rawThrows.slice(0, maxRounds * 3).map(t => ({ nx: clamp(t?.nx, -1.5, 1.5), ny: clamp(t?.ny, -1.5, 1.5) }));
+  let remaining = 301, turnStart = 301, dartsLeft = 3, round = 1, won = false, used = 0, bestTurn = 0, turnValid = 0, validTurns = 0;
+  let bulls = 0, triple20s = 0, valid = 0, scored = 0;
+  const endTurn = () => { bestTurn = Math.max(bestTurn, turnStart - remaining); if (turnValid === 3) validTurns += 1; turnValid = 0; dartsLeft = 3; turnStart = remaining; round += 1; };
+  for (const t of list) {
+    if (won || round > maxRounds) break;
+    const h = dartScore(t.nx, t.ny); used += 1;
+    if (h.zone !== 'MISS') { valid += 1; turnValid += 1; }
+    const cand = remaining - h.score;
+    if (cand < 0) { remaining = turnStart; turnValid = 0; endTurn(); continue; }
+    if (h.zone === 'BULL') bulls += 1;
+    if (h.zone === 'TRIPLE' && h.number === 20) triple20s += 1;
+    scored += h.score;
+    if (cand === 0) { remaining = 0; won = true; bestTurn = Math.max(bestTurn, turnStart); if (turnValid === 3) validTurns += 1; break; }
+    remaining = cand; dartsLeft -= 1; if (dartsLeft === 0) endTurn();
+  }
+  const completed = won || round > maxRounds;
+  return { pro: true, won, completed, dartsUsed: used, remaining, bulls, triple20s, validTurns, accuracy: used ? Math.round(valid / used * 100) : 0, scored, bestTurn };
+}
+// Economía coherente con los otros juegos (tope 1000 por partida, topes diarios iguales). Tabla del PDF escalada:
+// completar partida, ganar, eficiencia (301 en 9 dardos o menos = máximo), Bull 50, Triple 20, turnos con 3 aciertos.
+function dartsProPoints(m) {
+  if (!m.completed) return { rawScore: 0, awardedPoints: 0, detalle: { motivo: 'partida_no_completada' } };
+  const p = 100 + (m.won ? 300 : 0)
+    + (m.won ? clamp(round(250 * (9 / Math.max(9, m.dartsUsed))), 0, 250) : clamp(round(250 * (301 - m.remaining) / 301), 0, 150))
+    + clamp(m.bulls * 40, 0, 160) + clamp(m.triple20s * 60, 0, 180) + clamp(m.validTurns * 20, 0, 100) + round(clamp(m.accuracy, 0, 100) * 0.6);
+  return { rawScore: m.won ? 1 : 0, awardedPoints: clamp(p, 0, 1000), detalle: { won: m.won, dartsUsed: m.dartsUsed, remaining: m.remaining, bulls: m.bulls, triple20s: m.triple20s } };
+}
+
 /* ───────────── catálogo y presupuestos por juego (números del PDF) ───────────── */
 const GAMES = Object.freeze({
   WORD_SEARCH: 'Sopa de letras', HANGMAN: 'El ahorcado', MEMORY_PAIRS: 'Pares de cartas',
@@ -100,6 +146,7 @@ const FORMULAS = {
     return { rawScore: made, awardedPoints: clamp(p, 0, 1000), detalle: { made, swish, bestStreak } };
   },
   DARTS(m) {
+    if (m.pro) return dartsProPoints(m);
     const finished = m.finished ? 400 : 0, dartsUsed = clamp(m.dartsUsed, 3, 30), avgAcc = clamp(m.avgAccuracy, 0, 100), bonus = clamp(m.bonusHits, 0, 10);
     const eff = m.finished ? clamp(round(300 * (9 / Math.max(9, dartsUsed))), 0, 300) : 0;
     const p = finished + eff + round(clamp(2 * avgAcc, 0, 200)) + clamp(bonus * 10, 0, 100);
@@ -121,7 +168,11 @@ function sanitizeMetrics(gameCode, raw = {}) {
     case 'HANGMAN': return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'MEMORY_PAIRS': return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
-    case 'DARTS': return { finished: bool(raw.finished), dartsUsed: num(raw.dartsUsed, 9), avgAccuracy: num(raw.avgAccuracy), bonusHits: num(raw.bonusHits) };
+    case 'DARTS': {
+      // Dardos PRO: si llegan coordenadas, el servidor RECALCULA todo (zona, puntaje, 301, bust) y no confía en nada más.
+      if (Array.isArray(raw.throws) && raw.throws.length) return dartsReplay(raw.throws, num(raw.maxRounds, DARTS_MAX_ROUNDS));
+      return { finished: bool(raw.finished), dartsUsed: num(raw.dartsUsed, 9), avgAccuracy: num(raw.avgAccuracy), bonusHits: num(raw.bonusHits) };
+    }
     case 'COLOR_CHALLENGE': return { completed: bool(raw.completed), precisionPct: num(raw.precisionPct), wrongChanges: num(raw.wrongChanges), finePremium: bool(raw.finePremium) };
     default: return null;
   }
@@ -187,7 +238,16 @@ module.exports = async function handler(req, res) {
         const daily = { ...(prev.dailyDate === todayStr ? prev.daily : {}) };
         daily.global = usedGlobalToday + awardedPoints; daily[gameCode] = usedGameToday + awardedPoints;
         tx.set(resultRef, { uid, gameCode, roundId, rawScore, awardedPoints, metrics: clean, createdAt: new Date().toISOString(), localDate: todayStr });
-        tx.set(userRef, { totalPoints, byGame, streak, dailyDate: todayStr, daily, updatedAt: new Date().toISOString() }, { merge: true });
+        const extra = {};
+        if (gameCode === 'DARTS' && clean && clean.pro) { // estadísticas propias de Dardos (el ranking sigue usando el total global de SP)
+          const st = { ...((prev.stats || {}).darts || {}) };
+          st.matchesPlayed = (Number(st.matchesPlayed) || 0) + 1; st.matchesWon = (Number(st.matchesWon) || 0) + (clean.won ? 1 : 0);
+          st.bulls = (Number(st.bulls) || 0) + clean.bulls; st.triple20s = (Number(st.triple20s) || 0) + clean.triple20s;
+          st.totalDartsThrown = (Number(st.totalDartsThrown) || 0) + clean.dartsUsed; st.totalScoreScored = (Number(st.totalScoreScored) || 0) + clean.scored;
+          st.bestTurnScore = Math.max(Number(st.bestTurnScore) || 0, clean.bestTurn);
+          extra.stats = { ...(prev.stats || {}), darts: st };
+        }
+        tx.set(userRef, { totalPoints, byGame, streak, dailyDate: todayStr, daily, ...extra, updatedAt: new Date().toISOString() }, { merge: true });
         return { uid, gameCode, roundId, rawScore, awardedPoints, totalPoints, streak, badge: badgeFor(totalPoints), repetido: false };
       });
       const totalPoints = Number(out.totalPoints) || 0;
@@ -229,4 +289,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
