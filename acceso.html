@@ -511,10 +511,16 @@
     if(d.esTvDigital!==true)return "";
     const meses=Math.max(1,Number(d.mesesContratados||1)||1);
     const dispositivos=Math.max(0,Number(d.dispositivosContratados||0)||0);
+    const idx=Math.max(0,Number(d._serviceIndex||0));
     const filas=[infoRow("Plan contratado",`${meses} mes${meses===1?"":"es"}`,"🗓️")];
     if(dispositivos)filas.push(infoRow("Dispositivos",`${dispositivos} dispositivo${dispositivos===1?"":"s"}`,"📺"));
-    if(d.urlServidor)filas.push(fieldRow("URL / servidor",d.urlServidor,`s${Math.max(0,Number(d._serviceIndex||0))}-servidor`));
-    return `<div class="section-title">Datos del plan</div><div class="profile-group">${filas.join("")}</div>`;
+    if(d.esIptv&&d.fechaRenovacion)filas.push(infoRow("Renovación",d.fechaRenovacion,"📅"));
+    if(d.iptvLista)filas.push(infoRow("Lista",d.iptvLista,"📲"));
+    if(d.urlServidor)filas.push(fieldRow("URL / servidor",d.urlServidor,`s${idx}-servidor`));
+    // R58 · Max Player: usuario y contraseña propios de la app (distintos a los de la lista).
+    const max=d.maxPlayer===true?`<div class="section-title">📱 Max Player</div><div class="profile-group">${d.maxPlayerUsuario?fieldRow("Usuario",d.maxPlayerUsuario,`s${idx}-mp-usuario`):""}${d.maxPlayerClave?fieldRow("Contraseña",d.maxPlayerClave,`s${idx}-mp-clave`):""}${!d.maxPlayerUsuario&&!d.maxPlayerClave?infoRow("Acceso","Pídale sus datos de Max Player a su vendedor","ℹ️"):""}</div>`:"";
+    const aviso=d.esIptv&&dispositivos?`<div class="note iptv-aviso" role="note"><b>⚠️ Cuenta válida en ${dispositivos} dispositivo${dispositivos===1?"":"s"}</b>Vigente hasta el ${esc(d.fechaRenovacion||"—")}. Usarla en más dispositivos puede bloquear el acceso.</div>`:"";
+    return `${max}<div class="section-title">Datos del plan</div><div class="profile-group">${filas.join("")}</div>${aviso}`;
   }
 
   function detalleServicioHtml(d,index){
