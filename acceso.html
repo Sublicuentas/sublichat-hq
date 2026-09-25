@@ -514,7 +514,7 @@
     const idx=Math.max(0,Number(d._serviceIndex||0));
     const filas=[infoRow("Plan contratado",`${meses} mes${meses===1?"":"es"}`,"🗓️")];
     if(dispositivos)filas.push(infoRow("Dispositivos",`${dispositivos} dispositivo${dispositivos===1?"":"s"}`,"📺"));
-    if(d.esIptv&&d.fechaRenovacion)filas.push(infoRow("Renovación",d.fechaRenovacion,"📅"));
+    if(d.esIptv&&d.fechaRenovacion)filas.push(infoRow("Renovación",`${d.fechaRenovacion}${d.iptvHora?` · ${d.iptvHora}`:""}`,"📅"));
     if(d.iptvLista)filas.push(infoRow("Lista",d.iptvLista,"📲"));
     if(d.urlServidor)filas.push(fieldRow("URL / servidor",d.urlServidor,`s${idx}-servidor`));
     // R58 · Max Player: usuario y contraseña propios de la app (distintos a los de la lista).
