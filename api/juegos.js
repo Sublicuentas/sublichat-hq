@@ -68,6 +68,28 @@ function hnWeekStartStr(d = new Date()) {
   return local.toISOString().slice(0, 10);
 }
 
+/* ───────────── Ahorcado PRO (5 rondas · 7 intentos · 2 pistas · 3 min) ───────────── */
+const AHORCADO = Object.freeze({ ROUNDS: 5, ATTEMPTS: 7, HINTS: 2, SECONDS: 180, WIN: 20, TIME_STEP: 5, TIME_MAX: 10, NO_HINT: 5, STREAK_EVERY: 3, STREAK_BONUS: 10, MATCH_COMPLETE: 20 });
+// Recalcula ronda por ronda con límites: no más de 5 rondas, 7 errores, 2 pistas, 3 minutos, y el reloj nunca "sube".
+function ahorcadoValidate(raw) {
+  const rounds = raw.rounds.slice(0, AHORCADO.ROUNDS).map(r => ({ won: r?.won === true, wrong: clamp(Math.trunc(Number(r?.wrong) || 0), 0, AHORCADO.ATTEMPTS), hints: clamp(Math.trunc(Number(r?.hints) || 0), 0, AHORCADO.HINTS), secs: clamp(Math.trunc(Number(r?.secondsRemaining) || 0), 0, AHORCADO.SECONDS), len: clamp(Math.trunc(Number(r?.len) || 3), 1, 20) }));
+  let prev = AHORCADO.SECONDS, hintsTotal = 0; const elapsedMs = clamp(Number(raw.elapsedMs) || 0, 0, AHORCADO.SECONDS * 1000 + 5000);
+  for (const r of rounds) { if (r.won && r.wrong >= AHORCADO.ATTEMPTS) r.won = false; r.secs = Math.min(r.secs, prev); prev = r.secs; hintsTotal += r.hints; }
+  const humano = elapsedMs >= rounds.filter(r => r.won).reduce((t, r) => t + r.len * 250, 0); // escribir cada letra toma tiempo
+  return { pro: true, rounds: humano ? rounds : rounds.map(r => ({ ...r, won: false })), hintsOk: hintsTotal <= AHORCADO.HINTS, complete: rounds.length === AHORCADO.ROUNDS };
+}
+function ahorcadoProPoints(m) {
+  let streak = 0, total = 0;
+  for (const r of m.rounds) {
+    if (!r.won) { streak = 0; continue; }
+    streak += 1;
+    total += AHORCADO.WIN + Math.min(Math.floor(r.secs / AHORCADO.TIME_STEP), AHORCADO.TIME_MAX) + (r.hints === 0 ? AHORCADO.NO_HINT : 0) + (streak % AHORCADO.STREAK_EVERY === 0 ? AHORCADO.STREAK_BONUS : 0);
+  }
+  if (m.complete) total += AHORCADO.MATCH_COMPLETE;
+  if (!m.hintsOk) total = Math.max(0, total - 50);
+  return { rawScore: m.rounds.filter(r => r.won).length, awardedPoints: clamp(total, 0, 1000), detalle: { ganadas: m.rounds.filter(r => r.won).length, completa: m.complete } };
+}
+
 /* ───────────── Memoria PRO (antes Pares de cartas) · tabla del pack oficial ───────────── */
 const MEMORIA_MODES = Object.freeze({
   EASY: { pairs: 6, seconds: 75, pairPoints: 10, completionBonus: 30, maxTimeBonus: 20 },
@@ -192,6 +214,7 @@ const FORMULAS = {
     return { rawScore: words, awardedPoints: clamp(p, 0, 1000), detalle: { words, wrong, hints, maxCombo } };
   },
   HANGMAN(m) {
+    if (m.pro) return ahorcadoProPoints(m);
     const solved = clamp(m.solvedWords, 0, 5), totalErrors = clamp(m.totalWrongLetters, 0, 35), hints = clamp(m.hintsUsed, 0, 2);
     const timeLimit = clamp(m.timeLimitSec, 60, 600) || 180, remain = clamp(m.timeRemainingSec, 0, timeLimit);
     const p = solved * 150 + clamp(round(100 * (1 - totalErrors / 35)), 0, 100) + round(clamp(150 * remain / timeLimit, 0, 150)) - hints * 80;
@@ -231,7 +254,8 @@ function sanitizeMetrics(gameCode, raw = {}) {
   switch (gameCode) {
     case 'WORD_SEARCH': if (Array.isArray(raw.selections) && Array.isArray(raw.grid) && Array.isArray(raw.words)) return sopaValidate(raw);
       return { foundWords: num(raw.foundWords), wrongSelections: num(raw.wrongSelections), hintsUsed: num(raw.hintsUsed), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 240), timeRemainingSec: num(raw.timeRemainingSec) };
-    case 'HANGMAN': return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
+    case 'HANGMAN': if (raw.pro === true && Array.isArray(raw.rounds)) return ahorcadoValidate(raw);
+      return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'MEMORY_PAIRS': if (raw.pro === true && MEMORIA_MODES[String(raw.mode || '')]) return memoriaValidate(raw);
       return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
@@ -368,4 +392,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { memoriaValidate, memoriaProPoints, sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { ahorcadoValidate, ahorcadoProPoints, memoriaValidate, memoriaProPoints, sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
