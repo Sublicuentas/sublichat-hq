@@ -78,7 +78,7 @@ async function listResource(req, res) {
     return res.status(403).json({ ok:false, error:'No tiene permiso para consultar este recurso.' });
   }
 
-  const limit = Math.max(25, Math.min(1000, Number(body.limit) || 500));
+  const limit = Math.max(25, Math.min(300, Number(body.limit) || 250));
   const cursor = String(body.cursor || '').trim();
   const db = getApp().firestore();
   const ref = db.collection(resource);
@@ -91,6 +91,27 @@ async function listResource(req, res) {
   const items = snap.docs.map(doc => ({ id:doc.id, ...(doc.data() || {}) }));
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
   return res.status(200).json({ ok:true, items, nextCursor });
+}
+
+// R69 · Paquete G — configuración remota NO sensible para la APK (sin secretos).
+// Fuente: documento Firestore `configuracion_app/android` (editable) sobre valores por defecto; MIN_ANDROID_BUILD por entorno.
+const CONFIG_DEFAULTS = Object.freeze({
+  configVersion: 1, apiVersion: 2, minAppBuild: 0, syncStaleSeconds: 15,
+  sellerPhones: { relojes: '32126332', sublicuentas: '89464277', 'sublicuentas 2': '89464328', yami: '96877246', jimena: '88501036', heber: '32174922', abner: '94306551', manuel: '87989267' },
+  calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
+});
+const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
+async function getConfig(req, res) {
+  const user = await requireFirebaseUser(req, res);
+  if (!user) return;
+  let doc = {};
+  try { const snap = await getApp().firestore().collection('configuracion_app').doc('android').get(); if (snap.exists) doc = snap.data() || {}; } catch (_) { doc = {}; }
+  const config = {};
+  for (const k of CONFIG_ALLOWED) config[k] = doc[k] !== undefined ? doc[k] : CONFIG_DEFAULTS[k];
+  const envMin = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
+  config.minAppBuild = Math.max(Number(config.minAppBuild) || 0, envMin);
+  if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
+  return res.status(200).json({ ok: true, config });
 }
 
 module.exports = async function mobileCore(req, res) {
@@ -113,5 +134,6 @@ module.exports = async function mobileCore(req, res) {
     return loginHandler(req, res);
   }
   if (action === 'list') return listResource(req, res);
+  if (action === 'config') return getConfig(req, res);
   return res.status(400).json({ ok:false, error:'Acción no válida.' });
 };

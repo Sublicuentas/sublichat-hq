@@ -560,6 +560,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     esIptv: esFamiliaIptv(plataforma),
     iptvLista: esFamiliaIptv(plataforma) && !iptvSoloPlan(servicio) ? String(servicio.iptvLista || "") : "",
     maxPlayer: esFamiliaIptv(plataforma) && servicio.maxPlayer === true,
+    iptvHora: esFamiliaIptv(plataforma) ? String(servicio.iptvHora || "").slice(0, 10) : "", // R69: fecha Y hora de renovación en la URL
     maxPlayerUsuario: !vencido && esFamiliaIptv(plataforma) && servicio.maxPlayer === true ? String(servicio.maxPlayerUsuario || "") : "",
     maxPlayerClave: !vencido && esFamiliaIptv(plataforma) && servicio.maxPlayer === true ? String(servicio.maxPlayerClave || "") : "",
     esTvDigital: tvDigital.esTvDigital === true,

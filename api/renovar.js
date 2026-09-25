@@ -1125,7 +1125,7 @@ function aplicarNuevoServicio(servicioAnterior, nuevo) {
   return limpiarServicioCRM(merged);
 }
 
-export default async function handler(req, res) {
+async function handlerCore(req, res) {
   res.setHeader("Cache-Control", "private, no-store, max-age=0");
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.method !== "POST") {
@@ -1932,3 +1932,70 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "No se pudo guardar el cambio. Intente nuevamente." });
   }
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R69 · Paquetes E/F/G — auditoría, idempotencia y compatibilidad de versión.
+// • La identidad del autor SALE DEL TOKEN verificado (uid/usuario/role), nunca del cuerpo.
+// • Mismo operationId + mismo usuario = misma respuesta (no se duplica la mutación).
+// • Auditoría sin secretos: solo nombres de campos cambiados, nunca valores de claves/PIN/credenciales.
+// • Si la APK es más vieja que MIN_ANDROID_BUILD, se rechaza la escritura con 426 UPDATE_REQUIRED.
+const OP_ID_RE = /^[A-Za-z0-9-]{8,80}$/;
+const READ_ACTIONS = new Set(["asegurar_enlaces"]);
+const SECRET_KEY_RE = /^(clave|claves|password|pass|contrasena|contraseña|pin|pinperfil|maxplayerclave|maxplayerusuario|iptvclave|token|idtoken|refreshtoken|cookie|secret|correo|email)$/i;
+function camposModificados(body = {}) {
+  const out = new Set();
+  const walk = (o, pre = "") => { if (!o || typeof o !== "object" || Array.isArray(o)) return; for (const k of Object.keys(o)) { if (["operationId", "clientMeta", "accion"].includes(k)) continue; const path = pre ? `${pre}.${k}` : k; out.add(SECRET_KEY_RE.test(k) ? `${path}(protegido)` : path); if (pre.split(".").length < 2) walk(o[k], path); } };
+  walk(body);
+  return [...out].slice(0, 80);
+}
+async function verifyForWrapper(req) {
+  try { const auth = String(req.headers.authorization || ""); const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : ""; if (!token) return null; return await admin.auth().verifyIdToken(token); } catch (_) { return null; }
+}
+export default async function handler(req, res) {
+  const body = (req.body && typeof req.body === "object") ? req.body : {};
+  const acc = String(body.accion || "renovar");
+  const isWrite = req.method === "POST" && !READ_ACTIONS.has(acc);
+  const meta = body.clientMeta && typeof body.clientMeta === "object" ? body.clientMeta : {};
+  const minBuild = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
+  if (isWrite && meta.source === "android" && minBuild && Number(meta.appBuild || 0) < minBuild) {
+    return res.status(426).json({ ok: false, code: "UPDATE_REQUIRED", minAppBuild: minBuild, error: `Actualización requerida (build ${minBuild} o superior).` });
+  }
+  const opId = String(body.operationId || "");
+  if (!isWrite) return handlerCore(req, res);
+  let db, user;
+  try { db = getApp().firestore(); user = await verifyForWrapper(req); } catch (_) { return handlerCore(req, res); }
+  if (!user) return handlerCore(req, res); // el núcleo responde 401
+  const opRef = OP_ID_RE.test(opId) ? db.collection("operaciones_idempotentes").doc(`${user.uid}_${opId}`) : null;
+  if (opRef) {
+    try {
+      await opRef.create({ estado: "pendiente", accion: acc, uid: user.uid, usuario: String(user.usuario || ""), creadoEn: admin.firestore.FieldValue.serverTimestamp(), expiraEn: new Date(Date.now() + 7 * 864e5) });
+    } catch (_) {
+      const prev = await opRef.get().catch(() => null);
+      const d = prev?.exists ? prev.data() : null;
+      if (d?.estado === "hecho") { res.setHeader("X-Idempotent-Replay", "1"); return res.status(Number(d.httpStatus) || 200).json(d.respuesta || { ok: true }); }
+      return res.status(409).json({ ok: false, error: "Esta operación ya se está procesando. Espere un momento.", retryable: true, operationId: opId });
+    }
+  }
+  // Captura la respuesta del núcleo para guardarla con el operationId y auditar.
+  let httpStatus = 200, payload = null;
+  const origStatus = res.status.bind(res), origJson = res.json.bind(res);
+  res.status = code => { httpStatus = code; origStatus(code); return res; };
+  res.json = data => { payload = data; return origJson(data); };
+  try { await handlerCore(req, res); }
+  finally {
+    const ok = httpStatus < 400 && payload?.ok !== false && !payload?.error;
+    try {
+      if (opRef) { if (ok) await opRef.set({ estado: "hecho", httpStatus, respuesta: payload || { ok: true }, terminadoEn: admin.firestore.FieldValue.serverTimestamp() }, { merge: true }); else await opRef.delete(); }
+      await db.collection("auditoria_eventos").add({
+        tipo: "mutacion", accion: acc, resultado: ok ? "ok" : "error", httpStatus,
+        uid: user.uid, usuario: String(user.usuario || ""), rol: String(user.role || ""), // del token, nunca del cuerpo
+        operationId: opRef ? opId : "", requestId: String(meta.requestId || "").slice(0, 80), origen: String(meta.source || "web").slice(0, 20), appBuild: Number(meta.appBuild || 0) || 0,
+        clienteId: String(body.clienteId || payload?.clienteId || "").slice(0, 120), plataforma: String(body.plataforma || body?.servicio?.plataforma || "").slice(0, 60),
+        camposModificados: camposModificados(body), error: ok ? "" : String(payload?.error || "").slice(0, 200),
+        creadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (_) { /* la auditoría nunca rompe la operación */ }
+  }
+}
+export const __wrapperInternal = { camposModificados, OP_ID_RE };
