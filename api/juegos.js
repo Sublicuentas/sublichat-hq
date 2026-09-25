@@ -68,6 +68,29 @@ function hnWeekStartStr(d = new Date()) {
   return local.toISOString().slice(0, 10);
 }
 
+/* ───────────── Básquet PRO · el servidor vuelve a simular cada tiro con la MISMA física de la APK ───────────── */
+const BASQUET = Object.freeze({ SHOTS: 5, SECONDS: 90, ANGLE_MIN: 25, ANGLE_MAX: 85, POWER_MIN: 10, POWER_MAX: 100, HOOP_MIN: 0.60, HOOP_MAX: 0.88, W: 360, H: 220, START_X: 0.12, START_Y: 0.78, RIM_Y: 0.38, G: 100 });
+function basquetHeight(xw, angleDeg, power) { const t = angleDeg * Math.PI / 180, v = 60 + clamp(power, 0, 100) * 2, c = Math.cos(t); return xw * Math.tan(t) - (BASQUET.G * xw * xw) / (2 * v * v * c * c); }
+function basquetSimulate(angle, power, hoopX) {
+  const a = clamp(Number(angle) || 0, BASQUET.ANGLE_MIN, BASQUET.ANGLE_MAX), p = clamp(Number(power) || 0, BASQUET.POWER_MIN, BASQUET.POWER_MAX);
+  const dx = (clamp(Number(hoopX) || 0.7, BASQUET.HOOP_MIN, BASQUET.HOOP_MAX) - BASQUET.START_X) * BASQUET.W, dy = (BASQUET.START_Y - BASQUET.RIM_Y) * BASQUET.H;
+  const y = basquetHeight(dx, a, p), diff = y - dy, descending = basquetHeight(dx + 1, a, p) < y;
+  const scored = Math.abs(diff) <= 9 && descending; return { scored, swish: scored && Math.abs(diff) <= 3.5 };
+}
+function basquetValidate(raw) {
+  const shots = raw.shots.slice(0, BASQUET.SHOTS).map(s => basquetSimulate(s?.angle, s?.power, s?.hoopX));
+  const elapsedMs = clamp(Number(raw.elapsedMs) || 0, 0, BASQUET.SECONDS * 1000 + 5000);
+  const humano = elapsedMs >= shots.length * 700; // cada tiro tiene animación de vuelo
+  return { pro: true, shots: humano ? shots : shots.map(() => ({ scored: false, swish: false })) };
+}
+// SP = puntos × 10 (enceste 2, limpia 3) + 25 si 5/5 + 15 si 3+ limpias (tabla del documento).
+function basquetProPoints(m) {
+  const made = m.shots.filter(s => s.scored).length, swishes = m.shots.filter(s => s.swish).length;
+  const pts = m.shots.reduce((t, s) => t + (s.scored ? (s.swish ? 3 : 2) : 0), 0);
+  const sp = pts * 10 + (made === BASQUET.SHOTS ? 25 : 0) + (swishes >= 3 ? 15 : 0);
+  return { rawScore: pts, awardedPoints: clamp(sp, 0, 1000), detalle: { made, swishes, pts } };
+}
+
 /* ───────────── Ahorcado PRO (5 rondas · 7 intentos · 2 pistas · 3 min) ───────────── */
 const AHORCADO = Object.freeze({ ROUNDS: 5, ATTEMPTS: 7, HINTS: 2, SECONDS: 180, WIN: 20, TIME_STEP: 5, TIME_MAX: 10, NO_HINT: 5, STREAK_EVERY: 3, STREAK_BONUS: 10, MATCH_COMPLETE: 20 });
 // Recalcula ronda por ronda con límites: no más de 5 rondas, 7 errores, 2 pistas, 3 minutos, y el reloj nunca "sube".
@@ -229,6 +252,7 @@ const FORMULAS = {
     return { rawScore: pairs, awardedPoints: clamp(p, 0, 1000), detalle: { pairs, moves, maxCombo } };
   },
   BASKETBALL(m) {
+    if (m.pro) return basquetProPoints(m);
     const made = clamp(m.made, 0, 5), swish = clamp(m.swish, 0, made), bestStreak = clamp(m.bestStreak, 0, 5), avgAcc = clamp(m.avgAccuracy, 0, 100);
     const p = made * 100 + swish * 30 + clamp(round(30 * bestStreak), 0, 150) + round(clamp(2 * avgAcc, 0, 200));
     return { rawScore: made, awardedPoints: clamp(p, 0, 1000), detalle: { made, swish, bestStreak } };
@@ -258,7 +282,8 @@ function sanitizeMetrics(gameCode, raw = {}) {
       return { solvedWords: num(raw.solvedWords), totalWrongLetters: num(raw.totalWrongLetters), hintsUsed: num(raw.hintsUsed), timeLimitSec: num(raw.timeLimitSec, 180), timeRemainingSec: num(raw.timeRemainingSec) };
     case 'MEMORY_PAIRS': if (raw.pro === true && MEMORIA_MODES[String(raw.mode || '')]) return memoriaValidate(raw);
       return { pairsFound: num(raw.pairsFound), moves: num(raw.moves, 12), maxCombo: num(raw.maxCombo), timeLimitSec: num(raw.timeLimitSec, 120), timeRemainingSec: num(raw.timeRemainingSec) };
-    case 'BASKETBALL': return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
+    case 'BASKETBALL': if (raw.pro === true && Array.isArray(raw.shots)) return basquetValidate(raw);
+      return { made: num(raw.made), swish: num(raw.swish), bestStreak: num(raw.bestStreak), avgAccuracy: num(raw.avgAccuracy) };
     case 'DARTS': {
       // Dardos PRO: si llegan coordenadas, el servidor RECALCULA todo (zona, puntaje, 301, bust) y no confía en nada más.
       if (Array.isArray(raw.throws) && raw.throws.length) {
@@ -392,4 +417,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.__internal = { ahorcadoValidate, ahorcadoProPoints, memoriaValidate, memoriaProPoints, sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
+module.exports.__internal = { basquetSimulate, basquetValidate, basquetProPoints, ahorcadoValidate, ahorcadoProPoints, memoriaValidate, memoriaProPoints, sopaValidate, sopaProPoints, SOPA_SCORE, dartScore, dartsReplay, dartsProPoints, mergeByAccess, accessName, FORMULAS, sanitizeMetrics, badgeFor, computeStreak, hnDateStr, hnWeekStartStr, GAMES, DAILY_GLOBAL_CAP, DAILY_GAME_CAP };
