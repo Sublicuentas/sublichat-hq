@@ -419,7 +419,7 @@ async function abrirPromocion(p){
       try{
         const sent=await api('POST',`promociones/${promoId}/enviar`,{});
         closePromo();await loadPromociones(true);
-        alert(`${editing?'Promoción actualizada y reenviada':'Promoción publicada'}.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
+        alert(`${editing?'Promoción actualizada y reenviada':'Promoción publicada'}.\nTelegram enviados: ${sent.enviados||0}${sent.encolados?`\nPor bot principal: ${sent.encolados}`:''}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
       }catch(sendError){
         closePromo();await loadPromociones(true);
         alert(`✅ Los cambios sí quedaron guardados.\n⚠️ No se pudo completar el envío por Telegram: ${sendError.message}\nPuede usar “Reenviar Telegram” para reintentarlo.`);
@@ -429,7 +429,7 @@ async function abrirPromocion(p){
     }
   };
 }
-async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}${Array.isArray(d.erroresTelegram)&&d.erroresTelegram.length?'\n\nDetalle Telegram:\n'+d.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
+async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}${d.encolados?`\nPor bot principal: ${d.encolados}`:''}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}${Array.isArray(d.erroresTelegram)&&d.erroresTelegram.length?'\n\nDetalle Telegram:\n'+d.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
 async function eliminarPromocion(id){if(!confirm('¿Eliminar esta promoción? Dejará de aparecer en el Panel de Socios.'))return;try{await api('DELETE',`promociones/${id}`);await loadPromociones(true)}catch(e){alert(e.message)}}
 
 /* ═══════════ PRECIOS ═══════════ */
@@ -666,10 +666,15 @@ async function probarTelegramVendedor(id,button){
   const original=button.textContent;button.disabled=true;button.textContent='Probando…';
   try{
     const d=await api('POST',`revendedores/${id}/testtelegram`,{});
-    alert(`✅ Telegram correcto para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}${d.telegramNombre?`\nCuenta: ${d.telegramNombre}`:''}${d.username?` (@${d.username})`:''}\n\n${d.diagnostico||'Puede recibir mensajes del bot.'}`);
+    if(d.queued){
+      alert(`📨 Prueba enviada al bot principal para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}\n\n${d.diagnostico||'La prueba quedó en cola y debe llegar en segundos.'}`);
+    }else{
+      alert(`✅ Telegram correcto para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}${d.telegramNombre?`\nCuenta: ${d.telegramNombre}`:''}${d.username?` (@${d.username})`:''}\n\n${d.diagnostico||'Puede recibir mensajes del bot.'}`);
+    }
   }catch(e){
     const d=e.data||{};
-    alert(`❌ Telegram de ${r.nombre} falló.\nID guardado: ${d.telegramId||r.telegramId}\n${d.error||e.message}${d.diagnostico?`\n\n${d.diagnostico}`:''}\n\nPídale escribir /id al MISMO bot de Sublicuentas y compare el número con el que aparece aquí.`);
+    const authFail=Number(d.codigo||0)===401||/unauthorized|token/i.test(String(d.error||e.message||''));
+    alert(`❌ Telegram de ${r.nombre} falló.\nID guardado: ${d.telegramId||r.telegramId}\n${d.error||e.message}${d.diagnostico?`\n\n${d.diagnostico}`:''}${authFail?'\n\n⚠️ Este error es del BOT_TOKEN, no del ID del vendedor.':'\n\nPídale escribir /id al MISMO bot de Sublicuentas y compare el número con el que aparece aquí.'}`);
   }finally{button.disabled=false;button.textContent=original;}
 }
 
