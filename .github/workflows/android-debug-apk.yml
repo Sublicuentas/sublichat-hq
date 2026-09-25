@@ -65,9 +65,11 @@ jobs:
           test -f mobile/package.json || { echo 'ERROR: falta mobile/package.json'; exit 1; }
           test -f mobile/capacitor.config.json || { echo 'ERROR: falta mobile/capacitor.config.json'; exit 1; }
 
-      - name: Install mobile dependencies
+      - name: Install mobile dependencies (lockfile exacto)
         working-directory: mobile
-        run: npm install
+        run: |
+          test -f package-lock.json || { echo 'ERROR: falta mobile/package-lock.json (build reproducible)'; exit 1; }
+          npm ci
 
       - name: Run mobile tests
         working-directory: mobile
@@ -128,6 +130,15 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK package id
+        working-directory: mobile
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          PKG=$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          echo "Package del APK: $PKG"
+          test "$PKG" = "com.sublicuentas.app" || { echo "ERROR: package inesperado ($PKG)"; exit 1; }
 
       - name: Prepare artifact
         working-directory: mobile
