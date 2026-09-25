@@ -78,7 +78,7 @@ async function listResource(req, res) {
     return res.status(403).json({ ok:false, error:'No tiene permiso para consultar este recurso.' });
   }
 
-  const limit = Math.max(25, Math.min(300, Number(body.limit) || 250));
+  const limit = Math.max(25, Math.min(1000, Number(body.limit) || 500));
   const cursor = String(body.cursor || '').trim();
   const db = getApp().firestore();
   const ref = db.collection(resource);
