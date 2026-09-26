@@ -24,12 +24,25 @@ function identity(user={}){
 }
 function safeDetail(obj){
   const out={};if(!obj||typeof obj!=="object"||Array.isArray(obj))return out;
-  for(const k of ["clienteId","servicioIndex","servicioId","inventarioId","ticketId","id","sorteoId","plataforma","vendedor","seccion","tipo","motivo"]){
-    if(obj[k]!=null&&typeof obj[k]!=="object")out[k]=clean(obj[k],160);
+  // Solo datos operativos útiles para auditoría. Nunca guardamos claves,
+  // contraseñas, tokens ni PIN en esta bitácora.
+  for(const k of [
+    "clienteId","cliente","clienteAnterior","telefono","servicioIndex","servicioId",
+    "inventarioId","ticketId","id","sorteoId","plataforma","cuenta","perfil",
+    "pagador","vendedor","seccion","tipo","motivo","campo","cambio","destino",
+    "titulo","resultado","origen"
+  ]){
+    if(obj[k]!=null&&typeof obj[k]!=="object")out[k]=clean(obj[k],220);
   }
   return out;
 }
-function detailText(det={}){return Object.entries(det).filter(([,v])=>v!=="").slice(0,3).map(([k,v])=>`${k}: ${v}`).join(" · ");}
+function detailText(det={}){
+  const order=["cliente","perfil","plataforma","cuenta","campo","cambio","vendedor","destino","motivo"];
+  const used=new Set(),parts=[];
+  for(const k of order){const v=det[k];if(v!==undefined&&v!==""){parts.push(`${k}: ${v}`);used.add(k);}if(parts.length>=5)break;}
+  if(parts.length<5)for(const [k,v] of Object.entries(det)){if(used.has(k)||v==="")continue;parts.push(`${k}: ${v}`);if(parts.length>=5)break;}
+  return parts.join(" · ");
+}
 function toIso(v){
   if(!v)return "";if(typeof v==="string")return v;
   if(v.toDate)try{return v.toDate().toISOString();}catch(_){}
@@ -44,9 +57,12 @@ export default async function handler(req,res){
       const body=req.body||{};const modulo=clean(body.modulo,80),accion=clean(body.accion,120),metodo=clean(body.metodo||"POST",12).toUpperCase(),ruta=clean(body.ruta,160);
       if(!modulo||!accion)return res.status(400).json({ok:false,error:"Falta módulo o acción."});
       const detalle=safeDetail(body.detalle);const now=new Date().toISOString();
+      const origen=clean(body.origen||detalle.origen||"Sublichat",40);
+      const textoExplicito=clean(body.detalleTexto,520);
       const ref=db.collection("actividad_usuarios").doc();
       await ref.set({
-        usuario:me.usuario,actorLabel:me.actorLabel,rol:me.role,uid:user.uid||"",modulo,accion,metodo,ruta,detalle,detalleTexto:detailText(detalle),
+        usuario:me.usuario,actorLabel:me.actorLabel,rol:me.role,uid:user.uid||"",modulo,accion,metodo,ruta,origen,detalle,
+        detalleTexto:textoExplicito||detailText(detalle),
         createdAt:admin.firestore.FieldValue.serverTimestamp(),createdAtIso:now
       });
       return res.status(200).json({ok:true,id:ref.id});
