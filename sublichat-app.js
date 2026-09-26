@@ -5809,7 +5809,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const active=pos===fichaServicioPosActual;
       const plat=s.plataforma||fichaPlatformLabel(s.plataformaRaw)||"Servicio";
       const acceso=s.correo||"Sin correo/usuario";
-      const para=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?`Para ${s.beneficiarioNombre||"tercero"}`:"Titular";
+      const para=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?`Tercero: ${s.beneficiarioNombre||"tercero"}`:"Titular";
       return `<button type="button" class="ficha-service-tab${active?" active":""}" data-ficha-servicio="${pos}" aria-pressed="${active?"true":"false"}"><span class="ficha-service-icon">${fichaPlatformEmoji(s.plataformaRaw||plat)}</span><span class="ficha-service-copy"><b>${pos+1}. ${fichaEsc(plat)}</b><small>${fichaEsc(fichaServicioFecha(s))} · 🧾 ${fichaEsc(s.vendedor||"Sin vendedor")} · ${fichaEsc(para)} · ${fichaEsc(acceso)}</small></span><span class="ficha-service-state">${active?"Viendo":"Abrir"}</span></button>`;
     }).join("");
     list.querySelectorAll("[data-ficha-servicio]").forEach(btn=>btn.addEventListener("click",()=>fichaSeleccionarServicio(Number(btn.dataset.fichaServicio))));
