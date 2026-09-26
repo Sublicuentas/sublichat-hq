@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const imap = require('../lib/codigos-imap.js');
+const imap = require('../api/_codigos-imap.js');
 const api = require('../api/codigos.js');
 
 const ahora = Date.now();
@@ -100,4 +100,13 @@ test('R79 diagnóstico sin contraseñas', async () => {
   const st = imap.estadoImap();
   assert.ok(st.cuentas >= 1); assert.equal(st.dependencias.ok, true);
   assert.doesNotMatch(JSON.stringify(st), /secreto123/); assert.match(JSON.stringify(st), /ad\*\*\*@sublicuentas\.com/);
+});
+
+test('R81 el lector IMAP vive dentro de /api (Vercel instala imapflow con api/package.json)', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../api/codigos.js', import.meta.url), 'utf8');
+  assert.match(src, /require\('\.\/_codigos-imap\.js'\)/);
+  assert.doesNotMatch(src, /lib\/codigos-imap/);
+  const pkg = JSON.parse(fs.readFileSync(new URL('../api/package.json', import.meta.url), 'utf8'));
+  assert.ok(pkg.dependencies.imapflow && pkg.dependencies.mailparser && pkg.dependencies['firebase-admin']);
 });
