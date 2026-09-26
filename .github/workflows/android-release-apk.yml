@@ -1,10 +1,11 @@
 name: Sublichat Android Release APK
 
-# R69 · Paquete H — APK de producción FIRMADA (no debug). Requiere estos secretos del repositorio:
+# R69/R80 · APK de producción FIRMADA (no debug). Requiere estos secretos del repositorio:
 #   ANDROID_KEYSTORE_BASE64  (keystore .jks en base64)
 #   ANDROID_KEYSTORE_PASSWORD
 #   ANDROID_KEY_ALIAS
 #   ANDROID_KEY_PASSWORD
+# (Se crean una sola vez con el workflow "Sublichat · Generar llave de firma".)
 # Se ejecuta a mano (Actions → Run workflow) o al subir una etiqueta android-v*.
 on:
   workflow_dispatch:
@@ -131,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/36.0.0"
-          echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "$KS" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.jks"
           IN=android/app/build/outputs/apk/release/app-release-unsigned.apk
           test -f "$IN" || { echo "ERROR: no se generó $IN"; exit 1; }
           mkdir -p artifacts
