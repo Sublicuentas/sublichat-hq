@@ -96,6 +96,8 @@ jobs:
         env:
           VITE_API_BASE_URL: https://sublichat.capuchino.lat
           VITE_BUILD_NUMBER: ${{ github.run_number }}
+          VITE_APP_VERSION: ${{ env.VERSION_NAME }}   # R82: la app muestra la misma versión que Android
+          VITE_APP_CHANNEL: release
         run: npm run build
 
       - name: Create and sync Android project
