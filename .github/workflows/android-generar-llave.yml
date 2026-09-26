@@ -1,0 +1,107 @@
+name: Sublichat · Generar llave de firma (USAR UNA SOLA VEZ)
+
+# R80 · Crea la llave (keystore) de producción de la APK SIN computadora.
+# ANTES de correrlo:
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret
+#     Nombre: LLAVE_ZIP_CLAVE   Valor: una contraseña que usted invente y anote (con ella abre el zip)
+# Luego: Actions → "Sublichat · Generar llave de firma" → Run workflow.
+# Descarga el artefacto "llave-sublichat" (dura 1 día), lo abre con LLAVE_ZIP_CLAVE, copia los 4 secretos
+# a GitHub y guarda el zip en Drive. DESPUÉS borre este archivo .yml y el artefacto.
+#
+# Seguridad: nada se imprime en los registros; el zip va cifrado con AES-256 usando su LLAVE_ZIP_CLAVE.
+# Si ya existe ANDROID_KEYSTORE_BASE64, se niega a crear otra (cambiar de llave rompe las actualizaciones).
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Escriba CREAR para confirmar'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verificaciones
+        shell: bash
+        env:
+          CONFIRMAR: ${{ github.event.inputs.confirmar }}
+          ZIPPASS: ${{ secrets.LLAVE_ZIP_CLAVE }}
+          EXISTE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMAR" = "CREAR" || { echo "ERROR: escriba CREAR en el campo de confirmación."; exit 1; }
+          test -n "$ZIPPASS" || { echo "ERROR: primero cree el secreto LLAVE_ZIP_CLAVE (Settings → Secrets → Actions)."; exit 1; }
+          test ${#ZIPPASS} -ge 8 || { echo "ERROR: LLAVE_ZIP_CLAVE debe tener al menos 8 caracteres."; exit 1; }
+          if [ -n "$EXISTE" ]; then echo "ERROR: ya existe ANDROID_KEYSTORE_BASE64. No se crea otra llave: cambiarla obliga a desinstalar la app en todos los teléfonos."; exit 1; fi
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Crear llave y zip cifrado
+        shell: bash
+        env:
+          ZIPPASS: ${{ secrets.LLAVE_ZIP_CLAVE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          W="$RUNNER_TEMP/llave"; mkdir -p "$W"; cd "$W"
+          STOREPASS=$(openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | head -c 32)
+          KEYPASS="$STOREPASS"   # PKCS12: la clave de la llave es la misma del archivo
+          ALIAS="sublicuentas"
+          echo "::add-mask::$STOREPASS"
+          keytool -genkeypair -v -storetype PKCS12 -keystore sublichat-release.jks -alias "$ALIAS" \
+            -keyalg RSA -keysize 4096 -validity 10000 \
+            -storepass "$STOREPASS" -keypass "$KEYPASS" \
+            -dname "CN=Sublicuentas, OU=Sublichat, O=Sublicuentas, L=Tegucigalpa, C=HN" > /dev/null 2>&1
+          B64=$(base64 -w0 sublichat-release.jks)
+          SHA=$(keytool -list -v -keystore sublichat-release.jks -storepass "$STOREPASS" 2>/dev/null | sed -n 's/^\s*SHA256: //p' | head -1)
+          printf '%s' "$B64"      > 1_ANDROID_KEYSTORE_BASE64.txt
+          printf '%s' "$STOREPASS" > 2_ANDROID_KEYSTORE_PASSWORD.txt
+          printf '%s' "$ALIAS"     > 3_ANDROID_KEY_ALIAS.txt
+          printf '%s' "$KEYPASS"   > 4_ANDROID_KEY_PASSWORD.txt
+          cat > LEEME.txt <<TXT
+          LLAVE DE FIRMA DE LA APK SUBLICHAT (com.sublicuentas.app)
+          Creada: $(date -u +%Y-%m-%d) · válida por 10000 días · huella SHA-256: ${SHA}
+
+          1) En GitHub → Settings → Secrets and variables → Actions → New repository secret,
+             cree estos 4 secretos. Nombre = nombre del archivo sin el número; Valor = TODO el contenido del archivo:
+               ANDROID_KEYSTORE_BASE64   (archivo 1, es largo: cópielo completo)
+               ANDROID_KEYSTORE_PASSWORD (archivo 2)
+               ANDROID_KEY_ALIAS         (archivo 3)
+               ANDROID_KEY_PASSWORD      (archivo 4)
+          2) Guarde ESTE zip en Drive y en otro lugar fuera del teléfono. Si se pierde, no se pueden
+             publicar actualizaciones que se instalen encima.
+          3) Borre el archivo .github/workflows/android-generar-llave.yml del repositorio.
+          TXT
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          7z a -tzip -mem=AES256 -p"$ZIPPASS" "$GITHUB_WORKSPACE/out/llave-sublichat.zip" \
+            sublichat-release.jks 1_ANDROID_KEYSTORE_BASE64.txt 2_ANDROID_KEYSTORE_PASSWORD.txt \
+            3_ANDROID_KEY_ALIAS.txt 4_ANDROID_KEY_PASSWORD.txt LEEME.txt > /dev/null
+          cd / && rm -rf "$W"
+          test -s "$GITHUB_WORKSPACE/out/llave-sublichat.zip"
+          echo "Zip cifrado creado. Huella SHA-256 del certificado: ${SHA}"
+
+      - name: Subir zip cifrado (dura 1 día)
+        uses: actions/upload-artifact@v4
+        with:
+          name: llave-sublichat
+          path: out/llave-sublichat.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Resumen
+        run: |
+          {
+            echo '## Llave de firma creada'
+            echo '1. Descargue el artefacto **llave-sublichat** (abajo) y ábralo con su **LLAVE_ZIP_CLAVE**.'
+            echo '2. Cree los 4 secretos ANDROID_* con el contenido de los archivos 1 a 4.'
+            echo '3. Guarde el zip en Drive y borre este workflow del repositorio.'
+          } >> "$GITHUB_STEP_SUMMARY"
