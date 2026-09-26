@@ -1,5 +1,5 @@
 // api/codigos.js · R77 — Códigos de plataformas para la APK (respaldo independiente de Telegram/Render).
-// Lee el correo del hosting por IMAP con la MISMA lógica del bot (lib/codigos-imap.js).
+// Lee el correo del hosting por IMAP con la MISMA lógica del bot (api/_codigos-imap.js).
 //
 // Seguridad:
 //  · Sublicuentas, Relojes y Geisell (R79: los tres ven Códigos igual).
@@ -11,7 +11,9 @@
 // EMAIL_IMAP_HOST, EMAIL_IMAP_PORT (993), EMAIL_IMAP_SECURE (true) · y las FIREBASE_* de siempre.
 'use strict';
 const admin = require('firebase-admin');
-const imap = require('../lib/codigos-imap.js');
+// R81: el lector IMAP vive DENTRO de /api (como _sorteos-*.js). Desde lib/ Vercel no encontraba
+// "imapflow" (MODULE_NOT_FOUND): las dependencias de la función se instalan junto a api/package.json.
+const imap = require('./_codigos-imap.js');
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -105,7 +107,7 @@ async function handler(req, res, deps = {}) {
     if (e?.code === 'IMAP_DEPENDENCIA') {
       const causa = String(e?.cause?.code || e?.cause?.message || '').slice(0, 80);
       console.error('CODIGOS_DEPENDENCIA', e.dep, e?.cause?.stack || e?.cause);
-      return res.status(503).json({ ok: false, error: `Falta instalar "${e.dep}" en Vercel${causa ? ` (${causa})` : ''}. Revise que package.json de la raíz tenga "imapflow" y "mailparser" y haga Redeploy.` });
+      return res.status(503).json({ ok: false, error: `Falta instalar "${e.dep}" en Vercel${causa ? ` (${causa})` : ''}. Revise que api/package.json tenga "imapflow" y "mailparser" y haga Redeploy.` });
     }
     console.error('CODIGOS_ERROR', e?.code || '', e?.cause?.message || e?.message || e);
     return res.status(502).json({ ok: false, error: 'No se pudo abrir el correo del hosting. Intente de nuevo en unos segundos.' });
