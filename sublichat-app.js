@@ -5291,7 +5291,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   function fichaBuildText(){
     const plat=fichaGetVal("fichaPlat");
-    const nombre=fichaGetVal("fichaNombre");
+    // R79: si el acceso es de un tercero, la ficha va a SU nombre, nunca al del titular que paga.
+    const nombre=fichaNombreBeneficiario()||fichaGetVal("fichaNombre");
     const perfil=fichaGetVal("fichaPerfil")||nombre;
     const correo=fichaGetVal("fichaCorreo")||"—";
     const clave=fichaGetVal("fichaClave");

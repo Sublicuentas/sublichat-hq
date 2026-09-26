@@ -105,6 +105,10 @@
     },
     "api/partidos.js": {
       "maxDuration": 30
+    },
+    "api/codigos.js": {
+      "includeFiles": "lib/**",
+      "maxDuration": 60
     }
   }
 }

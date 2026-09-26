@@ -4,7 +4,9 @@
   "private": true,
   "dependencies": {
     "firebase-admin": "^11.11.1",
-    "@google/generative-ai": "^0.6.0"
+    "@google/generative-ai": "^0.6.0",
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.2"
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
