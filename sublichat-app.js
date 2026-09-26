@@ -4350,7 +4350,7 @@ Ingrese estos datos manualmente en su app:
 *📲 Lista: {iptvlista}*
 *👤 Usuario: {correo}*
 *🔒 Contraseña: {clave}*
-*🧾 URL: {iptvurl}*
+*🧾 URL: {iptvurl}*{maxplayer}
 
 *⏳ Duración: {fecha} {iptvhora}*
 
@@ -4861,14 +4861,22 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       modo,
       correo:campos.correo!==false,
       clave:campos.clave!==false,
-      pin:campos.pin!==false
+      pin:campos.pin!==false,
+      // R83 · TV digital (IPTV): la URL del servidor es opcional en la ficha URL.
+      url:typeof campos.url==="boolean"?campos.url:undefined
     };
   }
+  function fichaMaxPlayerActivo(){ return fichaEsIptv(fichaGetVal("fichaPlat"))&&fichaGetVal("fichaMaxPlayer")==="si"; }
   function fichaVisibilidadUrlActual(){
     const modo=FICHA_VISIBILIDAD_URL_MODOS.has(fichaGetVal("fichaVisibilidadUrl"))?fichaGetVal("fichaVisibilidadUrl"):"plataforma";
     const correo=fichaQ("fichaVerCorreo")?fichaQ("fichaVerCorreo").checked:true;
     const clave=fichaQ("fichaVerClave")?fichaQ("fichaVerClave").checked:true;
     const pin=fichaQ("fichaVerPin")?fichaQ("fichaVerPin").checked:true;
+    if(fichaEsIptv(fichaGetVal("fichaPlat"))){
+      // R83 · TV digital: personalizado = Usuario, Clave y URL (nada más).
+      const url=fichaQ("fichaVerUrl")?fichaQ("fichaVerUrl").checked:false;
+      return modo==="personalizado"?{modo,campos:{correo,clave,pin:false,url}}:{modo};
+    }
     return modo==="personalizado"?{modo,campos:{correo,clave,pin}}:{modo};
   }
   function fichaAplicarVisibilidadUrl(raw){
@@ -4879,6 +4887,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(correo)correo.checked=v.correo;
     if(clave)clave.checked=v.clave;
     if(pin)pin.checked=v.pin;
+    const url=fichaQ("fichaVerUrl"); if(url)url.checked=v.url===true||(v.url===undefined&&v.modo==="personalizado"&&(v.correo||v.clave));
     fichaActualizarVisibilidadUrl(false);
   }
   function fichaCamposUrlEfectivos(perfil=null){
@@ -4937,7 +4946,25 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       if(opcionCorreoClave)opcionCorreoClave.disabled=!(permiteCorreo&&permiteClave);
       if(select.selectedOptions[0]&&select.selectedOptions[0].disabled)select.value="plataforma";
     }
-    const modo=fichaGetVal("fichaVisibilidadUrl")||"plataforma";
+    // R83 · TV digital (LatinTV, LionTV, Nanotech, IPTV): opciones propias y Max Player.
+    const esTv=fichaEsIptv(plat), conMax=esTv&&fichaGetVal("fichaMaxPlayer")==="si";
+    if(select){
+      const textos=esTv
+        ? {plataforma:"Solo datos del plan (sin accesos)",todos:"Usuario, clave y URL",correo_clave:"Usuario y clave",solo_correo:"Solo usuario",solo_pin:"Solo PIN",personalizado:"Personalizado… (usuario, clave, URL)"}
+        : null;
+      [...select.options].forEach(o=>{ if(!o.dataset.textoBase)o.dataset.textoBase=o.textContent; o.textContent=textos&&textos[o.value]?textos[o.value]:o.dataset.textoBase; });
+      const opcionPin=select.querySelector('option[value="solo_pin"]'); if(opcionPin&&esTv)opcionPin.disabled=true;
+      if(select.selectedOptions[0]&&select.selectedOptions[0].disabled)select.value="plataforma";
+      select.disabled=conMax;
+    }
+    const labelDe=id=>{const i=fichaQ(id);return i&&i.closest("label");};
+    const setTexto=(id,t)=>{const l=labelDe(id);if(!l)return;const nodo=[...l.childNodes].find(n=>n.nodeType===3);if(nodo)nodo.textContent=" "+t;};
+    setTexto("fichaVerCorreo",esTv?"Usuario":"Correo / usuario");
+    setTexto("fichaVerClave",esTv?"Clave":"Clave / serial");
+    const pinLabel=labelDe("fichaVerPin"); if(pinLabel)pinLabel.style.display=esTv?"none":"";
+    const urlBox=fichaQ("fichaVerUrlBox"); if(urlBox)urlBox.style.display=esTv?"":"none";
+    const notaMax=fichaQ("fichaVisibilidadMaxPlayerNota"); if(notaMax)notaMax.style.display=conMax?"block":"none";
+    const modo=conMax?"plataforma":(fichaGetVal("fichaVisibilidadUrl")||"plataforma");
     const custom=fichaQ("fichaVisibilidadCustom");
     if(custom)custom.style.display=modo==="personalizado"?"flex":"none";
     const disponibilidad={
@@ -5289,6 +5316,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(box) box.style.display=fichaGetVal("fichaVendedor")==="__nuevo__" ? "block" : "none";
   }
 
+  // R83 · Respaldo para el grupo de WhatsApp: con Max Player se agregan SUS credenciales (además de la lista).
+  function fichaMaxPlayerTexto(plat){
+    if(!fichaEsIptv(plat)||fichaGetVal("fichaMaxPlayer")!=="si")return "";
+    return `\n\n*📱 App: Max Player*\n*👤 Usuario Max Player: ${fichaGetVal("fichaMpUsuario")||"—"}*\n*🔒 Contraseña Max Player: ${fichaGetVal("fichaMpClave")||"—"}*`;
+  }
   function fichaBuildText(){
     const plat=fichaGetVal("fichaPlat");
     // R79: si el acceso es de un tercero, la ficha va a SU nombre, nunca al del titular que paga.
@@ -5319,7 +5351,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const perfiles=fichaRecolectarPerfiles();
     const variables={
       plat:fichaPlatformLabel(plat),nombre:nombre||"Cliente",perfil:perfil||nombre||"Cliente",correo,clave:clave||"—",pin:pin||"—",
-      claveLine,pinLine,iptvurl,iptvlista,iptvhora,iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
+      claveLine,pinLine,iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
       dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
     };
     const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
@@ -5335,7 +5367,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         if(camposPerfil.pin)acceso.push(`🔐 PIN ${p.pinPerfil||"—"}`);
         return acceso.join("\n");
       }).join("\n\n");
-      const datosIptv=fichaEsIptv(plat)?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*\n📺 Plan: *${iptvpantallas}*\n🗓️ Vigencia contratada: *${planmeses}*\n`:"";
+      const datosIptv=fichaEsIptv(plat)?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*${fichaMaxPlayerTexto(plat)}\n📺 Plan: *${iptvpantallas}*\n🗓️ Vigencia contratada: *${planmeses}*\n`:"";
       const reglas=aplicarVariables(fichaReglasFor(plat));
       return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
@@ -5475,6 +5507,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(iptvBox)iptvBox.style.display=showIptv?"block":"none";
     if(iptvListaBox)iptvListaBox.style.display=showIptv?"block":"none";
     if(iptvHoraBox)iptvHoraBox.style.display=showIptv?"block":"none";
+    const mpBox=fichaQ("fichaMaxPlayerBox"),mpUserBox=fichaQ("fichaMpUsuarioBox"),mpClaveBox=fichaQ("fichaMpClaveBox");
+    const conMaxPlayer=showIptv&&fichaGetVal("fichaMaxPlayer")==="si";
+    if(mpBox)mpBox.style.display=showIptv?"block":"none";
+    if(mpUserBox)mpUserBox.style.display=conMaxPlayer?"block":"none";
+    if(mpClaveBox)mpClaveBox.style.display=conMaxPlayer?"block":"none";
+    fichaActualizarVisibilidadUrl(false);
     if(iptvPantallasBox)iptvPantallasBox.style.display=showIptv?"block":"none";
     if(oleadaBox)oleadaBox.style.display=showTvDigital?"block":"none";
     fichaAvisoDispositivo();
@@ -5567,6 +5605,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       servicio.iptvPantallas=Number(fichaGetVal("fichaIptvPantallas")||1);
       servicio.iptvLista=fichaGetVal("fichaIptvLista");
       servicio.iptvHora=fichaGetVal("fichaIptvHora");
+      // R83 · Max Player: la ficha URL muestra solo estas credenciales; la ficha de WhatsApp lleva todo.
+      servicio.maxPlayer=fichaGetVal("fichaMaxPlayer")==="si";
+      servicio.maxPlayerUsuario=servicio.maxPlayer?fichaGetVal("fichaMpUsuario"):"";
+      servicio.maxPlayerClave=servicio.maxPlayer?fichaGetVal("fichaMpClave"):"";
+      if(servicio.maxPlayer)servicio.visibilidadUrl={modo:"plataforma"};
     }
     if(fichaBaseRegla(plat)==="oleada") servicio.oleadaDispositivos=Number(fichaGetVal("fichaOleadaDispositivos")||1);
     if(fichaBaseRegla(plat)==="stellatv") servicio.stellaDispositivos=Number(fichaGetVal("fichaOleadaDispositivos")||1);
@@ -5605,6 +5648,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const mesesPermitidos=fichaMesesValidosTv(payload.servicio.plataforma);
     if(mesesPermitidos.length&&!mesesPermitidos.includes(Number(payload.servicio.mesesContratados||1))){
       fichaToast(`Plan no válido. Para ${fichaGetVal("fichaPlataforma")||payload.servicio.plataforma} use ${mesesPermitidos.join(", ")} meses.`);
+      return null;
+    }
+    if(payload.servicio.maxPlayer===true&&(!String(payload.servicio.maxPlayerUsuario||"").trim()||!String(payload.servicio.maxPlayerClave||"").trim())){
+      fichaToast("Max Player: escriba el usuario y la contraseña de Max Player.");
       return null;
     }
     if(payload.servicio.beneficiarioTipo==="tercero"&&!String(payload.servicio.beneficiarioNombre||"").trim()){
@@ -5858,10 +5905,15 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaActualizarIptvOpciones(cantidadGuardada,proveedorGuardado);
       fichaQ("fichaIptvLista").value=String(s.iptvLista||s.listaIptv||s.lista||"");
       fichaQ("fichaIptvHora").value=String(s.iptvHora||s.horaIptv||s.hora||"");
+      fichaQ("fichaMaxPlayer").value=s.maxPlayer===true?"si":"no";
+      fichaQ("fichaMpUsuario").value=String(s.maxPlayerUsuario||"");
+      fichaQ("fichaMpClave").value=String(s.maxPlayerClave||"");
     }else{
       fichaActualizarIptvOpciones("1","");
       fichaQ("fichaIptvLista").value="";
       fichaQ("fichaIptvHora").value="";
+      fichaQ("fichaMaxPlayer").value="no"; fichaQ("fichaMpUsuario").value=""; fichaQ("fichaMpClave").value="";
+      fichaQ("fichaMaxPlayer").value="no"; fichaQ("fichaMpUsuario").value=""; fichaQ("fichaMpClave").value="";
     }
     fichaActualizarTvDigitalOpciones(cantidadGuardada);
     fichaQ("fichaPrecio").dataset.manual=s.precio?"1":"";
@@ -5984,6 +6036,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaIptvProveedor").value="latintv";
     fichaQ("fichaIptvLista").value="";
     fichaQ("fichaIptvHora").value="";
+    fichaQ("fichaMaxPlayer").value="no"; fichaQ("fichaMpUsuario").value=""; fichaQ("fichaMpClave").value="";
     fichaQ("fichaIptvPantallas").value="1";
     fichaQ("fichaOleadaDispositivos").value="1";
     fichaRenderPerfilesExtra();
@@ -6173,7 +6226,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
               <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerCorreo" checked> Correo / usuario</label>
               <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerClave" checked> Clave / serial</label>
               <label class="ficha-visibility-check"><input type="checkbox" id="fichaVerPin" checked> PIN</label>
+              <label class="ficha-visibility-check" id="fichaVerUrlBox" style="display:none"><input type="checkbox" id="fichaVerUrl"> URL del servidor</label>
             </div>
+            <small id="fichaVisibilidadMaxPlayerNota" style="display:none;margin-top:6px;font-size:12px;color:var(--muted)">📱 Con Max Player, la ficha URL muestra <b>solo el usuario y la clave de Max Player</b>. La ficha de WhatsApp sigue llevando todos los datos.</small>
           </div>
           <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
@@ -6185,6 +6240,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Servidor / URL del IPTV seleccionado</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latgt.com:8080)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV (liontv.es)</option><option value="evoutouch">Nanotech (smarterstv99.dyndns.tv)</option></select></label>
           <label class="ficha-field" id="fichaIptvListaBox" style="display:none"><span>Lista (app IPTV)</span><input class="ficha-input" id="fichaIptvLista" placeholder="Ej. Icomplay"></label>
           <label class="ficha-field" id="fichaIptvHoraBox" style="display:none"><span>Hora de activación</span><input class="ficha-input" id="fichaIptvHora" type="time"></label>
+          <label class="ficha-field" id="fichaMaxPlayerBox" style="display:none"><span>📱 ¿Se entrega con Max Player?</span><select class="ficha-select" id="fichaMaxPlayer"><option value="no">No, con la lista IPTV</option><option value="si">Sí, con Max Player</option></select></label>
+          <label class="ficha-field" id="fichaMpUsuarioBox" style="display:none"><span>Max Player · Usuario</span><input class="ficha-input" id="fichaMpUsuario" autocomplete="off" placeholder="Usuario de Max Player"></label>
+          <label class="ficha-field" id="fichaMpClaveBox" style="display:none"><span>Max Player · Contraseña</span><input class="ficha-input" id="fichaMpClave" autocomplete="off" placeholder="Contraseña de Max Player"></label>
           <label class="ficha-field" id="fichaIptvPantallasBox" style="display:none"><span>Dispositivos contratados</span><select class="ficha-select" id="fichaIptvPantallas"><option value="1">1 dispositivo</option><option value="2">2 dispositivos</option><option value="3">3 dispositivos</option><option value="4">4 dispositivos</option></select></label>
           <label class="ficha-field" id="fichaOleadaBox" style="display:none"><span id="fichaTvDigitalDispositivosLabel">Dispositivos Oleada TV</span><select class="ficha-select" id="fichaOleadaDispositivos"><option value="1">1 dispositivo</option><option value="3">3 dispositivos</option></select></label>
           <label class="ficha-field"><span>Perfil 1 · Nombre de la persona/perfil</span><input class="ficha-input" id="fichaPerfil" placeholder="Ej. María"></label>
@@ -6274,6 +6332,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaIptvProveedor").addEventListener("change",fichaRefreshTemplate);
     fichaQ("fichaIptvLista").addEventListener("input",fichaRefreshTemplate);
     fichaQ("fichaIptvHora").addEventListener("input",fichaRefreshTemplate);
+    fichaQ("fichaMaxPlayer").addEventListener("change",fichaRefreshTemplate);
+    fichaQ("fichaMpUsuario").addEventListener("input",fichaRefreshTemplate);
+    fichaQ("fichaMpClave").addEventListener("input",fichaRefreshTemplate);
+    fichaQ("fichaVerUrl").addEventListener("change",()=>fichaActualizarVisibilidadUrl());
     fichaQ("fichaIptvPantallas").addEventListener("change",()=>{fichaSetPrecioDefault(true);fichaRefreshTemplate();});
     fichaQ("fichaOleadaDispositivos").addEventListener("change",()=>{fichaSetPrecioDefault(true);fichaRefreshTemplate();});
     fichaQ("fichaVendedor").addEventListener("change",()=>{ fichaToggleVendedorNuevo(); fichaAplicarTelVendedorDefault(); fichaSetPrecioDefault(true); fichaRefreshTemplate(); });
@@ -6348,6 +6410,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaQ("fichaIptvProveedor").value="latintv";
       fichaQ("fichaIptvLista").value="";
       fichaQ("fichaIptvHora").value="";
+      fichaQ("fichaMaxPlayer").value="no"; fichaQ("fichaMpUsuario").value=""; fichaQ("fichaMpClave").value="";
       fichaQ("fichaIptvPantallas").value="1";
       fichaQ("fichaOleadaDispositivos").value="1";
       fichaRenderPerfilesExtra();

@@ -359,3 +359,6 @@ body.portal-ready .portal-account-panel .support-footer{
 }
 body.portal-ready .portal-account-panel .field-label{font-size:11.5px!important}
 body.portal-ready .portal-account-panel .terms li{font-size:12.5px!important}
+/* R83 · íconos 3D de Perfil / Usuario / Clave más pequeños (antes se veían muy grandes) */
+.portal-account-panel .field-icon.has-portal-image{width:28px;height:28px;flex:0 0 28px;padding:0}
+@media (max-width:420px){.portal-account-panel .field-icon.has-portal-image{width:26px;height:26px;flex:0 0 26px}}
