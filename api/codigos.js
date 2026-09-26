@@ -102,7 +102,11 @@ async function handler(req, res, deps = {}) {
     return res.status(200).json({ ok: true, modo, resultado });
   } catch (e) {
     if (e?.code === 'IMAP_SIN_CREDENCIALES') return res.status(503).json({ ok: false, error: 'Falta configurar el correo del hosting en Vercel (EMAIL_ADMIN_USER y EMAIL_ADMIN_PASS).' });
-    if (e?.code === 'IMAP_DEPENDENCIA') return res.status(503).json({ ok: false, error: `Falta instalar "${e.dep}" en Vercel. Suba package.json y package-lock.json del R77/R79 y haga Redeploy.` });
+    if (e?.code === 'IMAP_DEPENDENCIA') {
+      const causa = String(e?.cause?.code || e?.cause?.message || '').slice(0, 80);
+      console.error('CODIGOS_DEPENDENCIA', e.dep, e?.cause?.stack || e?.cause);
+      return res.status(503).json({ ok: false, error: `Falta instalar "${e.dep}" en Vercel${causa ? ` (${causa})` : ''}. Revise que package.json de la raíz tenga "imapflow" y "mailparser" y haga Redeploy.` });
+    }
     console.error('CODIGOS_ERROR', e?.code || '', e?.cause?.message || e?.message || e);
     return res.status(502).json({ ok: false, error: 'No se pudo abrir el correo del hosting. Intente de nuevo en unos segundos.' });
   }
