@@ -6,7 +6,8 @@ name: Sublichat Android Release APK
 #   ANDROID_KEY_ALIAS
 #   ANDROID_KEY_PASSWORD
 # (Se crean una sola vez con el workflow "Sublichat · Generar llave de firma".)
-# Se ejecuta a mano (Actions → Run workflow) o al subir una etiqueta android-v*.
+# Se ejecuta a mano (Actions → Run workflow, desde cualquier rama) o al subir una etiqueta android-v*.
+# Siempre compila el código de la rama android-v1-r13-limpio.
 on:
   workflow_dispatch:
     inputs:
@@ -34,8 +35,11 @@ jobs:
       VERSION_CODE: ${{ github.run_number }}
       VERSION_NAME: ${{ github.event.inputs.version_name || github.ref_name }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (siempre la rama de la app)
         uses: actions/checkout@v7
+        with:
+          # R80: aunque se corra desde "main", toma el código de la APK de su rama.
+          ref: android-v1-r13-limpio
 
       - name: Check signing secrets
         shell: bash
