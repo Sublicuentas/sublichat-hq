@@ -3,12 +3,12 @@
 
   // Evita montar dos instancias de Control Maestro si el bundle se evalúa dos veces.
   if(window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__) return;
-  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260925-66';
+  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260926-68';
 
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260925-66';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260926-68';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -1927,15 +1927,14 @@
     };
   }
 
+  // REGLA FIJA DE CONTROL MAESTRO:
+  // una mutación jamás cambia por su cuenta la búsqueda, plataforma, filtro,
+  // vista, cantidad cargada ni posición de trabajo del usuario. Si el elemento
+  // deja de coincidir con el filtro, se conserva el filtro y se muestran 0
+  // resultados hasta que el usuario decida cambiarlo.
   function keepMutatedAccountInView(account){
     if(!account)return;
     state.expandedAccountKey=account.key||state.expandedAccountKey;
-    const q=norm(state.accountQuery);
-    if(q){
-      const haystack=norm([account.platform,account.email,account.clave,...(account.roster||[]).flatMap((r)=>[r.name,r.payer,r.phone,r.pin,r.actualAccount,dateLabel(r.date)])].join(' '));
-      if(!haystack.includes(q)&&account.email)state.accountQuery=String(account.email);
-    }
-    if(state.accountStatus!=='all'&&!accountMatchesStatus(account,state.accountStatus))state.accountStatus='all';
     state.filteredAccountsCache=null;
   }
 
@@ -2304,16 +2303,13 @@
         state.accountAudit.accounts=state.accountAudit.accounts.filter((x)=>x!==account&&String(x.key||'')!==String(account.key||''));
       }
       state.filteredAccountsCache=null;
-      let candidates=filteredAccounts();
-      if(!candidates.length&&state.accountQuery){
-        state.accountQuery='';
-        view.accountQuery='';
-        state.filteredAccountsCache=null;
-        candidates=filteredAccounts();
-      }
-      const nextAccount=candidates[Math.min(index,Math.max(0,candidates.length-1))]||candidates[0]||null;
-      state.expandedAccountKey=nextAccount?.key||'';
-      view.expandedAccountKey=state.expandedAccountKey;
+      // Nunca limpiar búsqueda/filtros después de eliminar. El usuario conserva
+      // exactamente el contexto con el que llegó a esta cuenta.
+      // La cuenta borrada ya no puede permanecer expandida, pero tampoco se
+      // selecciona otra automáticamente: el usuario conserva búsqueda, filtros,
+      // scroll y la misma lista exactamente donde estaba trabajando.
+      state.expandedAccountKey='';
+      view.expandedAccountKey='';
       mutationMessage(`✅ Cuenta ${account.email||''} eliminada de ${where}.`,'good');
       queueSilentControlReload();
       Promise.resolve(refreshMeta()).catch(()=>{});
@@ -2368,7 +2364,7 @@
     state.accountFeedback={key:a.key,type:'saving',text:'Eliminando únicamente la incidencia…'};
     state.status=state.accountFeedback.text;state.statusType='';render();restoreControlView(view);
     try{
-      const result=await api({accion:'control_eliminar_incidencia_cuenta',accountKey:a.revisionKey});
+      const result=await api({accion:'control_eliminar_incidencia_cuenta',accountKey:a.revisionKey,plataforma:a.family,correo:a.email});
       if(!result.ok)throw new Error(result.error||'Firebase no confirmó la eliminación.');
       const revisionKey=String(a.revisionKey||'');
       const anteriores=Array.isArray(state.meta?.revisiones)?state.meta.revisiones:[];

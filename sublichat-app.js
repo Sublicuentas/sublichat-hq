@@ -121,6 +121,80 @@ function sbMdToPlain(text) {
 }
 /* SUBLI-MD:END */
 
+function sublichatAuditClientById(clientId){
+  const id=String(clientId||'').trim();if(!id)return null;
+  try{
+    const list=typeof DATA!=='undefined'&&Array.isArray(DATA)?DATA:[];
+    return list.find(c=>String(c?.id||c?._id||'')===id)||null;
+  }catch(_){return null;}
+}
+function sublichatAuditInventoryById(docId){
+  const id=String(docId||'').trim();if(!id)return null;
+  try{
+    const list=typeof INVENTARIO!=='undefined'&&Array.isArray(INVENTARIO)?INVENTARIO:[];
+    return list.find(c=>String(c?.id||c?._id||'')===id)||null;
+  }catch(_){return null;}
+}
+function sublichatAuditFirst(...vals){
+  for(const v of vals){if(v!==undefined&&v!==null&&String(v).trim()!=='')return String(v).trim();}
+  return '';
+}
+function sublichatAuditFields(body={},accion=''){
+  const a=String(accion||'').toLowerCase(),out=[];
+  const add=(label)=>{if(label&&!out.includes(label))out.push(label);};
+  if(body.nuevoNombre!=null)add('nombre');
+  if(body.nuevoTelefono!=null)add('teléfono');
+  if(body.nuevoPin!=null)add('PIN');
+  if(body.correo!=null||body?.servicio?.correo!=null)add('correo/cuenta');
+  if(body.clave!=null||body?.servicio?.clave!=null)add('clave');
+  if(body.capacidad!=null)add('capacidad');
+  if(body.precio!=null||body?.servicio?.precio!=null)add('precio');
+  if(body.fechaRenovacion!=null||body.fecha!=null||body?.servicio?.fechaRenovacion!=null)add('renovación');
+  if(body.vendedor!=null||body?.servicio?.vendedor!=null)add('vendedor');
+  if(body.plataforma!=null||body?.servicio?.plataforma!=null)add('plataforma');
+  if(/renov/.test(a))add('renovación');
+  if(/eliminar_perfil|quitar.*perfil/.test(a))add('perfil');
+  if(/eliminar|borr|quitarcliente/.test(a))add('eliminación');
+  return out;
+}
+function sublichatAuditHuman({mod,accion,det,body}){
+  const a=String(accion||'').toLowerCase();
+  const cliente=det.cliente||'',perfil=det.perfil||'',plat=det.plataforma||'',cuenta=det.cuenta||'',campo=det.campo||'',cambio=det.cambio||'';
+  const who=cliente||perfil||'';
+  const suffix=[plat&&`servicio ${plat}`,cuenta&&`cuenta ${cuenta}`].filter(Boolean).join(' · ');
+  if(a==='quitarcliente')return `Sacó a ${who||'un cliente'} de Bodega${suffix?` · ${suffix}`:''}.`;
+  if(a==='editarcliente'){
+    const target=det.clienteAnterior||cliente||'un cliente';
+    const extras=[];
+    if(body.nuevoNombre!=null&&String(body.nuevoNombre).trim())extras.push(`nombre → ${String(body.nuevoNombre).trim()}`);
+    if(body.nuevoTelefono!=null&&String(body.nuevoTelefono).trim())extras.push(`teléfono → ${String(body.nuevoTelefono).trim()}`);
+    if(body.nuevoPin!=null)extras.push('PIN actualizado');
+    return `Editó a ${target} en Bodega${extras.length?` · ${extras.join(' · ')}`:''}${suffix?` · ${suffix}`:''}.`;
+  }
+  if(a==='control_guardar_revision_cuenta'){
+    const res=sublichatAuditFirst(body.resultado,det.resultado,'revisión guardada');
+    const nota=sublichatAuditFirst(body.nota);
+    return `Revisó la cuenta${plat?` ${plat}`:''}${cuenta?` · ${cuenta}`:''} · resultado: ${res}${nota?` · nota: ${nota}`:''}.`;
+  }
+  if(a==='control_eliminar_incidencia_cuenta')return `Quitó la incidencia/revisión de la cuenta${plat?` ${plat}`:''}${cuenta?` · ${cuenta}`:''}.`;
+  if(a==='control_guardar_plantilla')return `Actualizó el respaldo Excel de Control Maestro${body.motivo?` · motivo: ${String(body.motivo).replace(/_/g,' ')}`:''}.`;
+  if(a==='control_guardar_respaldo')return `Guardó un respaldo de Control Maestro${body.motivo?` · motivo: ${String(body.motivo).replace(/_/g,' ')}`:''}.`;
+  if(a==='eliminarcuenta')return `Eliminó la cuenta ${cuenta||''}${plat?` de ${plat}`:''}.`.replace(/\s+\./,'.');
+  if(a==='editarcuenta')return `Editó la cuenta ${cuenta||''}${plat?` de ${plat}`:''}${campo?` · cambió ${campo}`:''}.`.replace(/\s+\./,'.');
+  if(a==='eliminar_perfil')return `Quitó el perfil ${perfil||who||'seleccionado'}${plat?` de ${plat}`:''}${cuenta?` · cuenta ${cuenta}`:''}.`;
+  if(a==='eliminar')return `Eliminó ${plat||'un servicio'}${cliente?` de ${cliente}`:''}${cuenta?` · cuenta ${cuenta}`:''}.`;
+  if(a.includes('renov'))return `Renovó ${plat||'servicio'}${cliente?` de ${cliente}`:''}${cambio?` · ${cambio}`:''}.`;
+  if(a==='ficha_upsert'||a==='guardar_ficha'||a==='guardar')return `Guardó cambios${cliente?` de ${cliente}`:''}${plat?` · ${plat}`:''}${cuenta?` · cuenta ${cuenta}`:''}${campo?` · cambió ${campo}`:''}.`;
+  if(mod==='tickets'&&a==='crear')return `Creó ticket${det.titulo?` “${det.titulo}”`:''}${det.destino?` para ${det.destino}`:''}.`;
+  if(mod==='tickets'&&a==='responder')return `Respondió un ticket${det.titulo?` · ${det.titulo}`:''}.`;
+  if(mod==='tickets'&&a==='resolver')return `Marcó un ticket como resuelto${det.titulo?` · ${det.titulo}`:''}.`;
+  if(mod==='finanzas'&&a==='registrar_cobro')return `Registró cobro${cliente?` de ${cliente}`:''}${plat?` · ${plat}`:''}${cambio?` · ${cambio}`:''}.`;
+  if(mod==='finanzas'&&a==='registrar_egreso')return `Registró un egreso${det.motivo?` · ${det.motivo}`:''}${cambio?` · ${cambio}`:''}.`;
+  const label=String(accion||`${mod} actualizado`).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const extras=[who&&`cliente/perfil ${who}`,plat&&`plataforma ${plat}`,cuenta&&`cuenta ${cuenta}`,campo&&`cambió ${campo}`].filter(Boolean);
+  return `${label}${extras.length?` · ${extras.join(' · ')}`:''}.`;
+}
+
 function sublichatAuditPayload(rawUrl, method, init){
   let parsed;try{parsed=new URL(rawUrl,window.location.href);}catch(_){return null;}
   if(parsed.origin!==window.location.origin||!parsed.pathname.startsWith('/api/')||['/api/login','/api/auditoria'].includes(parsed.pathname))return null;
@@ -138,11 +212,57 @@ function sublichatAuditPayload(rawUrl, method, init){
     || /^cargar_agosto_2026$/i.test(accion)
     || (!accion && ['renovar','finanzas','recuperacion','acceso'].includes(mod));
   if(!mutacion)return null;
-  const safe={};
-  for(const k of ['clienteId','servicioIndex','servicioId','inventarioId','ticketId','id','sorteoId','plataforma','vendedor','seccion','tipo','motivo']){
-    if(body[k]!=null&&typeof body[k]!== 'object')safe[k]=String(body[k]).slice(0,160);
-  }
-  return {modulo:mod,accion:accion||`${verbo.toLowerCase()}_${mod}`,metodo:verbo,ruta:parsed.pathname,detalle:safe};
+
+  const clientId=sublichatAuditFirst(body.clienteId,body?.cliente?.id,body?.cliente?.clienteId);
+  const client=sublichatAuditClientById(clientId);
+  const inv=sublichatAuditInventoryById(sublichatAuditFirst(body.docId,body.inventarioId));
+  const serviceIndex=Number.isInteger(Number(body.servicioIndex))?Number(body.servicioIndex):null;
+  const clientService=client&&serviceIndex!=null&&Array.isArray(client.servicios)?client.servicios[serviceIndex]:null;
+  const nestedService=body.servicio&&typeof body.servicio==='object'?body.servicio:null;
+  const det={origen:'Sublichat'};
+  if(clientId)det.clienteId=clientId;
+  const cliente=sublichatAuditFirst(
+    body.clienteNombre,body.nombreCliente,body?.cliente?.nombrePerfil,body?.cliente?.nombre,
+    client?.nombrePerfil,client?.nombre,body.titular,body.nombre
+  );
+  if(cliente)det.cliente=cliente;
+  if(body.nombreCliente&&body.nuevoNombre&&String(body.nombreCliente).trim()!==String(body.nuevoNombre).trim())det.clienteAnterior=String(body.nombreCliente).trim();
+  const telefono=sublichatAuditFirst(body.nuevoTelefono,body.telefono,body?.cliente?.telefono,client?.telefono);
+  if(telefono)det.telefono=telefono;
+  const plat=sublichatAuditFirst(body.plataforma,nestedService?.plataforma,clientService?.plataforma,inv?.plataforma);
+  if(plat)det.plataforma=typeof platLabel==='function'?platLabel(plat):plat;
+  const cuenta=sublichatAuditFirst(body.correo,body.confirmarCorreo,nestedService?.correo,clientService?.correo,inv?.correo,inv?.email,inv?.usuario);
+  if(cuenta)det.cuenta=cuenta;
+  const perfil=sublichatAuditFirst(body.perfilNombre,body.slot,body?.perfil?.nombre,body?.perfil?.perfil,
+    body.accion==='eliminar_perfil'?body.clienteNorm:'');
+  if(perfil)det.perfil=perfil;
+  const vendedor=sublichatAuditFirst(body.vendedor,nestedService?.vendedor,clientService?.vendedor);
+  if(vendedor)det.vendedor=vendedor;
+  if(body.ticketId)det.ticketId=String(body.ticketId);
+  if(body.id)det.id=String(body.id);
+  const titulo=sublichatAuditFirst(body.titulo,body.asunto,body?.ticket?.titulo);
+  if(titulo)det.titulo=titulo;
+  const destino=sublichatAuditFirst(body.destino,Array.isArray(body.destinos)?body.destinos.join(' + '):'');
+  if(destino)det.destino=destino;
+  if(body.motivo)det.motivo=String(body.motivo).slice(0,220);
+  if(body.resultado!=null&&String(body.resultado).trim())det.resultado=String(body.resultado).trim().slice(0,160);
+
+  const fields=sublichatAuditFields(body,accion);
+  if(fields.length)det.campo=fields.join(', ');
+  const changes=[];
+  if(body.nuevoNombre!=null&&String(body.nuevoNombre).trim())changes.push(`nombre → ${String(body.nuevoNombre).trim()}`);
+  if(body.nuevoTelefono!=null&&String(body.nuevoTelefono).trim())changes.push(`teléfono → ${String(body.nuevoTelefono).trim()}`);
+  if(body.fechaRenovacion!=null&&String(body.fechaRenovacion).trim())changes.push(`renovación → ${String(body.fechaRenovacion).trim()}`);
+  if(nestedService?.fechaRenovacion)changes.push(`renovación → ${String(nestedService.fechaRenovacion).trim()}`);
+  if(body.precio!=null&&String(body.precio).trim())changes.push(`precio → L ${String(body.precio).trim()}`);
+  if(nestedService?.precio!=null&&String(nestedService.precio).trim())changes.push(`precio → L ${String(nestedService.precio).trim()}`);
+  if(body.vendedor!=null&&String(body.vendedor).trim())changes.push(`vendedor → ${String(body.vendedor).trim()}`);
+  if(changes.length)det.cambio=changes.slice(0,4).join(' · ');
+
+  return {
+    modulo:mod,accion:accion||`${verbo.toLowerCase()}_${mod}`,metodo:verbo,ruta:parsed.pathname,
+    origen:'Sublichat',detalle:det,detalleTexto:sublichatAuditHuman({mod,accion:accion||`${verbo.toLowerCase()}_${mod}`,det,body})
+  };
 }
 
 async function sublichatRegistrarActividad(payload, authHeader){
@@ -6617,10 +6737,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       .activity-refresh{height:44px;white-space:nowrap;padding:0 15px}.activity-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.activity-stat{display:grid;grid-template-columns:42px 1fr;gap:11px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px 14px;box-shadow:var(--sh);min-width:0}.activity-stat-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:var(--accentSoft);font-size:19px}.activity-stat b{display:block;font-family:var(--ff);font-size:24px;line-height:1;color:var(--txt)}.activity-stat span{display:block;margin-top:5px;color:var(--txt2);font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .activity-panel{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;box-shadow:var(--sh)}.activity-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}.activity-panel-head h3{margin:0;font-family:var(--ff);font-size:18px;color:var(--txt)}.activity-panel-head p{margin:3px 0 0;color:var(--txt2);font-size:11.5px}.activity-count{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:30px;border-radius:999px;padding:0 10px;border:1px solid var(--line);background:var(--surface);color:var(--txt2);font-size:11px;font-weight:900}
       .activity-users{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px}.activity-user-card{appearance:none;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--txt);border-radius:18px;padding:13px;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}.activity-user-card:hover{transform:translateY(-1px);border-color:var(--accent)}.activity-user-card.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accentSoft);background:var(--card)}.activity-user-top{display:flex;align-items:center;gap:10px}.activity-user-avatar{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--accentSoft);color:var(--accent);font-family:var(--ff);font-weight:900}.activity-user-name{min-width:0;flex:1}.activity-user-name b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-user-name small{display:block;margin-top:3px;color:var(--txt2);font-size:10.5px}.activity-user-total{font-family:var(--ff);font-size:20px;font-weight:900}.activity-user-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:11px}.activity-user-metrics span{display:block;border-radius:10px;padding:7px 6px;background:var(--card);border:1px solid var(--line);font-size:9.5px;color:var(--txt2);text-align:center;font-weight:800}.activity-user-metrics b{display:block;font-size:13px;color:var(--txt);margin-bottom:2px}
-      .activity-history-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.activity-event{border:1px solid var(--line);background:var(--surface);border-radius:17px;padding:13px;min-width:0}.activity-event.danger{border-left:4px solid var(--accent)}.activity-event.edit{border-left:4px solid var(--info)}.activity-event.create{border-left:4px solid var(--good)}.activity-event-top{display:flex;align-items:center;gap:9px}.activity-event-avatar{width:34px;height:34px;flex:0 0 34px;border-radius:11px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);font-size:11px;font-weight:900;color:var(--txt)}.activity-event-who{min-width:0;flex:1}.activity-event-who b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-event-who small{display:block;margin-top:2px;color:var(--muted);font-size:10px}.activity-event-title{margin:10px 0 6px;font-family:var(--ff);font-size:14px;color:var(--txt)}.activity-event-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.activity-tag{display:inline-flex;align-items:center;min-height:24px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:var(--card);color:var(--txt2);font-size:9.5px;font-weight:900}.activity-event-detail{margin-top:8px;color:var(--txt2);font-size:11px;line-height:1.35;overflow-wrap:anywhere}.activity-empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:16px;padding:22px;text-align:center;color:var(--txt2);font-size:12px;background:var(--surface)}.activity-clear{border:0;background:transparent;color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;padding:4px 0}.activity-results-note{color:var(--txt2);font-size:10.5px;font-weight:800}
+      .activity-history-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.activity-event{border:1px solid var(--line);background:var(--surface);border-radius:17px;padding:13px;min-width:0}.activity-event.danger{border-left:4px solid var(--accent)}.activity-event.edit{border-left:4px solid var(--info)}.activity-event.create{border-left:4px solid var(--good)}.activity-event-top{display:flex;align-items:center;gap:9px}.activity-event-avatar{width:34px;height:34px;flex:0 0 34px;border-radius:11px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);font-size:11px;font-weight:900;color:var(--txt)}.activity-event-who{min-width:0;flex:1}.activity-event-who b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-event-who small{display:block;margin-top:2px;color:var(--muted);font-size:10px}.activity-event-title{margin:10px 0 6px;font-family:var(--ff);font-size:14px;color:var(--txt)}.activity-event-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.activity-tag{display:inline-flex;align-items:center;min-height:24px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:var(--card);color:var(--txt2);font-size:9.5px;font-weight:900}.activity-event-detail{margin-top:8px;color:var(--txt2);font-size:11px;line-height:1.35;overflow-wrap:anywhere}.activity-tag.source{background:color-mix(in srgb,var(--info) 10%,var(--card));color:var(--txt)}.activity-event-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}.activity-event-facts div{min-width:0}.activity-event-facts span{display:block;color:var(--muted);font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.activity-event-facts b{display:block;margin-top:2px;color:var(--txt);font-size:10.8px;line-height:1.3;overflow-wrap:anywhere}.activity-empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:16px;padding:22px;text-align:center;color:var(--txt2);font-size:12px;background:var(--surface)}.activity-clear{border:0;background:transparent;color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;padding:4px 0}.activity-results-note{color:var(--txt2);font-size:10.5px;font-weight:800}
 
       .nav{position:fixed!important;left:50%!important;right:auto!important;top:auto!important;bottom:12px!important;transform:translateX(-50%)!important;width:min(720px,calc(100% - 24px))!important;height:84px!important;overflow-x:auto;justify-content:flex-start!important;gap:4px;padding-left:8px!important;padding-right:8px!important;flex-direction:row!important;border-radius:32px!important;border-top:0!important;border:1px solid var(--line)!important;background:var(--surface)!important;box-shadow:var(--sh2)!important;z-index:9999!important}.nav::-webkit-scrollbar{display:none}.nav-btn{min-width:74px;flex:0 0 auto!important}.nav-btn.active{transform:translateY(-6px)!important}
-      @media(max-width:760px){.activity-toolbar{grid-template-columns:1fr 1fr}.activity-search{grid-column:1/-1}.activity-summary{grid-template-columns:1fr 1fr}.activity-history-grid{grid-template-columns:1fr}.activity-refresh{width:100%}}
+      @media(max-width:760px){.activity-toolbar{grid-template-columns:1fr 1fr}.activity-search{grid-column:1/-1}.activity-summary{grid-template-columns:1fr 1fr}.activity-history-grid{grid-template-columns:1fr}.activity-event-facts{grid-template-columns:1fr}.activity-refresh{width:100%}}
       @media(max-width:520px){.profile-hero{grid-template-columns:1fr;text-align:center}.profile-avatar{margin:0 auto}.profile-funciones{grid-template-columns:1fr}.profile-form{grid-template-columns:1fr}.rbac-grid{grid-template-columns:1fr}.rbac-form{grid-template-columns:1fr}.rbac-row{grid-template-columns:1fr}.rbac-actions{justify-content:stretch}.rbac-btn{flex:1}.rbac-table{font-size:11px}.activity-toolbar{grid-template-columns:1fr}.activity-search{grid-column:auto}.activity-summary{grid-template-columns:1fr 1fr}.activity-users{grid-template-columns:1fr}.activity-stat{grid-template-columns:36px 1fr;padding:11px}.activity-stat-icon{width:36px;height:36px;border-radius:11px}.activity-stat b{font-size:21px}.nav{width:calc(100% - 18px)!important;bottom:9px!important;height:82px!important}.nav-btn{min-width:70px!important}}
       @media(min-width:980px){body{padding-bottom:130px!important}.wrap{max-width:940px!important;margin:0 auto!important}.nav{left:50%!important;right:auto!important;top:auto!important;bottom:18px!important;transform:translateX(-50%)!important;width:min(760px,calc(100% - 40px))!important;height:86px!important;flex-direction:row!important;border-radius:32px!important;padding:8px 10px!important}.nav-btn{width:auto!important;min-width:88px!important;padding:8px 10px!important}.nav-btn.active{transform:translateY(-6px)!important}.nav-btn .nico{font-size:26px!important}}
     `;
@@ -7175,7 +7295,42 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const actividadIsCreate=e=>/(crear|registrar|agregar|subir|importar|iniciar|girar|unificar|migrar)/i.test(String(e?.accion||''));
   function actividadFecha(v){const d=new Date(v||'');if(isNaN(d))return '—';try{return d.toLocaleString('es-HN',{timeZone:'America/Tegucigalpa',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return d.toLocaleString('es-HN');}}
   function actividadInRange(e,range){if(range==='all')return true;const t=Date.parse(e?.createdAtIso||e?.createdAt||'');if(!t)return false;const now=new Date(),d=new Date(t);if(range==='today')return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();const days=Number(range||30);return t>=Date.now()-(days*86400000);}
-  function actividadSearchText(e){let det='';try{det=JSON.stringify(e?.detalle||{});}catch(_){}return [actividadActor(e),e?.usuario,e?.accion,e?.modulo,e?.detalleTexto,det].filter(Boolean).join(' ').toLowerCase();}
+  function actividadDetalleEnriquecido(e){
+    const raw=e?.detalle&&typeof e.detalle==='object'?e.detalle:{};
+    const d={...raw};
+    const clientId=String(d.clienteId||'').trim();
+    const client=clientId?sublichatAuditClientById(clientId):null;
+    const serviceIndex=Number.isInteger(Number(d.servicioIndex))?Number(d.servicioIndex):null;
+    const service=client&&serviceIndex!=null&&Array.isArray(client.servicios)?client.servicios[serviceIndex]:null;
+    if(!d.cliente&&client)d.cliente=sublichatAuditFirst(client.nombrePerfil,client.nombre);
+    if(!d.telefono&&client)d.telefono=client.telefono||'';
+    if(!d.plataforma&&service)d.plataforma=typeof platLabel==='function'?platLabel(service.plataforma||''):String(service.plataforma||'');
+    if(!d.cuenta)d.cuenta=sublichatAuditFirst(d.correo,d.email,d.usuario,service?.correo,service?.usuario,service?.cuenta);
+    if(!d.perfil&&service)d.perfil=sublichatAuditFirst(service.perfil,service.nombrePerfil,service.tercero);
+    if(!d.vendedor&&service)d.vendedor=service.vendedor||'';
+    return d;
+  }
+  function actividadHumanText(e){
+    const saved=String(e?.detalleTexto||'').trim();if(saved)return saved;
+    const d=actividadDetalleEnriquecido(e),a=String(e?.accion||'').toLowerCase();
+    const cliente=d.cliente||d.perfil||'',plat=d.plataforma||'',cuenta=d.cuenta||'';
+    if(a==='eliminar'&&cliente)return `Eliminó ${plat||'un servicio'} de ${cliente}${cuenta?` · cuenta ${cuenta}`:''}.`;
+    if(/eliminar_cliente|borrar_cliente/.test(a)&&cliente)return `Eliminó al cliente ${cliente}.`;
+    if(/editar.*cliente/.test(a)&&cliente)return `Editó a ${cliente}${d.cambio?` · ${d.cambio}`:''}.`;
+    if(/renov/.test(a)&&cliente)return `Renovó ${plat||'servicio'} de ${cliente}${d.cambio?` · ${d.cambio}`:''}.`;
+    if(a==='control_guardar_revision_cuenta')return `Revisó cuenta${plat?` ${plat}`:''}${cuenta?` · ${cuenta}`:''}${d.resultado?` · resultado: ${d.resultado}`:''}.`;
+    return actividadLabel(e?.accion);
+  }
+  function actividadSearchText(e){let det='';try{det=JSON.stringify(actividadDetalleEnriquecido(e));}catch(_){}return [actividadActor(e),e?.usuario,e?.accion,e?.modulo,e?.origen,actividadHumanText(e),det].filter(Boolean).join(' ').toLowerCase();}
+  function actividadFactsHtml(e){
+    const d=actividadDetalleEnriquecido(e);
+    const rows=[
+      ['Cliente',d.cliente],['Perfil',d.perfil],['Servicio',d.plataforma],['Cuenta',d.cuenta],
+      ['Cambio',d.cambio||d.campo],['Vendedor',d.vendedor],['Destino',d.destino]
+    ].filter(([,v])=>String(v||'').trim());
+    if(!rows.length)return '';
+    return `<div class="activity-event-facts">${rows.slice(0,7).map(([k,v])=>`<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;
+  }
   function actividadEventTone(e){return actividadIsDelete(e)?'danger':(actividadIsEdit(e)?'edit':(actividadIsCreate(e)?'create':''));}
   async function loadActividad(force=false){
     if(!isSublicuentasAccount()||actividadState.loading||(actividadState.loaded&&!force))return;
@@ -7212,7 +7367,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const activeLabel=activeUser==='all'?'Todos los usuarios':(byUser.get(activeUser)?.label||activeUser);
     const userOptions=userRows.map(x=>`<option value="${esc(x.key)}" ${activeUser===x.key?'selected':''}>${esc(x.label)} · ${x.total}</option>`).join('');
     const userCards=userRows.length?userRows.map(x=>`<button type="button" class="activity-user-card ${activeUser===x.key?'on':''}" data-actividad-user="${esc(x.key)}"><div class="activity-user-top"><span class="activity-user-avatar">${esc(actividadInitials(x.label))}</span><span class="activity-user-name"><b>${esc(x.label)}</b><small>${esc(rangeLabel)}</small></span><span class="activity-user-total">${x.total}</span></div><div class="activity-user-metrics"><span><b>${x.ediciones}</b>Cambios</span><span><b>${x.eliminaciones}</b>Eliminó</span><span><b>${x.creaciones}</b>Creó</span></div></button>`).join(''):'<div class="activity-empty">Todavía no hay actividad en este período.</div>';
-    const eventCards=filtered.length?filtered.slice(0,200).map(e=>`<article class="activity-event ${actividadEventTone(e)}"><div class="activity-event-top"><span class="activity-event-avatar">${esc(actividadInitials(actividadActor(e)))}</span><div class="activity-event-who"><b>${esc(actividadActor(e))}</b><small>${esc(actividadFecha(e.createdAtIso||e.createdAt))}</small></div></div><div class="activity-event-title">${esc(actividadLabel(e.accion))}</div><div class="activity-event-meta"><span class="activity-tag">${esc(actividadLabel(e.modulo))}</span>${e.metodo?`<span class="activity-tag">${esc(String(e.metodo))}</span>`:''}</div>${e.detalleTexto?`<div class="activity-event-detail">${esc(e.detalleTexto)}</div>`:''}</article>`).join(''):'<div class="activity-empty">No encontré acciones con estos filtros.</div>';
+    const eventCards=filtered.length?filtered.slice(0,200).map(e=>{
+      const human=actividadHumanText(e);
+      const source=String(e.origen||e?.detalle?.origen||'Sublichat').trim();
+      return `<article class="activity-event ${actividadEventTone(e)}"><div class="activity-event-top"><span class="activity-event-avatar">${esc(actividadInitials(actividadActor(e)))}</span><div class="activity-event-who"><b>${esc(actividadActor(e))}</b><small>${esc(actividadFecha(e.createdAtIso||e.createdAt))}</small></div></div><div class="activity-event-title">${esc(human)}</div><div class="activity-event-meta"><span class="activity-tag source">${esc(source)}</span><span class="activity-tag">${esc(actividadLabel(e.modulo))}</span><span class="activity-tag">${esc(actividadLabel(e.accion))}</span></div>${actividadFactsHtml(e)}</article>`;
+    }).join(''):'<div class="activity-empty">No encontré acciones con estos filtros.</div>';
 
     el.innerHTML=`<div class="activity-shell">
       <div class="activity-toolbar">
