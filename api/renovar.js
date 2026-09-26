@@ -951,7 +951,9 @@ function normalizarVisibilidadUrl(raw, anterior = null) {
     campos: {
       correo: camposRaw.correo === true,
       clave: camposRaw.clave === true,
-      pin: camposRaw.pin === true
+      pin: camposRaw.pin === true,
+      // R83 · TV digital: la URL del servidor es opcional en la ficha URL (solo se guarda si se eligió).
+      ...(typeof camposRaw.url === "boolean" ? { url: camposRaw.url } : {})
     }
   };
 }

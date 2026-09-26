@@ -450,6 +450,20 @@ function iptvSoloPlan(servicio = {}) {
   const raw = servicio.visibilidadUrl || {}; const c = raw.campos || raw;
   return !(c.correo === true || c.clave === true);
 }
+// R83 · TV digital (IPTV): la URL del servidor sale en la ficha URL solo si el vendedor la eligió.
+//   Max Player o "solo datos del plan" → nunca · "Usuario, clave y URL" (todos) → sí
+//   "Usuario y clave" / "Solo usuario" → no · Personalizado → según la casilla URL
+//   (fichas viejas sin esa casilla: se muestra si mostraban usuario o clave, como antes).
+function iptvMuestraUrl(servicio = {}) {
+  if (!esFamiliaIptv(servicio.plataforma)) return true;
+  if (servicio.maxPlayer === true || iptvSoloPlan(servicio)) return false;
+  const modo = iptvModoVisibilidad(servicio);
+  if (modo === "todos") return true;
+  if (modo !== "personalizado") return false;
+  const raw = servicio.visibilidadUrl || {}; const c = raw.campos || raw;
+  if (typeof c.url === "boolean") return c.url;
+  return c.correo === true || c.clave === true;
+}
 function tvDigitalOcultaServidor(servicio = {}) {
   // La opción personalizada con todas las credenciales desmarcadas significa
   // “no mostrar datos de acceso”. En Nanotech la URL del servidor también es
@@ -556,7 +570,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     mesesContratados: tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1),
     planDuracion: `${tvDigital.mesesContratados || Math.max(1, Number(servicio.mesesContratados || 1) || 1)} mes${(tvDigital.mesesContratados || Number(servicio.mesesContratados || 1)) === 1 ? "" : "es"}`,
     dispositivosContratados: tvDigital.dispositivosContratados || 0,
-    urlServidor: (tvDigitalOcultaServidor(servicio) || iptvSoloPlan(servicio)) ? "" : (tvDigital.urlServidor || ""),
+    urlServidor: (vencido || tvDigitalOcultaServidor(servicio) || iptvSoloPlan(servicio) || !iptvMuestraUrl(servicio)) ? "" : (tvDigital.urlServidor || ""),
     esIptv: esFamiliaIptv(plataforma),
     iptvLista: esFamiliaIptv(plataforma) && !iptvSoloPlan(servicio) ? String(servicio.iptvLista || "") : "",
     maxPlayer: esFamiliaIptv(plataforma) && servicio.maxPlayer === true,
