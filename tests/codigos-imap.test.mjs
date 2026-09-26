@@ -110,3 +110,17 @@ test('R81 el lector IMAP vive dentro de /api (Vercel instala imapflow con api/pa
   const pkg = JSON.parse(fs.readFileSync(new URL('../api/package.json', import.meta.url), 'utf8'));
   assert.ok(pkg.dependencies.imapflow && pkg.dependencies.mailparser && pkg.dependencies['firebase-admin']);
 });
+
+test('R82 si el hosting no contesta, responde 504 con mensaje (la app no se queda en "Buscando…")', async () => {
+  const { db } = fakeDb(); const res = fakeRes();
+  const d = deps({ uid: 'n', usuario: 'naara' }, {}, db);
+  await api.handler(req({ correo: 'c@x.com' }), res, { ...d, topeMs: 50, imap: { ...d.imap, consultar: () => new Promise(() => {}) } });
+  assert.equal(res.code, 504); assert.match(res.body.error, /tardó demasiado/);
+});
+
+test('R82 búsqueda IMAP: primero los correos dirigidos a la cuenta y con tiempo límite', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../api/_codigos-imap.js', import.meta.url), 'utf8');
+  assert.match(src, /headers: HDRS/); assert.match(src, /const orden = directos\.length \? directos : candidatos;/);
+  assert.match(src, /if \(Date\.now\(\) > deadline\)/);
+});
