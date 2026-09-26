@@ -92,9 +92,12 @@ async function handler(req, res, deps = {}) {
   let db = null; try { db = dbOf(); } catch (_) { db = null; }
   const marcas = db ? db.collection('codigos_entregados') : null;
   try {
-    const resultado = await lib.consultar(correo, modo, {
+    // R82: tope total de 50 s; si el hosting no contesta, la app recibe un mensaje en vez de quedarse "Buscando…".
+    let reloj = null;
+    const tope = new Promise((_, rej) => { reloj = setTimeout(() => { const e = new Error('IMAP_TIEMPO'); e.code = 'IMAP_TIEMPO'; rej(e); }, Number(deps.topeMs || 50000)); });
+    const resultado = await Promise.race([tope, lib.consultar(correo, modo, {
       yaEntregadoDisney: async key => { if (!marcas) return ''; try { const s = await marcas.doc(key).get(); return s.exists ? String(s.data()?.marcador || '') : ''; } catch (_) { return ''; } },
-    });
+    })]).finally(() => clearTimeout(reloj));
     if (resultado.tipo === 'codigo' && resultado.plataforma === 'disney' && !resultado.repetido && marcas) {
       // Igual que el bot: se recuerda el último OTP de Disney entregado (sin guardar el código visible en la bitácora).
       await marcas.doc(correo).set({ marcador: resultado.marcador, por: me.actorLabel, at: new Date().toISOString() }, { merge: true }).catch(() => {});
@@ -103,6 +106,7 @@ async function handler(req, res, deps = {}) {
     if (db) await bitacora(db, user, me, modo, correo, resultado);
     return res.status(200).json({ ok: true, modo, resultado });
   } catch (e) {
+    if (e?.code === 'IMAP_TIEMPO') return res.status(504).json({ ok: false, error: 'El correo del hosting tardó demasiado en responder. Intente de nuevo en unos segundos.' });
     if (e?.code === 'IMAP_SIN_CREDENCIALES') return res.status(503).json({ ok: false, error: 'Falta configurar el correo del hosting en Vercel (EMAIL_ADMIN_USER y EMAIL_ADMIN_PASS).' });
     if (e?.code === 'IMAP_DEPENDENCIA') {
       const causa = String(e?.cause?.code || e?.cause?.message || '').slice(0, 80);

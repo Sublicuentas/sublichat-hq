@@ -547,7 +547,14 @@ async function scrapearCodigoWeb(url) {
   return null;
 }
 
-async function buscarEmailsCuenta(correo, limite=15, cuenta={}) {
+// R82 · Rendimiento en Vercel: el bot (Render) puede tardar lo que quiera, pero una función de Vercel se
+// corta a los 60 s. Antes se descargaba el correo COMPLETO de cada candidato de los últimos 3 días (cientos
+// en un buzón catch-all) solo para ver si era de la cuenta buscada → "Buscando…" sin fin.
+// Ahora: (1) en el primer barrido se leen también To/Cc y Delivered-To/X-Original-To/Envelope-To, y se
+// descargan PRIMERO los correos dirigidos a esa cuenta (normalmente 1-5); (2) solo si no hay ninguno se
+// revisan los demás (el correo puede venir solo en el cuerpo), y (3) todo tiene un tiempo límite.
+async function buscarEmailsCuenta(correo, limite=15, cuenta={}, opts={}) {
+  const deadline = Number(opts.deadline || (Date.now() + 25000));
   const correoBuscar = String(correo||"").trim().toLowerCase();
   const base = resolverImapBase();
 
@@ -580,7 +587,8 @@ async function buscarEmailsCuenta(correo, limite=15, cuenta={}) {
 
       // ✅ Paso 1: traer envelope con internalDate — guardar seq + fecha exacta del servidor
       const candidatos = []; // { seq, uid, ts }
-      for await (const msg of client.fetch(rango, { envelope: true, internalDate: true, uid: true })) {
+      const HDRS = ["delivered-to", "x-original-to", "envelope-to", "x-forwarded-to"];
+      for await (const msg of client.fetch(rango, { envelope: true, internalDate: true, uid: true, headers: HDRS })) {
         try {
           const fecha = msg.internalDate ? new Date(msg.internalDate) : new Date(0);
           if (fecha < fechaLimite) continue;
@@ -600,7 +608,11 @@ async function buscarEmailsCuenta(correo, limite=15, cuenta={}) {
             subjStr.includes("verifica") || subjStr.includes("acceso") ||
             subjStr.includes("contrase") || subjStr.includes("restablec");
 
-          if (esPlatConocida) candidatos.push({ seq: msg.seq, uid: Number(msg.uid || 0), ts: fecha.getTime() });
+          if (!esPlatConocida) continue;
+          const dest = [...(msg.envelope?.to || []), ...(msg.envelope?.cc || []), ...(msg.envelope?.bcc || [])].map(a => String(a?.address || "")).join(" ").toLowerCase();
+          const hdr = msg.headers ? (Buffer.isBuffer(msg.headers) ? msg.headers.toString("utf8") : String(msg.headers)).toLowerCase() : "";
+          const directo = dest.includes(correoBuscar) || hdr.includes(correoBuscar);
+          candidatos.push({ seq: msg.seq, uid: Number(msg.uid || 0), ts: fecha.getTime(), directo });
         } catch(_) {}
       }
 
@@ -609,10 +621,14 @@ async function buscarEmailsCuenta(correo, limite=15, cuenta={}) {
       // En ese caso internalDate empata; UID/sequence más alto es el correo que
       // llegó último y, para Disney, el único código que sigue siendo válido.
       candidatos.sort((a, b) => b.ts - a.ts || b.uid - a.uid || b.seq - a.seq);
+      // R82: primero los dirigidos a la cuenta; los demás solo si no hubo ninguno directo.
+      const directos = candidatos.filter(c => c.directo);
+      const orden = directos.length ? directos : candidatos;
 
       // ✅ Paso 2: descargar source solo de candidatos, del más reciente al más viejo
-      for (const { seq, uid, ts } of candidatos) {
+      for (const { seq, uid, ts } of orden) {
         if (emails.length >= limite) break;
+        if (Date.now() > deadline) { console.warn("[IMAP buscarEmails] tiempo límite: se devuelve lo encontrado", emails.length); break; }
         try {
           const data = await client.fetchOne(String(seq), { source: true });
           if (!data?.source) continue;
@@ -676,11 +692,14 @@ function cuentasImapCodigos() {
   });
 }
 
-async function buscarEmails(correo, limite = 15) {
+async function buscarEmails(correo, limite = 15, opts = {}) {
+  const t0 = Date.now();
+  const deadline = Number(opts.deadline || (t0 + 25000));
   const cuentas = cuentasImapCodigos();
   if (!cuentas.length) { const e = new Error('IMAP_SIN_CREDENCIALES'); e.code = 'IMAP_SIN_CREDENCIALES'; throw e; }
   deps(); // R79: si falta imapflow/mailparser se avisa claro, no como "no conecta"
-  const results = await Promise.allSettled(cuentas.map(cuenta => buscarEmailsCuenta(correo, limite, cuenta)));
+  const results = await Promise.allSettled(cuentas.map(cuenta => buscarEmailsCuenta(correo, limite, cuenta, { deadline })));
+  console.log('CODIGOS_TIEMPO', JSON.stringify({ ms: Date.now() - t0, buzones: cuentas.length, fallidos: results.filter(r => r.status === 'rejected').length }));
   const emails = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
   if (!emails.length && results.every(r => r.status === 'rejected')) {
     const e = new Error('IMAP_NO_CONECTA'); e.code = 'IMAP_NO_CONECTA'; e.cause = results.find(r => r.status === 'rejected')?.reason; throw e;
@@ -837,9 +856,11 @@ async function consultar(correoRaw, modo = 'codigo', opts = {}) {
   const leer = opts.buscar || buscarEmails;
   if (modo === 'link') return resolverLink(await leer(correo), correo);
   if (modo === 'hogar') return resolverHogar(await leer(correo), correo, opts);
-  let emails = await leer(correo);
+  const inicio = Date.now();
+  let emails = await leer(correo, 15, { deadline: inicio + 25000 });
   // Igual que el bot: si hay correo de Disney, se relee a los ~4.5 s por si el OTP nuevo todavía está entrando.
-  if (emails.some(e => esDisney(e.from, e.subject))) { await (opts.esperar || esperar)(4500); emails = await leer(correo); }
+  // R82: la segunda lectura solo si queda tiempo (la función de Vercel se corta a los 60 s).
+  if (emails.some(e => esDisney(e.from, e.subject)) && Date.now() - inicio < 30000) { await (opts.esperar || esperar)(4500); emails = await leer(correo, 15, { deadline: Date.now() + 18000 }); }
   return resolverCodigo(emails, correo, opts);
 }
 
