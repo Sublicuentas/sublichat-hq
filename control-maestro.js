@@ -3,12 +3,12 @@
 
   // Evita montar dos instancias de Control Maestro si el bundle se evalúa dos veces.
   if(window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__) return;
-  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260924-65';
+  window.__SUBLICHAT_CONTROL_MAESTRO_INSTANCE__='20260925-66';
 
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260924-65';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260925-66';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -17,7 +17,7 @@
   // búsqueda siguen usando TODAS las cuentas; solamente el DOM se pagina.
   const DEFAULT_ACCOUNT_LIMIT=120;
   const ACCOUNT_PAGE_SIZE=120;
-  let accountSearchTimer=null,clientSearchTimer=null;
+  let accountSearchTimer=null,clientSearchTimer=null,accountLoadObserver=null,mutationReloadTimer=null;
   const state={
     booted:false,installed:false,loading:false,busy:false,status:'',statusType:'',meta:null,
     templateBase64:'',analysis:null,filter:'revision',query:'',visible:[],autoTried:false,
@@ -696,7 +696,7 @@
         // cliente (p.telefono), antes se ignoraba por completo — el teléfono solo
         // se tomaba de Clientes o del Excel. Si no había servicio coincidente en
         // Clientes, el teléfono desaparecía aunque siguiera guardado en Bodega.
-        roster.push({inv:p,service,excel,status,level,detail,name:p.nombre||service?.nombre||excel?.name||'Sin nombre',phone:service?._phone||excel?.phone||fieldText(p.telefono)||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
+        roster.push({inv:p,service,excel,status,level,detail,name:service?.nombre||p.nombre||excel?.name||'Sin nombre',payer:fieldText(service?.pagadoPor||service?.titular||''),phone:service?._phone||excel?.phone||fieldText(p.telefono)||'',profile:fieldText(service?.perfil)||fieldText(p.slot)||fieldText(excel?.profile),pin:fieldText(service?.pinPerfil)||fieldText(p.pin)||fieldText(excel?.pin),date:service?._date||excel?.date||'',actualAccount:service?._email||'',invIndex:Number.isInteger(Number(p._clientIndex))?Number(p._clientIndex):invIndex});
       });
       g.services.forEach((service,i)=>{
         if(used.has(i))return;
@@ -718,12 +718,12 @@
           status=hasExcelAudit&&!excel?'falta_excel_bodega':'falta_bodega';
           detail=excel?'Coincide entre Clientes y Excel, pero no existe una cuenta vinculada en Bodega.':(hasExcelAudit?'El servicio está en Clientes, pero no existe una cuenta vinculada en Bodega ni fila coincidente en el Excel.':'El servicio está en Clientes, pero no existe una cuenta vinculada en Bodega.');
         }
-        roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',phone:service._phone||excel?.phone||'',profile:fieldText(service.perfil)||fieldText(excel?.profile),pin:fieldText(service.pinPerfil)||fieldText(excel?.pin),date:service._date||excel?.date||'',actualAccount:service._email||''});
+        roster.push({inv:null,service,excel,status,level:expired?'bad':'warn',detail,name:service.nombre||excel?.name||'Sin nombre',payer:fieldText(service.pagadoPor||service.titular||''),phone:service._phone||excel?.phone||'',profile:fieldText(service.perfil)||fieldText(excel?.profile),pin:fieldText(service.pinPerfil)||fieldText(excel?.pin),date:service._date||excel?.date||'',actualAccount:service._email||''});
       });
       g.excelRows.forEach((excel,i)=>{
         if(usedExcel.has(i))return;
         const expired=isExpired(excel.date);
-        roster.push({inv:null,service:null,excel,status:expired?'solo_excel_vencido':'solo_excel',level:expired?'bad':'warn',detail:expired?'Permanece en el Excel con fecha vencida, pero ya no está en Clientes ni Bodega.':'Está en el Excel, pero no aparece en Clientes ni en Bodega.',name:excel.name||`Sin nombre · fila ${excel.row}`,phone:excel.phone||'',profile:excel.profile||'',pin:excel.pin||'',date:excel.date||'',actualAccount:''});
+        roster.push({inv:null,service:null,excel,status:expired?'solo_excel_vencido':'solo_excel',level:expired?'bad':'warn',detail:expired?'Permanece en el Excel con fecha vencida, pero ya no está en Clientes ni Bodega.':'Está en el Excel, pero no aparece en Clientes ni en Bodega.',name:excel.name||`Sin nombre · fila ${excel.row}`,payer:'',phone:excel.phone||'',profile:excel.profile||'',pin:excel.pin||'',date:excel.date||'',actualAccount:''});
       });
 
       const missingInventory=!g.inventoryAccounts.length;
@@ -1134,7 +1134,7 @@
     const items=accountsForSelectedPlatform(audit).filter((a)=>{
       if(!accountMatchesStatus(a,state.accountStatus))return false;
       if(!q)return true;
-      return norm([a.platform,a.email,a.clave,...a.roster.flatMap((r)=>[r.name,r.phone,r.profile,r.pin,r.actualAccount,dateLabel(r.date)])].join(' ')).includes(q);
+      return norm([a.platform,a.email,a.clave,...a.roster.flatMap((r)=>[r.name,r.payer,r.phone,r.profile,r.pin,r.actualAccount,dateLabel(r.date)])].join(' ')).includes(q);
     }).sort((a,b)=>{
       const la=accountLifecycle(a),lb=accountLifecycle(b);
       return (rank[la.tone]??9)-(rank[lb.tone]??9)||la.nextDays-lb.nextDays||a.platform.localeCompare(b.platform)||String(a.email).localeCompare(String(b.email));
@@ -1409,16 +1409,17 @@
     const accountIndex=state.accountVisible.findIndex((x)=>x.key===account.key);
     return (account.roster||[]).map((r,rowIndex)=>{
       const s=rosterMatchSummary(account,r);
-      const profile=fieldText(r.profile)?(/^perfil\b/i.test(fieldText(r.profile))?fieldText(r.profile):`Perfil ${fieldText(r.profile)}`):'Perfil sin indicar';
+      const payer=fieldText(r.payer);
+      const showPayer=!!payer&&auditPersonKey(payer)!==auditPersonKey(r.name);
       const pointer=`${accountIndex}:${rowIndex}`;
       const differentAccount=r.actualAccount&&email(r.actualAccount)!==email(account.email);
       return `<div class="cm-client-row ${s.tone}">
         <div class="cm-client-cell num">${rowIndex+1}</div>
         <div class="cm-client-heading">
-          <button type="button" class="cm-client-cell link cm-client-name" data-cm-audit-client="${pointer}" title="Ver ficha del cliente"><b>${esc(r.name||'Sin nombre')}</b>${getLocalNote(localNoteKey(account,r))?`<small>${esc(getLocalNote(localNoteKey(account,r)))}</small>`:''}</button>
+          <button type="button" class="cm-client-cell link cm-client-name" data-cm-audit-client="${pointer}" title="Ver ficha del cliente"><b>${esc(r.name||'Sin nombre')}</b>${showPayer?`<small class="cm-paid-by">💳 Pagado por: ${esc(payer)}</small>`:''}${getLocalNote(localNoteKey(account,r))?`<small>${esc(getLocalNote(localNoteKey(account,r)))}</small>`:''}</button>
           <span class="cm-roster-status cm-client-match ${s.tone} ${s.complete?'is-complete':''}" title="${esc(s.detail||'')}">${esc(s.label)}</span>
         </div>
-        <div class="cm-client-cell cm-client-profile"><small class="cm-field-label">Perfil / PIN</small><b>${esc(profile)}</b><small>${r.pin?`PIN ${esc(r.pin)}`:'Sin PIN'}</small></div>
+        <div class="cm-client-cell cm-client-profile"><small class="cm-field-label">PIN</small><b>${r.pin?esc(r.pin):'Sin PIN'}</b></div>
         <div class="cm-client-cell cm-client-contact"><small class="cm-field-label">Teléfono</small><b>${esc(r.phone||'Sin teléfono')}</b>${differentAccount?`<small class="cm-account-mismatch">Cuenta asignada: ${esc(r.actualAccount)}</small>`:''}</div>
         <div class="cm-client-cell cm-client-expiry"><small class="cm-field-label">Vencimiento</small><b>${esc(r.date?dateLabel(r.date):'Sin fecha')}</b></div>
         <div class="cm-client-cell end"><div class="cm-client-actions">${r.service?`<button class="cm-row-action edit" data-cm-edit-service="${pointer}">Editar</button>`:''}${r.inv?`<button class="cm-row-action move" data-cm-remove-assignment="${pointer}">Sacar</button>`:''}${r.service?`<button class="cm-row-action delete" data-cm-delete-service="${pointer}">Eliminar</button>`:''}${r.excel&&!r.service&&!r.inv?`<button class="cm-row-action delete" data-cm-delete-excel="${pointer}">Borrar Excel</button>`:''}${`<button class="cm-row-action note" data-cm-note-toggle="${pointer}">${getLocalNote(localNoteKey(account,r))?'Nota':'+Nota'}</button>`}</div>${state.editingNoteKey===localNoteKey(account,r)?`<div class="cm-inline-note"><input data-cm-note-input="${pointer}" value="${esc(getLocalNote(localNoteKey(account,r)))}" placeholder="Nota rápida..."><div><button class="cm-row-action edit" data-cm-note-save="${pointer}">Guardar</button><button class="cm-row-action" data-cm-note-cancel>Cancelar</button></div></div>`:''}${s.detail?`<details class="cm-client-review-details"><summary>Detalle de revisión</summary><p>${esc(s.detail)}</p></details>`:''}</div>
@@ -1480,7 +1481,7 @@
       <section class="cm-account-list-panel">
         <div class="cm-account-list-head"><div><h4>Cuentas de ${esc(state.accountPlatform==='all'?'todas las plataformas':auditPlatformLabel(state.accountPlatform))}</h4><p>Seleccione un correo para ver sus clientes.</p></div><div class="cm-account-count-pill">${state.accountVisible.length} / ${all.length}</div></div>
         <div class="cm-account-list-body">${accountListRowsHtml(selected)||'<div class="cm-empty cm-account-no-results">No hay cuentas con este filtro.</div>'}</div>
-        ${remaining?`<div class="cm-load-more"><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining} cuentas pendientes por mostrar.</small></div>`:''}
+        ${remaining?`<div class="cm-load-more" data-cm-load-more-sentinel><button class="cm-btn primary" data-cm-action="show-more-accounts">Cargar ${next} cuentas más</button><small>Quedan ${remaining} cuentas. Al llegar aquí se cargarán automáticamente.</small></div>`:''}
       </section>
       ${selectedAccountPanelHtml(selected)}
     </div>`;
@@ -1656,6 +1657,20 @@
     }
   }
 
+  function armAccountAutoLoad(container){
+    try{accountLoadObserver?.disconnect();}catch(_){}
+    accountLoadObserver=null;
+    const sentinel=container?.querySelector?.('[data-cm-load-more-sentinel]');
+    if(!sentinel||typeof IntersectionObserver==='undefined')return;
+    accountLoadObserver=new IntersectionObserver((entries)=>{
+      if(!entries.some((entry)=>entry.isIntersecting)||state.busy||state.refreshing)return;
+      try{accountLoadObserver?.disconnect();}catch(_){}
+      accountLoadObserver=null;
+      handleAction('show-more-accounts');
+    },{root:null,rootMargin:'420px 0px 420px 0px',threshold:0.01});
+    accountLoadObserver.observe(sentinel);
+  }
+
   // Vuelve a atar únicamente los botones que viven dentro de la mesa de cuentas
   // (#cmAccountResults). Se llama tanto en el render completo como en la
   // actualización liviana que dispara la búsqueda, para no tener que reconstruir
@@ -1680,6 +1695,7 @@
     container.querySelectorAll('[data-cm-edit-account]').forEach(b=>b.onclick=()=>editAuditAccount(Number(b.dataset.cmEditAccount)));
     container.querySelectorAll('[data-cm-delete-account]').forEach(b=>b.onclick=()=>deleteAuditAccount(Number(b.dataset.cmDeleteAccount)));
     container.querySelectorAll('[data-cm-delete-excel-account]').forEach(b=>b.onclick=()=>deleteExcelOnlyAccount(Number(b.dataset.cmDeleteExcelAccount)));
+    armAccountAutoLoad(container);
     container.querySelectorAll('[data-cm-review-ok]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewOk,'correcta'));
     container.querySelectorAll('[data-cm-review-issue]').forEach(b=>b.onclick=()=>saveAccountReview(b.dataset.cmReviewIssue,'incidencia'));
     container.querySelectorAll('[data-cm-review-delete]').forEach(b=>b.onclick=()=>deleteAccountIncident(b.dataset.cmReviewDelete));
@@ -1911,11 +1927,99 @@
     };
   }
 
-  async function reloadControlAfterMutation(message,preferredKey=''){
+  function keepMutatedAccountInView(account){
+    if(!account)return;
+    state.expandedAccountKey=account.key||state.expandedAccountKey;
+    const q=norm(state.accountQuery);
+    if(q){
+      const haystack=norm([account.platform,account.email,account.clave,...(account.roster||[]).flatMap((r)=>[r.name,r.payer,r.phone,r.pin,r.actualAccount,dateLabel(r.date)])].join(' '));
+      if(!haystack.includes(q)&&account.email)state.accountQuery=String(account.email);
+    }
+    if(state.accountStatus!=='all'&&!accountMatchesStatus(account,state.accountStatus))state.accountStatus='all';
+    state.filteredAccountsCache=null;
+  }
+
+  function sameServiceRecord(a,b){
+    if(a===b)return true;
+    if(!a||!b)return false;
+    const aid=String(a.perfilId||''),bid=String(b.perfilId||'');
+    if(aid&&bid)return aid===bid;
+    const ac=String(a.compraId||''),bc=String(b.compraId||'');
+    const ai=Number(a.perfilIndex),bi=Number(b.perfilIndex);
+    if(ac&&bc&&ac===bc&&Number.isFinite(ai)&&Number.isFinite(bi))return ai===bi;
+    return String(a.clienteId||'')===String(b.clienteId||'')&&Number(a.servicioIndex)===Number(b.servicioIndex)&&email(a.correo)===email(b.correo);
+  }
+
+  function optimisticDeleteService(account,row,inventoryTouched=false){
+    if(!account||!row)return;
+    const service=row.service;
+    if(service)account.services=(account.services||[]).filter((x)=>!sameServiceRecord(x,service));
+    row.service=null;
+    if(inventoryTouched&&row.inv){
+      const inv=row.inv;
+      account.invClients=(account.invClients||[]).filter((x)=>x!==inv&&!(
+        String(x?.perfilId||'')&&String(x?.perfilId||'')===String(inv?.perfilId||'')
+      ));
+      row.inv=null;
+    }
+    if(!row.service&&!row.inv&&!row.excel){
+      const i=(account.roster||[]).indexOf(row);
+      if(i>=0)account.roster.splice(i,1);
+    }else{
+      row.name=row.excel?.name||row.inv?.nombre||row.name;
+      row.payer='';
+      row.phone=row.excel?.phone||fieldText(row.inv?.telefono)||row.phone;
+      row.pin=row.excel?.pin||fieldText(row.inv?.pin)||row.pin;
+      row.date=row.excel?.date||'';
+    }
+    keepMutatedAccountInView(account);
+  }
+
+  function optimisticRemoveAssignment(account,row){
+    if(!account||!row?.inv)return;
+    const inv=row.inv;
+    account.invClients=(account.invClients||[]).filter((x)=>x!==inv&&!(
+      String(x?.perfilId||'')&&String(x?.perfilId||'')===String(inv?.perfilId||'')
+    ));
+    row.inv=null;
+    if(!row.service&&!row.excel){
+      const i=(account.roster||[]).indexOf(row);
+      if(i>=0)account.roster.splice(i,1);
+    }
+    keepMutatedAccountInView(account);
+  }
+
+  function queueSilentControlReload(){
+    clearTimeout(mutationReloadTimer);
+    mutationReloadTimer=setTimeout(async()=>{
+      if(typeof window.sublichatControlReload!=='function')return;
+      try{
+        await window.sublichatControlReload();
+        state.accountAudit=null;
+        state.filteredAccountsCache=null;
+        if(!screenActive())return;
+        const liveView=captureControlView();
+        render();
+        restoreControlView(liveView,{keepExpanded:true});
+      }catch(_){
+        // La mutación ya fue confirmada por su API. Un refresco silencioso
+        // fallido no debe sacar al usuario de la cuenta en la que está trabajando.
+      }
+    },220);
+  }
+
+  async function reloadControlAfterMutation(message,preferredKey='',options={}){
+    if(options.fast){
+      state.expandedAccountKey=preferredKey||state.expandedAccountKey;
+      mutationMessage(message,'good');
+      queueSilentControlReload();
+      return;
+    }
     let reloadWarning='';
     try{if(typeof window.sublichatControlReload==='function')await window.sublichatControlReload();}
     catch(_){reloadWarning=' La operación sí se guardó; presione “Actualizar base” para verla.';}
     state.accountAudit=null;
+    state.filteredAccountsCache=null;
     state.expandedAccountKey=preferredKey;
     mutationMessage(message+reloadWarning,'good');
   }
@@ -1944,7 +2048,8 @@
     try{
       const out=await api({accion:multiperfil?'eliminar_perfil':'eliminar',clienteId:service.clienteId||'',clienteNorm:norm(service.titular||service.nombre||row.name),telefono:service.telefono||row.phone||'',plataforma:service.plataforma||account.family,correo:multiperfil?'':(service.correo||account.email||''),servicioIndex:Number.isInteger(Number(service.servicioIndex))?Number(service.servicioIndex):null,perfilIndex:Number.isInteger(Number(service.perfilIndex))?Number(service.perfilIndex):null,perfilId:service.perfilId||'',compraId:service.compraId||''},RENEW_API);
       const extra=out.inventario?.tocado?` Cupo liberado: ${out.inventario.disponibles} disponible${out.inventario.disponibles===1?'':'s'}.`:'';
-      await reloadControlAfterMutation(multiperfil?`✅ Perfil ${row.name} retirado de la compra ${platform}.${extra}`:`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key);
+      optimisticDeleteService(account,row,!!out.inventario?.tocado);
+      await reloadControlAfterMutation(multiperfil?`✅ Perfil ${row.name} retirado de la compra ${platform}.${extra}`:`✅ ${row.name}: servicio ${platform} eliminado.${extra}`,account.key,{fast:true});
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar el servicio.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();restoreControlView(view,{keepExpanded:true});}
   }
@@ -2075,7 +2180,13 @@
         accion:'quitarCliente',docId:payload.docId,clienteIndex:payload.clienteIndex,
         nombreCliente:payload.nombreCliente,slot:payload.slot
       },INVENTORY_API);
-      await reloadControlAfterMutation(`✅ ${payload.rowName} fue retirado de la cuenta ${payload.accountEmail}.`,payload.accountKey);
+      const currentAccount=accountByKey(payload.accountKey);
+      const currentRow=(currentAccount?.roster||[]).find((r)=>r.inv&&(
+        (payload.clienteIndex>=0&&Number(r.invIndex)===Number(payload.clienteIndex))||
+        (payload.nombreCliente&&auditPersonKey(r.inv?.nombre)===auditPersonKey(payload.nombreCliente))
+      ));
+      if(currentAccount&&currentRow)optimisticRemoveAssignment(currentAccount,currentRow);
+      await reloadControlAfterMutation(`✅ ${payload.rowName} fue retirado de la cuenta ${payload.accountEmail}.`,payload.accountKey,{fast:true});
       state.busy=false;
       render();restoreControlView(view);
       return {ok:true,result};
@@ -2153,6 +2264,7 @@
     const where=[ids.length?'Bodega':'',excelPointers.length?'Excel':''].filter(Boolean).join(' y ');
     if(!confirm(`¿Eliminar definitivamente esta cuenta de ${where}?\n\n${account.platform}\n${account.email||'Sin correo'}\n\nSolo se permite cuando ya no tiene clientes ni servicios activos. Se guardará un respaldo del Excel antes de modificarlo.`))return;
     const view=captureControlView();
+    let repairedAnalysisAfterDelete=null;
     state.busy=true;mutationMessage('Eliminando cuenta…','');render();restoreControlView(view);
     try{
       // Primero Bodega: la API vuelve a comprobar que no existan clientes ni
@@ -2181,15 +2293,30 @@
         }
         if(cleared){
           try{await api({accion:'control_guardar_respaldo',filename:`ANTES-DE-ELIMINAR-CUENTA-${state.meta?.plantilla?.filename||'Sublicuentas.xlsx'}`,size:base64ToBuffer(originalBase64).byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:originalBase64,motivo:'antes_eliminar_cuenta_completa',metricas:state.analysis?.metrics||{}});}catch(_){}
-          const repairedAnalysis=parseWorkbook(workbook,{servicios:[],cuentas:[]});rebuildConditionalFormatting(repairedAnalysis);
+          repairedAnalysisAfterDelete=parseWorkbook(workbook,{servicios:[],cuentas:[]});rebuildConditionalFormatting(repairedAnalysisAfterDelete);
           const buffer=await workbook.xlsx.writeBuffer(),base64=bufferToBase64(buffer),filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
           await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_completa',metricas:state.analysis?.metrics||{}});
           state.templateBase64=base64;
         }
       }
-      state.analysis=null;state.accountAudit=null;state.expandedAccountKey='';
-      await refreshMeta();await analyze(true);
+      if(repairedAnalysisAfterDelete)state.analysis=repairedAnalysisAfterDelete;
+      if(state.accountAudit?.accounts){
+        state.accountAudit.accounts=state.accountAudit.accounts.filter((x)=>x!==account&&String(x.key||'')!==String(account.key||''));
+      }
+      state.filteredAccountsCache=null;
+      let candidates=filteredAccounts();
+      if(!candidates.length&&state.accountQuery){
+        state.accountQuery='';
+        view.accountQuery='';
+        state.filteredAccountsCache=null;
+        candidates=filteredAccounts();
+      }
+      const nextAccount=candidates[Math.min(index,Math.max(0,candidates.length-1))]||candidates[0]||null;
+      state.expandedAccountKey=nextAccount?.key||'';
+      view.expandedAccountKey=state.expandedAccountKey;
       mutationMessage(`✅ Cuenta ${account.email||''} eliminada de ${where}.`,'good');
+      queueSilentControlReload();
+      Promise.resolve(refreshMeta()).catch(()=>{});
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();restoreControlView(view,{keepExpanded:false});}
   }

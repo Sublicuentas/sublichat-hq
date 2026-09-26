@@ -567,14 +567,30 @@ window.sublichatControlData=()=>({
   version:CONTROL_DATA_VERSION,
   ready:CONTROL_DATA_READY,
   error:CONTROL_DATA_ERROR,
-  servicios:DATA.flatMap(c=>(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre)).map((p,perfilIndex)=>({
-    clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
-    cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),titular:c.nombre||'',
-    nombre:p.nombre||c.nombre||'',telefono:c.telefono||'',vendedor:c.vendedor||'',
-    plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:perfilIndex===0?(Number(c.precio)||0):0,precioCompra:Number(c.precio)||0,
-    fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha.toISOString():String(c.fechaRaw||''),correo:p.correo||c.correo||'',
-    clave:p.clave||c.clave||'',pinPerfil:p.pinPerfil||'',perfil:p.perfil||p.nombre||c.perfil||''
-  }))),
+  servicios:DATA.flatMap(c=>{
+    const perfiles=(Array.isArray(c.perfiles)&&c.perfiles.length?c.perfiles:perfilesDeCompra(c,c.nombre));
+    const pagadoPor=String(c.nombre||'').trim();
+    const esTercero=String(c.beneficiarioTipo||'').trim().toLowerCase()==='tercero';
+    const beneficiarioNombre=esTercero?String(c.beneficiarioNombre||'').trim():'';
+    return perfiles.map((p,perfilIndex)=>{
+      const nombrePerfilGuardado=String(p?.nombre||p?.perfil||'').trim();
+      const usaBeneficiario=!!beneficiarioNombre&&(
+        perfiles.length===1||
+        !nombrePerfilGuardado||
+        clienteSearchNorm(nombrePerfilGuardado)===clienteSearchNorm(pagadoPor)
+      );
+      const nombrePerfilReal=(usaBeneficiario?beneficiarioNombre:nombrePerfilGuardado)||pagadoPor||'Sin nombre';
+      return {
+        clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
+        cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),
+        titular:pagadoPor,pagadoPor,beneficiarioTipo:esTercero?'tercero':'titular',beneficiarioNombre,
+        nombre:nombrePerfilReal,telefono:c.telefono||'',vendedor:c.vendedor||'',
+        plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:perfilIndex===0?(Number(c.precio)||0):0,precioCompra:Number(c.precio)||0,
+        fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha.toISOString():String(c.fechaRaw||''),correo:p.correo||c.correo||'',
+        clave:p.clave||c.clave||'',pinPerfil:p.pinPerfil||'',perfil:nombrePerfilReal
+      };
+    });
+  }),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
     disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
