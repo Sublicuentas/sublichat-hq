@@ -684,25 +684,40 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
   });
 }
 
+function nombrePerfilRealInventario(servicio = {}, perfil = {}, nombreTitular = "", totalPerfiles = 1) {
+  const pagador = String(nombreTitular || "").trim();
+  const tercero = String(servicio?.beneficiarioTipo || "").trim().toLowerCase() === "tercero";
+  const beneficiario = tercero ? String(servicio?.beneficiarioNombre || servicio?.beneficiario || "").trim() : "";
+  const guardado = String(perfil?.nombre || perfil?.perfil || "").trim();
+  if (beneficiario && (totalPerfiles === 1 || !guardado || normName(guardado) === normName(pagador))) return beneficiario;
+  return guardado || beneficiario || pagador || "—";
+}
+
 async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "" } = {}) {
   const plataformaAnterior = anterior?.plataforma || nuevo?.plataforma || "";
   const plataformaNueva = nuevo?.plataforma || anterior?.plataforma || "";
   const antes = anterior && servicioRequiereCorreo(plataformaAnterior) ? perfilesOperativos(anterior, nombreTitular) : [];
   const despues = nuevo && servicioRequiereCorreo(plataformaNueva) ? perfilesOperativos(nuevo, nombreTitular) : [];
-  const key = (p, plataforma) => `${familiaInventario(plataforma)}|${normCorreo(p.correo)}|${normName(p.nombre)}`;
-  const nuevas = new Set(despues.map((p) => key(p, plataformaNueva)));
+  const key = (p, plataforma, servicio, total) => `${familiaInventario(plataforma)}|${normCorreo(p.correo)}|${normName(nombrePerfilRealInventario(servicio,p,nombreTitular,total))}`;
+  const nuevas = new Set(despues.map((p) => key(p, plataformaNueva, nuevo, despues.length)));
   const resultados = [];
 
   for (const p of antes) {
-    if (!nuevas.has(key(p, plataformaAnterior))) {
+    if (!nuevas.has(key(p, plataformaAnterior, anterior, antes.length))) {
       resultados.push(await ajustarInventario(db, {
-        modo: "liberar", plataforma: plataformaAnterior, correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+        modo: "liberar", plataforma: plataformaAnterior, correo: p.correo,
+        nombreCliente: nombrePerfilRealInventario(anterior,p,nombreTitular,antes.length),
+        pagadoPor: nombreTitular, pin: p.pinPerfil || "",
+        perfilId: p.perfilId || "", compraId: anterior?.compraId || ""
       }));
     }
   }
   for (const p of despues) {
     resultados.push(await ajustarInventario(db, {
-      modo: "ocupar", plataforma: plataformaNueva, correo: p.correo, nombreCliente: p.nombre || nombreTitular, pin: p.pinPerfil || ""
+      modo: "ocupar", plataforma: plataformaNueva, correo: p.correo,
+      nombreCliente: nombrePerfilRealInventario(nuevo,p,nombreTitular,despues.length),
+      pagadoPor: nombreTitular, pin: p.pinPerfil || "",
+      perfilId: p.perfilId || "", compraId: nuevo?.compraId || ""
     }));
   }
 
@@ -789,7 +804,7 @@ async function propagarClaveCompartida(db, plan) {
 // cambió, se actualiza en el mismo registro en vez de crear uno nuevo.
 // También se agregó el tope de capacidad, que antes no existía acá (por eso
 // una cuenta de 5 cupos podía terminar con 15 "clientes").
-async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pin }) {
+async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "" }) {
   if (!correo) return { tocado: false, motivo: "sin correo" };
   try {
     const correoOriginal = String(correo || "").trim();
@@ -814,21 +829,60 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
       const cap = Number(data.capacidad) || 0;
 
       if (modo === "ocupar") {
-        const idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente));
         const pinNorm = String(pin || "").trim();
+        const perfilKey = String(perfilId || "").trim();
+        const compraKey = String(compraId || "").trim();
+        const pagadorNorm = normName(pagadoPor || "");
+        let idxExiste = perfilKey ? clientes.findIndex(c => String(c?.perfilId || "").trim() === perfilKey) : -1;
+        // Nombre real + PIN es más seguro que compraId en compras multiperfil:
+        // varios perfiles pueden compartir el mismo compraId.
+        if (idxExiste === -1) {
+          idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+        }
+        // Adopta registros legacy donde quedó guardado el pagador como si fuera
+        // el titular del perfil. El PIN evita cambiar otra persona por accidente.
+        if (idxExiste === -1 && pagadorNorm) {
+          idxExiste = clientes.findIndex(c => normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+        }
+        // Último fallback: compraId, pero solo si identifica una única fila.
+        if (idxExiste === -1 && compraKey) {
+          const porCompra = clientes.map((c,i)=>({c,i})).filter(({c}) => String(c?.compraId || "").trim() === compraKey && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          if (porCompra.length === 1) idxExiste = porCompra[0].i;
+        }
         if (idxExiste !== -1) {
-          if (pinNorm && String(clientes[idxExiste].pin || "") !== pinNorm) {
-            clientes[idxExiste] = { ...clientes[idxExiste], pin: pinNorm };
-          }
+          const actual = clientes[idxExiste] || {};
+          const actualizado = {
+            ...actual,
+            nombre: nombreCliente || actual.nombre || "—",
+            ...(pinNorm ? { pin: pinNorm } : {}),
+            ...(perfilKey ? { perfilId: perfilKey } : {}),
+            ...(compraKey ? { compraId: compraKey } : {})
+          };
+          if (pagadoPor && normName(pagadoPor) !== normName(nombreCliente)) actualizado.pagadoPor = String(pagadoPor).trim();
+          else delete actualizado.pagadoPor;
+          clientes[idxExiste] = actualizado;
         } else if (cap > 0 && clientes.length >= cap) {
           return { tocado: false, motivo: "cuenta llena", ocupados: clientes.length, capacidad: cap };
         } else {
           const usados = clientes.map(c => Number(c.slot) || 0);
           let slot = 1; while (usados.includes(slot)) slot++;
-          clientes.push({ nombre: nombreCliente || "—", pin: pinNorm, slot });
+          clientes.push({
+            nombre: nombreCliente || "—", pin: pinNorm, slot,
+            ...(perfilKey ? { perfilId: perfilKey } : {}),
+            ...(compraKey ? { compraId: compraKey } : {}),
+            ...(pagadoPor && normName(pagadoPor) !== normName(nombreCliente) ? { pagadoPor: String(pagadoPor).trim() } : {})
+          });
         }
       } else if (modo === "liberar") {
-        const i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente)));
+        const perfilKey = String(perfilId || "").trim();
+        const compraKey = String(compraId || "").trim();
+        let i = perfilKey ? clientes.findIndex(c => String(c?.perfilId || "").trim() === perfilKey) : -1;
+        if (i === -1) i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente) && (!pin || String(c?.pin || "").trim() === String(pin).trim())));
+        if (i === -1 && pagadoPor) i = clientes.findIndex(c => normName(c.nombre) === normName(pagadoPor) && (!pin || String(c?.pin || "").trim() === String(pin).trim()));
+        if (i === -1 && compraKey) {
+          const porCompra = clientes.map((c,idx)=>({c,idx})).filter(({c}) => String(c?.compraId || "").trim() === compraKey && (!pin || String(c?.pin || "").trim() === String(pin).trim()));
+          if (porCompra.length === 1) i = porCompra[0].idx;
+        }
         if (i !== -1) clientes.splice(i, 1);
         else if (clientes.length) clientes.pop();
       }
