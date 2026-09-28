@@ -66,6 +66,82 @@ function applyCors(req, res) {
   return { origin, allowed };
 }
 
+// Compatibilidad con APK ya instalada: la web reconstruye el pie de la ficha
+// (teléfono del CLIENTE + vendedor) al abrir una cuenta, pero versiones actuales
+// de la APK muestran fichaTexto tal como llega de Firestore. Si una ficha antigua
+// quedó guardada sin ese pie, el número desaparece solo en la APK.
+//
+// Este hotfix NO modifica Firestore ni requiere actualizar la APK: únicamente
+// completa fichaTexto en la respuesta /api/mobile-core para el recurso clientes.
+function sellerIconForFicha(seller = '') {
+  const n = norm(seller).replace(/\s+/g, ' ');
+  if (n === 'relojes') return '⌚';
+  if (n === 'sublicuentas') return '💻';
+  return '🌟';
+}
+
+function phoneDigits(value = '') {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function ensureMobileFichaFooter(text = '', telefono = '', vendedor = '') {
+  const raw = String(text || '').replace(/\r\n/g, '\n').trimEnd();
+  if (!raw.trim()) return raw;
+
+  const lines = raw.split('\n');
+  const trimBlanks = () => { while (lines.length && !String(lines[lines.length - 1] || '').trim()) lines.pop(); };
+  const isSellerLine = line => /^(?:⌚|💻|🌟)?\s*Vendedor\b/i.test(String(line || '').trim());
+  const isPhoneLine = line => /^\+?\d[\d\s().-]{5,}$/.test(String(line || '').trim());
+
+  trimBlanks();
+
+  // Quite únicamente el pie estructurado anterior; no toque el cuerpo de la ficha.
+  if (lines.length && isSellerLine(lines[lines.length - 1])) {
+    lines.pop();
+    trimBlanks();
+    if (lines.length && isPhoneLine(lines[lines.length - 1])) {
+      lines.pop();
+      trimBlanks();
+    }
+  } else {
+    // Si una versión antigua dejó solo el teléfono al final, reemplácelo únicamente
+    // cuando coincide exactamente con el teléfono actual del cliente.
+    const wanted = phoneDigits(telefono);
+    const last = lines.length ? phoneDigits(lines[lines.length - 1]) : '';
+    if (wanted && last === wanted && isPhoneLine(lines[lines.length - 1])) {
+      lines.pop();
+      trimBlanks();
+    }
+  }
+
+  const base = lines.join('\n').trimEnd();
+  const footer = [];
+  const phone = String(telefono || '').trim();
+  const seller = String(vendedor || '').trim();
+  if (phone) footer.push(phone);
+  if (seller) footer.push(`${sellerIconForFicha(seller)} Vendedor ${seller}`);
+  if (!footer.length) return base;
+  return `${base}\n\n${footer.join('\n')}`.trim();
+}
+
+function prepareClientForMobile(client = {}) {
+  const out = { ...(client || {}) };
+  const telefono = String(out.telefono || '').trim();
+  const clientSeller = String(out.vendedor || '').trim();
+  if (!Array.isArray(out.servicios)) return out;
+
+  out.servicios = out.servicios.map(service => {
+    if (!service || typeof service !== 'object') return service;
+    const copy = { ...service };
+    const fichaTexto = String(copy.fichaTexto || '');
+    if (!fichaTexto.trim()) return copy;
+    const vendedor = String(copy.vendedor || clientSeller || '').trim();
+    copy.fichaTexto = ensureMobileFichaFooter(fichaTexto, telefono, vendedor);
+    return copy;
+  });
+  return out;
+}
+
 async function listResource(req, res) {
   const user = await requireFirebaseUser(req, res);
   if (!user) return;
@@ -88,7 +164,10 @@ async function listResource(req, res) {
     if (cursorSnap.exists) query = query.startAfter(cursorSnap);
   }
   const snap = await query.get();
-  const items = snap.docs.map(doc => ({ id:doc.id, ...(doc.data() || {}) }));
+  const items = snap.docs.map(doc => {
+    const item = { id:doc.id, ...(doc.data() || {}) };
+    return resource === 'clientes' ? prepareClientForMobile(item) : item;
+  });
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
   return res.status(200).json({ ok:true, items, nextCursor });
 }
