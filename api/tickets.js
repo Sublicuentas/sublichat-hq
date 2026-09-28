@@ -446,8 +446,39 @@ function safeTelegramInfo(info) {
   return out;
 }
 
-function safeTicketForClient(item) {
+function safeTicketForClient(item, role = '') {
   const out = { ...(item || {}) };
+  const actor = destinationKey(role);
+
+  // PRIVACIDAD DE AVISOS: un aviso puede enviarse a varios destinatarios,
+  // pero cada uno solo debe ver sus propias respuestas y las respuestas
+  // dirigidas expresamente a él. Sublicuentas conserva la conversación
+  // completa como emisor/administrador del aviso.
+  if (String(out.tipo || '').toLowerCase() === 'aviso' && actor && actor !== 'sublicuentas') {
+    const creator = destinationKey(out.creadoPorRol || 'sublicuentas');
+    const destinos = Array.isArray(out.destinos) ? out.destinos.map(destinationKey).filter(Boolean) : [];
+    const respuestas = Array.isArray(out.respuestas) ? out.respuestas : [];
+    out.respuestas = respuestas.filter((r) => {
+      const porRol = destinationKey(r && r.porRol);
+      const para = Array.isArray(r && r.para) ? r.para.map(destinationKey).filter(Boolean) : [];
+      if (porRol === actor) return true;
+      if (para.includes(actor)) return true;
+      // Compatibilidad con respuestas antiguas sin campo `para`: solo es
+      // seguro mostrarlas cuando el aviso tenía un único destinatario.
+      if (porRol === creator && !para.length && destinos.length === 1 && destinos[0] === actor) return true;
+      return false;
+    });
+
+    const last = out.respuestas[out.respuestas.length - 1];
+    out.ultimaRespuesta = last ? clean(last.texto || '', 3000) : '';
+    out.ultimaRespuestaPor = last ? clean(last.por || '', 100) : '';
+    if (String(out.estado || '').toLowerCase() === 'respondido' && !out.respuestas.length) out.estado = 'abierto';
+
+    // No exponer metadatos de entrega/respuesta de otros destinatarios.
+    delete out.telegramReplyInfo;
+    delete out.telegramReplyOk;
+  }
+
   ['telegramInfo', 'telegramProcessInfo', 'telegramResolvedInfo', 'telegramReplyInfo'].forEach((key) => {
     if (out[key]) out[key] = safeTelegramInfo(out[key]);
   });
@@ -479,7 +510,7 @@ async function listTickets(db, body) {
     });
   }
   const recipients = await availableRecipients(db);
-  return { ok: true, items: items.map(safeTicketForClient), recipients };
+  return { ok: true, items: items.map((item) => safeTicketForClient(item, rol)), recipients };
 }
 
 // Genera un número de ticket secuencial (#1, #2, #3...) usando un contador en Firestore.
@@ -552,6 +583,20 @@ function ticketConversationTargets(ticket, actorRole) {
 //  - Si nadie ha respondido todavía, va a los participantes del aviso/ticket.
 function ticketReplyTargets(ticket, actorRole) {
   const previas = Array.isArray(ticket && ticket.respuestas) ? ticket.respuestas : [];
+  const actor = destinationKey(actorRole);
+  const creator = destinationKey(ticket && ticket.creadoPorRol);
+
+  // AVISOS: cada respuesta es privada entre el destinatario que responde y
+  // el creador del aviso. Nunca se reenvía al resto de destinatarios.
+  if (String(ticket && ticket.tipo || '').toLowerCase() === 'aviso') {
+    if (actor && actor !== creator) return creator ? [creator] : [];
+    const ultimaDeDestinatario = [...previas].reverse().find((r) => {
+      const por = destinationKey(r && r.porRol);
+      return por && por !== creator;
+    });
+    return ultimaDeDestinatario ? [destinationKey(ultimaDeDestinatario.porRol)] : [];
+  }
+
   const ultimaTelegram = [...previas].reverse().find(r => r && r.origen === 'telegram' && destinationKey(r.porRol));
   if (ultimaTelegram) return [destinationKey(ultimaTelegram.porRol)];
   return ticketConversationTargets(ticket, actorRole);
