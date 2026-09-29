@@ -5963,7 +5963,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(guardada&&respaldoActual&&!guardada.includes(respaldoActual)) guardada=(guardada+"\n\n"+respaldoActual).trim();
     const multiperfilAntiguaSinReglas=perfiles.length>1&&/COMPRA MULTIPERFIL/i.test(guardada)&&!/(reglas|condiciones|reglas de oro|pasos exactos|garant[ií]a)/i.test(guardada);
     const guardadaCompleta=fichaTextoTieneDatosCompletos(guardada);
-    if(guardada&&guardadaCompleta&&!multiperfilAntiguaSinReglas){
+    // La ficha guardada es una foto vieja: si se renovó o se cambió correo/clave/PIN
+    // (aquí, en el bot o en la APK) ya no coincide con la cuenta. En ese caso se
+    // usa la plantilla recién armada con los datos actuales en vez del texto viejo.
+    const valoresActuales=[fichaISOToDMY(fichaGetVal("fichaFecha"))||"",fichaGetVal("fichaCorreo"),fichaGetVal("fichaClave"),fichaGetVal("fichaPinPerfil")].map(v=>String(v||"").trim()).filter(v=>v&&v!=="—");
+    const guardadaAlDia=valoresActuales.every(v=>guardada.includes(v));
+    if(guardada&&guardadaCompleta&&guardadaAlDia&&!multiperfilAntiguaSinReglas){
       const txt=fichaQ("fichaTexto"), view=fichaQ("fichaTextoView");
       if(txt)txt.value=guardada;
       if(view)view.innerHTML=fichaMarkdownToHtml(guardada);
