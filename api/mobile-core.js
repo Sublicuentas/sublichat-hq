@@ -124,6 +124,42 @@ function ensureMobileFichaFooter(text = '', telefono = '', vendedor = '') {
   return `${base}\n\n${footer.join('\n')}`.trim();
 }
 
+// La APK muestra fichaTexto tal como está guardada. Ese texto es una FOTO del
+// momento en que se creó la ficha: al renovar (web, bot o APK) o al cambiar
+// correo/clave/PIN desde el bot, la fecha y los datos del servicio sí cambian,
+// pero el texto viejo seguía mostrando lo anterior ("no me actualiza la ficha").
+// Aquí se refrescan SOLO las líneas estructuradas de la plantilla, con los datos
+// actuales del servicio. No modifica Firestore. Si una etiqueta aparece más de
+// una vez (fichas multiperfil) no se toca, para no mezclar perfiles.
+function perfilPrincipalMovil(service = {}) {
+  const perfiles = Array.isArray(service.perfiles) ? service.perfiles.filter(p => p && typeof p === 'object') : [];
+  return perfiles[0] || {};
+}
+function reemplazarValorEtiqueta(lines, regex, valor) {
+  const v = String(valor ?? '').trim();
+  if (!v) return;
+  const idx = [];
+  lines.forEach((line, i) => { if (regex.test(line)) idx.push(i); });
+  if (idx.length !== 1) return;
+  const i = idx[0];
+  lines[i] = lines[i].replace(/(:\s*)(.*?)(\*?\s*)$/, (_m, sep, _old, tail) => `${sep}${v}${tail}`);
+}
+function refrescarFichaTextoMovil(texto = '', service = {}) {
+  const raw = String(texto || '');
+  if (!raw.trim()) return raw;
+  const principal = perfilPrincipalMovil(service);
+  const lines = raw.replace(/\r\n/g, '\n').split('\n');
+  const fecha = String(service.fechaRenovacion || '').trim();
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fecha)) {
+    reemplazarValorEtiqueta(lines, /📅\s*Renovaci[oó]n\s*:/i, fecha);
+    reemplazarValorEtiqueta(lines, /(📅|⏳)\s*Pr[oó]ximo pago\s*:/i, fecha);
+  }
+  reemplazarValorEtiqueta(lines, /📧\s*Correo\s*:/i, principal.correo || service.correo);
+  reemplazarValorEtiqueta(lines, /🔑\s*Clave\s*:/i, principal.clave || service.clave);
+  reemplazarValorEtiqueta(lines, /📎\s*Pin\s*:/i, principal.pinPerfil || principal.pin || service.pinPerfil || service.pin);
+  return lines.join('\n');
+}
+
 function prepareClientForMobile(client = {}) {
   const out = { ...(client || {}) };
   const telefono = String(out.telefono || '').trim();
@@ -133,7 +169,7 @@ function prepareClientForMobile(client = {}) {
   out.servicios = out.servicios.map(service => {
     if (!service || typeof service !== 'object') return service;
     const copy = { ...service };
-    const fichaTexto = String(copy.fichaTexto || '');
+    const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy);
     if (!fichaTexto.trim()) return copy;
     const vendedor = String(copy.vendedor || clientSeller || '').trim();
     copy.fichaTexto = ensureMobileFichaFooter(fichaTexto, telefono, vendedor);

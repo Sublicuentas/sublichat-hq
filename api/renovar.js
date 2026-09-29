@@ -92,6 +92,30 @@ function planValidoMasCercanoTvDigital(plataforma="",meses=1){
   },permitidos[0]);
 }
 
+// Meses que se guardan al RENOVAR. La renovación nunca se bloquea por este
+// dato: antes se validaba estricto contra la tabla de planes con la diferencia
+// de fechas, y cualquier fecha grande (cliente vencido hace meses, fecha exacta
+// lejana, meses gratis) daba "Plan no válido" y la fecha no se guardaba.
+// 1) Si el llamado trae los meses elegidos y son válidos, se usan.
+// 2) Si no, se calcula desde la fecha más reciente entre la anterior y HOY
+//    (un cliente vencido no "paga" los meses que estuvo sin servicio) y se
+//    ajusta al plan válido más cercano.
+function hoyDMYTegucigalpa() {
+  const partes = new Intl.DateTimeFormat("en-US", { timeZone:"America/Tegucigalpa", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
+  const pick = t => partes.find(x => x.type === t)?.value || "";
+  return `${pick("day")}/${pick("month")}/${pick("year")}`;
+}
+function mesesRenovacionSeguro(plataforma = "", mesesPedidos, fechaAnterior, fechaNueva) {
+  const pedidos = Math.round(Number(mesesPedidos));
+  if (Number.isFinite(pedidos) && pedidos > 0) {
+    try { return validarMesesTvDigital(plataforma, pedidos); } catch (_) {}
+  }
+  const hoy = hoyDMYTegucigalpa();
+  const a = parseFechaDMY(fechaAnterior), h = parseFechaDMY(hoy);
+  const base = a && h && a > h ? fechaAnterior : hoy;
+  return planValidoMasCercanoTvDigital(plataforma, mesesPagadosEntre(base, fechaNueva));
+}
+
 function mesesPagadosEntre(inicio, fin) {
   const a = parseFechaDMY(inicio), b = parseFechaDMY(fin);
   if (!a || !b || b <= a) return 1;
@@ -1017,7 +1041,11 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   try {
     mesesContratados = validarMesesTvDigital(plataformaFinal, mesesContratados, { legacy: legacyMeses });
   } catch (errorPlan) {
-    if (!editandoSinCambioFecha) throw errorPlan;
+    // Solo se bloquea cuando el vendedor ELIGIÓ un plan que no existe. Si los
+    // meses salieron de calcular fechas (fecha grande, APK/bot sin selector de
+    // plan), se guarda la ficha con el plan válido más cercano.
+    const planElegido = Number.isFinite(mesesSolicitados) && mesesSolicitados > 0;
+    if (!editandoSinCambioFecha && planElegido) throw errorPlan;
     mesesContratados = legacyMeses
       ? Math.round(mesesAnteriores)
       : planValidoMasCercanoTvDigital(plataformaFinal, mesesContratados);
@@ -1646,7 +1674,7 @@ async function handlerCore(req, res) {
         servicios[idx] = {
           ...s,
           fechaRenovacion: nuevaFecha,
-          mesesContratados: validarMesesTvDigital(s.plataforma || plataforma || "", mesesPagadosEntre(fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha)),
+          mesesContratados: mesesRenovacionSeguro(s.plataforma || plataforma || "", body.meses ?? body.mesesContratados, fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
           updatedAt: isoNow()
