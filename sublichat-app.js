@@ -536,15 +536,39 @@ async function readControlSharedCollection(coleccion){
   try{return await pending;}finally{controlSharedRequests.delete(key);}
 }
 
+// Respaldo cuando la escucha EN VIVO de Firebase falla (reglas, red, sesión).
+// Antes solo existía para Sublicuentas/Geisell y únicamente dentro de Control
+// Maestro: en Clientes/Cobro los cambios hechos desde el bot o la APK no
+// llegaban hasta recargar la página. Ahora aplica a todos los usuarios y a
+// todas las pantallas, solo mientras la pestaña está visible y solo mientras
+// la escucha en vivo esté caída (cuando funciona, no hay lecturas extra).
+let controlFallbackUltimo=0, controlFallbackCorriendo=false;
+async function refrescoRespaldoClientes(motivo='intervalo'){
+  if(clientesLiveStarted||controlFallbackCorriendo)return;
+  if(document.hidden||!document.body.classList.contains('ready'))return;
+  if(window.SublichatControlMaestro?.isBusy?.())return;
+  const ahora=Date.now();
+  if(motivo!=='intervalo'&&ahora-controlFallbackUltimo<30000)return;
+  controlFallbackUltimo=ahora;controlFallbackCorriendo=true;
+  try{
+    const enControl=!!document.getElementById('screen-control-cuentas')?.classList.contains('active');
+    await load({forceServer:true,requireServer:true,controlOnly:true});
+    if(!enControl){try{render();}catch(_){}}
+    const src=document.getElementById('srcLabel');
+    if(src&&!clientesLiveStarted)src.textContent=`Firebase (actualización automática) · ${DATA.length} servicios`;
+  }catch(_){}
+  finally{controlFallbackCorriendo=false;}
+}
 function activarControlFallback(){
-  if(controlLiveFallback||!controlUsesSharedData())return;
-  // Si las reglas del navegador no admiten el nuevo rol de Geisell, la API
-  // privada conserva la actualización mientras trabaja en Control Maestro.
-  controlLiveFallback=setInterval(()=>{
-    if(document.hidden||!document.body.classList.contains('ready')||!document.getElementById('screen-control-cuentas')?.classList.contains('active'))return;
-    if(window.SublichatControlMaestro?.isBusy?.())return;
-    load({forceServer:true,requireServer:true,controlOnly:true}).catch(()=>{});
-  },60000);
+  const src=document.getElementById('srcLabel');
+  if(src&&!clientesLiveStarted)src.textContent=`Firebase (actualización automática) · ${DATA.length} servicios`;
+  if(controlLiveFallback)return;
+  controlLiveFallback=setInterval(()=>{refrescoRespaldoClientes('intervalo');},90000);
+  if(!window.__sublichatFallbackEventos){
+    window.__sublichatFallbackEventos=true;
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refrescoRespaldoClientes('visible');});
+    window.addEventListener('focus',()=>refrescoRespaldoClientes('focus'));
+  }
 }
 
 function activarClientesEnVivo(db,collection,onSnapshot){
@@ -659,8 +683,8 @@ async function load(options={}){
       if(session!==CONTROL_SESSION_VERSION)return;
       console.error(e);
       CONTROL_DATA_ERROR=e.message||'No se pudieron cargar los datos de Firebase. Presione Actualizar datos para reintentar.';
+      activarControlFallback();
       document.getElementById("srcLabel").textContent=DATA.length?'Error de conexión · última copia visible':'No se pudieron cargar los datos';
-      if(sharedControl)activarControlFallback();
       try{window.sublichatControlSyncLoadedData?.();}catch(_){}
       if(requireServer)throw new Error(CONTROL_DATA_ERROR);
     }
