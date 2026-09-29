@@ -335,6 +335,18 @@ const platLabel = p => { const k=String(p||"").toLowerCase().trim();
   return PLAT_LABELS[k] || (p ? p.charAt(0).toUpperCase()+p.slice(1) : "—"); };
 
 const today = new Date(); today.setHours(0,0,0,0);
+// "today" se calculaba UNA sola vez al abrir la página. Si Sublichat quedaba
+// abierto de un día para otro, los servicios que vencieron ayer se seguían
+// contando como vigentes/"vence hoy" (por eso la web daba 649 y la APK 648).
+// Se actualiza en el mismo objeto para que todas las funciones lo vean.
+function sublichatRefrescarHoy(){
+  const ahora=new Date(); ahora.setHours(0,0,0,0);
+  if(ahora.getTime()===today.getTime())return false;
+  today.setTime(ahora.getTime());
+  return true;
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sublichatRefrescarHoy()){try{render();}catch(_){}}});
+setInterval(()=>{if(sublichatRefrescarHoy()){try{render();}catch(_){}}},60000);
 const offset = d => { const x=new Date(today); x.setDate(x.getDate()+d);
   return String(x.getDate()).padStart(2,"0")+"/"+String(x.getMonth()+1).padStart(2,"0")+"/"+x.getFullYear(); };
 const DEMO = [
@@ -751,6 +763,7 @@ window.sublichatControlData=()=>({
 window.sublichatControlReload=()=>load({forceServer:true,requireServer:true,controlOnly:true});
 
 function render(){
+  sublichatRefrescarHoy();
   const $=id=>document.getElementById(id);
   const tot=DATA.reduce((s,c)=>s+c.precio,0);
   const hoy=DATA.filter(c=>c.fecha&&daysTo(c.fecha)===0);
