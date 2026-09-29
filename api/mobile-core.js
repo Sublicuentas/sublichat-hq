@@ -160,6 +160,33 @@ function refrescarFichaTextoMovil(texto = '', service = {}) {
   return lines.join('\n');
 }
 
+// La APK solo entiende fechas exactas DD/MM/AAAA. La web también acepta
+// AAAA-MM-DD, Timestamp de Firebase o "DD/MM/AAAA hora". Un servicio con otro
+// formato contaba en la web pero en la APK quedaba "sin fecha" (fuera de
+// Vigentes). Se entrega normalizado a la APK sin tocar Firestore.
+function fechaDMYMovil(v) {
+  if (v == null || v === '') return '';
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d => (d instanceof Date && !isNaN(d)) ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : '';
+  if (typeof v === 'object') {
+    const sec = v.seconds ?? v._seconds;
+    if (sec != null) {
+      const d = new Date(Number(sec) * 1000);
+      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Tegucigalpa', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+      const g = t => p.find(x => x.type === t)?.value || '';
+      return `${g('day')}/${g('month')}/${g('year')}`;
+    }
+    if (typeof v.toDate === 'function') return fmt(v.toDate());
+    return '';
+  }
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${pad(m[1])}/${pad(m[2])}/${m[3]}`;
+  return s;
+}
+
 function prepareClientForMobile(client = {}) {
   const out = { ...(client || {}) };
   const telefono = String(out.telefono || '').trim();
@@ -169,6 +196,7 @@ function prepareClientForMobile(client = {}) {
   out.servicios = out.servicios.map(service => {
     if (!service || typeof service !== 'object') return service;
     const copy = { ...service };
+    if (copy.fechaRenovacion != null && copy.fechaRenovacion !== '') copy.fechaRenovacion = fechaDMYMovil(copy.fechaRenovacion);
     const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy);
     if (!fichaTexto.trim()) return copy;
     const vendedor = String(copy.vendedor || clientSeller || '').trim();
@@ -200,10 +228,15 @@ async function listResource(req, res) {
     if (cursorSnap.exists) query = query.startAfter(cursorSnap);
   }
   const snap = await query.get();
-  const items = snap.docs.map(doc => {
-    const item = { id:doc.id, ...(doc.data() || {}) };
-    return resource === 'clientes' ? prepareClientForMobile(item) : item;
-  });
+  // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
+  // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
+  // usando el último documento leído, así la paginación no se altera.
+  const items = snap.docs
+    .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
+    .map(doc => {
+      const item = { id:doc.id, ...(doc.data() || {}) };
+      return resource === 'clientes' ? prepareClientForMobile(item) : item;
+    });
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
   return res.status(200).json({ ok:true, items, nextCursor });
 }
