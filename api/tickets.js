@@ -602,14 +602,20 @@ function ticketReplyTargets(ticket, actorRole) {
   return ticketConversationTargets(ticket, actorRole);
 }
 
+// En avisos nunca se revela la lista de destinatarios.
+function ticketRouteLine(t = {}) {
+  const de = `De: ${telegramHTML(t.creadoPor || roleLabel(t.creadoPorRol))}`;
+  if (String(t.tipo || '').toLowerCase() === 'aviso' || t.seccion === 'avisos') return de;
+  return `${de} · Para: ${telegramHTML(t.destinosLabel || '—')}`;
+}
+
 function creationTelegramMessage(item = {}) {
   const esAviso = String(item.tipo || '').toLowerCase() === 'aviso' || item.seccion === 'avisos';
+  // AVISOS: solo título + cuerpo (+ imagen). Nunca se muestra a quién más se envió.
   return esAviso ? [
-    `📢 <b>Nuevo aviso de ${telegramHTML(roleLabel(item.creadoPorRol))}</b>`,
-    `<b>Para:</b> ${telegramHTML(item.destinosLabel || destinosLabel(item.destinos))}`,
-    `<b>${telegramHTML(String(item.titulo || '').replace(/^AVISO\s*[·:-]?\s*/i, '') || 'Actualización')}</b>`,
+    `📢 <b>${telegramHTML(String(item.titulo || '').replace(/^AVISO\s*[·:-]?\s*/i, '') || 'Aviso')}</b>`,
     telegramHTML(item.detalle)
-  ].join('\n') : [
+  ].filter(Boolean).join('\n\n') : [
     `🎫 <b>${telegramHTML(roleLabel(item.creadoPorRol))}</b> te ha enviado un ticket #${item.numero || '—'}`,
     `<b>Motivo:</b> ${telegramHTML(item.titulo)}`,
     `<b>Estado:</b> ${telegramHTML(estadoLabel(item.estado))}`
@@ -791,7 +797,7 @@ async function setProcesoTicket(db, body) {
   const msg = [
     `🔄 <b>Ticket #${old.numero || id.slice(-4)}</b> · ${estadoLabel(update.estado)}`,
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
-    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
+    ticketRouteLine(old),
     `Lo puso en proceso: ${telegramHTML(update.procesoPor || '—')}`
   ].join('\n');
   const telegram = await sendTelegram(db, msg, ticketConversationTargets(old, body.rol), { replyMarkup:ticketReplyMarkup(id, old.numero, old.tipo) }).catch(e => ({ ok: false, error: e.message }));
@@ -823,7 +829,7 @@ async function resolveTicket(db, body) {
   const msg = [
     `✅ <b>Ticket #${old.numero || id.slice(-4)}</b> · Resuelto`,
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
-    `De: ${telegramHTML(old.creadoPor || roleLabel(old.creadoPorRol))} · Para: ${telegramHTML(old.destinosLabel || '—')}`,
+    ticketRouteLine(old),
     `Resuelto por: ${telegramHTML(update.resueltoPor || '—')}`,
     `<b>Resolución:</b> ${telegramHTML(resolucion)}`
   ].join('\n');
