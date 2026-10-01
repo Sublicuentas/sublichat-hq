@@ -278,9 +278,21 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
       pinPerfil: String(p?.pinPerfil ?? p?.pin_perfil ?? p?.perfilPin ?? (index === 0 ? (servicio.pinPerfil || servicio.pin_perfil || servicio.perfilPin || "") : "")).trim(),
       dispositivo,
       esRoku: dispositivo === "tv" && esRokuRaw === true,
-      visibilidadUrl:p?.visibilidadUrl!=null?p.visibilidadUrl:(index===0?(servicio.visibilidadUrl||{modo:"plataforma"}):{modo:"plataforma"})
+      visibilidadUrl:visibilidadPerfilPublico(p, servicio, index)
     };
   });
+}
+
+// R102 · Fichas guardadas desde la APK antes del arreglo: el servicio tiene la visibilidad elegida
+// (p. ej. Personalizado: correo + PIN) pero el perfil principal quedó en "Según plataforma".
+// En ese caso manda la del servicio, para que la URL nunca enseñe datos que se ocultaron.
+function visibilidadPerfilPublico(p, servicio = {}, index = 0) {
+  const delServicio = servicio.visibilidadUrl || { modo:"plataforma" };
+  if (index !== 0) return p?.visibilidadUrl != null ? p.visibilidadUrl : { modo:"plataforma" };
+  if (p?.visibilidadUrl == null) return delServicio;
+  const modoPerfil = String((typeof p.visibilidadUrl === "object" ? p.visibilidadUrl?.modo : p.visibilidadUrl) || "plataforma");
+  const modoServicio = String((typeof delServicio === "object" ? delServicio?.modo : delServicio) || "plataforma");
+  return modoPerfil === "plataforma" && modoServicio !== "plataforma" ? delServicio : p.visibilidadUrl;
 }
 
 function resolverModo(servicio = {}) {

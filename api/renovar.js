@@ -696,9 +696,16 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       ? raw.esRoku
       : (previo.esRoku != null ? previo.esRoku : (servicio.esRoku != null ? servicio.esRoku : anterior.esRoku));
     out.esRoku = out.dispositivo === "tv" && esRokuRaw === true;
+    // R102 · Visibilidad de la URL: lo que se ELIGE al guardar manda.
+    // Antes, si el perfil principal no traía su propia visibilidad (la APK solo manda la del servicio),
+    // ganaba la vieja del perfil ("Según plataforma") y la URL seguía mostrando todo, hasta la clave.
+    // Ahora el perfil principal toma: la suya propia → la del servicio que viene en esta solicitud → la anterior.
+    const visPerfil = raw.visibilidadUrl != null
+      ? raw.visibilidadUrl
+      : (index === 0 && servicio.visibilidadUrl != null ? servicio.visibilidadUrl : undefined);
     out.visibilidadUrl = normalizarVisibilidadUrl(
-      raw.visibilidadUrl,
-      previo.visibilidadUrl || (index === 0 ? (servicio.visibilidadUrl ?? anterior.visibilidadUrl ?? { modo:"plataforma" }) : { modo:"plataforma" })
+      visPerfil,
+      previo.visibilidadUrl || (index === 0 ? (anterior.visibilidadUrl ?? { modo:"plataforma" }) : { modo:"plataforma" })
     );
     const pin = sinPin ? "" : String(
       topPin ?? raw.pinPerfil ?? raw.pin_perfil ?? raw.perfilPin ?? raw.pin ?? previo.pinPerfil ?? ""
