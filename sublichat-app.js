@@ -560,7 +560,7 @@ async function refrescoRespaldoClientes(motivo='intervalo'){
   if(document.hidden||!document.body.classList.contains('ready'))return;
   if(window.SublichatControlMaestro?.isBusy?.())return;
   const ahora=Date.now();
-  if(motivo!=='intervalo'&&ahora-controlFallbackUltimo<30000)return;
+  if(motivo!=='intervalo'&&ahora-controlFallbackUltimo<120000)return;
   controlFallbackUltimo=ahora;controlFallbackCorriendo=true;
   try{
     const enControl=!!document.getElementById('screen-control-cuentas')?.classList.contains('active');
@@ -575,7 +575,7 @@ function activarControlFallback(){
   const src=document.getElementById('srcLabel');
   if(src&&!clientesLiveStarted)src.textContent=`Firebase (actualización automática) · ${DATA.length} servicios`;
   if(controlLiveFallback)return;
-  controlLiveFallback=setInterval(()=>{refrescoRespaldoClientes('intervalo');},90000);
+  controlLiveFallback=setInterval(()=>{refrescoRespaldoClientes('intervalo');},300000); // Auditoría Firestore: antes 90 s (descarga completa)
   if(!window.__sublichatFallbackEventos){
     window.__sublichatFallbackEventos=true;
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)refrescoRespaldoClientes('visible');});
@@ -583,6 +583,17 @@ function activarControlFallback(){
   }
 }
 
+// Auditoría Firestore: al abrir la web se leía "clientes" DOS veces completas (getDocs + la primera foto
+// del listener en vivo). Ahora la primera foto del listener ES la carga inicial → la mitad de lecturas.
+let clientesPrimeraFoto=null;
+function primeraFotoClientes(db,collection,onSnapshot,ms=15000){
+  return new Promise(resolve=>{
+    const t=setTimeout(()=>{clientesPrimeraFoto=null;resolve(null);},ms);
+    clientesPrimeraFoto=snap=>{clearTimeout(t);resolve(snap);};
+    activarClientesEnVivo(db,collection,onSnapshot);
+    if(!clientesLiveStarted){clearTimeout(t);clientesPrimeraFoto=null;resolve(null);}
+  });
+}
 function activarClientesEnVivo(db,collection,onSnapshot){
   if(clientesLiveStarted||typeof onSnapshot!=="function")return;
   clientesLiveStarted=true;
@@ -593,6 +604,7 @@ function activarClientesEnVivo(db,collection,onSnapshot){
     // No permita que una copia vieja del caché reemplace una lectura confirmada.
     // Los cambios del bot llegan aquí apenas Firebase confirma el servidor.
     if(snap.metadata&&snap.metadata.fromCache)return;
+    if(clientesPrimeraFoto){const fn=clientesPrimeraFoto;clientesPrimeraFoto=null;fn(snap);}
     DATA=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
     bumpControlDataVersion();
     const src=document.getElementById("srcLabel");
@@ -605,6 +617,7 @@ function activarClientesEnVivo(db,collection,onSnapshot){
   },error=>{
     if(session!==CONTROL_SESSION_VERSION)return;
     console.error("clientes en vivo",error);
+    if(clientesPrimeraFoto){const fn=clientesPrimeraFoto;clientesPrimeraFoto=null;fn(null);}
     clientesLiveStarted=false;
     clientesLiveUnsubscribe=null;
     activarControlFallback();
@@ -650,7 +663,9 @@ async function load(options={}){
 
       // Clientes y Bodega se leen antes de sustituir la copia visible. Así una
       // falla de red no deja Control Maestro con una mitad nueva y otra antigua.
-      const snap=await readCollection(CONFIG.collection);
+      let snap=null;
+      if(!sharedControl&&!clientesLiveStarted&&!requireServer)snap=await primeraFotoClientes(db,collection,onSnapshot);
+      if(!snap)snap=await readCollection(CONFIG.collection);
       let invSnap=null,invError=null;
       try{invSnap=await readCollection("inventario");}
       catch(e){if(requireServer||sharedControl)throw e;invError=e;}
