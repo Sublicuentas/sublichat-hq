@@ -886,7 +886,7 @@ async function responderTicket(db, body) {
   };
   await ref.set(update, { merge: true });
   const msg = [
-    `💬 <b>${String(old.tipo||'').toLowerCase()==='aviso'?'Respuesta al aviso':`Ticket #${old.numero || id.slice(-4)}`} · ${telegramHTML(estadoLabel(update.estado))}</b>`,
+    `💬 <b>${String(old.tipo||'').toLowerCase()==='aviso'||old.seccion==='avisos'?'Respuesta al aviso':`Ticket #${old.numero || id.slice(-4)} · ${telegramHTML(estadoLabel(update.estado))}`}</b>`, // R102: el aviso no lleva estado
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,
     `Respondió: ${telegramHTML(roleLabel(body.rol) || entry.por)}`,
     respuesta ? telegramHTML(respuesta) : '📎 Evidencia adjunta'
