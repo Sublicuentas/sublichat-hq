@@ -238,13 +238,15 @@ async function listResource(req, res) {
       return resource === 'clientes' ? prepareClientForMobile(item) : item;
     });
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
+  // Monitoreo de lecturas (Vercel → Logs, buscar "fs_read"): quién descarga qué y cuántos documentos.
+  console.log(JSON.stringify({ evt:'fs_read', src:'mobile-core', resource, docs:snap.size, page:cursor ? 'next' : 'first', uid:String(user.uid || '').slice(0, 8) }));
   return res.status(200).json({ ok:true, items, nextCursor });
 }
 
 // R69 · Paquete G — configuración remota NO sensible para la APK (sin secretos).
 // Fuente: documento Firestore `configuracion_app/android` (editable) sobre valores por defecto; MIN_ANDROID_BUILD por entorno.
 const CONFIG_DEFAULTS = Object.freeze({
-  configVersion: 1, apiVersion: 2, minAppBuild: 0, syncStaleSeconds: 15,
+  configVersion: 1, apiVersion: 2, minAppBuild: 0, syncStaleSeconds: 300, // Auditoría Firestore: antes 15 s → cada vuelta a la app releía TODO
   sellerPhones: { relojes: '32126332', sublicuentas: '89464277', 'sublicuentas 2': '89464328', yami: '96877246', jimena: '88501036', heber: '32174922', abner: '94306551', manuel: '87989267' },
   calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
 });
@@ -258,6 +260,10 @@ async function getConfig(req, res) {
   for (const k of CONFIG_ALLOWED) config[k] = doc[k] !== undefined ? doc[k] : CONFIG_DEFAULTS[k];
   const envMin = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
   config.minAppBuild = Math.max(Number(config.minAppBuild) || 0, envMin);
+  // Auditoría Firestore (oct-2026): la APK descarga clientes/inventario/finanzas COMPLETOS cada vez que vuelve
+  // al frente (WhatsApp ↔ app) si el último refresco tiene más de syncStaleSeconds. Con 15 s eso eran cientos de
+  // descargas completas al día por vendedor. Piso de 5 min (los cambios propios se ven al instante igual).
+  config.syncStaleSeconds = Math.max(300, Number(config.syncStaleSeconds) || 300);
   if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
   return res.status(200).json({ ok: true, config });
 }
