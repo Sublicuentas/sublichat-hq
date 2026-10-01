@@ -101,6 +101,16 @@ function normPhone(s) {
   return String(s || "").replace(/\D/g, "");
 }
 
+// R101 · Idempotencia de cobros/egresos: la APK manda un operationId fijo por cada cambio
+// (también los hechos sin conexión, que se reintentan al volver la señal). Con el mismo
+// operationId del mismo usuario, el segundo intento NO duplica el movimiento.
+const FIN_OP_ID_RE = /^[A-Za-z0-9-]{8,80}$/;
+function finOpDocId(body = {}, uid = "") {
+  const op = String(body?.operationId || "").trim();
+  const u = String(uid || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+  return FIN_OP_ID_RE.test(op) && u ? `op_${u}_${op}` : "";
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -128,7 +138,12 @@ export default async function handler(req, res) {
       if (!monto) return res.status(200).json({ ok: false, error: "Falta el monto del cobro." });
 
       const financeDate = canonicalFinanceDate(body.fechaPago || body.fecha, now.slice(0, 10));
-      const movRef = db.collection("finanzas_movimientos").doc();
+      const offId = finOpDocId(body, authUser?.uid);
+      const movRef = offId ? db.collection("finanzas_movimientos").doc(offId) : db.collection("finanzas_movimientos").doc();
+      if (offId) {
+        const ya = await movRef.get();
+        if (ya.exists) return res.status(200).json({ ok: true, accion, movimientoId: movRef.id, duplicado: true });
+      }
       const movimiento = {
         ...financeMetadata({ docId: movRef.id, usuario: identity.usuario, userId: authUser.uid }),
         tipo: "ingreso",
@@ -159,7 +174,12 @@ export default async function handler(req, res) {
       if (!motivo || !monto) return res.status(200).json({ ok: false, error: "Falta motivo o monto del egreso." });
 
       const financeDate = canonicalFinanceDate(body.fecha || body.fechaPago, now.slice(0, 10));
-      const movRef = db.collection("finanzas_movimientos").doc();
+      const offId = finOpDocId(body, authUser?.uid);
+      const movRef = offId ? db.collection("finanzas_movimientos").doc(offId) : db.collection("finanzas_movimientos").doc();
+      if (offId) {
+        const ya = await movRef.get();
+        if (ya.exists) return res.status(200).json({ ok: true, accion, movimientoId: movRef.id, duplicado: true });
+      }
       const movimiento = {
         ...financeMetadata({ docId: movRef.id, usuario: identity.usuario, userId: authUser.uid }),
         tipo: "egreso",
