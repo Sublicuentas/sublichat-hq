@@ -147,6 +147,7 @@
       const image=element('img','portal-field-icon-image');
       image.src=source;image.alt='';image.loading='lazy';image.decoding='async';
       icon.replaceChildren(image);icon.classList.add('has-portal-image');
+      if(source===PORTAL_ICONS.contrasena)icon.classList.add('is-lock'); // candado de Clave/PIN: más pequeño, proporcional
     });
   }
 

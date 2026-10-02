@@ -9,7 +9,7 @@
 <meta name="sublicuentas-access-ui-version" content="20260914-tvdigital-v1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/portal-cliente-publico.css?v=20261002-sorteos-r4">
+<link rel="stylesheet" href="/portal-cliente-publico.css?v=20261002-ficha-r5">
 <style>
   :root{
     --bg:#F5F0E6; --card:#FFFFFF; --edge:#ECE5D6;
@@ -116,6 +116,10 @@
   .field-copy-hint{ display:none; }
   .copy-btn{ flex:0 0 auto; min-width:67px; height:42px; padding:0 10px; border-radius:12px; background:var(--black); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; font-size:10.5px; font-weight:800; }
   .copy-btn-icon{ font-size:15px; line-height:1; }
+  .field-pair{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-bottom:10px; }
+  .field-pair .field{ margin-bottom:0; padding:10px 11px; gap:8px; }
+  .field-pair .copy-btn{ min-width:36px; width:36px; height:36px; padding:0; border-radius:10px; }
+  .field-pair .copy-btn span:not(.copy-btn-icon){ display:none; }
   .copy-btn:active{ background:var(--red); }
   .note{ border-radius:16px; padding:14px 16px; font-size:13px; line-height:1.6; margin-bottom:14px; border:1px solid #c6d9f2; background:var(--blue-soft); color:#1c3d63; }
   .note b{ color:var(--blue); }
@@ -456,8 +460,12 @@
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
       }else{
         if(p.correo)campos+=fieldRow(etiquetaAcceso,p.correo,`${prefix}-${etiquetaAcceso==="Usuario"?"usuario":"correo"}`);
-        if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
-        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
+        // Clave y PIN en la misma línea (ficha más corta). Si solo hay uno, ocupa todo el ancho.
+        if(p.clave&&usaPin)campos+=`<div class="field-pair">${fieldRow("Clave",p.clave,`${prefix}-clave`)}${infoRow("PIN",p.pin||"—","#")}</div>`;
+        else{
+          if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
+          if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
+        }
       }
       const nota=perfiles.length>1?notaModo(d,p):"";
       if(perfiles.length>1){
@@ -692,7 +700,7 @@
     }
   })();
 </script>
-<script src="/portal-cliente-publico.js?v=20261002-sorteos-r2"></script>
+<script src="/portal-cliente-publico.js?v=20261002-ficha-r5"></script>
 
 </body>
 </html>
