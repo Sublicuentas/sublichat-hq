@@ -90,7 +90,7 @@ function safeTipo(tipo) {
 }
 
 function labelTipo(tipo) {
-  if (tipo === "streaming") return "Sublicuentas streaming / Magdiel";
+  if (tipo === "streaming") return "Sublicuentas streaming / Geisell";
   if (tipo === "inventario") return "Inventario de sublicuentas / Admin";
   return "Respaldo Excel";
 }
@@ -1001,7 +1001,7 @@ async function controlRestaurarComoPlantilla(db, body) {
    y se trabaja aquí dentro. Guarda valores (los gráficos/fórmulas de
    Excel se regeneran al exportar). No toca CRM, inventario ni el bot.
        bodega       -> Sublicuentas (Excel inventario)
-       auditoria    -> Magdiel      (Excel streaming)
+       auditoria    -> Geisell      (Excel streaming)
        flujo_diario -> Relojes       (Word)
    Estructura Firestore:
      secciones_trabajo/{sec}                         (meta + lista de hojas)
