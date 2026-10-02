@@ -494,8 +494,21 @@
         if(draw.eleccion.instrucciones)copy.append(element('p','',draw.eleccion.instrucciones));
         copy.append(element('em','',draw.eleccion.estado==='entregado'?'Premio entregado':'Elección confirmada'));
       }else{
-        copy.append(element('span','','Escoge la opción digital que más te guste.'));
-        const choose=element('button','portal-choose-prize','Elegir mi premio');choose.type='button';choose.addEventListener('click',()=>openPrizeChooser(draw));copy.append(choose);
+        const prizes=Array.isArray(draw.premios)?draw.premios:[];
+        if(prizes.length===1){
+          // Un solo premio: no hay nada que escoger → se muestra el premio y se reclama directo.
+          const only=prizes[0];
+          copy.append(element('span','',`Tu premio: ${rafflePrizeIcon(only.tipo)} ${only.nombre||'Premio digital'}${only.descripcion?` · ${only.descripcion}`:''}`));
+          const claim=element('button','portal-choose-prize','Reclamar mi premio');claim.type='button';
+          const status=element('small','portal-prize-status','');
+          claim.addEventListener('click',()=>claimPrize(draw,only.id,claim,status));
+          copy.append(claim,status);
+        }else if(prizes.length>1){
+          copy.append(element('span','','Escoge la opción digital que más te guste.'));
+          const choose=element('button','portal-choose-prize','Elegir mi premio');choose.type='button';choose.addEventListener('click',()=>openPrizeChooser(draw));copy.append(choose);
+        }else{
+          copy.append(element('span','','Te contactaremos para entregarte tu premio.'));
+        }
       }
     }else{
       copy.append(element('small','','GANADOR DEL SORTEO'),element('b','',`${draw.ganador.nombre||'Cliente'} ${draw.ganador.telefono||''}`),element('span','',draw.ganador.codigo||''));
@@ -604,6 +617,16 @@
   }
 
   function closePrizeChooser(){document.getElementById('portalPrizeChooser')?.remove();}
+
+  async function claimPrize(draw,premioId,button,statusLine){
+    if(!premioId)return;
+    button.disabled=true;statusLine.textContent='Reclamando tu premio…';
+    try{
+      const response=await fetch('/api/sorteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'elegir_premio',token:tokenFromLocation(),sorteoId:draw.id,premioId})});
+      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'No se pudo reclamar el premio.');
+      showToast('¡Premio reclamado!');await loadRaffles(true);selectPanel('sorteos',false);
+    }catch(error){statusLine.textContent=error.message||'No se pudo reclamar.';button.disabled=false;}
+  }
 
   function openPrizeChooser(draw){
     closePrizeChooser();
