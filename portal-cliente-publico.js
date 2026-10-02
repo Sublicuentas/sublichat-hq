@@ -483,6 +483,8 @@
     const winner=element('section',`portal-raffle-winner ${draw.ganadorActual?'is-mine':''}`);
     winner.append(element('span','portal-raffle-crown','🏆'));
     const copy=element('div','portal-raffle-winner-copy');
+    const actions=element('div','portal-raffle-winner-actions');
+    const ctaButton=(label)=>{const b=element('button','portal-choose-prize');b.type='button';b.append(element('span','portal-cta-icon','🎁'),element('span','portal-cta-label',label),element('span','portal-cta-chevron','›'));return b;};
     if(draw.ganadorActual){
       copy.append(element('small','','¡ESTE PREMIO ES TUYO!'),element('b','','¡Felicidades, ganaste!'));
       if(draw.eleccion){
@@ -499,13 +501,13 @@
           // Un solo premio: no hay nada que escoger → se muestra el premio y se reclama directo.
           const only=prizes[0];
           copy.append(element('span','',`Tu premio: ${rafflePrizeIcon(only.tipo)} ${only.nombre||'Premio digital'}${only.descripcion?` · ${only.descripcion}`:''}`));
-          const claim=element('button','portal-choose-prize','Reclamar mi premio');claim.type='button';
+          const claim=ctaButton('Reclamar mi premio');
           const status=element('small','portal-prize-status','');
           claim.addEventListener('click',()=>claimPrize(draw,only.id,claim,status));
-          copy.append(claim,status);
+          actions.append(claim,status);
         }else if(prizes.length>1){
           copy.append(element('span','','Escoge la opción digital que más te guste.'));
-          const choose=element('button','portal-choose-prize','Elegir mi premio');choose.type='button';choose.addEventListener('click',()=>openPrizeChooser(draw));copy.append(choose);
+          const choose=ctaButton('Elegir mi premio');choose.addEventListener('click',()=>openPrizeChooser(draw));actions.append(choose);
         }else{
           copy.append(element('span','','Te contactaremos para entregarte tu premio.'));
         }
@@ -513,7 +515,7 @@
     }else{
       copy.append(element('small','','GANADOR DEL SORTEO'),element('b','',`${draw.ganador.nombre||'Cliente'} ${draw.ganador.telefono||''}`),element('span','',draw.ganador.codigo||''));
     }
-    winner.append(copy);body.append(winner);
+    winner.append(copy);if(actions.childNodes.length){winner.classList.add('has-action');winner.append(actions);}body.append(winner);
   }
 
   // Sorteo ya realizado: no se vuelve a promocionar. Solo se muestra el resultado
@@ -522,9 +524,15 @@
     const prizes=Array.isArray(draw.premios)?draw.premios:[];
     const card=element('article',`portal-raffle-result ${draw.ganadorActual?'is-mine':''}`);card.style.setProperty('--raffle-color',safeColor(draw.color));
     const head=element('header','portal-raffle-result-head');
-    head.append(element('span','portal-raffle-result-tag','✅ Sorteo finalizado'),element('h3','',draw.titulo||'Sorteo'));
+    const titleText=String(draw.titulo||'Sorteo').trim();const words=titleText.split(/\s+/);
+    const h3=element('h3','portal-raffle-result-title');
+    if(words.length>2){h3.append(element('span','',words.slice(0,2).join(' ')+' '),element('em','',words.slice(2).join(' ')));}else h3.textContent=titleText;
+    head.append(element('span','portal-raffle-result-tag','✅ Sorteo finalizado'),h3);
     if(prizes.length)head.append(element('small','',`Premio: ${prizes.map(p=>p.nombre||'Premio digital').join(' · ')}`));
-    card.append(head);
+    const art=element('div','portal-raffle-result-art');art.setAttribute('aria-hidden','true');
+    const artImg=element('img');artImg.src=PORTAL_ICONS.sorteos;artImg.alt='';artImg.loading='lazy';artImg.decoding='async';
+    art.append(artImg);for(let i=1;i<=7;i++)art.append(element('i',`c${i}`));
+    card.append(art,head);
     if(draw.ganador){
       renderWinner(draw,card);
       if(!draw.ganadorActual)card.append(element('p','portal-raffle-result-note','Esta vez no fue su número. ¡Renueve a tiempo y participe en el próximo sorteo!'));

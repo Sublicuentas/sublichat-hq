@@ -370,3 +370,65 @@ body.portal-ready .portal-account-panel .terms li{font-size:12.5px!important}
 .portal-raffle-result-head small{display:block;color:#64748B;font-size:12.5px}
 .portal-raffle-result-tag{display:inline-block;padding:4px 10px;border-radius:999px;background:#ECFDF3;color:#067647;font-size:11px;font-weight:800;letter-spacing:.02em}
 .portal-raffle-result-note{margin:12px 2px 0;color:#475467;font-size:13px}
+
+/* ===== Rediseño SOLO Sorteos y premios (URL del cliente) · oct-2026 ===== */
+#portal-panel-sorteos{--sr-red:#E2231A;--sr-navy:#0B1530;--sr-ink:#1D1828;--sr-muted:#5B6476;--sr-line:#E6EAF2;--sr-gold:#E9B53A}
+#portal-panel-sorteos>.portal-panel-title{font-size:23px;letter-spacing:-.02em;color:var(--sr-navy);margin-bottom:4px}
+#portal-panel-sorteos>.portal-panel-title .portal-panel-title-icon{width:40px;height:40px;flex-basis:40px}
+#portal-panel-sorteos>.portal-panel-sub{color:var(--sr-muted);font-size:13.5px;margin:0 0 14px 14px}
+#portal-panel-sorteos .portal-raffle-summary{grid-template-columns:1fr 1.1fr 1.1fr;border:1px solid var(--sr-line);border-radius:20px;box-shadow:0 10px 26px rgba(11,21,48,.06);margin-bottom:16px}
+#portal-panel-sorteos .portal-raffle-summary-item{min-height:96px;padding:14px 16px;border-left:1px solid var(--sr-line)}
+#portal-panel-sorteos .portal-raffle-summary-item:first-child{border-left:0}
+#portal-panel-sorteos .portal-raffle-summary-icon{width:48px;height:48px;background:#FFE9EA;font-size:22px}
+#portal-panel-sorteos .portal-raffle-summary-item.is-tickets strong{font-size:26px;font-weight:900}
+#portal-panel-sorteos .portal-raffle-summary-item.is-tickets b{font-size:13px;color:var(--sr-navy)}
+#portal-panel-sorteos .portal-raffle-summary-item.is-tickets small{font-size:11px;color:var(--sr-muted)}
+#portal-panel-sorteos .portal-level-medal{width:50px;height:50px;font-size:23px}
+#portal-panel-sorteos .portal-raffle-summary-copy b{font-size:14px;color:var(--sr-navy)}
+#portal-panel-sorteos .portal-raffle-summary-copy small{font-size:11.5px;color:var(--sr-muted)}
+#portal-panel-sorteos .portal-raffle-summary-progress{height:7px;border-radius:999px;background:#E3E9F4}
+/* Tarjeta de sorteo finalizado */
+#portal-panel-sorteos .portal-raffle-result{position:relative;overflow:hidden;padding:20px 20px 18px;border:1.5px solid #F2B8B5;border-radius:22px;background:radial-gradient(120% 140% at 100% 0%,#FFE1E1 0%,rgba(255,225,225,0) 46%),linear-gradient(180deg,#FFF7F6,#FFFFFF);box-shadow:0 14px 32px rgba(226,35,26,.08)}
+#portal-panel-sorteos .portal-raffle-result.is-mine{border-color:#EE4B43;background:radial-gradient(120% 150% at 100% 0%,#FFD3D3 0%,rgba(255,211,211,0) 48%),linear-gradient(180deg,#FFF6F5,#FFFFFF)}
+#portal-panel-sorteos .portal-raffle-result-head{position:relative;z-index:1;max-width:66%}
+#portal-panel-sorteos .portal-raffle-result-tag{padding:5px 12px;font-size:12px;background:#E5F8EC;color:#08793F}
+#portal-panel-sorteos .portal-raffle-result-title{margin:10px 0 4px;color:var(--sr-navy);font-size:28px;font-weight:900;letter-spacing:-.03em;line-height:1.08}
+#portal-panel-sorteos .portal-raffle-result-title em{font-style:normal;color:var(--sr-red)}
+#portal-panel-sorteos .portal-raffle-result-head small{font-size:14px;color:var(--sr-muted)}
+#portal-panel-sorteos .portal-raffle-result-art{position:absolute;top:8px;right:18px;width:150px;height:118px;pointer-events:none}
+#portal-panel-sorteos .portal-raffle-result-art img{position:absolute;right:6px;top:4px;width:112px;height:112px;object-fit:contain;filter:drop-shadow(0 12px 14px rgba(120,20,15,.22))}
+#portal-panel-sorteos .portal-raffle-result-art i{position:absolute;width:9px;height:5px;border-radius:2px;background:var(--sr-red);transform:rotate(-24deg);opacity:.85}
+#portal-panel-sorteos .portal-raffle-result-art i.c2,#portal-panel-sorteos .portal-raffle-result-art i.c5{background:var(--sr-gold)}
+#portal-panel-sorteos .portal-raffle-result-art i.c1{left:0;top:30px}#portal-panel-sorteos .portal-raffle-result-art i.c2{left:18px;top:62px;transform:rotate(30deg)}#portal-panel-sorteos .portal-raffle-result-art i.c3{left:6px;top:88px;transform:rotate(60deg)}#portal-panel-sorteos .portal-raffle-result-art i.c4{right:0;top:18px;transform:rotate(40deg)}#portal-panel-sorteos .portal-raffle-result-art i.c5{right:-4px;top:76px}#portal-panel-sorteos .portal-raffle-result-art i.c6{left:28px;top:10px;transform:rotate(-60deg)}#portal-panel-sorteos .portal-raffle-result-art i.c7{right:22px;bottom:-2px;background:var(--sr-gold);transform:rotate(15deg)}
+#portal-panel-sorteos .portal-raffle-result-note{position:relative;z-index:1;font-size:13.5px}
+/* Bloque ganador + CTA */
+#portal-panel-sorteos .portal-raffle-result .portal-raffle-winner{position:relative;z-index:1;margin-top:16px;padding:16px 18px;grid-template-columns:auto minmax(0,1fr);gap:14px;border:1.5px solid #F1D08A;border-radius:18px;background:linear-gradient(135deg,#FFFBEF,#FFF6E3);box-shadow:0 8px 20px rgba(153,103,0,.08)}
+#portal-panel-sorteos .portal-raffle-result .portal-raffle-winner.has-action{grid-template-columns:auto minmax(0,1fr) auto}
+#portal-panel-sorteos .portal-raffle-crown{font-size:40px;line-height:1;filter:drop-shadow(0 6px 8px rgba(120,80,0,.2))}
+#portal-panel-sorteos .portal-raffle-winner-copy small{color:#9A6A00;font-size:11px;font-weight:900;letter-spacing:.06em}
+#portal-panel-sorteos .portal-raffle-winner-copy b{margin:3px 0 4px;color:var(--sr-navy);font-size:19px;font-weight:900}
+#portal-panel-sorteos .portal-raffle-winner-copy span{color:var(--sr-muted);font-size:13px;line-height:1.45}
+#portal-panel-sorteos .portal-raffle-winner-copy em{margin-top:6px;color:#08793F;font-style:normal;font-weight:800;font-size:12px}
+#portal-panel-sorteos .portal-raffle-winner-actions{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:220px}
+#portal-panel-sorteos .portal-choose-prize{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:50px;margin:0;padding:0 18px;border:0;border-radius:14px;background:linear-gradient(180deg,#EF2B22,#D9160E);color:#fff;font-family:inherit;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 10px 22px rgba(226,35,26,.28)}
+#portal-panel-sorteos .portal-choose-prize:hover{filter:brightness(1.05)}
+#portal-panel-sorteos .portal-choose-prize:disabled{opacity:.6;cursor:wait}
+#portal-panel-sorteos .portal-cta-icon{font-size:18px}
+#portal-panel-sorteos .portal-cta-chevron{font-size:24px;line-height:1;margin-left:4px}
+#portal-panel-sorteos .portal-prize-status{display:block;min-height:0;color:var(--sr-muted);font-size:12px;text-align:center}
+#portal-panel-sorteos .portal-raffle-code{margin-top:8px}
+@media(max-width:620px){
+  #portal-panel-sorteos>.portal-panel-title{font-size:20px}
+  #portal-panel-sorteos>.portal-panel-sub{margin-left:0;font-size:12.5px}
+  #portal-panel-sorteos .portal-raffle-summary{grid-template-columns:1fr}
+  #portal-panel-sorteos .portal-raffle-summary-item{border-left:0;border-top:1px solid var(--sr-line);min-height:78px}
+  #portal-panel-sorteos .portal-raffle-summary-item:first-child{border-top:0}
+  #portal-panel-sorteos .portal-raffle-result{padding:16px 14px}
+  #portal-panel-sorteos .portal-raffle-result-head{max-width:72%}
+  #portal-panel-sorteos .portal-raffle-result-title{font-size:22px}
+  #portal-panel-sorteos .portal-raffle-result-art{width:96px;height:86px;right:4px}
+  #portal-panel-sorteos .portal-raffle-result-art img{width:78px;height:78px}
+  #portal-panel-sorteos .portal-raffle-result .portal-raffle-winner,#portal-panel-sorteos .portal-raffle-result .portal-raffle-winner.has-action{grid-template-columns:auto minmax(0,1fr)}
+  #portal-panel-sorteos .portal-raffle-winner-actions{grid-column:1/-1;min-width:0}
+  #portal-panel-sorteos .portal-raffle-crown{font-size:32px}
+}
