@@ -323,10 +323,11 @@
       <div class="sr-winner-list">${draws.map(draw=>{
         const winner=draw.ganador||{},delivery=deliveryFor(draw);
         const stateLabel=!delivery?'Esperando elección':(delivery.estado==='entregado'?'Entregado':delivery.estado==='listo'?'Código listo':'Preparar entrega');
-        return `<article class="sr-winner-row"><span class="sr-winner-crown">🏆</span><div class="sr-winner-person"><small>${esc(draw.titulo)}</small><b>${esc(winner.clienteNombre||'Cliente')}</b><span>${esc(winner.telefono||'Sin teléfono')} · ${esc(winner.codigo||'')}</span></div><div class="sr-winner-choice"><small>PREMIO ELEGIDO</small><b>${esc(delivery?.premioNombre||'Aún no ha elegido')}</b><span class="sr-delivery-state ${esc(delivery?.estado||'espera')}">${esc(stateLabel)}</span></div>${delivery&&delivery.estado!=='entregado'?`<button type="button" class="sr-btn primary" data-sr-deliver="${esc(delivery.id)}">Marcar entregado</button>`:''}</article>`;
+        return `<article class="sr-winner-row"><span class="sr-winner-crown">🏆</span><div class="sr-winner-person"><small>${esc(draw.titulo)}</small><b>${esc(winner.clienteNombre||'Cliente')}</b><span>${esc(winner.telefono||'Sin teléfono')} · ${esc(winner.codigo||'')}</span></div><div class="sr-winner-choice"><small>PREMIO ELEGIDO</small><b>${esc(delivery?.premioNombre||'Aún no ha elegido')}</b><span class="sr-delivery-state ${esc(delivery?.estado||'espera')}">${esc(stateLabel)}</span></div>${delivery&&delivery.estado!=='entregado'?`<button type="button" class="sr-btn primary" data-sr-deliver="${esc(delivery.id)}">Marcar entregado</button><button type="button" class="sr-btn ghost" data-sr-undo-choice="${esc(draw.id)}" title="Si el premio se confirmó por error, el cliente podrá reclamarlo de nuevo">↩ Deshacer elección</button>`:''}</article>`;
       }).join('')||'<div class="sr-empty"><b>Aún no hay ganadores.</b><br>Cuando gire una ruleta, el resultado aparecerá aquí.</div>'}</div>`;
     byId('srRefresh')?.addEventListener('click',()=>load(true));
     body.querySelectorAll('[data-sr-deliver]').forEach(button=>button.addEventListener('click',()=>markDelivered(button.dataset.srDeliver)));
+    body.querySelectorAll('[data-sr-undo-choice]').forEach(button=>button.addEventListener('click',()=>undoChoice(button.dataset.srUndoChoice)));
   }
 
   function typeOptions(selected){return Object.entries(TIPO_PREMIO).map(([value,item])=>`<option value="${value}" ${value===selected?'selected':''}>${item[0]} ${esc(item[1])}</option>`).join('');}
@@ -545,6 +546,12 @@
       <div class="sr-ticket-list">${tickets.map(ticket=>`<article><b>${esc(ticket.codigo)}</b><span>${esc(ticket.clienteNombre||'Cliente')}</span><small>${esc(ticket.tipo==='renovacion'?'Renovación':ticket.tipo==='oro'?'Bono Oro':'Compra nueva')}</small></article>`).join('')||'<div class="sr-empty">No hay boletos emitidos todavía.</div>'}</div>
       ${Number(draw.totalBoletos)>tickets.length?`<p class="sr-list-note">Mostrando los boletos recientes disponibles en esta vista. Total registrado: ${Number(draw.totalBoletos)}.</p>`:''}<div class="sr-modal-actions"><button type="button" class="sr-btn primary" id="srTicketClose">Cerrar</button></div></div>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srTicketClose').onclick=closeModal;
+  }
+  async function undoChoice(sorteoId){
+    if(!confirm('¿Deshacer la elección de premio? El premio vuelve a quedar disponible y el ganador podrá reclamarlo otra vez desde su URL (72 h desde ahora).'))return;
+    status('Deshaciendo elección…');
+    try{await api({accion:'deshacer_eleccion',sorteoId});await load(true);state.tab='ganadores';render();status('Elección deshecha. El cliente puede reclamar su premio de nuevo.','good');}
+    catch(error){status(error.message,'bad');}
   }
   async function markDelivered(id){
     if(!confirm('¿Confirma que el premio ya fue entregado al cliente?'))return;
