@@ -362,3 +362,11 @@ body.portal-ready .portal-account-panel .terms li{font-size:12.5px!important}
 /* R83 · íconos 3D de Perfil / Usuario / Clave más pequeños (antes se veían muy grandes) */
 .portal-account-panel .field-icon.has-portal-image{width:28px;height:28px;flex:0 0 28px;padding:0}
 @media (max-width:420px){.portal-account-panel .field-icon.has-portal-image{width:26px;height:26px;flex:0 0 26px}}
+
+/* Sorteo finalizado: solo resultado */
+.portal-raffle-result{padding:16px;border:1px solid #E6E9F0;border-radius:20px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.05)}
+.portal-raffle-result.is-mine{border-color:#E4B938;background:linear-gradient(135deg,#FFFBEA,#FFFFFF)}
+.portal-raffle-result-head h3{margin:6px 0 2px;font-size:20px;line-height:1.2;color:#0F172A}
+.portal-raffle-result-head small{display:block;color:#64748B;font-size:12.5px}
+.portal-raffle-result-tag{display:inline-block;padding:4px 10px;border-radius:999px;background:#ECFDF3;color:#067647;font-size:11px;font-weight:800;letter-spacing:.02em}
+.portal-raffle-result-note{margin:12px 2px 0;color:#475467;font-size:13px}

@@ -417,7 +417,7 @@
     const span=Math.max(1,nextStart-current.desde);
     const progress=next?Math.max(0,Math.min(100,((cycles-current.desde)/span)*100)):100;
     const activeDraws=draws.filter(draw=>draw.estado==='activo');
-    const countedDraws=activeDraws.length?activeDraws:draws;
+    const countedDraws=activeDraws; // Un sorteo finalizado ya no tiene boletos "activos"
     const ticketTotal=countedDraws.reduce((total,draw)=>total+(Array.isArray(draw.boletos)?draw.boletos.length:0),0);
 
     const summary=element('section','portal-raffle-summary');
@@ -503,7 +503,26 @@
     winner.append(copy);body.append(winner);
   }
 
+  // Sorteo ya realizado: no se vuelve a promocionar. Solo se muestra el resultado
+  // (y, si el cliente ganó, su premio para elegir o el que ya eligió).
+  function raffleResultCard(draw){
+    const prizes=Array.isArray(draw.premios)?draw.premios:[];
+    const card=element('article',`portal-raffle-result ${draw.ganadorActual?'is-mine':''}`);card.style.setProperty('--raffle-color',safeColor(draw.color));
+    const head=element('header','portal-raffle-result-head');
+    head.append(element('span','portal-raffle-result-tag','✅ Sorteo finalizado'),element('h3','',draw.titulo||'Sorteo'));
+    if(prizes.length)head.append(element('small','',`Premio: ${prizes.map(p=>p.nombre||'Premio digital').join(' · ')}`));
+    card.append(head);
+    if(draw.ganador){
+      renderWinner(draw,card);
+      if(!draw.ganadorActual)card.append(element('p','portal-raffle-result-note','Esta vez no fue su número. ¡Renueve a tiempo y participe en el próximo sorteo!'));
+    }else{
+      card.append(element('p','portal-raffle-result-note','El resultado ya fue publicado. ¡Gracias por participar!'));
+    }
+    return card;
+  }
+
   function raffleCard(draw){
+    if(draw.estado==='finalizado')return raffleResultCard(draw);
     const tickets=Array.isArray(draw.boletos)?draw.boletos:[];
     const prizes=Array.isArray(draw.premios)?draw.premios:[];
     const firstPrize=prizes[0]||null;
@@ -580,7 +599,8 @@
     const draws=Array.isArray(state.sorteosData.sorteos)?state.sorteosData.sorteos:[];
     renderRaffleSummary(panel,draws);
     if(!draws.length){panel.append(emptyState('No hay sorteos activos',' Cuando publiquemos el próximo, sus boletos aparecerán aquí automáticamente.'));return;}
-    const list=element('div','portal-raffle-list');draws.forEach(draw=>list.append(raffleCard(draw)));panel.append(list);
+    const ordered=[...draws.filter(d=>d.estado!=='finalizado'),...draws.filter(d=>d.estado==='finalizado')];
+    const list=element('div','portal-raffle-list');ordered.forEach(draw=>list.append(raffleCard(draw)));panel.append(list);
   }
 
   function closePrizeChooser(){document.getElementById('portalPrizeChooser')?.remove();}
