@@ -388,15 +388,15 @@ body.portal-ready .portal-account-panel .terms li{font-size:12.5px!important}
 #portal-panel-sorteos .portal-raffle-summary-copy small{font-size:11.5px;color:var(--sr-muted)}
 #portal-panel-sorteos .portal-raffle-summary-progress{height:7px;border-radius:999px;background:#E3E9F4}
 /* Tarjeta de sorteo finalizado */
-#portal-panel-sorteos .portal-raffle-result{position:relative;overflow:hidden;padding:20px 20px 18px;border:1.5px solid #F2B8B5;border-radius:22px;background:radial-gradient(120% 140% at 100% 0%,#FFE1E1 0%,rgba(255,225,225,0) 46%),linear-gradient(180deg,#FFF7F6,#FFFFFF);box-shadow:0 14px 32px rgba(226,35,26,.08)}
-#portal-panel-sorteos .portal-raffle-result.is-mine{border-color:#EE4B43;background:radial-gradient(120% 150% at 100% 0%,#FFD3D3 0%,rgba(255,211,211,0) 48%),linear-gradient(180deg,#FFF6F5,#FFFFFF)}
+#portal-panel-sorteos .portal-raffle-result{position:relative;overflow:hidden;padding:20px 20px 18px;border:1.5px solid #F2B8B5;border-radius:22px;background:#FFFFFF;box-shadow:0 8px 22px rgba(11,21,48,.06)}
+#portal-panel-sorteos .portal-raffle-result.is-mine{border-color:#EE4B43;background:#FFFFFF}
 #portal-panel-sorteos .portal-raffle-result-head{position:relative;z-index:1;max-width:66%}
 #portal-panel-sorteos .portal-raffle-result-tag{padding:5px 12px;font-size:12px;background:#E5F8EC;color:#08793F}
 #portal-panel-sorteos .portal-raffle-result-title{margin:10px 0 4px;color:var(--sr-navy);font-size:28px;font-weight:900;letter-spacing:-.03em;line-height:1.08}
 #portal-panel-sorteos .portal-raffle-result-title em{font-style:normal;color:var(--sr-red)}
 #portal-panel-sorteos .portal-raffle-result-head small{font-size:14px;color:var(--sr-muted)}
 #portal-panel-sorteos .portal-raffle-result-art{position:absolute;top:8px;right:18px;width:150px;height:118px;pointer-events:none}
-#portal-panel-sorteos .portal-raffle-result-art img{position:absolute;right:6px;top:4px;width:112px;height:112px;object-fit:contain;filter:drop-shadow(0 12px 14px rgba(120,20,15,.22))}
+#portal-panel-sorteos .portal-raffle-result-art img{position:absolute;right:6px;top:4px;width:112px;height:112px;object-fit:contain;filter:none}
 #portal-panel-sorteos .portal-raffle-result-art i{position:absolute;width:9px;height:5px;border-radius:2px;background:var(--sr-red);transform:rotate(-24deg);opacity:.85}
 #portal-panel-sorteos .portal-raffle-result-art i.c2,#portal-panel-sorteos .portal-raffle-result-art i.c5{background:var(--sr-gold)}
 #portal-panel-sorteos .portal-raffle-result-art i.c1{left:0;top:30px}#portal-panel-sorteos .portal-raffle-result-art i.c2{left:18px;top:62px;transform:rotate(30deg)}#portal-panel-sorteos .portal-raffle-result-art i.c3{left:6px;top:88px;transform:rotate(60deg)}#portal-panel-sorteos .portal-raffle-result-art i.c4{right:0;top:18px;transform:rotate(40deg)}#portal-panel-sorteos .portal-raffle-result-art i.c5{right:-4px;top:76px}#portal-panel-sorteos .portal-raffle-result-art i.c6{left:28px;top:10px;transform:rotate(-60deg)}#portal-panel-sorteos .portal-raffle-result-art i.c7{right:22px;bottom:-2px;background:var(--sr-gold);transform:rotate(15deg)}
@@ -410,7 +410,7 @@ body.portal-ready .portal-account-panel .terms li{font-size:12.5px!important}
 #portal-panel-sorteos .portal-raffle-winner-copy span{color:var(--sr-muted);font-size:13px;line-height:1.45}
 #portal-panel-sorteos .portal-raffle-winner-copy em{margin-top:6px;color:#08793F;font-style:normal;font-weight:800;font-size:12px}
 #portal-panel-sorteos .portal-raffle-winner-actions{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:220px}
-#portal-panel-sorteos .portal-choose-prize{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:50px;margin:0;padding:0 18px;border:0;border-radius:14px;background:linear-gradient(180deg,#EF2B22,#D9160E);color:#fff;font-family:inherit;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 10px 22px rgba(226,35,26,.28)}
+#portal-panel-sorteos .portal-choose-prize{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:50px;margin:0;padding:0 18px;border:0;border-radius:14px;background:#E2231A;color:#fff;font-family:inherit;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 4px 10px rgba(11,21,48,.12)}
 #portal-panel-sorteos .portal-choose-prize:hover{filter:brightness(1.05)}
 #portal-panel-sorteos .portal-choose-prize:disabled{opacity:.6;cursor:wait}
 #portal-panel-sorteos .portal-cta-icon{font-size:18px}
