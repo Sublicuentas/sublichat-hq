@@ -1008,7 +1008,8 @@ async function choosePrize(db, body) {
     ]);
     if (!drawSnap.exists || String((drawSnap.data() || {}).ganador?.clientId || "") !== clientId) throw Object.assign(new Error("Este cliente no es el ganador del sorteo."), { status: 403 });
     const draw = drawSnap.data() || {};
-    if (timeMs(draw.sorteadoAt) && Date.now() - timeMs(draw.sorteadoAt) > 72 * 3600000) throw new Error("El plazo de 72 horas para reclamar este premio ya venció. Contacte a soporte.");
+    const desdeReclamo = Math.max(timeMs(draw.sorteadoAt) || 0, timeMs(draw.reclamoDesde) || 0);
+    if (desdeReclamo && Date.now() - desdeReclamo > 72 * 3600000) throw new Error("El plazo de 72 horas para reclamar este premio ya venció. Contacte a soporte.");
     if (!vendors.some(vendor => scopeMatches(draw, vendor))) throw Object.assign(new Error("Este sorteo no pertenece a este enlace."), { status: 403 });
     const winnerVendor = sorteoVendorGroup(draw.ganador?.vendedorNorm || draw.ganador?.vendedor);
     if (winnerVendor && !vendors.includes(winnerVendor)) throw Object.assign(new Error("Este premio no pertenece a este enlace."), { status: 403 });
@@ -1384,6 +1385,51 @@ async function spinDraw(db, editor, id) {
   };
 }
 
+// Deshacer una elección de premio hecha por error (p. ej. la confirmó el admin desde la URL del cliente).
+// Devuelve el premio a su stock (código al inventario / reserva liberada), borra la elección y le da
+// al ganador 72 h nuevas para reclamar. No se puede si el premio ya se marcó como entregado.
+async function revertChoice(db, editor, body) {
+  const sorteoId = sorteoSafeId(body.sorteoId);
+  if (!sorteoId) throw new Error("Sorteo inválido.");
+  const drawRef = db.collection(SORTEOS_COLLECTION).doc(sorteoId);
+  const drawSnap0 = await drawRef.get();
+  if (!drawSnap0.exists || !drawVisibleToEditor(drawSnap0.data() || {}, editor)) throw Object.assign(new Error("No puede modificar este sorteo."), { status: 403 });
+  const clientId = String((drawSnap0.data() || {}).ganador?.clientId || "");
+  if (!clientId) throw new Error("Este sorteo no tiene ganador.");
+  const entregaRef = db.collection(ENTREGAS_COLLECTION).doc(`${sorteoId}_${clientId}`);
+  return db.runTransaction(async transaction => {
+    const [drawSnap, entregaSnap] = await Promise.all([transaction.get(drawRef), transaction.get(entregaRef)]);
+    if (!entregaSnap.exists) throw new Error("El ganador todavía no ha elegido premio; no hay nada que deshacer.");
+    const entrega = entregaSnap.data() || {};
+    if (entrega.estado === "entregado") throw new Error("Ese premio ya se marcó como entregado; no se puede deshacer.");
+    const prizeRef = entrega.premioId ? db.collection(PREMIOS_COLLECTION).doc(sorteoSafeId(entrega.premioId)) : null;
+    const prizeSnap = prizeRef ? await transaction.get(prizeRef) : null;
+    if (prizeRef && prizeSnap?.exists) {
+      const prize = prizeSnap.data() || {};
+      const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+      if (entrega.codigo) {
+        const codes = Array.isArray(prize.codigosDisponibles) ? [...prize.codigosDisponibles] : [];
+        if (!codes.includes(entrega.codigo)) codes.unshift(entrega.codigo);
+        update.codigosDisponibles = codes;
+        if (prize.entregaModo === "codigo") update.stock = codes.length;
+      }
+      if (entrega.estado === "pendiente") update.reservados = Math.max(0, (Number(prize.reservados) || 0) - 1);
+      if (entrega.estado === "listo") update.entregados = Math.max(0, (Number(prize.entregados) || 0) - 1);
+      transaction.set(prizeRef, update, { merge: true });
+    }
+    transaction.delete(entregaRef);
+    transaction.update(drawRef, {
+      "ganador.premioId": admin.firestore.FieldValue.delete(),
+      "ganador.premioNombre": admin.firestore.FieldValue.delete(),
+      "ganador.elegidoAt": admin.firestore.FieldValue.delete(),
+      "ganador.eleccionAnulada": { at: new Date().toISOString(), por: sorteoClean(editor.actor, 80), premioNombre: sorteoClean(entrega.premioNombre, 120) },
+      reclamoDesde: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { ok: true, sorteoId, premioAnulado: entrega.premioNombre || "" };
+  });
+}
+
 async function markDelivered(db, editor, body) {
   const entregaId = sorteoSafeId(body.id);
   if (!entregaId) throw new Error("Entrega inválida.");
@@ -1447,6 +1493,7 @@ export default async function handler(req, res) {
     if (action === "cerrar_sorteo") return res.status(200).json(await closeDraw(db, editor, body.id));
     if (action === "girar_ruleta") return res.status(200).json(await spinDraw(db, editor, body.id));
     if (action === "marcar_entregado") return res.status(200).json(await markDelivered(db, editor, body));
+    if (action === "deshacer_eleccion") return res.status(200).json(await revertChoice(db, editor, body));
     return res.status(400).json({ ok: false, error: "Acción no válida." });
   } catch (error) {
     const status = Number(error?.status) || 500;
