@@ -2410,9 +2410,11 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     if((m=t.match(/(\d{1,2})\s*(?:de\s+)?([a-z]{3,10})\.?\s*(?:de\s+|del\s+)?(\d{2,4})/))&&MESES[m[2]])return antigValid(antigYear(m[3]),MESES[m[2]],+m[1]);
     if((m=t.match(/([a-z]{3,10})\.?[\s\-\/]*(?:de\s+|del\s+)?(\d{4}|\d{2})\b/))&&MESES[m[1]])return antigValid(antigYear(m[2]),MESES[m[1]],1);
     if((m=t.match(/(\d{1,2})[\/\-.](\d{4})\b/)))return antigValid(+m[2],+m[1],1);
+    if((m=t.match(/^(?:desde\s+|ano\s+|del\s+)?(20\d\d)$/)))return antigValid(+m[1],1,1);
     if((m=t.match(/^(\d{5})(?:\.\d+)?$/))){const n=+m[1];if(n>36000&&n<60000){const d=new Date(Math.round((n-25569)*86400000));return antigValid(d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate());}}
     return null;
   }
+  function antigParseFuturo(v){const t=norm(cleanCell(v||''));const m=t.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(!m)return null;const y=antigYear(m[3]);const d=new Date(y,+m[2]-1,+m[1],12);return d.getMonth()===+m[2]-1?d:null;}
   function antigYearsSince(dt){const now=new Date();let y=now.getFullYear()-dt.getFullYear();if(now.getMonth()<dt.getMonth()||(now.getMonth()===dt.getMonth()&&now.getDate()<dt.getDate()))y--;return Math.max(0,y);}
   function antigFmt(dt){return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;}
   function antigGuessCols(h,info){
@@ -2420,19 +2422,31 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     let best=-1,bestScore=0;
     for(let c=0;c<cols;c++){let hits=0;rows.forEach(r=>{if(antigParse(r[c]))hits++;});const lab=norm(headerLabel(info,c));const bonus=/(desde|inicio|ingreso|contrat|alta|cliente desde|antig)/.test(lab)?1.5:(/fecha/.test(lab)?1.1:1);const score=hits*bonus;if(score>bestScore){bestScore=score;best=c;}}
     const find=(...keys)=>{for(const k of keys){const i=headerIndex(info,k);if(i>=0)return i;}return -1;};
-    return {date:best,name:find('nombre','cliente'),phone:find('celular','telefono','teléfono','whats','numero','número')};
+    // Columna de INICIO: manda el encabezado (Cliente desde / Inicio / Ingreso / Antigüedad), aunque esté a medio llenar.
+    let start=-1;for(let c=0;c<cols;c++){const lab=norm(headerLabel(info,c));if(/(desde|inicio|ingreso|antig|contrat|alta)/.test(lab)){start=c;break;}}
+    const cobro=headerIndex(info,'fecha');
+    return {date:start>=0?start:best,start,cobro,name:find('nombre','cliente'),phone:find('celular','telefono','teléfono','whats','numero','número')};
   }
   function antigCompute(){
     const h=state.sheet;if(!h)return null;const info=headerInfo(h);
     const g=antigGuessCols(h,info);
     const dc=Number.isInteger(state.antigCol)&&state.antigCol>=0?state.antigCol:g.date;
     const nc=g.name>=0?g.name:1, pc=g.phone;
-    const people=new Map();let lastDate=null,parsed=0;
+    // Renovación continua: el cliente cuenta si su FECHA de cobro está al día (no vencida más de 10 días).
+    const cc=-1; // la continuidad la da estar en la lista activa de Flujo Diario (no hay historial de pagos en el documento)
+    const hoy=new Date();hoy.setHours(12,0,0,0);
+    const minCobro=new Date(hoy.getTime()-10*86400000), maxCobro=new Date(hoy.getTime()+400*86400000);
+    const esCobro=g.start<0; // no existe columna «Cliente desde»
+    const people=new Map();let lastDate=null,parsed=0,noAlDia=0,oldest=null;
     (h.filas||[]).forEach((r,i)=>{
       if(i===info.row)return;
-      const raw=cleanCell(r[dc]||'').trim();
-      const dt=raw?antigParse(raw):lastDate; if(raw&&dt){lastDate=dt;parsed++;}
+      const raw=cleanCell(r[dc]||'').trim();const dt0=raw?antigParse(raw):null;if(dt0&&(!oldest||dt0<oldest))oldest=dt0;
+      let dt;
+      if(g.start>=0&&dc===g.start){ // «Cliente desde»: si está vacía se usa la Fecha de la fila (nunca la de otra fila)
+        dt=dt0||(g.cobro>=0?antigParse(r[g.cobro]):null); if(dt)parsed++;
+      }else{ dt=raw?dt0:lastDate; if(raw&&dt){lastDate=dt;parsed++;} }
       const name=cleanCell(r[nc]||'').split('\n')[0].trim(); if(!name||!dt)return;
+      if(cc>=0&&!state.antigTodos){const cobro=antigParseFuturo(r[cc]);if(!cobro||cobro<minCobro||cobro>maxCobro){noAlDia++;return;}}
       const phone=pc>=0?cleanCell(r[pc]||'').replace(/\D/g,'').slice(-8):'';
       const key=norm(name)+'|'+phone;const prev=people.get(key);
       if(!prev||dt<prev.dt)people.set(key,{name,phone,dt});
@@ -2440,7 +2454,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     const groups={4:[],3:[],2:[],1:[],0:[]};
     for(const p of people.values()){const y=antigYearsSince(p.dt);p.years=y;groups[Math.min(4,y)].push(p);}
     Object.values(groups).forEach(list=>list.sort((a,b)=>a.dt-b.dt));
-    return {info,dc,parsed,groups,total:people.size,label:dc>=0?headerLabel(info,dc):''};
+    return {info,dc,parsed,groups,total:people.size,label:dc>=0?headerLabel(info,dc):'',esCobro,continuidad:cc>=0,noAlDia,oldest};
   }
   const ANTIG_LABEL={4:'4 años o más',3:'3 años',2:'2 años',1:'1 año',0:'Menos de 1 año'};
   function antigLine(p){return `${p.name}${p.phone?' · '+p.phone:''} · desde ${antigFmt(p.dt)} · ${p.years} año${p.years===1?'':'s'}`;}
@@ -2449,14 +2463,17 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     const h=state.sheet;const res=antigCompute();if(!res)return '';
     const cols=h.cols||1;let opts='';for(let c=0;c<cols;c++)opts+=`<option value="${c}" ${c===res.dc?'selected':''}>${esc(headerLabel(res.info,c))}</option>`;
     const head=`<div class="antig-head"><b>🎂 Antigüedad de clientes · para sorteo</b><label>Columna de fecha de contratación <select id="antigCol" class="docs-input">${opts}</select></label><button class="docs-btn" id="antigCsv">⬇️ Descargar CSV</button><button class="docs-btn" id="antigClose">✕ Cerrar</button></div>`;
-    if(!res.parsed)return `<style>.antig-panel{margin:10px 0;padding:14px;border:1px solid #dce7f7;border-radius:16px;background:#fbfdff}.antig-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.antig-head b{font-size:15px;color:#0b2447;margin-right:auto}.antig-head label{display:flex;gap:6px;align-items:center;font-size:12px;color:#5b6b82}.antig-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}.antig-chip{display:flex;flex-direction:column;align-items:center;min-width:92px;padding:8px 12px;border-radius:14px;background:#eef3fb;font-size:12px;color:#33435c}.antig-chip b{font-size:20px;color:#0b2447}.antig-chip.y4{background:#fff4d6}.antig-chip.y3{background:#ffe9e9}.antig-chip.y2{background:#e9f6ff}.antig-chip.y1{background:#ecfdf3}.antig-note{font-size:12px;color:#6b7a90;margin:4px 2px 10px}.antig-warn{margin-top:10px;padding:10px;border-radius:12px;background:#fff4e5;color:#7a4b00;font-size:13px}.antig-group{border:1px solid #e2e9f4;border-radius:12px;margin:8px 0;background:#fff}.antig-group summary{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;font-weight:800;cursor:pointer}.antig-group ol{margin:0;padding:0 14px 12px 34px;font-size:13px;line-height:1.6}</style><section class="antig-panel">${head}<p class="antig-warn">⚠️ En la columna «${esc(res.label)}» no encontré fechas con año (ej. 15/03/2022 o marzo 2022). Elija arriba la columna correcta. Si el documento solo tiene el día de cobro (5, 12, 20…), no trae el año de contratación y hay que agregarlo.</p></section>`;
+    const aviso=res.esCobro?`<p class="antig-warn">⚠️ Este documento no tiene columna <b>«Cliente desde»</b>, así que se usa «${esc(res.label)}». En esa columna la fecha más antigua es <b>${res.oldest?antigFmt(res.oldest):'—'}</b>: los clientes que están con ustedes desde 2023 o antes no aparecen con ese año. Agregue una columna <b>«Cliente desde»</b> (➕ Columna) y escriba el año o mes/año en que empezó cada cliente, ej. <b>2023</b> o <b>03/2023</b>. El panel la usa sola en cuanto exista.</p>`:'';
+    const cont=res.continuidad?`<label class="antig-cont"><input type="checkbox" id="antigTodos" ${state.antigTodos?'checked':''}> Incluir clientes con cobro vencido (sin renovación continua)${!state.antigTodos&&res.noAlDia?` · ${res.noAlDia} fuera por no estar al día`:''}</label>`:'';
+    if(!res.parsed)return `<style>.antig-panel{margin:10px 0;padding:14px;border:1px solid #dce7f7;border-radius:16px;background:#fbfdff}.antig-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.antig-head b{font-size:15px;color:#0b2447;margin-right:auto}.antig-head label{display:flex;gap:6px;align-items:center;font-size:12px;color:#5b6b82}.antig-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}.antig-chip{display:flex;flex-direction:column;align-items:center;min-width:92px;padding:8px 12px;border-radius:14px;background:#eef3fb;font-size:12px;color:#33435c}.antig-chip b{font-size:20px;color:#0b2447}.antig-chip.y4{background:#fff4d6}.antig-chip.y3{background:#ffe9e9}.antig-chip.y2{background:#e9f6ff}.antig-chip.y1{background:#ecfdf3}.antig-cont{display:flex;gap:8px;align-items:center;margin:10px 2px 0;font-size:12.5px;color:#33435c}.antig-note{font-size:12px;color:#6b7a90;margin:4px 2px 10px}.antig-warn{margin-top:10px;padding:10px;border-radius:12px;background:#fff4e5;color:#7a4b00;font-size:13px}.antig-group{border:1px solid #e2e9f4;border-radius:12px;margin:8px 0;background:#fff}.antig-group summary{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;font-weight:800;cursor:pointer}.antig-group ol{margin:0;padding:0 14px 12px 34px;font-size:13px;line-height:1.6}</style><section class="antig-panel">${head}<p class="antig-warn">⚠️ En la columna «${esc(res.label)}» no encontré fechas con año (ej. 15/03/2022 o marzo 2022). Elija arriba la columna correcta. Si el documento solo tiene el día de cobro (5, 12, 20…), no trae el año de contratación y hay que agregarlo.</p></section>`;
     const chips=[4,3,2,1,0].map(k=>`<span class="antig-chip y${k}"><b>${res.groups[k].length}</b>${ANTIG_LABEL[k]}</span>`).join('');
     const lists=[4,3,2,1].map(k=>{const l=res.groups[k];if(!l.length)return '';return `<details class="antig-group" ${k>=3?'open':''}><summary>${ANTIG_LABEL[k]} · ${l.length} cliente${l.length===1?'':'s'}<button class="docs-btn mini" data-antig-copy="${k}">📋 Copiar</button></summary><ol>${l.map(p=>`<li>${esc(antigLine(p))}</li>`).join('')}</ol></details>`;}).join('');
-    return `<style>.antig-panel{margin:10px 0;padding:14px;border:1px solid #dce7f7;border-radius:16px;background:#fbfdff}.antig-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.antig-head b{font-size:15px;color:#0b2447;margin-right:auto}.antig-head label{display:flex;gap:6px;align-items:center;font-size:12px;color:#5b6b82}.antig-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}.antig-chip{display:flex;flex-direction:column;align-items:center;min-width:92px;padding:8px 12px;border-radius:14px;background:#eef3fb;font-size:12px;color:#33435c}.antig-chip b{font-size:20px;color:#0b2447}.antig-chip.y4{background:#fff4d6}.antig-chip.y3{background:#ffe9e9}.antig-chip.y2{background:#e9f6ff}.antig-chip.y1{background:#ecfdf3}.antig-note{font-size:12px;color:#6b7a90;margin:4px 2px 10px}.antig-warn{margin-top:10px;padding:10px;border-radius:12px;background:#fff4e5;color:#7a4b00;font-size:13px}.antig-group{border:1px solid #e2e9f4;border-radius:12px;margin:8px 0;background:#fff}.antig-group summary{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;font-weight:800;cursor:pointer}.antig-group ol{margin:0;padding:0 14px 12px 34px;font-size:13px;line-height:1.6}</style><section class="antig-panel">${head}<div class="antig-chips">${chips}</div><p class="antig-note">${res.total} clientes únicos (nombre + celular) · se usa su fecha más antigua · años completos al día de hoy.</p>${lists}</section>`;
+    return `<style>.antig-panel{margin:10px 0;padding:14px;border:1px solid #dce7f7;border-radius:16px;background:#fbfdff}.antig-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.antig-head b{font-size:15px;color:#0b2447;margin-right:auto}.antig-head label{display:flex;gap:6px;align-items:center;font-size:12px;color:#5b6b82}.antig-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}.antig-chip{display:flex;flex-direction:column;align-items:center;min-width:92px;padding:8px 12px;border-radius:14px;background:#eef3fb;font-size:12px;color:#33435c}.antig-chip b{font-size:20px;color:#0b2447}.antig-chip.y4{background:#fff4d6}.antig-chip.y3{background:#ffe9e9}.antig-chip.y2{background:#e9f6ff}.antig-chip.y1{background:#ecfdf3}.antig-cont{display:flex;gap:8px;align-items:center;margin:10px 2px 0;font-size:12.5px;color:#33435c}.antig-note{font-size:12px;color:#6b7a90;margin:4px 2px 10px}.antig-warn{margin-top:10px;padding:10px;border-radius:12px;background:#fff4e5;color:#7a4b00;font-size:13px}.antig-group{border:1px solid #e2e9f4;border-radius:12px;margin:8px 0;background:#fff}.antig-group summary{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;font-weight:800;cursor:pointer}.antig-group ol{margin:0;padding:0 14px 12px 34px;font-size:13px;line-height:1.6}</style><section class="antig-panel">${head}${aviso}${cont}<div class="antig-chips">${chips}</div><p class="antig-note">${res.total} clientes únicos (nombre + celular) · se usa su fecha de inicio más antigua · años completos al día de hoy${res.continuidad&&!state.antigTodos?' · solo clientes al día (renovación continua)':''}.</p>${lists}</section>`;
   }
   function antigBind(root){
     const b=root.querySelector('#docAntig');if(b)b.onclick=()=>{state.antigOpen=!state.antigOpen;render();};
     const sel=root.querySelector('#antigCol');if(sel)sel.onchange=()=>{state.antigCol=Number(sel.value);render();};
+    const tod=root.querySelector('#antigTodos');if(tod)tod.onchange=()=>{state.antigTodos=tod.checked;render();};
     const cl=root.querySelector('#antigClose');if(cl)cl.onclick=()=>{state.antigOpen=false;render();};
     root.querySelectorAll('[data-antig-copy]').forEach(btn=>btn.onclick=(e)=>{e.preventDefault();const res=antigCompute();const l=(res&&res.groups[btn.dataset.antigCopy])||[];const txt=`${ANTIG_LABEL[btn.dataset.antigCopy]} (${l.length})\n`+l.map((p,i)=>`${i+1}. ${antigLine(p)}`).join('\n');try{navigator.clipboard.writeText(txt);toast('Lista copiada');}catch(_){prompt('Copie la lista:',txt);}});
     const csv=root.querySelector('#antigCsv');if(csv)csv.onclick=()=>{const res=antigCompute();if(!res)return;const q=v=>`"${String(v).replace(/"/g,'""')}"`;const lines=['Grupo,Nombre,Celular,Desde,Años'];[4,3,2,1,0].forEach(k=>res.groups[k].forEach(p=>lines.push([q(ANTIG_LABEL[k]),q(p.name),q(p.phone),q(antigFmt(p.dt)),p.years].join(','))));const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='antiguedad_clientes.csv';document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);};
