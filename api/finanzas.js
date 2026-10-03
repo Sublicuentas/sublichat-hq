@@ -196,6 +196,11 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   const now = isoNow();
   const actor = identity.usuario;
 
+  if (accion === "finanzas_metodos") {
+    // Ligero (1 lectura): para el formulario "¿Dónde pagó?" al renovar.
+    return res.status(200).json({ ok: true, accion, metodos: await loadMethods(db) });
+  }
+
   if (accion === "finanzas_resumen") {
     const { methods, libro, totales, saldos } = await estadoLibro(db);
     const [pagosSnap, cierresSnap] = await Promise.all([
@@ -235,19 +240,23 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     if (!banco) return res.status(200).json({ ok: false, error: "Elija un banco activo." });
     if (!(monto >= 0) || body.monto === "" || body.monto == null) return res.status(200).json({ ok: false, error: "Escriba el saldo inicial del banco (0 o más)." });
     const hoy = hoyYmdHN();
+    // R104b: el saldo inicial puede ser el que el banco tenía al EMPEZAR un día pasado (p. ej. 01/10/2026),
+    // así todo lo registrado desde ese día cuenta para el saldo y para el ciclo.
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) && body.desde <= hoy ? body.desde : hoy;
     const out = await db.runTransaction(async (tx) => {
       const ref = libroRef(db);
       const snap = await tx.get(ref);
       const data = snap.exists ? (snap.data() || {}) : {};
       const bases = { ...(data.bases || {}) };
       if (bases[bancoId]) throw new Error(`${banco.nombre} ya tiene saldo inicial. Para corregir use “Ajuste de saldo” con motivo.`);
-      bases[bancoId] = { saldo: monto, desde: hoy, registradoPor: actor, at: now };
+      if (data.ultimoCierreFin && desde <= data.ultimoCierreFin) throw new Error(`La fecha debe ser posterior al último cierre (${data.ultimoCierreFin}).`);
+      bases[bancoId] = { saldo: monto, desde, registradoPor: actor, at: now };
       const movRef = db.collection("finanzas_movimientos").doc(`saldoini_${bancoId}`);
-      tx.set(movRef, { ...financeMetadata({ docId: movRef.id, usuario: actor, userId: authUser.uid }), tipo: "saldo_inicial", subtipo: "saldo_inicial", bancoId, banco: banco.nombre, monto, ...canonicalFinanceDate(hoy, hoy), origenCanal: cleanText(body.origen || "apk"), createdAt: now, updatedAt: now });
-      const cicloInicio = data.cicloInicio || hoy;
-      tx.set(ref, { bases, cicloInicio, cicloId: data.cicloId || `ciclo_${cicloInicio}`, updatedAt: now }, { merge: true });
+      tx.set(movRef, { ...financeMetadata({ docId: movRef.id, usuario: actor, userId: authUser.uid }), tipo: "saldo_inicial", subtipo: "saldo_inicial", bancoId, banco: banco.nombre, monto, ...canonicalFinanceDate(desde, hoy), origenCanal: cleanText(body.origen || "apk"), createdAt: now, updatedAt: now });
+      const cicloInicio = !data.cicloInicio ? desde : (!data.ultimoCierreFin && desde < data.cicloInicio ? desde : data.cicloInicio);
+      tx.set(ref, { bases, cicloInicio, cicloId: data.ultimoCierreFin ? (data.cicloId || `ciclo_${cicloInicio}`) : `ciclo_${cicloInicio}`, updatedAt: now }, { merge: true });
       tx.set(db.collection("auditoria_eventos").doc(), { tipo: "finanzas_saldo_inicial", bancoId, monto, registradoPor: actor, rol: identity.role, createdAt: now });
-      return { bancoId, monto };
+      return { bancoId, monto, desde };
     });
     return res.status(200).json({ ok: true, accion, ...out });
   }
@@ -371,7 +380,7 @@ export default async function handler(req, res) {
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
     }
-    if (["finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
+    if (["finanzas_metodos", "finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
