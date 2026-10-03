@@ -1669,6 +1669,11 @@ async function handlerCore(req, res) {
         const { dias, fechaActual, fechaExacta, servicioIndex } = body;
         if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Faltan datos (plataforma o fecha).");
         if (!dias && !fechaExacta) throw crmUserError("Faltan datos (plataforma o fecha).");
+        // R104 · Ajuste administrativo (garantía, cortesía, corrección): mueve la fecha SIN crear ingreso,
+        // pero exige motivo y queda auditado. Nunca se registra un ingreso ficticio de Lps. 0.
+        const ajusteAdministrativo = body.ajusteAdministrativo === true;
+        const motivoAjuste = String(body.motivoAjuste || body.motivo || "").trim().slice(0, 200);
+        if (ajusteAdministrativo && motivoAjuste.length < 4) throw crmUserError("El ajuste de fecha sin pago necesita un motivo.");
         const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
         if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
         const s = servicios[idx];
@@ -1684,6 +1689,7 @@ async function handlerCore(req, res) {
           mesesContratados: mesesRenovacionSeguro(s.plataforma || plataforma || "", body.meses ?? body.mesesContratados, fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
+          ...(ajusteAdministrativo ? { ultimoAjusteAdministrativo: { motivo: motivoAjuste, fechaAnterior: fechaAnterior || "", fechaNueva: nuevaFecha, por: String(authUser.usuario || authUser.uid || "sublichat"), at: isoNow(), origen: String(body.origen || "apk").slice(0, 20) } } : {}),
           updatedAt: isoNow()
         };
 
@@ -1891,6 +1897,11 @@ async function handlerCore(req, res) {
     });
 
     let invResult = null;
+    if (acc === "renovar" && body.ajusteAdministrativo === true) {
+      try {
+        await db.collection("auditoria_eventos").add({ tipo: "renovacion_ajuste_sin_pago", clienteId: docRef.id, compraId: String(body.compraId || ""), plataforma: String(plataforma || ""), motivo: String(body.motivoAjuste || body.motivo || "").trim().slice(0, 200), registradoPor: String(authUser.usuario || authUser.uid || "sublichat"), origen: String(body.origen || "apk").slice(0, 20), createdAt: isoNow() });
+      } catch (e) { console.error("auditoria ajuste renovacion", e?.message || e); }
+    }
     if (mutation.inventarioPlan) {
       try { invResult = await sincronizarInventarioServicio(db, mutation.inventarioPlan); }
       catch (e) { invResult = { tocado: false, motivo: e.message }; }
