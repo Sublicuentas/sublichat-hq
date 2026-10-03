@@ -6,11 +6,11 @@
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
-import { financeMetadata } from "../lib/finance-schema.mjs";
+import { financeMetadata } from "./_finance-schema.js";
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla
-} from "./_finanzas-libro.mjs";
+} from "./_finanzas-libro.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
