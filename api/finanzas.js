@@ -139,6 +139,7 @@ function finOpDocId(body = {}, uid = "") {
 
 // ===================== LIBRO MAYOR (Finanzas R104 · solo Sublicuentas y Relojes) =====================
 const LIBRO_REF = ["finanzas_config", "libro_mayor"];
+const INICIO_LIBRO = "2026-10-01";
 // Solo respaldo si portal_cliente/configuracion no existe (la fuente real es la configuración del portal).
 const METODOS_RESPALDO = [
   { id: "bac-credomatic", nombre: "BAC Credomatic", logoKey: "bac" }, { id: "ficohsa", nombre: "Ficohsa", logoKey: "ficohsa" },
@@ -158,7 +159,8 @@ async function loadMethods(db) {
 function libroFrom(data = {}) {
   const bases = data.bases && typeof data.bases === "object" ? data.bases : {};
   const desdes = Object.values(bases).map((b) => b?.desde).filter(Boolean).sort();
-  const cicloInicio = data.cicloInicio || desdes[0] || hoyYmdHN();
+  // Finanzas nueva arranca el 01/10/2026: aunque todavía no haya saldo inicial, el ciclo cuenta desde ese día.
+  const cicloInicio = data.cicloInicio || desdes[0] || INICIO_LIBRO;
   return { ...data, bases, cicloInicio, cicloId: data.cicloId || `ciclo_${cicloInicio}`, lecturaDesde: [cicloInicio, ...desdes].sort()[0] };
 }
 function movementsQuery(db, desde) {
