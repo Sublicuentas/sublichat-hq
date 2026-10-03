@@ -10,7 +10,7 @@ import { financeMetadata } from "../lib/finance-schema.mjs";
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla
-} from "../lib/finanzas-libro.mjs";
+} from "./_finanzas-libro.mjs";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
