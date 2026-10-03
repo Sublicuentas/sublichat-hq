@@ -73,6 +73,11 @@ test("saldo inicial único por banco; corregir exige ajuste", async () => {
   assert.equal(r.metodos[0].cuenta, undefined, "no expone cuentas");
 });
 
+test("saldo inicial: un banco ya activado no se vuelve a registrar (ni con otra fecha)", async () => {
+  const fut = await call({ accion: "registrar_saldo_inicial", bancoId: "bac-credomatic", monto: 1, desde: "2999-01-01" });
+  assert.equal(fut.ok, false);
+});
+
 test("Caso A + doble toque: renovación L220 en BAC con el mismo operationId crea UN ingreso", async () => {
   const body = { accion: "registrar_cobro_renovacion", monto: 220, bancoId: "bac-credomatic", clienteNombre: "Juan", plataforma: "Netflix", clienteId: "c1", compraId: "k1", operationId: "op-juan-0001" };
   const a = await call(body), b = await call(body);
@@ -126,4 +131,18 @@ test("cierre del ciclo: congela totales, conserva saldos y abre el siguiente; re
   assert.equal(after.totalBancos, before.totalBancos, "el cierre no pone bancos en cero");
   assert.equal(after.totales.ingresos, 0, "ciclo nuevo arranca vacío");
   assert.notEqual(after.ciclo.id, before.ciclo.id);
+});
+
+test("saldo inicial con fecha pasada: el ciclo y el banco cuentan desde ese día", async () => {
+  // libro limpio para esta prueba
+  for (const k of [...db.store.keys()]) if (k.startsWith("finanzas_") || k.startsWith("planilla_")) db.store.delete(k);
+  const hoy = (await call({ accion: "finanzas_resumen" })).hoy;
+  const ayer = new Date(Date.parse(hoy + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+  await db.collection("finanzas_movimientos").doc("viejo").set({ tipo: "ingreso", monto: 300, bancoId: "ficohsa", fechaPago: ayer, fechaTS: admin.firestore.Timestamp.fromDate(new Date(ayer + "T12:00:00Z")) });
+  const r = await call({ accion: "registrar_saldo_inicial", bancoId: "ficohsa", monto: 1000, desde: ayer });
+  assert.equal(r.ok, true, r.error); assert.equal(r.desde, ayer);
+  const s = await call({ accion: "finanzas_resumen" });
+  assert.equal(s.ciclo.inicio, ayer);
+  assert.equal(s.totales.ingresos, 300);
+  assert.equal(s.bancos.find((b) => b.id === "ficohsa").saldo, 1300);
 });
