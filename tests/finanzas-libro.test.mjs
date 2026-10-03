@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   cycleTotals, bankBalances, validatePlanilla, resolveBankId, movementKind, movementYmd, publicMethods, addDaysYmd,
-} from "../api/_finanzas-libro.mjs";
+} from "../api/_finanzas-libro.js";
 
 const methods = publicMethods([
   { id: "bac-credomatic", nombre: "BAC Credomatic", logoKey: "bac", cuenta: "1", titular: "X", activo: true },

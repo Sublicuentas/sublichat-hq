@@ -5,7 +5,10 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 test('api/finanzas.js lleva su libro mayor dentro de /api (Vercel siempre lo empaqueta)', () => {
   const src = fs.readFileSync(path.join(root, 'api/finanzas.js'), 'utf8');
-  assert.match(src, /from "\.\/_finanzas-libro\.mjs"/);
-  assert.doesNotMatch(src, /lib\/finanzas-libro/);
-  assert.ok(fs.existsSync(path.join(root, 'api/_finanzas-libro.mjs')));
+  // Vercel compila api/finanzas.js a CommonJS: sus dependencias locales deben ser .js dentro de /api (nunca .mjs).
+  assert.match(src, /from "\.\/_finanzas-libro\.js"/);
+  assert.match(src, /from "\.\/_finance-schema\.js"/);
+  assert.doesNotMatch(src, /\.mjs["']/);
+  assert.ok(fs.existsSync(path.join(root, 'api/_finanzas-libro.js')));
+  assert.ok(fs.existsSync(path.join(root, 'api/_finance-schema.js')));
 });
