@@ -39,5 +39,5 @@ test('R83 servidor guarda la casilla URL y la web tiene Max Player + URL en pers
 
 test('R83 íconos de Perfil/Usuario/Clave más pequeños en la ficha URL', () => {
   assert.match(read('portal-cliente-publico.css'), /\.field-icon\.has-portal-image\{width:28px;height:28px;flex:0 0 28px/);
-  assert.match(read('acceso.html'), /portal-cliente-publico\.css\?v=20260927-r83-iconos/);
+  assert.match(read('acceso.html'), /portal-cliente-publico\.css\?v=[\w-]+/); // la versión cambia en cada ajuste del portal
 });
