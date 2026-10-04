@@ -225,7 +225,10 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : libro.cicloInicio;
     const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : "";
     const snap = await movementsQuery(db, desde).limit(1500).get();
-    let rows = rowsOf(snap).map((m) => movimientoView(m, methods)).filter((m) => m.kind !== "ignorar" && (!hasta || m.fecha <= hasta));
+    // "venta" es el valor comercial acordado, NO dinero real. Se conserva en Firestore
+    // para Ventas generadas / Auditoría, pero jamás debe mezclarse con el listado de
+    // movimientos monetarios (ingresos, egresos, planilla, ajustes, etc.).
+    let rows = rowsOf(snap).map((m) => movimientoView(m, methods)).filter((m) => !["ignorar", "venta"].includes(m.kind) && (!hasta || m.fecha <= hasta));
     if (body.tipo) rows = rows.filter((m) => m.kind === body.tipo);
     if (body.bancoId) rows = rows.filter((m) => m.bancoId === body.bancoId);
     const q = String(body.texto || "").toLowerCase().trim();
