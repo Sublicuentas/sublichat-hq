@@ -3058,6 +3058,8 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
     pintar();
   });
 }
+// R107: el pago viaja DENTRO de la misma petición de renovar/guardar compra → el servidor guarda fecha/compra y pago juntos.
+function pagoBodyWeb(pago,key,operationId){const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web"};}
 function pagoOpNuevoId(){return (crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`);}
 async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",clienteNombre="",compraId="",plataforma="",fechaAnterior="",fechaNueva="",operationId}){
   const f=(pago.filas||{})[key]||{};
@@ -3104,17 +3106,18 @@ async function renovarServicio(dias, fechaExacta){
   const errores=[];
   const diag=[];
   const confirmadas=[];
+  const pagoOpIds=aRenovar.map(()=>pagoOpNuevoId()); // un operationId fijo por servicio (reintento = sin duplicar)
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({...(pagoOp?.modo==="pago"?{pago:pagoBodyWeb(pagoOp,String(aRenovar.indexOf(s)),pagoOpIds[aRenovar.indexOf(s)])}:{}),...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json().catch(()=>({}));
       if(j.ok&&j.verified===true){
         aplicarRenovacionLocal(g,s,j);
         confirmadas.push({servicio:s,resultado:j});
         ok++;
         if(pagoOp?.modo==="pago"){
-          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"renovacion",pago:pagoOp,key:String(aRenovar.indexOf(s)),clienteId:g.clienteId||s.clienteId||"",clienteNombre:g.nombre||"",compraId:j.compraId||s.compraId||"",plataforma:s.plataforma||"",fechaAnterior:j.fechaAnterior||"",fechaNueva:j.fechaNueva||""});diag.push(`💵 ${rp.estado}`);}
+          try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"renovacion",pago:pagoOp,key:String(aRenovar.indexOf(s)),clienteId:g.clienteId||s.clienteId||"",clienteNombre:g.nombre||"",compraId:j.compraId||s.compraId||"",plataforma:s.plataforma||"",fechaAnterior:j.fechaAnterior||"",fechaNueva:j.fechaNueva||"",operationId:pagoOpIds[aRenovar.indexOf(s)]});diag.push(`💵 ${String(rp.estado||"").toUpperCase()}`);}
           catch(e){errores.push(`${s.plataforma}: renovado pero el pago no se registró (${e.message}). Regístrelo en Finanzas.`);fail++;}
         }
         diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"}`);
@@ -5828,6 +5831,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if((esCompraNueva||perfilesNuevos>0)&&pagoOpHabilitado()){
       pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:perfilesNuevos>0?`${payload.servicio.plataforma} · ${perfilesNuevos} perfil${perfilesNuevos===1?"":"es"} adicional${perfilesNuevos===1?"":"es"}`:payload.servicio.plataforma}]});
       if(!pagoOp){fichaStatus("Guardado cancelado: falta la información del pago de la compra.","err");return null;}
+      pagoOp.operationId=`compra-${String(payload.servicio.compraId||fichaNuevoId("compra")).replace(/[^A-Za-z0-9-]/g,"-")}-p${(payload.servicio.perfiles||[]).length}`.slice(0,80);
+      payload.pago=pagoBodyWeb(pagoOp,"0",pagoOp.operationId); // R107: viaja con la compra (misma transacción)
     }
     fichaStatus("Guardando en CRM/Firebase…","info");
     try{
@@ -5853,7 +5858,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         fichaCompraIdActual=j.compraId||payload.servicio.compraId||fichaCompraIdActual;
         fichaPerfilesOriginalesActual=(payload.servicio.perfiles||[]).length; // lo ya guardado no vuelve a pedir pago
         if(pagoOp){
-          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:`compra-${String(fichaCompraIdActual||"").replace(/[^A-Za-z0-9-]/g,"-")}-p${(payload.servicio.perfiles||[]).length}`.slice(0,80)});fichaToast(`💵 Pago de la compra: ${rp.estado}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
+          try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:pagoOp.operationId});fichaToast(`💵 Pago de la compra: ${String(rp.estado||"").toUpperCase()}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
           catch(e){const m=`⚠️ La compra se guardó, pero el pago NO se registró (${e.message}). Regístrelo en Finanzas → Pendientes/Ingresos.`;fichaStatus(m,"err");fichaToast(m);}
         }
         const nombres=listaConfirmada.map(p=>p.nombre).filter(Boolean).join(" + ");
@@ -7138,15 +7143,16 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(!c)return;
     let pagoOp=null; // R106: pago real (sin precio de catálogo) para Sublicuentas/Relojes
     if(pagoOpHabilitado()){ pagoOp=await pedirPagoOperacion({tipo:'renovacion',cliente:c.nombre,rows:[{key:'0',label:`${c.plataforma} +30 días`}],permitirAjuste:true}); if(!pagoOp)return; }
+    const pagoOpIdAgenda=pagoOpNuevoId();
     const old=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     try{
       const user=currentUser()||'sublichat';
-      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...(pagoOp&&pagoOp.modo==='ajuste'?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:'web'}:{}),accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),compraId:c.compraId||'',dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
+      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...(pagoOp&&pagoOp.modo==='pago'?{pago:pagoBodyWeb(pagoOp,'0',pagoOpIdAgenda)}:{}),...(pagoOp&&pagoOp.modo==='ajuste'?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:'web'}:{}),accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),compraId:c.compraId||'',dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
       const j=await r.json().catch(()=>({}));
       if(!j.ok||j.verified!==true) throw new Error(j.error||(j.ok?'Firebase no confirmó la fecha.':'No se pudo renovar.'));
       const grupo=groupFromService(c);
       aplicarRenovacionLocal(grupo,c,j);
-      if(pagoOp){ if(pagoOp.modo==='pago') await registrarPagoOperacionWeb({tipoOrigen:'renovacion',pago:pagoOp,key:'0',clienteId:c.clienteId||'',clienteNombre:c.nombre||'',compraId:j.compraId||c.compraId||'',plataforma:c.plataformaRaw||c.plataforma||'',fechaAnterior:j.fechaAnterior||'',fechaNueva:j.fechaNueva||''}); }
+      if(pagoOp){ if(pagoOp.modo==='pago'&&!j.pagoOperacion) await registrarPagoOperacionWeb({tipoOrigen:'renovacion',pago:pagoOp,key:'0',clienteId:c.clienteId||'',clienteNombre:c.nombre||'',compraId:j.compraId||c.compraId||'',plataforma:c.plataformaRaw||c.plataforma||'',fechaAnterior:j.fechaAnterior||'',fechaNueva:j.fechaNueva||'',operationId:pagoOpIdAgenda}); }
       else await fetch('/api/finanzas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'registrar_cobro',clienteNombre:c.nombre,clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,monto:c.precio||0,metodoPago:'No especificado',cobradoPor:user,vendedor:c.vendedor||user,rol:currentRole(),fechaPago:dateISO(new Date())})}).catch(()=>null);
       mostrarToast('✅ Pagado registrado y fecha renovada.');
       render();
