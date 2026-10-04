@@ -49,6 +49,25 @@ function toIso(v){
   if(v._seconds!=null)return new Date(v._seconds*1000).toISOString();
   return "";
 }
+// R106 · Auditoría total: une la bitácora de usuarios (actividad_usuarios) con los eventos del servidor
+// (auditoria_eventos: finanzas, cartera, planilla, correcciones… con ANTES/DESPUÉS). Paginación por cursor
+// (antesDe) para no depender de un límite fijo. Nunca devuelve secretos: clave/PIN/token salen como "(cambiada)".
+const SECRET_RE=/(^|_)(clave|password|contrasena|contraseña|pin|token|secret)$/i;
+function sinSecretos(v,depth=0){
+  if(v==null||depth>4)return v;
+  if(Array.isArray(v))return v.slice(0,40).map(x=>sinSecretos(x,depth+1));
+  if(typeof v==="object"){const o={};for(const [k,x] of Object.entries(v)){o[k]=SECRET_RE.test(k)?"(credencial cambiada)":sinSecretos(x,depth+1);}return o;}
+  return v;
+}
+function eventoServidor(id,x={}){
+  const fecha=toIso(x.createdAt)||String(x.createdAtIso||"");
+  const det={cliente:x.clienteNombre||"",monto:x.monto!=null?String(x.monto):"",motivo:x.motivo||"",origen:x.origen||"",movimientoId:x.movimientoId||"",planillaPagoId:x.planillaPagoId||"",cuentaId:x.cuentaId||"",compraId:x.compraId||"",operationId:x.operationId||""};
+  for(const k of Object.keys(det))if(det[k]==="")delete det[k];
+  return {id:`srv_${id}`,fuente:"servidor",usuario:x.actorUsuario||x.registradoPor||x.cerradoPor||"sistema",actorLabel:x.actorUsuario||x.registradoPor||"Sistema",rol:x.rol||"",
+    modulo:x.modulo||String(x.tipo||"").split("_")[0]||"finanzas",accion:x.accion||x.tipo||"evento",origen:x.origen||"",detalle:sinSecretos(det),detalleTexto:x.detalle||"",
+    before:sinSecretos(x.before??null),after:sinSecretos(x.after??null),bancos:x.bancos||[],targetType:x.targetType||"",targetId:x.targetId||"",createdAtIso:fecha};
+}
+
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   try{
@@ -70,8 +89,22 @@ export default async function handler(req,res){
     if(req.method==="GET"){
       if(!me.admin)return res.status(403).json({ok:false,error:"La bitácora completa es privada de Sublicuentas."});
       const limit=Math.max(50,Math.min(1000,Number(req.query?.limit||500)||500));
-      const snap=await db.collection("actividad_usuarios").orderBy("createdAt","desc").limit(limit).get();
-      const eventos=snap.docs.map(d=>{const x=d.data()||{};return {id:d.id,...x,createdAtIso:x.createdAtIso||toIso(x.createdAt),createdAt:undefined};});
+      const antesDe=String(req.query?.antesDe||"").trim(); // cursor ISO: trae lo anterior a esa fecha
+      let q1=db.collection("actividad_usuarios").orderBy("createdAt","desc");
+      if(antesDe)q1=q1.where("createdAt","<",admin.firestore.Timestamp.fromDate(new Date(antesDe)));
+      const snap=await q1.limit(limit).get();
+      let eventos=snap.docs.map(d=>{const x=d.data()||{};return {id:d.id,fuente:"usuario",...x,detalle:sinSecretos(x.detalle),createdAtIso:x.createdAtIso||toIso(x.createdAt),createdAt:undefined};});
+      // Eventos del servidor (finanzas, cartera, planilla, correcciones) con antes/después.
+      try{
+        let q2=db.collection("auditoria_eventos").orderBy("createdAt","desc");
+        if(antesDe)q2=q2.where("createdAt","<",antesDe);
+        const s2=await q2.limit(limit).get();
+        eventos=eventos.concat(s2.docs.map(d=>eventoServidor(d.id,d.data()||{})));
+      }catch(e){console.warn("AUDITORIA_EVENTOS_SERVIDOR",e?.message||e);}
+      eventos.sort((a,b)=>String(b.createdAtIso).localeCompare(String(a.createdAtIso)));
+      const masAntiguos=eventos.length>limit;
+      eventos=eventos.slice(0,limit);
+      const nextCursor=(snap.size>=limit||masAntiguos)&&eventos.length?eventos[eventos.length-1].createdAtIso:"";
       const now=Date.now(),day=86400000,startToday=new Date();startToday.setHours(0,0,0,0);
       const por=new Map();let hoy=0,ultimos7Dias=0,eliminaciones30Dias=0;
       for(const e of eventos){
@@ -86,7 +119,7 @@ export default async function handler(req,res){
         }
       }
       const porUsuario=[...por.values()].sort((a,b)=>b.total-a.total||String(a.actorLabel).localeCompare(String(b.actorLabel)));
-      return res.status(200).json({ok:true,eventos,resumen:{hoy,ultimos7Dias,eliminaciones30Dias,usuariosActivos30Dias:porUsuario.length,porUsuario}});
+      return res.status(200).json({ok:true,eventos,nextCursor,resumen:{hoy,ultimos7Dias,eliminaciones30Dias,usuariosActivos30Dias:porUsuario.length,porUsuario}});
     }
     return res.status(405).json({ok:false,error:"Método no permitido."});
   }catch(e){console.error("AUDITORIA_USUARIOS_ERROR",e);return res.status(500).json({ok:false,error:e.message||"Error interno."});}
