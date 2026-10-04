@@ -7515,7 +7515,20 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     bindExcelSavedPanel(el);
   }
 
-  const actividadState={loaded:false,loading:false,error:'',eventos:[],resumen:null,query:'',user:'all',range:'30',focusSearch:false};
+  const actividadState={loaded:false,loading:false,error:'',eventos:[],resumen:null,query:'',user:'all',range:'30',focusSearch:false,modulo:'all',origen:'all',cursor:'',cargandoMas:false};
+  // R106 · Auditoría total: antes/después, módulo/origen, cargar historial antiguo (cursor) y exportar CSV.
+  function actividadDiffHtml(e){
+    if(!e||(e.before==null&&e.after==null&&!(e.bancos||[]).length))return '';
+    const fmtv=v=>v==null?'—':esc(typeof v==='object'?JSON.stringify(v,null,1).replace(/[{}"]/g,'').trim():String(v));
+    const bancos=(e.bancos||[]).filter(b=>b&&b.bancoId).map(b=>`${esc(b.bancoId)} ${b.direccion==='salida'||Number(b.monto)<0?'−':'+'}${esc(Math.abs(Number(b.monto||0)))}${b.saldoAntes!=null?` (${esc(b.saldoAntes)} → ${esc(b.saldoDespues)})`:''}`).join(' · ');
+    return `<details class="activity-diff" style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;font-size:12.5px">Ver antes / después${e.detalle?.motivo?` · motivo: ${esc(e.detalle.motivo)}`:''}</summary><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:12px"><div style="background:#fff5f5;border-radius:8px;padding:8px;white-space:pre-wrap"><b>ANTES</b><br>${fmtv(e.before)}</div><div style="background:#f0fdf4;border-radius:8px;padding:8px;white-space:pre-wrap"><b>DESPUÉS</b><br>${fmtv(e.after)}</div></div>${bancos?`<div style="font-size:12px;margin-top:6px">🏦 ${bancos}</div>`:''}${e.detalle?.operationId?`<div style="font-size:11px;color:#64748b;margin-top:4px">operationId: ${esc(e.detalle.operationId)}</div>`:''}</details>`;
+  }
+  function actividadCsv(rows){
+    const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+    const head=['Fecha','Usuario','Origen','Módulo','Acción','Detalle','Antes','Después','Motivo','IDs'];
+    const lines=[head.join(',')].concat(rows.map(e=>[e.createdAtIso||'',actividadActor(e),e.origen||e?.detalle?.origen||'',e.modulo||'',e.accion||'',e.detalleTexto||actividadHumanText(e),e.before?JSON.stringify(e.before):'',e.after?JSON.stringify(e.after):'',e?.detalle?.motivo||'',[e?.detalle?.movimientoId,e?.detalle?.planillaPagoId,e?.detalle?.cuentaId,e?.detalle?.compraId,e?.detalle?.operationId].filter(Boolean).join(' ')].map(q).join(',')));
+    const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`auditoria_${new Date().toISOString().slice(0,10)}.csv`;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);
+  }
   const actividadLabel=s=>String(s||'Acción').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   const actividadActor=e=>String(e.actorLabel||e.usuario||'Usuario');
   const actividadUserKey=e=>{const raw=String(e?.usuario||actividadActor(e)||'usuario').trim().toLowerCase();return raw==='geissel'?'geisell':raw;};
@@ -7568,8 +7581,16 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     try{
       const r=await fetch('/api/auditoria?limit=1000',{cache:'no-store'}),j=await r.json().catch(()=>({}));
       if(!r.ok||!j.ok)throw new Error(j.error||'No se pudo leer la bitácora.');
-      actividadState.eventos=Array.isArray(j.eventos)?j.eventos:[];actividadState.resumen=j.resumen||{};actividadState.loaded=true;
+      actividadState.eventos=Array.isArray(j.eventos)?j.eventos:[];actividadState.resumen=j.resumen||{};actividadState.loaded=true;actividadState.cursor=j.nextCursor||'';
     }catch(e){actividadState.error=e.message||'No se pudo leer la bitácora.';}finally{actividadState.loading=false;renderActividad();}
+  }
+  async function loadActividadMas(){ // R106: historial más antiguo (sin límite fijo de 1,000)
+    if(!actividadState.cursor||actividadState.cargandoMas)return;
+    actividadState.cargandoMas=true;renderActividad();
+    try{const r=await fetch(`/api/auditoria?limit=1000&antesDe=${encodeURIComponent(actividadState.cursor)}`,{cache:'no-store'}),j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.ok)throw new Error(j.error||'No se pudo leer más historial.');
+      const ids=new Set(actividadState.eventos.map(e=>e.id));actividadState.eventos=actividadState.eventos.concat((j.eventos||[]).filter(e=>!ids.has(e.id)));actividadState.cursor=j.nextCursor||'';}
+    catch(e){mostrarToast('⚠️ '+(e.message||'Error'));}finally{actividadState.cargandoMas=false;renderActividad();}
   }
   function renderActividad(){
     const el=document.getElementById('rbac-actividad');if(!el)return;
@@ -7591,7 +7612,12 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const userRows=[...byUser.values()].sort((a,b)=>b.total-a.total||String(a.label).localeCompare(String(b.label)));
     if(selected!=='all'&&!byUser.has(selected))actividadState.user='all';
     const activeUser=actividadState.user||'all';
-    const filtered=rangeEvents.filter(e=>(activeUser==='all'||actividadUserKey(e)===activeUser)&&(!query||actividadSearchText(e).includes(query)));
+    const modSel=actividadState.modulo||'all',oriSel=actividadState.origen||'all';
+    const origenDe=e=>String(e.origen||e?.detalle?.origen||'web').toLowerCase();
+    const textoExtra=e=>JSON.stringify([e.detalle||'',e.before||'',e.after||'',e.targetId||'']).toLowerCase();
+    const filtered=rangeEvents.filter(e=>(activeUser==='all'||actividadUserKey(e)===activeUser)&&(modSel==='all'||String(e.modulo||'')===modSel)&&(oriSel==='all'||origenDe(e).includes(oriSel))&&(!query||actividadSearchText(e).includes(query)||textoExtra(e).includes(query)));
+    const modulos=[...new Set(eventos.map(e=>String(e.modulo||'')).filter(Boolean))].sort();
+    actividadState._filtrados=filtered;
     const edits=filtered.filter(actividadIsEdit).length,deletes=filtered.filter(actividadIsDelete).length,visibleUsers=new Set(filtered.map(actividadUserKey)).size;
     const rangeLabel=range==='today'?'Hoy':(range==='7'?'Últimos 7 días':(range==='30'?'Últimos 30 días':'Todo el historial cargado'));
     const activeLabel=activeUser==='all'?'Todos los usuarios':(byUser.get(activeUser)?.label||activeUser);
@@ -7600,7 +7626,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const eventCards=filtered.length?filtered.slice(0,200).map(e=>{
       const human=actividadHumanText(e);
       const source=String(e.origen||e?.detalle?.origen||'Sublichat').trim();
-      return `<article class="activity-event ${actividadEventTone(e)}"><div class="activity-event-top"><span class="activity-event-avatar">${esc(actividadInitials(actividadActor(e)))}</span><div class="activity-event-who"><b>${esc(actividadActor(e))}</b><small>${esc(actividadFecha(e.createdAtIso||e.createdAt))}</small></div></div><div class="activity-event-title">${esc(human)}</div><div class="activity-event-meta"><span class="activity-tag source">${esc(source)}</span><span class="activity-tag">${esc(actividadLabel(e.modulo))}</span><span class="activity-tag">${esc(actividadLabel(e.accion))}</span></div>${actividadFactsHtml(e)}</article>`;
+      return `<article class="activity-event ${actividadEventTone(e)}"><div class="activity-event-top"><span class="activity-event-avatar">${esc(actividadInitials(actividadActor(e)))}</span><div class="activity-event-who"><b>${esc(actividadActor(e))}</b><small>${esc(actividadFecha(e.createdAtIso||e.createdAt))}</small></div></div><div class="activity-event-title">${esc(human)}</div>${actividadDiffHtml(e)}<div class="activity-event-meta"><span class="activity-tag source">${esc(source)}</span><span class="activity-tag">${esc(actividadLabel(e.modulo))}</span><span class="activity-tag">${esc(actividadLabel(e.accion))}</span></div>${actividadFactsHtml(e)}</article>`;
     }).join(''):'<div class="activity-empty">No encontré acciones con estos filtros.</div>';
 
     el.innerHTML=`<div class="activity-shell">
@@ -7608,7 +7634,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         <label class="activity-field activity-search"><span>🔎</span><input id="actividadSearch" type="search" autocomplete="off" value="${esc(actividadState.query||'')}" placeholder="Buscar usuario, acción, módulo o detalle…"></label>
         <label class="activity-field"><span>Usuario</span><select id="actividadUserFilter"><option value="all">Todos los usuarios</option>${userOptions}</select></label>
         <label class="activity-field"><span>Período</span><select id="actividadRange"><option value="today" ${range==='today'?'selected':''}>Hoy</option><option value="7" ${range==='7'?'selected':''}>Últimos 7 días</option><option value="30" ${range==='30'?'selected':''}>Últimos 30 días</option><option value="all" ${range==='all'?'selected':''}>Todo</option></select></label>
+        <label class="activity-field"><span>Módulo</span><select id="actividadModulo"><option value="all">Todos</option>${modulos.map(m=>`<option value="${esc(m)}" ${modSel===m?'selected':''}>${esc(m)}</option>`).join('')}</select></label>
+        <label class="activity-field"><span>Origen</span><select id="actividadOrigen">${[['all','Todos'],['web','Web'],['apk','APK'],['tg','Telegram']].map(([v,t])=>`<option value="${v}" ${oriSel===v?'selected':''}>${t}</option>`).join('')}</select></label>
         <button type="button" class="rbac-btn activity-refresh" id="actividadRefresh">↻ Actualizar</button>
+        <button type="button" class="rbac-btn" id="actividadCsv">⬇️ Exportar CSV</button>
       </div>
       <div class="activity-summary">
         <div class="activity-stat"><span class="activity-stat-icon">📋</span><div><b>${filtered.length}</b><span>Acciones filtradas</span></div></div>
@@ -7622,7 +7651,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       </section>
       <section class="activity-panel">
         <div class="activity-panel-head"><div><h3>Historial de acciones</h3><p>${esc(activeLabel)} · ${esc(rangeLabel)}</p></div><div><span class="activity-count">${filtered.length}</span>${(activeUser!=='all'||query)?'<button type="button" class="activity-clear" id="actividadClear"> Limpiar filtros</button>':''}</div></div>
-        <div class="activity-results-note">Mostrando hasta 200 acciones de las ${filtered.length} que coinciden.</div>
+        <div class="activity-results-note">Mostrando hasta 200 acciones de las ${filtered.length} que coinciden.${actividadState.cursor?` <button type="button" class="activity-clear" id="actividadMas">${actividadState.cargandoMas?'Cargando…':'⏬ Cargar historial más antiguo'}</button>`:''}</div>
         <div class="activity-history-grid" style="margin-top:10px">${eventCards}</div>
       </section>
     </div>`;
@@ -7633,6 +7662,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     document.querySelectorAll('[data-actividad-user]').forEach(btn=>btn.onclick=()=>{actividadState.user=btn.dataset.actividadUser||'all';renderActividad();});
     const clr=document.getElementById('actividadClear');if(clr)clr.onclick=()=>{actividadState.user='all';actividadState.query='';renderActividad();};
     const ref=document.getElementById('actividadRefresh');if(ref)ref.onclick=()=>loadActividad(true);
+    const mf=document.getElementById('actividadModulo');if(mf)mf.onchange=()=>{actividadState.modulo=mf.value||'all';renderActividad();};
+    const of=document.getElementById('actividadOrigen');if(of)of.onchange=()=>{actividadState.origen=of.value||'all';renderActividad();};
+    const cv=document.getElementById('actividadCsv');if(cv)cv.onclick=()=>actividadCsv(actividadState._filtrados||[]);
+    const mas=document.getElementById('actividadMas');if(mas)mas.onclick=()=>loadActividadMas();
   }
 
   function renderSoporteConfig(){
