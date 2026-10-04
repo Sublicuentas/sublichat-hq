@@ -1413,7 +1413,7 @@ function finParse(m){
 }
 function renderFinanzas(){
   if(window._finError){ const st=document.getElementById("finStats"); if(st)st.innerHTML=`<div style="color:var(--muted);font-size:12.5px">⚠️ No pude leer finanzas (${window._finError}). Revisá las reglas de Firestore.</div>`; return; }
-  const movs=FINANZAS.map(finParse).filter(m=>m.fecha);
+  const movs=FINANZAS.filter(m=>finKey(m?.tipo||m?.type||m?.movimiento||"")!=="venta").map(finParse).filter(m=>m.fecha);
   const ing=movs.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
   const egr=movs.filter(m=>m.tipo==="egreso").reduce((s,m)=>s+m.monto,0);
   const st=document.getElementById("finStats");
