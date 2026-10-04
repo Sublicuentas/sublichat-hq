@@ -3070,9 +3070,9 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
 // R107: el pago viaja DENTRO de la misma petición de renovar/guardar compra → el servidor guarda fecha/compra y pago juntos.
 function pagoBodyWeb(pago,key,operationId){const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web"};}
 function pagoOpNuevoId(){return (crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`);}
-async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",clienteNombre="",compraId="",plataforma="",fechaAnterior="",fechaNueva="",operationId}){
+async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",clienteNombre="",compraId="",compraIds=[],servicios=[],plataforma="",fechaAnterior="",fechaNueva="",operationId}){
   const f=(pago.filas||{})[key]||{};
-  const body={accion:"registrar_operacion_pago",tipoOrigen,montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,clienteId,clienteNombre,compraId,plataforma,fechaAnterior,fechaNueva,origen:"web",operationId:operationId||pagoOpNuevoId()};
+  const body={accion:"registrar_operacion_pago",tipoOrigen,montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,clienteId,clienteNombre,compraId,compraIds,servicios,plataforma,fechaAnterior,fechaNueva,origen:"web",operationId:operationId||pagoOpNuevoId()};
   let ultimo="";
   for(let i=0;i<2;i++){ // un reintento con el MISMO operationId (no duplica)
     try{const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(j.ok)return j;ultimo=j.error||`HTTP ${r.status}`;if(r.status<500)break;}
@@ -3104,7 +3104,7 @@ async function renovarServicio(dias, fechaExacta){
   const nombres=aRenovar.map(s=>s.plataforma).join(", ");
   let pagoOp=null; // R106: Sublicuentas/Relojes registran el pago real (o ajuste sin pago con motivo)
   if(pagoOpHabilitado()){
-    pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:aRenovar.map((s,i)=>({key:String(i),label:`${s.plataforma} · ${descRenov}`})),permitirAjuste:true});
+    pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:[{key:"renovacion",label:`${nombres} · ${descRenov}`}],permitirAjuste:true});
     if(!pagoOp)return;
   }
   if(!pagoOp&&!confirm(`¿Confirmás renovar ${descRenov}?\n\nCliente: ${g.nombre}\nServicio(s): ${nombres}\n\nEsto cambia la fecha en la base de datos.`)) return;
@@ -3115,26 +3115,30 @@ async function renovarServicio(dias, fechaExacta){
   const errores=[];
   const diag=[];
   const confirmadas=[];
-  const pagoOpIds=aRenovar.map(()=>pagoOpNuevoId()); // un operationId fijo por servicio (reintento = sin duplicar)
+  const pagoOpId=pagoOpNuevoId(); // R110: un solo operationId financiero para toda la renovación múltiple
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...(pagoOp?.modo==="pago"?{pago:pagoBodyWeb(pagoOp,String(aRenovar.indexOf(s)),pagoOpIds[aRenovar.indexOf(s)])}:{}),...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json().catch(()=>({}));
       if(j.ok&&j.verified===true){
         aplicarRenovacionLocal(g,s,j);
         confirmadas.push({servicio:s,resultado:j});
         ok++;
-        if(pagoOp?.modo==="pago"){
-          try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"renovacion",pago:pagoOp,key:String(aRenovar.indexOf(s)),clienteId:g.clienteId||s.clienteId||"",clienteNombre:g.nombre||"",compraId:j.compraId||s.compraId||"",plataforma:s.plataforma||"",fechaAnterior:j.fechaAnterior||"",fechaNueva:j.fechaNueva||"",operationId:pagoOpIds[aRenovar.indexOf(s)]});diag.push(`💵 ${String(rp.estado||"").toUpperCase()}`);}
-          catch(e){errores.push(`${s.plataforma}: renovado pero el pago no se registró (${e.message}). Regístrelo en Finanzas.`);fail++;}
-        }
         diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"}`);
       }else{
         fail++;
         errores.push(`${s.plataforma}: ${j.error||(j.ok?"Firebase no confirmó la fecha":"error sin detalle")}`);
       }
     }catch(e){fail++;errores.push(`${s.plataforma}: ${e.message||"fallo de red"}`);}
+  }
+  // R110: una renovación múltiple genera UN solo ingreso financiero por el total cobrado.
+  if(pagoOp?.modo==="pago"&&ok===aRenovar.length&&fail===0){
+    try{
+      const first=confirmadas[0]||{}, serviciosPago=confirmadas.map(x=>({compraId:x.resultado?.compraId||x.servicio?.compraId||"",plataforma:x.servicio?.plataformaRaw||x.servicio?.plataforma||"",fechaAnterior:x.resultado?.fechaAnterior||x.servicio?.fechaRaw||"",fechaNueva:x.resultado?.fechaNueva||""}));
+      const rp=await registrarPagoOperacionWeb({tipoOrigen:"renovacion",pago:pagoOp,key:"renovacion",clienteId:g.clienteId||first.servicio?.clienteId||"",clienteNombre:g.nombre||"",compraId:serviciosPago[0]?.compraId||"",compraIds:serviciosPago.map(x=>x.compraId).filter(Boolean),servicios:serviciosPago,plataforma:aRenovar.map(x=>x.plataforma||x.plataformaRaw||"").join(" + "),fechaAnterior:serviciosPago[0]?.fechaAnterior||"",fechaNueva:serviciosPago[0]?.fechaNueva||"",operationId:pagoOpId});
+      diag.push(`💵 ${String(rp.estado||"").toUpperCase()} · un solo cobro`);
+    }catch(e){errores.push(`Renovación realizada, pero el cobro conjunto no se registró (${e.message}). Revise Finanzas.`);fail++;}
   }
   // ⚠️ FIX: antes, si al menos 1 servicio se renovaba, el mensaje final SIEMPRE
   // decía "✅ Renovado" sin importar si otro servicio del mismo cliente había
