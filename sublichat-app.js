@@ -4891,6 +4891,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   let fichaServicioIndexActual=null;
   let fichaServicioOriginalActual=null;
   let fichaCompraIdActual="";
+  let fichaPerfilesOriginalesActual=0; // R106: añadir perfil a una compra existente = compra nueva (pide pago)
   let fichaPerfilPrincipalIdActual="";
   let fichaPerfilesExtraActuales=[];
   let fichaForzarNuevoServicioActual=false;
@@ -5822,9 +5823,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(btn){ btn.disabled=true; btn.textContent="Guardando…"; }
     // R106: compra NUEVA = operación financiera completa (total + recibido + banco/responsable) para Sublicuentas/Relojes.
     const esCompraNueva=!fichaCompraIdActual&&(fichaForzarNuevoServicioActual||fichaServicioIndexActual==null);
+    const perfilesNuevos=esCompraNueva?0:Math.max(0,(payload.servicio.perfiles||[]).length-fichaPerfilesOriginalesActual);
     let pagoOp=null;
-    if(esCompraNueva&&pagoOpHabilitado()){
-      pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:payload.servicio.plataforma}]});
+    if((esCompraNueva||perfilesNuevos>0)&&pagoOpHabilitado()){
+      pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:perfilesNuevos>0?`${payload.servicio.plataforma} · ${perfilesNuevos} perfil${perfilesNuevos===1?"":"es"} adicional${perfilesNuevos===1?"":"es"}`:payload.servicio.plataforma}]});
       if(!pagoOp){fichaStatus("Guardado cancelado: falta la información del pago de la compra.","err");return null;}
     }
     fichaStatus("Guardando en CRM/Firebase…","info");
@@ -5849,8 +5851,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         }
         fichaClienteIdActual=j.clienteId||fichaClienteIdActual;
         fichaCompraIdActual=j.compraId||payload.servicio.compraId||fichaCompraIdActual;
+        fichaPerfilesOriginalesActual=(payload.servicio.perfiles||[]).length; // lo ya guardado no vuelve a pedir pago
         if(pagoOp){
-          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:`compra-${String(fichaCompraIdActual||"").replace(/[^A-Za-z0-9-]/g,"-")}`.slice(0,80)});fichaToast(`💵 Pago de la compra: ${rp.estado}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
+          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:`compra-${String(fichaCompraIdActual||"").replace(/[^A-Za-z0-9-]/g,"-")}-p${(payload.servicio.perfiles||[]).length}`.slice(0,80)});fichaToast(`💵 Pago de la compra: ${rp.estado}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
           catch(e){const m=`⚠️ La compra se guardó, pero el pago NO se registró (${e.message}). Regístrelo en Finanzas → Pendientes/Ingresos.`;fichaStatus(m,"err");fichaToast(m);}
         }
         const nombres=listaConfirmada.map(p=>p.nombre).filter(Boolean).join(" + ");
@@ -6034,6 +6037,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const perfiles=fichaPerfilesDesdeServicio(s,g||{});
     const principal=perfiles[0]||{};
     fichaCompraIdActual=String(s.compraId||"");
+    fichaPerfilesOriginalesActual=perfiles.length;
     fichaPerfilPrincipalIdActual=String(principal.perfilId||fichaNuevoId("perfil"));
     fichaPerfilesExtraActuales=perfiles.slice(1).map(p=>({...p}));
     const fechaISO=(s.fechaRaw?fbAISO(s.fechaRaw):"") || (s.fecha?s.fecha.toISOString().slice(0,10):"");
