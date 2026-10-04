@@ -3005,7 +3005,16 @@ async function pagoOpMetodos(){
 }
 function pagoOpEsc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function pagoOpEstado(total,recibido){const t=Math.round(Number(total||0)*100)/100,r=Math.round(Number(recibido||0)*100)/100,s=Math.max(0,Math.round((t-r)*100)/100);return {total:t,recibido:r,saldo:s,estado:s<=0?"PAGADO":(r>0?"PARCIAL":"PENDIENTE")};}
-// rows: [{key,label}] · devuelve {modo:'pago'|'ajuste', filas:{key:{total,recibido}}, bancoId, banco, responsable, vendedor, motivo} o null
+function pagoOpFilaEstado(f={}){
+  const modo=f.estadoCobro==="pendiente"?"pendiente":"pagado";if(f.estadoCobro==="parcial")f.tienePendiente=true;let recibido=0,saldo=0;
+  if(modo==="pendiente")saldo=Number(f.pendiente||0);
+  else{recibido=Number(f.pagado??f.recibidoParcial??0);saldo=f.tienePendiente?Number(f.pendiente||0):0;}
+  const total=Math.max(0,Math.round((recibido+saldo)*100)/100);
+  recibido=Math.max(0,Math.round(recibido*100)/100);saldo=Math.max(0,Math.round(saldo*100)/100);
+  f.total=total;f.recibido=recibido;
+  return {modo,total,recibido,saldo,estado:saldo<=0?"PAGADO":(recibido>0?"PARCIAL":"PENDIENTE")};
+}
+// R108 · UX simple: Pagó / Pendiente. Si Pagó, puede añadir saldo pendiente. El backend conserva montoTotal + recibido.
 async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitirAjuste=false}={}){
   let metodos=[];
   try{metodos=await pagoOpMetodos();}catch(e){alert("⚠️ "+(e.message||"Sin métodos de pago"));return null;}
@@ -3019,39 +3028,39 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
     const cerrar=(v)=>{back.remove();resolve(v);};
     const inp="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px";
     const btn=(on)=>`border:1px solid ${on?"#e2231a":"#dbe3ee"};background:${on?"#e2231a":"#fff"};color:${on?"#fff":"#0f2d52"};border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer`;
-    const resumen=()=>{let T=0,Rc=0;for(const r of rows){const f=st.filas[r.key]||{};T+=Number(f.total||0);Rc+=Number(f.recibido||0);}return pagoOpEstado(T,Rc);};
+    const fila=(key)=>{const f=(st.filas[key]=st.filas[key]||{});if(!f.estadoCobro)f.estadoCobro="pagado";return f;};
+    const totales=()=>{let total=0,recibido=0,saldo=0;for(const r of rows){const e=pagoOpFilaEstado(fila(r.key));total+=e.total;recibido+=e.recibido;saldo+=e.saldo;}return {total,recibido,saldo};};
+    const fieldHtml=(r)=>{const f=fila(r.key),e=pagoOpFilaEstado(f);const chip=(mode,label)=>`<button data-estado="${mode}" data-key="${pagoOpEsc(r.key)}" style="${btn(e.modo===mode)}">${label}</button>`;let campos="";
+      if(e.modo==="pendiente")campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`;
+      else campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pagado<input data-pagado="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pagado??f.recibidoParcial??"")}"></label><button data-toggle-pendiente="${pagoOpEsc(r.key)}" style="${btn(Boolean(f.tienePendiente))};margin-top:8px">${f.tienePendiente?"✓ Quedó saldo pendiente":"＋ Agregar saldo pendiente"}</button>${f.tienePendiente?`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Saldo pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`:""}`;
+      const estado=e.modo==="pendiente"?(e.saldo>0?`🕒 Pendiente Lps. ${e.saldo}`:"Escriba cuánto queda pendiente"):(e.recibido>0?(e.saldo>0?`◐ Pagó Lps. ${e.recibido} · pendiente Lps. ${e.saldo}`:`✅ Pagado Lps. ${e.recibido}`):"Escriba cuánto pagó");
+      return `<div style="border:1px solid #e5eaf2;border-radius:12px;padding:10px;margin-top:10px"><b style="font-size:13.5px">${pagoOpEsc(r.label)}</b><p style="font-size:12.5px;font-weight:700;margin:8px 0 5px">Estado del cobro</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${chip("pagado","✅ Pagó")}${chip("pendiente","🕒 Pendiente")}</div>${campos}<small data-fila-estado="${pagoOpEsc(r.key)}" style="display:block;color:#64748b;margin-top:7px">${estado}</small></div>`;
+    };
     function pintar(){
-      const e=resumen();const ajuste=st.modo==="ajuste";
+      const suma=totales(),ajuste=st.modo==="ajuste";
       box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">${tipo==="compra"?"💵 Pago de la compra":"💵 Renovar"} · ${pagoOpEsc(cliente)}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
       ${permitirAjuste?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0"><button data-modo="pago" style="${btn(!ajuste)}">💵 Con pago</button><button data-modo="ajuste" style="${btn(ajuste)}">🛠 Ajuste sin pago</button></div>`:""}
       ${ajuste?`<label style="display:block;font-size:13px;font-weight:700;margin-top:8px">Motivo (garantía, cortesía, corrección…)<input data-motivo style="${inp}" value="${pagoOpEsc(st.motivo)}" maxlength="200"></label><p style="color:#64748b;font-size:12.5px">Mueve la fecha sin registrar ingreso. Queda auditado.</p>`:`
-      ${rows.map(r=>`<div style="border:1px solid #e5eaf2;border-radius:12px;padding:10px;margin-top:10px"><b style="font-size:13.5px">${pagoOpEsc(r.label)}</b>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label style="font-size:12.5px;font-weight:700">Monto total<input data-total="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(st.filas[r.key]?.total||"")}"></label>
-        <label style="font-size:12.5px;font-weight:700">Recibido ahora<input data-recibido="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="0 si no pagó" style="${inp}" value="${pagoOpEsc(st.filas[r.key]?.recibido??"")}"></label></div></div>`).join("")}
-      <p data-estado style="margin:10px 0 0;font-weight:800;font-size:14px">${e.total>0?`Saldo pendiente: Lps. ${e.saldo} · Estado: ${e.estado}`:"Escriba el monto total y lo recibido."}</p>
-      <div data-banco-box ${e.recibido>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Dónde entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px">${metodos.map(m=>`<button data-banco="${pagoOpEsc(m.id)}" style="${btn(st.bancoId===m.id)}">${pagoOpEsc(m.nombre)}</button>`).join("")}</div></div>
-      <div data-resp-box ${e.saldo>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:12px 0 6px">¿Quién debe el pendiente? <span style="font-weight:400;color:#64748b">(no suma a bancos hasta cobrarse)</span></p>
-        <div style="display:flex;gap:6px"><button data-resp="cliente" style="${btn(st.responsable==="cliente")}">👤 El cliente</button><button data-resp="vendedor" style="${btn(st.responsable==="vendedor")}">🧑‍💼 Un vendedor</button></div>
-        ${st.responsable==="vendedor"?`<input data-vendedor placeholder="Nombre del vendedor" style="${inp}" value="${pagoOpEsc(st.vendedor)}">`:""}</div>`}
-      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":(tipo==="compra"?"Confirmar compra":"Confirmar pago y renovar")}</button>`;
+      ${rows.map(fieldHtml).join("")}
+      <div data-banco-box ${suma.recibido>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Dónde entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px">${metodos.map(m=>`<button data-banco="${pagoOpEsc(m.id)}" style="${btn(st.bancoId===m.id)}">${pagoOpEsc(m.nombre)}</button>`).join("")}</div></div>
+      <div data-resp-box ${suma.saldo>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:12px 0 6px">¿Quién debe el pendiente? <span style="font-weight:400;color:#64748b">(no suma a bancos hasta cobrarse)</span></p><div style="display:flex;gap:6px"><button data-resp="cliente" style="${btn(st.responsable==="cliente")}">👤 El cliente</button><button data-resp="vendedor" style="${btn(st.responsable==="vendedor")}">🧑‍💼 Un vendedor</button></div>${st.responsable==="vendedor"?`<input data-vendedor placeholder="Nombre del vendedor" style="${inp}" value="${pagoOpEsc(st.vendedor)}">`:""}</div>`}
+      <p data-error hidden style="margin:10px 0 0;color:#b91c1c;font-weight:800;font-size:13px"></p>
+      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":(tipo==="compra"?"Confirmar compra":"Confirmar y renovar")}</button>`;
+      const error=(msg)=>{const e=box.querySelector("[data-error]");if(e){e.textContent=msg;e.hidden=false;e.scrollIntoView?.({block:"nearest",behavior:"smooth"});}};
       box.querySelector("[data-x]").onclick=()=>cerrar(null);
       box.querySelectorAll("[data-modo]").forEach(b=>b.onclick=()=>{st.modo=b.dataset.modo;pintar();});
       box.querySelector("[data-motivo]")?.addEventListener("input",ev=>{st.motivo=ev.target.value;});
-      const refrescar=()=>{const e2=resumen();const p=box.querySelector("[data-estado]");if(p)p.textContent=e2.total>0?`Saldo pendiente: Lps. ${e2.saldo} · Estado: ${e2.estado}`:"Escriba el monto total y lo recibido.";const bb=box.querySelector("[data-banco-box]");if(bb)bb.hidden=!(e2.recibido>0);const rb=box.querySelector("[data-resp-box]");if(rb)rb.hidden=!(e2.saldo>0);};
-      box.querySelectorAll("[data-total]").forEach(i=>i.addEventListener("input",()=>{(st.filas[i.dataset.total]=st.filas[i.dataset.total]||{}).total=i.value;refrescar();}));
-      box.querySelectorAll("[data-recibido]").forEach(i=>i.addEventListener("input",()=>{(st.filas[i.dataset.recibido]=st.filas[i.dataset.recibido]||{}).recibido=i.value;refrescar();}));
+      box.querySelectorAll("[data-estado]").forEach(b=>b.onclick=()=>{const f=fila(b.dataset.key);f.estadoCobro=b.dataset.estado;if(f.estadoCobro==="pendiente")f.tienePendiente=false;pintar();});
+      box.querySelectorAll("[data-toggle-pendiente]").forEach(b=>b.onclick=()=>{const f=fila(b.dataset.togglePendiente);f.tienePendiente=!f.tienePendiente;pintar();});
+      box.querySelectorAll("[data-pagado]").forEach(i=>i.addEventListener("input",()=>{fila(i.dataset.pagado).pagado=i.value;pagoOpFilaEstado(fila(i.dataset.pagado));}));
+      box.querySelectorAll("[data-pendiente]").forEach(i=>i.addEventListener("input",()=>{fila(i.dataset.pendiente).pendiente=i.value;pagoOpFilaEstado(fila(i.dataset.pendiente));}));
       box.querySelectorAll("[data-banco]").forEach(b=>b.onclick=()=>{st.bancoId=b.dataset.banco;pintar();});
       box.querySelectorAll("[data-resp]").forEach(b=>b.onclick=()=>{st.responsable=b.dataset.resp;pintar();});
       box.querySelector("[data-vendedor]")?.addEventListener("input",ev=>{st.vendedor=ev.target.value;});
       box.querySelector("[data-ok]").onclick=()=>{
-        if(st.modo==="ajuste"){if(String(st.motivo).trim().length<4)return alert("Escriba el motivo del ajuste.");return cerrar({modo:"ajuste",motivo:String(st.motivo).trim()});}
-        for(const r of rows){const f=st.filas[r.key]||{};const e1=pagoOpEstado(f.total,f.recibido);
-          if(!(e1.total>0))return alert(`Escriba el monto total (${r.label}).`);
-          if(f.recibido===undefined||f.recibido==="")return alert(`Escriba lo recibido ahora (${r.label}); 0 si no pagó.`);
-          if(e1.recibido<0||e1.recibido>e1.total)return alert(`Lo recibido no puede ser mayor que el total (${r.label}).`);}
-        const e3=resumen();
-        if(e3.recibido>0&&!st.bancoId)return alert("Elija dónde entró el dinero.");
-        if(e3.saldo>0&&st.responsable==="vendedor"&&String(st.vendedor).trim().length<2)return alert("Escriba el vendedor responsable.");
+        if(st.modo==="ajuste"){if(String(st.motivo).trim().length<4)return error("Escriba el motivo del ajuste.");return cerrar({modo:"ajuste",motivo:String(st.motivo).trim()});}
+        for(const r of rows){const e=pagoOpFilaEstado(fila(r.key));if(e.modo==="pagado"&&!(e.recibido>0))return error(`Escriba cuánto pagó (${r.label}).`);if(e.modo==="pagado"&&fila(r.key).tienePendiente&&!(e.saldo>0))return error(`Escriba el saldo pendiente (${r.label}).`);if(e.modo==="pendiente"&&!(e.saldo>0))return error(`Escriba cuánto queda pendiente (${r.label}).`);}
+        const e3=totales();if(e3.recibido>0&&!st.bancoId)return error("Elija dónde entró el dinero.");if(e3.saldo>0&&st.responsable==="vendedor"&&String(st.vendedor).trim().length<2)return error("Escriba el vendedor responsable.");
         cerrar({modo:"pago",filas:st.filas,bancoId:st.bancoId,banco:(metodos.find(m=>m.id===st.bancoId)||{}).nombre||"",responsable:st.responsable,vendedor:String(st.vendedor).trim()});
       };
     }
