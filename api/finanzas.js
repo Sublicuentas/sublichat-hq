@@ -43,14 +43,30 @@ async function requireFirebaseUser(req, res) {
   }
 }
 
+function canonicalInternalUser(raw = "") {
+  const k = String(raw || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "").trim();
+  if (["naara", "sublicuentas", "sublicuentas2"].includes(k)) return "sublicuentas";
+  if (["libni", "daniela", "relojes", "finanzas"].includes(k)) return "relojes";
+  return k;
+}
+function financeActorLabel(m = {}) {
+  const origen = String(m.origenCanal || m.origen || "").toLowerCase();
+  if (["socios", "socio", "revendedor", "revendedores"].includes(origen)) return cleanText(m.socioNombre || m.revendedorNombre || m.registradoPorNombre || m.registradoPor || m.cobradoPor || "Socio");
+  const raw = cleanText(m.cobradoPor || m.registradoPor || m.userName || m.usuario || "");
+  const k = canonicalInternalUser(raw);
+  if (k === "sublicuentas") return "Sublicuentas";
+  if (k === "relojes") return "Relojes";
+  return raw;
+}
 function authIdentity(user) {
   const role = String(user && user.role || "").toLowerCase();
-  const usuario = String(user && (user.usuario || user.uid) || "sublichat").toLowerCase();
-  const adminUser = ["admin", "administrador", "sublicuentas", "owner"].includes(role) ||
-    ["naara", "sublicuentas"].includes(usuario);
+  const usuarioRaw = String(user && (user.usuario || user.uid) || "sublichat").toLowerCase();
+  const usuarioKey = canonicalInternalUser(usuarioRaw);
+  const adminUser = ["admin", "administrador", "sublicuentas", "owner"].includes(role) || usuarioKey === "sublicuentas";
   const canonicalRole = adminUser ? "sublicuentas" :
-    (["finanzas", "relojes"].includes(role) || ["libni", "relojes"].includes(usuario) ? "relojes" :
-      (["auditor", "auditoria", "magdiel"].includes(role) || usuario === "magdiel" ? "magdiel" : role || "usuario"));
+    (["finanzas", "relojes"].includes(role) || usuarioKey === "relojes" ? "relojes" :
+      (["auditor", "auditoria", "magdiel"].includes(role) || usuarioKey === "magdiel" ? "magdiel" : role || "usuario"));
+  const usuario = canonicalRole === "sublicuentas" ? "sublicuentas" : canonicalRole === "relojes" ? "relojes" : usuarioKey;
   return { usuario, role: canonicalRole, admin: adminUser };
 }
 
@@ -189,7 +205,7 @@ function movimientoView(m, methods) {
     bancoId, banco: (methods.find((x) => x.id === bancoId) || {}).nombre || (bancoId === SIN_BANCO ? "Sin banco" : bancoId),
     detalle: m.motivo || m.descripcion || m.detalle || m.concepto || "", cliente: m.clienteNombre || "", plataforma: m.plataforma || "",
     beneficiario: m.beneficiario || "", planillaPagoId: m.planillaPagoId || "", origen: m.origenCanal || m.origen || "",
-    usuario: m.cobradoPor || m.registradoPor || m.userName || "", operationId: m.operationId || "",
+    usuario: financeActorLabel(m), operationId: m.operationId || "",
   };
 }
 
@@ -479,6 +495,29 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
     return reply(r);
   }
 
+  // ---- ajustar SOLO la fecha real del dinero (sin reversa): no cambia monto/banco, solo el día financiero.
+  // Nunca se deriva de la fecha de corte/renovación del cliente.
+  if (accion === "ajustar_fecha_movimiento") {
+    const id = cleanText(body.movimientoId), fechaPago = cleanText(body.fechaPago || body.fecha);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPago)) return res.status(200).json({ ok: false, error: "Fecha inválida. Use yyyy-mm-dd." });
+    if (fechaPago > hoy) return res.status(200).json({ ok: false, error: "La fecha del pago no puede ser futura." });
+    const motivo = cleanText(body.motivo || "Ajuste manual de fecha de pago").slice(0, 200);
+    const ref = fmov(id || "x");
+    const r = await run(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw userErr("Ese movimiento no existe.");
+      const m = snap.data() || {};
+      const kind = movementKind(m);
+      if (!["ingreso", "egreso", "ajuste"].includes(kind) || m.reversaDe || m.estadoFinanciero || m.planillaPagoId) throw userErr("Ese movimiento no admite ajuste individual de fecha.");
+      const antes = movementYmd(m) || "";
+      if (antes === fechaPago) return { sinCambios: true, movimientoId: ref.id, fechaPago };
+      tx.set(ref, { ...canonicalFinanceDate(fechaPago, hoy), fechaPagoAjustadaManualmente: true, fechaAjustadaDe: antes, fechaAjustadaPor: identity.usuario, fechaAjustadaAt: isoNow(), updatedAt: isoNow() }, { merge: true });
+      auditar(tx, db, identity, { origen: body.origen, accion: "ajustar_fecha_pago", targetType: "movimiento", targetId: ref.id, movimientoId: ref.id, clienteId: m.clienteId || "", compraId: m.compraId || "", motivo, monto: money(m.monto), before: { fechaPago: antes }, after: { fechaPago }, detalle: `${antes || "sin fecha"} → ${fechaPago} · ${m.clienteNombre || m.motivo || m.plataforma || m.tipo || "Movimiento"}` });
+      return { sinCambios: false, movimientoId: ref.id, fechaAnterior: antes, fechaPago };
+    });
+    return reply(r);
+  }
+
   // ---- anular / corregir con reversa (nunca se borra nada confirmado)
   if (!ACCIONES_CORRECCION.includes(accion)) return null;
   const motivo = cleanText(body.motivo).slice(0, 200);
@@ -604,7 +643,7 @@ export default async function handler(req, res) {
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
     }
-    if (["registrar_operacion_pago", "listar_pendientes", "registrar_abono", "registrar_transferencia", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
+    if (["registrar_operacion_pago", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
