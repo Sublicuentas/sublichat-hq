@@ -752,9 +752,7 @@ tbody td{border-color:var(--line)!important;color:var(--txt)!important}
     radial-gradient(540px 380px at 50% 76%,rgba(226,35,26,.18),transparent 68%),
     linear-gradient(145deg,#fff8d9 0%,#f9fcff 42%,#e7f8ff 72%,#fff0f2 100%)}
   .intro-stage::before{content:"";position:absolute;inset:-35%;background:
-    linear-gradient(115deg,transparent 0 42%,rgba(255,255,255,.72) 48%,transparent 56%),
-    repeating-linear-gradient(90deg,rgba(15,45,78,.045) 0 1px,transparent 1px 82px),
-    repeating-linear-gradient(0deg,rgba(15,45,78,.035) 0 1px,transparent 1px 74px);
+    linear-gradient(115deg,transparent 0 42%,rgba(255,255,255,.72) 48%,transparent 56%); /* R106: sin la cuadrícula repeating-linear-gradient que dejaba líneas debajo del robot */
     transform:perspective(800px) rotateX(62deg) translateY(18%);animation:introGrid 4.2s ease-in-out forwards;opacity:.58}
   @keyframes introGrid{0%{transform:perspective(800px) rotateX(66deg) translateY(34%) scale(1.15);opacity:0}20%{opacity:.58}100%{transform:perspective(800px) rotateX(62deg) translateY(5%) scale(1);opacity:.38}}
   .intro-poster{display:none!important}
