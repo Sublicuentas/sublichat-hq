@@ -11,3 +11,7 @@ test('R106 web: renovación y compra nueva piden el pago real (solo Sublicuentas
   assert.match(app, /ajusteAdministrativo:true,motivoAjuste:pagoOp\.motivo/);
   assert.doesNotMatch(app.slice(app.indexOf('async function pedirPagoOperacion'), app.indexOf('function pagoOpNuevoId')), /c\.precio|precioCatalogo/, 'nunca precarga el precio');
 });
+test('R106 web: añadir perfil a compra existente pide pago', () => {
+  assert.match(app, /const perfilesNuevos=esCompraNueva\?0:Math\.max\(0,\(payload\.servicio\.perfiles\|\|\[\]\)\.length-fichaPerfilesOriginalesActual\)/);
+  assert.match(app, /if\(\(esCompraNueva\|\|perfilesNuevos>0\)&&pagoOpHabilitado\(\)\)/);
+});
