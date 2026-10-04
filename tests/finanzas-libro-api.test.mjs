@@ -146,3 +146,73 @@ test("saldo inicial con fecha pasada: el ciclo y el banco cuentan desde ese día
   assert.equal(s.totales.ingresos, 300);
   assert.equal(s.bancos.find((b) => b.id === "ficohsa").saldo, 1300);
 });
+
+test("R106 centro financiero: compra/renovación parcial y pendiente, abonos, transferencia, anular y corregir con reversa", async () => {
+  for (const k of [...db.store.keys()]) if (/^(finanzas_|planilla_|cuentas_por_cobrar|auditoria_)/.test(k)) db.store.delete(k);
+  const res = async () => call({ accion: "finanzas_resumen" });
+  const hoy = (await res()).hoy;
+  for (const [bancoId, monto] of [["bac-credomatic", 4000], ["ficohsa", 1000], ["banco-atlantida", 600], ["tigo-money", 400]]) await call({ accion: "registrar_saldo_inicial", bancoId, monto, desde: hoy });
+  const banco = async (id) => (await res()).bancos.find((b) => b.id === id).saldo;
+
+  // Compra nueva Ana: total 300, recibe 100 en Ficohsa → ingreso 100, cartera cliente 200, ventas 300
+  const ana = await call({ accion: "registrar_operacion_pago", tipoOrigen: "compra", montoTotal: 300, recibido: 100, bancoId: "ficohsa", clienteId: "ana", clienteNombre: "Ana", plataforma: "Disney", compraId: "k-ana", operationId: "op-ana-compra" });
+  assert.equal(ana.ok, true, ana.error); assert.equal(ana.estado, "parcial"); assert.equal(ana.saldo, 200);
+  assert.equal((await call({ accion: "registrar_operacion_pago", tipoOrigen: "compra", montoTotal: 300, recibido: 100, bancoId: "ficohsa", operationId: "op-ana-compra" })).duplicado, true);
+  // Renovación Juan totalmente pendiente: bancos sin cambio, cartera +220
+  const juan = await call({ accion: "registrar_operacion_pago", tipoOrigen: "renovacion", montoTotal: 220, recibido: 0, clienteId: "juan", clienteNombre: "Juan", plataforma: "Netflix", operationId: "op-juan-ren" });
+  assert.equal(juan.estado, "pendiente");
+  // Vendedor retiene 500
+  const ven = await call({ accion: "registrar_operacion_pago", tipoOrigen: "renovacion", montoTotal: 500, recibido: 0, responsable: "vendedor", vendedorNombre: "Heber", clienteNombre: "Carlos", operationId: "op-heber" });
+  assert.equal(ven.ok, true, ven.error);
+  let r = await res();
+  assert.equal(r.totales.ventasGeneradas, 1020); assert.equal(r.totales.ingresos, 100);
+  assert.equal(r.cartera.pendienteClientes, 420); assert.equal(r.cartera.pendienteVendedores, 500);
+  assert.equal(await banco("ficohsa"), 1100); assert.equal(await banco("bac-credomatic"), 4000);
+  assert.equal(r.totalBancos, 6100, "los pendientes NO suman a bancos");
+
+  // Abono Ana 120 en BAC → BAC +120, cartera Ana 80; repetir no duplica; abono mayor al saldo se rechaza
+  const ab = await call({ accion: "registrar_abono", cuentaId: ana.cuentaId, monto: 120, bancoId: "bac-credomatic", operationId: "op-abono-ana" });
+  assert.equal(ab.ok, true, ab.error); assert.equal(ab.saldoPendiente, 80);
+  assert.equal((await call({ accion: "registrar_abono", cuentaId: ana.cuentaId, monto: 120, bancoId: "bac-credomatic", operationId: "op-abono-ana" })).duplicado, true);
+  assert.match((await call({ accion: "registrar_abono", cuentaId: ana.cuentaId, monto: 500, bancoId: "bac-credomatic", operationId: "op-abono-mucho" })).error, /mayor que el saldo/);
+  assert.equal(await banco("bac-credomatic"), 4120);
+  // Corregir el banco del abono (BAC → Tigo): BAC vuelve, Tigo +120, cartera intacta en 80
+  const corrAb = await call({ accion: "corregir_movimiento", movimientoId: ab.movimientoId, bancoId: "tigo-money", motivo: "banco equivocado", operationId: "op-corr-abono" });
+  assert.equal(corrAb.ok, true, corrAb.error);
+  assert.equal(await banco("bac-credomatic"), 4000); assert.equal(await banco("tigo-money"), 520);
+  let pend = await call({ accion: "listar_pendientes", deudorTipo: "cliente" });
+  assert.equal(pend.cuentas.find((c) => c.id === ana.cuentaId).saldoPendiente, 80);
+
+  // Transferencia BAC → Ficohsa 1000: total igual
+  const antes = (await res()).totalBancos;
+  assert.equal((await call({ accion: "registrar_transferencia", origenId: "bac-credomatic", destinoId: "ficohsa", monto: 1000, operationId: "op-transf-1" })).ok, true);
+  r = await res(); assert.equal(r.totalBancos, antes); assert.equal(await banco("bac-credomatic"), 3000); assert.equal(r.totales.ingresos, 220);
+
+  // Planilla Naara 200 desde BAC → corregir a Ficohsa (motivo obligatorio); BAC restaurado, Ficohsa −200
+  const pago = await call({ accion: "confirmar_pago_planilla", beneficiario: "Naara", concepto: "pago_planilla", montoTotal: 200, asignaciones: [{ bancoId: "bac-credomatic", monto: 200 }], operationId: "op-naara" });
+  assert.equal(pago.ok, true, pago.error);
+  const fic0 = await banco("ficohsa");
+  assert.match((await call({ accion: "corregir_pago_planilla", planillaPagoId: pago.pago.id, asignaciones: [{ bancoId: "ficohsa", monto: 200 }], operationId: "op-corr-naara" })).error, /motivo/);
+  const corr = await call({ accion: "corregir_pago_planilla", planillaPagoId: pago.pago.id, asignaciones: [{ bancoId: "ficohsa", monto: 200 }], motivo: "banco equivocado", operationId: "op-corr-naara" });
+  assert.equal(corr.ok, true, corr.error);
+  assert.equal((await call({ accion: "corregir_pago_planilla", planillaPagoId: pago.pago.id, asignaciones: [{ bancoId: "ficohsa", monto: 200 }], motivo: "banco equivocado", operationId: "op-corr-naara" })).duplicado, true);
+  assert.equal(await banco("bac-credomatic"), 3000); assert.equal(await banco("ficohsa"), fic0 - 200);
+  r = await res(); assert.equal(r.totales.planilla, 200, "el pago sigue siendo 200, sin duplicar");
+  // Corregir monto 200 → 180 y luego anular: todo vuelve exacto
+  const c2 = await call({ accion: "corregir_pago_planilla", planillaPagoId: corr.sustitutoId, montoTotal: 180, asignaciones: [{ bancoId: "ficohsa", monto: 180 }], motivo: "monto real 180", operationId: "op-corr-naara-2" });
+  assert.equal(c2.ok, true, c2.error); assert.equal((await res()).totales.planilla, 180); assert.equal(await banco("ficohsa"), fic0 - 180);
+  const an = await call({ accion: "anular_pago_planilla", planillaPagoId: c2.sustitutoId, motivo: "pago duplicado", operationId: "op-anular-naara" });
+  assert.equal(an.ok, true, an.error); assert.equal((await res()).totales.planilla, 0); assert.equal(await banco("ficohsa"), fic0);
+  assert.equal(db.store.get(`planilla_pagos/${pago.pago.id}`).estado, "corregido", "el original queda visible, no se borra");
+
+  // Anular el abono (ya corregido → anular el sustituto): cartera de Ana vuelve a 200
+  const sus = [...db.store.keys()].find((k) => k.startsWith(`finanzas_movimientos/${ab.movimientoId}_c`)).split("/")[1];
+  assert.equal((await call({ accion: "anular_movimiento", movimientoId: sus, motivo: "no pagó realmente", operationId: "op-anular-abono" })).ok, true);
+  pend = await call({ accion: "listar_pendientes" });
+  assert.equal(pend.cuentas.find((c) => c.id === ana.cuentaId).saldoPendiente, 200);
+  assert.equal(await banco("tigo-money"), 400);
+  // Auditoría: cada operación deja evento con antes/después
+  const ev = [...db.store.entries()].filter(([k]) => k.startsWith("auditoria_eventos/")).map(([, v]) => v);
+  for (const a of ["compra_pago", "renovacion_pago", "abono", "corregir_movimiento", "transferencia", "corregir_pago_planilla", "anular_pago_planilla", "anular_movimiento"]) assert.ok(ev.some((e) => e.accion === a), a);
+  assert.ok(ev.find((e) => e.accion === "corregir_pago_planilla").before.asignaciones.length);
+});
