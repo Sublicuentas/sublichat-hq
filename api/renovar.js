@@ -9,6 +9,7 @@
 import admin from "firebase-admin";
 import { randomBytes } from "node:crypto";
 import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
+import { prepararPago, leerPago, escribirPago } from "./_finanzas-operacion.js"; // R107: pago en la misma transacción
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -1340,8 +1341,11 @@ async function handlerCore(req, res) {
       // Telegram y Sublichat pueden guardar con pocos milisegundos de diferencia.
       // Por eso toda la lectura, modificación puntual y escritura de servicios[]
       // ocurre dentro de UNA transacción sobre la versión más reciente de Firebase.
+      // R107: si viene el pago de la compra (Sublicuentas/Relojes), se valida aquí y se guarda DENTRO de la transacción.
+      const prepPagoFicha = await prepararPago(db, body.pago, authUser, "compra");
       const fichaResultado = await db.runTransaction(async transaction => {
         const latest = await transaction.get(docRef);
+        const lecturaPagoFicha = await leerPago(transaction, db, prepPagoFicha);
         if (doc && !latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
         const data = latest.exists ? (latest.data() || {}) : {};
         const created = !latest.exists;
@@ -1448,10 +1452,11 @@ async function handlerCore(req, res) {
         };
         if (created) update.createdAt = isoNow();
         transaction.set(docRef, update, { merge: true });
+        const pagoOperacion = escribirPago(transaction, db, prepPagoFicha, lecturaPagoFicha, { clienteId: docRef.id, clienteNombre: nombreFinal || nombrePerfil || "", compraId: serviciosLimpios[idx]?.compraId || "", plataforma: serviciosLimpios[idx]?.plataforma || servicio.plataforma || "" });
         return {
           created, idx, nombreFinal, serviciosLimpios, accesos,
           servicioActualizado, servicioAnterior, compraIdReconciliado,
-          servicioGuardado: serviciosLimpios[idx], beneficiarioActual, tokenPublico
+          servicioGuardado: serviciosLimpios[idx], beneficiarioActual, tokenPublico, pagoOperacion
         };
       });
 
@@ -1570,6 +1575,7 @@ async function handlerCore(req, res) {
         ok: true,
         accion: acc,
         guardadoEnFirebase: true,
+        ...(fichaResultado.pagoOperacion ? { pagoOperacion: fichaResultado.pagoOperacion } : {}),
         schemaVersion: Number(servicioGuardado?.schemaVersion) || 2,
         compraId: String(servicioGuardado?.compraId || servicio.compraId || ""),
         created,
@@ -1653,8 +1659,10 @@ async function handlerCore(req, res) {
 
     const docRef = elegido.ref;
     const noRenovoAuditRef = acc === "no_renovo" ? db.collection("auditoria_eventos").doc() : null;
+    const prepPagoRenov = acc === "renovar" ? await prepararPago(db, body.pago, authUser, "renovacion") : null; // R107
     const mutation = await db.runTransaction(async transaction => {
       const latest = await transaction.get(docRef);
+      const lecturaPagoRenov = await leerPago(transaction, db, prepPagoRenov);
       if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
       const data = latest.data() || {};
       let servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
@@ -1881,7 +1889,9 @@ async function handlerCore(req, res) {
         accesosBeneficiarios: accesos.registro,
         updatedAt: isoNow()
       }, { merge: true });
+      const pagoOperacion = acc === "renovar" ? escribirPago(transaction, db, prepPagoRenov, lecturaPagoRenov, { clienteId: docRef.id, clienteNombre: String(data.nombrePerfil || data.nombre || nombreTitular || ""), compraId: touchedCompraId || "", plataforma: String(serviciosLimpios[touchedIndex]?.plataforma || ""), fechaAnterior: fechaAnterior || "", fechaNueva: fechaNueva || "" }) : null;
       return {
+        pagoOperacion,
         serviciosLimpios, accesos, nombreTitular, inventarioPlan, perfilEliminado,
         fechaAnterior, fechaNueva, touchedIndex, touchedCompraId, eliminarClienteCompleto, claveCompartidaPlan,
         clienteMeta: {
@@ -2018,6 +2028,7 @@ async function handlerCore(req, res) {
       ok: true,
       verified,
       accion: acc,
+      ...(mutation.pagoOperacion ? { pagoOperacion: mutation.pagoOperacion } : {}),
       totalServicios: persistedServices.length,
       inventario: invResult,
       clienteId: docRef.id,
