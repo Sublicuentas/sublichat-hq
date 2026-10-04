@@ -2984,6 +2984,92 @@ function aplicarRenovacionLocal(g,s,resultado){
   }else g.fecha=fecha;
 }
 
+/* ===================== R106 · CENTRO FINANCIERO EN LA WEB (solo Sublicuentas y Relojes) =====================
+   Compra nueva y renovación piden el pago REAL: monto total + recibido ahora (nunca precargados), banco donde
+   entró y, si queda saldo, quién lo debe (cliente o vendedor). El backend (/api/finanzas · registrar_operacion_pago)
+   valida y contabiliza: venta + ingreso real + cuenta por cobrar. Misma lógica que la APK y el bot. */
+function pagoOpUsuario(){
+  for(const k of ["sublichat_user","subli_usuario","usuario","subli_user","active_user"]){
+    try{const v=localStorage.getItem(k);if(v&&String(v).trim())return String(v).trim().toLowerCase();}catch(_){}
+  }
+  return "";
+}
+function pagoOpHabilitado(){return ["sublicuentas","naara","relojes","libni"].includes(pagoOpUsuario());}
+let pagoOpMetodosCache=null;
+async function pagoOpMetodos(){
+  if(pagoOpMetodosCache)return pagoOpMetodosCache;
+  const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"finanzas_metodos"})});
+  const j=await r.json().catch(()=>({}));
+  if(!j.ok)throw new Error(j.error||"No se pudieron leer los métodos de pago.");
+  pagoOpMetodosCache=j.metodos||[];return pagoOpMetodosCache;
+}
+function pagoOpEsc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function pagoOpEstado(total,recibido){const t=Math.round(Number(total||0)*100)/100,r=Math.round(Number(recibido||0)*100)/100,s=Math.max(0,Math.round((t-r)*100)/100);return {total:t,recibido:r,saldo:s,estado:s<=0?"PAGADO":(r>0?"PARCIAL":"PENDIENTE")};}
+// rows: [{key,label}] · devuelve {modo:'pago'|'ajuste', filas:{key:{total,recibido}}, bancoId, banco, responsable, vendedor, motivo} o null
+async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitirAjuste=false}={}){
+  let metodos=[];
+  try{metodos=await pagoOpMetodos();}catch(e){alert("⚠️ "+(e.message||"Sin métodos de pago"));return null;}
+  return new Promise(resolve=>{
+    const st={modo:"pago",filas:{},bancoId:"",responsable:"cliente",vendedor:"",motivo:""};
+    const back=document.createElement("div");
+    back.setAttribute("style","position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:14px");
+    const box=document.createElement("div");
+    box.setAttribute("style","width:min(460px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;font-family:inherit;color:#0f172a;box-shadow:0 18px 50px rgba(0,0,0,.25)");
+    back.appendChild(box);document.body.appendChild(back);
+    const cerrar=(v)=>{back.remove();resolve(v);};
+    const inp="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px";
+    const btn=(on)=>`border:1px solid ${on?"#e2231a":"#dbe3ee"};background:${on?"#e2231a":"#fff"};color:${on?"#fff":"#0f2d52"};border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer`;
+    const resumen=()=>{let T=0,Rc=0;for(const r of rows){const f=st.filas[r.key]||{};T+=Number(f.total||0);Rc+=Number(f.recibido||0);}return pagoOpEstado(T,Rc);};
+    function pintar(){
+      const e=resumen();const ajuste=st.modo==="ajuste";
+      box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">${tipo==="compra"?"💵 Pago de la compra":"💵 Renovar"} · ${pagoOpEsc(cliente)}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
+      ${permitirAjuste?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0"><button data-modo="pago" style="${btn(!ajuste)}">💵 Con pago</button><button data-modo="ajuste" style="${btn(ajuste)}">🛠 Ajuste sin pago</button></div>`:""}
+      ${ajuste?`<label style="display:block;font-size:13px;font-weight:700;margin-top:8px">Motivo (garantía, cortesía, corrección…)<input data-motivo style="${inp}" value="${pagoOpEsc(st.motivo)}" maxlength="200"></label><p style="color:#64748b;font-size:12.5px">Mueve la fecha sin registrar ingreso. Queda auditado.</p>`:`
+      ${rows.map(r=>`<div style="border:1px solid #e5eaf2;border-radius:12px;padding:10px;margin-top:10px"><b style="font-size:13.5px">${pagoOpEsc(r.label)}</b>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label style="font-size:12.5px;font-weight:700">Monto total<input data-total="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(st.filas[r.key]?.total||"")}"></label>
+        <label style="font-size:12.5px;font-weight:700">Recibido ahora<input data-recibido="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="0 si no pagó" style="${inp}" value="${pagoOpEsc(st.filas[r.key]?.recibido??"")}"></label></div></div>`).join("")}
+      <p data-estado style="margin:10px 0 0;font-weight:800;font-size:14px">${e.total>0?`Saldo pendiente: Lps. ${e.saldo} · Estado: ${e.estado}`:"Escriba el monto total y lo recibido."}</p>
+      <div data-banco-box ${e.recibido>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Dónde entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px">${metodos.map(m=>`<button data-banco="${pagoOpEsc(m.id)}" style="${btn(st.bancoId===m.id)}">${pagoOpEsc(m.nombre)}</button>`).join("")}</div></div>
+      <div data-resp-box ${e.saldo>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:12px 0 6px">¿Quién debe el pendiente? <span style="font-weight:400;color:#64748b">(no suma a bancos hasta cobrarse)</span></p>
+        <div style="display:flex;gap:6px"><button data-resp="cliente" style="${btn(st.responsable==="cliente")}">👤 El cliente</button><button data-resp="vendedor" style="${btn(st.responsable==="vendedor")}">🧑‍💼 Un vendedor</button></div>
+        ${st.responsable==="vendedor"?`<input data-vendedor placeholder="Nombre del vendedor" style="${inp}" value="${pagoOpEsc(st.vendedor)}">`:""}</div>`}
+      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":(tipo==="compra"?"Confirmar compra":"Confirmar pago y renovar")}</button>`;
+      box.querySelector("[data-x]").onclick=()=>cerrar(null);
+      box.querySelectorAll("[data-modo]").forEach(b=>b.onclick=()=>{st.modo=b.dataset.modo;pintar();});
+      box.querySelector("[data-motivo]")?.addEventListener("input",ev=>{st.motivo=ev.target.value;});
+      const refrescar=()=>{const e2=resumen();const p=box.querySelector("[data-estado]");if(p)p.textContent=e2.total>0?`Saldo pendiente: Lps. ${e2.saldo} · Estado: ${e2.estado}`:"Escriba el monto total y lo recibido.";const bb=box.querySelector("[data-banco-box]");if(bb)bb.hidden=!(e2.recibido>0);const rb=box.querySelector("[data-resp-box]");if(rb)rb.hidden=!(e2.saldo>0);};
+      box.querySelectorAll("[data-total]").forEach(i=>i.addEventListener("input",()=>{(st.filas[i.dataset.total]=st.filas[i.dataset.total]||{}).total=i.value;refrescar();}));
+      box.querySelectorAll("[data-recibido]").forEach(i=>i.addEventListener("input",()=>{(st.filas[i.dataset.recibido]=st.filas[i.dataset.recibido]||{}).recibido=i.value;refrescar();}));
+      box.querySelectorAll("[data-banco]").forEach(b=>b.onclick=()=>{st.bancoId=b.dataset.banco;pintar();});
+      box.querySelectorAll("[data-resp]").forEach(b=>b.onclick=()=>{st.responsable=b.dataset.resp;pintar();});
+      box.querySelector("[data-vendedor]")?.addEventListener("input",ev=>{st.vendedor=ev.target.value;});
+      box.querySelector("[data-ok]").onclick=()=>{
+        if(st.modo==="ajuste"){if(String(st.motivo).trim().length<4)return alert("Escriba el motivo del ajuste.");return cerrar({modo:"ajuste",motivo:String(st.motivo).trim()});}
+        for(const r of rows){const f=st.filas[r.key]||{};const e1=pagoOpEstado(f.total,f.recibido);
+          if(!(e1.total>0))return alert(`Escriba el monto total (${r.label}).`);
+          if(f.recibido===undefined||f.recibido==="")return alert(`Escriba lo recibido ahora (${r.label}); 0 si no pagó.`);
+          if(e1.recibido<0||e1.recibido>e1.total)return alert(`Lo recibido no puede ser mayor que el total (${r.label}).`);}
+        const e3=resumen();
+        if(e3.recibido>0&&!st.bancoId)return alert("Elija dónde entró el dinero.");
+        if(e3.saldo>0&&st.responsable==="vendedor"&&String(st.vendedor).trim().length<2)return alert("Escriba el vendedor responsable.");
+        cerrar({modo:"pago",filas:st.filas,bancoId:st.bancoId,banco:(metodos.find(m=>m.id===st.bancoId)||{}).nombre||"",responsable:st.responsable,vendedor:String(st.vendedor).trim()});
+      };
+    }
+    pintar();
+  });
+}
+function pagoOpNuevoId(){return (crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`);}
+async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",clienteNombre="",compraId="",plataforma="",fechaAnterior="",fechaNueva="",operationId}){
+  const f=(pago.filas||{})[key]||{};
+  const body={accion:"registrar_operacion_pago",tipoOrigen,montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,clienteId,clienteNombre,compraId,plataforma,fechaAnterior,fechaNueva,origen:"web",operationId:operationId||pagoOpNuevoId()};
+  let ultimo="";
+  for(let i=0;i<2;i++){ // un reintento con el MISMO operationId (no duplica)
+    try{const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(j.ok)return j;ultimo=j.error||`HTTP ${r.status}`;if(r.status<500)break;}
+    catch(e){ultimo=e.message||"sin conexión";}
+  }
+  throw new Error(ultimo||"No se registró el pago.");
+}
+
 async function renovarServicio(dias, fechaExacta){
   if(!cobroActual) return;
   const g=cobroActual;
@@ -3005,7 +3091,12 @@ async function renovarServicio(dias, fechaExacta){
     ? `hasta el ${fechaExacta.split("-").reverse().join("/")}`
     : `+${dias} días`;
   const nombres=aRenovar.map(s=>s.plataforma).join(", ");
-  if(!confirm(`¿Confirmás renovar ${descRenov}?\n\nCliente: ${g.nombre}\nServicio(s): ${nombres}\n\nEsto cambia la fecha en la base de datos.`)) return;
+  let pagoOp=null; // R106: Sublicuentas/Relojes registran el pago real (o ajuste sin pago con motivo)
+  if(pagoOpHabilitado()){
+    pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:aRenovar.map((s,i)=>({key:String(i),label:`${s.plataforma} · ${descRenov}`})),permitirAjuste:true});
+    if(!pagoOp)return;
+  }
+  if(!pagoOp&&!confirm(`¿Confirmás renovar ${descRenov}?\n\nCliente: ${g.nombre}\nServicio(s): ${nombres}\n\nEsto cambia la fecha en la base de datos.`)) return;
 
   const hint=$cobro("cobroRenovarHint");
   hint.textContent="Renovando…";
@@ -3016,12 +3107,16 @@ async function renovarServicio(dias, fechaExacta){
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
       const j=await r.json().catch(()=>({}));
       if(j.ok&&j.verified===true){
         aplicarRenovacionLocal(g,s,j);
         confirmadas.push({servicio:s,resultado:j});
         ok++;
+        if(pagoOp?.modo==="pago"){
+          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"renovacion",pago:pagoOp,key:String(aRenovar.indexOf(s)),clienteId:g.clienteId||s.clienteId||"",clienteNombre:g.nombre||"",compraId:j.compraId||s.compraId||"",plataforma:s.plataforma||"",fechaAnterior:j.fechaAnterior||"",fechaNueva:j.fechaNueva||""});diag.push(`💵 ${rp.estado}`);}
+          catch(e){errores.push(`${s.plataforma}: renovado pero el pago no se registró (${e.message}). Regístrelo en Finanzas.`);fail++;}
+        }
         diag.push(`${s.plataforma}: ${j.fechaAnterior||"?"} → ${j.fechaNueva||"?"}`);
       }else{
         fail++;
@@ -5725,6 +5820,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const btn=button || (!silent ? fichaQ("fichaSave") : null);
     const old=btn?btn.textContent:"";
     if(btn){ btn.disabled=true; btn.textContent="Guardando…"; }
+    // R106: compra NUEVA = operación financiera completa (total + recibido + banco/responsable) para Sublicuentas/Relojes.
+    const esCompraNueva=!fichaCompraIdActual&&(fichaForzarNuevoServicioActual||fichaServicioIndexActual==null);
+    let pagoOp=null;
+    if(esCompraNueva&&pagoOpHabilitado()){
+      pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:payload.servicio.plataforma}]});
+      if(!pagoOp){fichaStatus("Guardado cancelado: falta la información del pago de la compra.","err");return null;}
+    }
     fichaStatus("Guardando en CRM/Firebase…","info");
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
@@ -5747,6 +5849,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         }
         fichaClienteIdActual=j.clienteId||fichaClienteIdActual;
         fichaCompraIdActual=j.compraId||payload.servicio.compraId||fichaCompraIdActual;
+        if(pagoOp){
+          try{const rp=await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:`compra-${String(fichaCompraIdActual||"").replace(/[^A-Za-z0-9-]/g,"-")}`.slice(0,80)});fichaToast(`💵 Pago de la compra: ${rp.estado}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
+          catch(e){const m=`⚠️ La compra se guardó, pero el pago NO se registró (${e.message}). Regístrelo en Finanzas → Pendientes/Ingresos.`;fichaStatus(m,"err");fichaToast(m);}
+        }
         const nombres=listaConfirmada.map(p=>p.nombre).filter(Boolean).join(" + ");
         const advertencias=Array.isArray(j.inventario?.advertencias)?j.inventario.advertencias.filter(Boolean):[];
         const base=j.created?"✅ Cliente creado en Firebase":(j.servicioActualizado?"✅ Compra actualizada en Firebase":"✅ Nueva cuenta agregada al mismo cliente");
@@ -7026,15 +7132,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   async function rbacMarcarPagado(c,btn){
     if(!c)return;
+    let pagoOp=null; // R106: pago real (sin precio de catálogo) para Sublicuentas/Relojes
+    if(pagoOpHabilitado()){ pagoOp=await pedirPagoOperacion({tipo:'renovacion',cliente:c.nombre,rows:[{key:'0',label:`${c.plataforma} +30 días`}],permitirAjuste:true}); if(!pagoOp)return; }
     const old=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     try{
       const user=currentUser()||'sublichat';
-      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),compraId:c.compraId||'',dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
+      const r=await fetch(CONFIG.renovarEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...(pagoOp&&pagoOp.modo==='ajuste'?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:'web'}:{}),accion:'renovar',clienteId:c.clienteId||'',clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,correo:c.correo||'',servicioIndex:(c.srvIndex!=null?c.srvIndex:null),compraId:c.compraId||'',dias:30,fechaActual:dateDMY(c.fecha||c.fechaRaw),cobradoPor:user,rol:currentRole()})});
       const j=await r.json().catch(()=>({}));
       if(!j.ok||j.verified!==true) throw new Error(j.error||(j.ok?'Firebase no confirmó la fecha.':'No se pudo renovar.'));
       const grupo=groupFromService(c);
       aplicarRenovacionLocal(grupo,c,j);
-      await fetch('/api/finanzas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'registrar_cobro',clienteNombre:c.nombre,clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,monto:c.precio||0,metodoPago:'No especificado',cobradoPor:user,vendedor:c.vendedor||user,rol:currentRole(),fechaPago:dateISO(new Date())})}).catch(()=>null);
+      if(pagoOp){ if(pagoOp.modo==='pago') await registrarPagoOperacionWeb({tipoOrigen:'renovacion',pago:pagoOp,key:'0',clienteId:c.clienteId||'',clienteNombre:c.nombre||'',compraId:j.compraId||c.compraId||'',plataforma:c.plataformaRaw||c.plataforma||'',fechaAnterior:j.fechaAnterior||'',fechaNueva:j.fechaNueva||''}); }
+      else await fetch('/api/finanzas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'registrar_cobro',clienteNombre:c.nombre,clienteNorm:c.nombreNorm||'',telefono:c.telefono||'',plataforma:c.plataformaRaw||c.plataforma,monto:c.precio||0,metodoPago:'No especificado',cobradoPor:user,vendedor:c.vendedor||user,rol:currentRole(),fechaPago:dateISO(new Date())})}).catch(()=>null);
       mostrarToast('✅ Pagado registrado y fecha renovada.');
       render();
       await load({forceServer:true});
