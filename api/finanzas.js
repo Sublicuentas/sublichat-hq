@@ -9,7 +9,7 @@ import admin from "firebase-admin";
 import { financeMetadata } from "./_finance-schema.js";
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
-  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla
+  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago
 } from "./_finanzas-libro.js";
 
 function getApp() {
@@ -213,7 +213,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     return res.status(200).json({
       ok: true, accion, hoy, metodos: methods,
       ciclo: { id: libro.cicloId, inicio: libro.cicloInicio, dias: Math.max(0, daysBetweenYmd(libro.cicloInicio, hoy)) + 1, ultimoCierreFin: libro.ultimoCierreFin || "", diasDesdeUltimoCierre: libro.ultimoCierreFin ? daysBetweenYmd(libro.ultimoCierreFin, hoy) : null },
-      totales, disponibleCiclo: totales.resultado, bancos: saldos.bancos, totalBancos: saldos.total,
+      totales, disponibleCiclo: totales.resultado, bancos: saldos.bancos, totalBancos: saldos.total, cartera: await resumenCartera(db),
       planillaPagos: rowsOf(pagosSnap).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
       cierres: rowsOf(cierresSnap), conceptos: PLANILLA_CONCEPTOS,
     });
@@ -357,6 +357,223 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   return null;
 }
 
+// ===================== CENTRO FINANCIERO R106 (solo Sublicuentas y Relojes) =====================
+// Compra/renovación con pago completo, parcial o pendiente · cartera por cobrar (cliente/vendedor) · abonos ·
+// transferencias · anular/corregir con REVERSA (nunca se borra un movimiento confirmado) · auditoría detallada.
+const CXC = "cuentas_por_cobrar";
+const ACCIONES_CORRECCION = ["anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"];
+async function resumenCartera(db) {
+  const snap = await db.collection(CXC).where("estado", "in", ["pendiente", "parcial"]).get().catch(() => ({ docs: [] }));
+  let clientes = 0, vendedores = 0, n = 0;
+  for (const d of snap.docs) { const c = d.data() || {}; n++; if (c.deudorTipo === "vendedor") vendedores += money(c.saldoPendiente); else clientes += money(c.saldoPendiente); }
+  return { pendienteClientes: money(clientes), pendienteVendedores: money(vendedores), pendienteTotal: money(clientes + vendedores), cuentas: n };
+}
+// Bitácora append-only con antes/después (nunca secretos).
+function auditar(tx, db, identity, ev = {}) {
+  tx.set(db.collection("auditoria_eventos").doc(), {
+    actorUsuario: identity.usuario, rol: identity.role, origen: cleanText(ev.origen || "apk").slice(0, 20), modulo: ev.modulo || "finanzas",
+    accion: ev.accion, targetType: ev.targetType || "", targetId: ev.targetId || "", clienteId: ev.clienteId || "", compraId: ev.compraId || "",
+    movimientoId: ev.movimientoId || "", planillaPagoId: ev.planillaPagoId || "", cuentaId: ev.cuentaId || "", operationId: ev.operationId || "",
+    before: ev.before ?? null, after: ev.after ?? null, motivo: ev.motivo || "", detalle: ev.detalle || "", monto: ev.monto ?? null,
+    bancos: ev.bancos || [], resultado: "ok", tipo: `finanzas_${ev.accion}`, createdAt: isoNow(),
+  });
+}
+function userErr(msg) { const e = new Error(msg); e.userError = true; return e; }
+function baseMov(identity, authUser, body) {
+  return { ...financeMetadata({ docId: "", usuario: identity.usuario, userId: authUser.uid }), registradoPor: identity.usuario, rol: identity.role, origenCanal: cleanText(body.origen || "apk").slice(0, 20), createdAt: isoNow(), updatedAt: isoNow() };
+}
+
+async function handleCentro(db, accion, body, identity, authUser, res) {
+  if (!canUseLibro(identity)) return res.status(403).json({ ok: false, error: "El centro financiero es exclusivo de Sublicuentas y Relojes." });
+  const hoy = hoyYmdHN();
+  const methods = await loadMethods(db);
+  const bancoDe = (id) => methods.find((m) => m.id === cleanText(id));
+  const run = (fn) => db.runTransaction(fn).catch((e) => { if (e.userError) return { error: e.message }; throw e; });
+  const reply = (r) => (r?.error ? res.status(200).json({ ok: false, error: r.error }) : res.status(200).json({ ok: true, accion, ...r }));
+  const fmov = (id) => db.collection("finanzas_movimientos").doc(id);
+
+  // ---- compra nueva / renovación: monto total + recibido ahora → venta + ingreso real + cuenta por cobrar
+  if (accion === "registrar_operacion_pago") {
+    const tipoOrigen = cleanText(body.tipoOrigen) === "compra" ? "compra" : "renovacion";
+    const ep = estadoPago(body.montoTotal, body.recibido);
+    if (!(ep.total > 0)) return res.status(200).json({ ok: false, error: "Escriba el monto total de la operación." });
+    if (ep.recibido < 0 || ep.recibido > ep.total) return res.status(200).json({ ok: false, error: "Lo recibido no puede ser negativo ni mayor que el total." });
+    if (ep.recibido > 0 && !bancoDe(body.bancoId)) return res.status(200).json({ ok: false, error: "Elija el método/banco donde entró el dinero." });
+    const deudorTipo = cleanText(body.responsable) === "vendedor" ? "vendedor" : "cliente";
+    if (ep.saldo > 0 && deudorTipo === "vendedor" && !cleanText(body.vendedorNombre || body.vendedorId)) return res.status(200).json({ ok: false, error: "Elija el vendedor responsable del pendiente." });
+    const opId = libroOpDocId("oper", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const ventaRef = fmov(`${opId}_venta`), ingRef = fmov(`${opId}_cobro`), cxcRef = db.collection(CXC).doc(opId);
+    const r = await run(async (tx) => {
+      if ((await tx.get(ventaRef)).exists) return { duplicado: true, operacionId: opId };
+      const { libro } = await estadoLibro(db, tx);
+      const banco = bancoDe(body.bancoId);
+      const rel = { clienteId: cleanText(body.clienteId), clienteNombre: cleanText(body.clienteNombre).slice(0, 80), compraId: cleanText(body.compraId), plataforma: cleanText(body.plataforma).slice(0, 40), tipoOrigen, operacionId: opId, cicloId: libro.cicloId, operationId: cleanText(body.operationId), fechaNueva: cleanText(body.fechaNueva), fechaAnterior: cleanText(body.fechaAnterior), vendedor: cleanText(body.vendedorNombre).slice(0, 60) };
+      tx.set(ventaRef, { ...baseMov(identity, authUser, body), movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...rel, ...canonicalFinanceDate(hoy, hoy) });
+      if (ep.recibido > 0) tx.set(ingRef, { ...baseMov(identity, authUser, body), movimientoId: ingRef.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: ep.recibido, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: identity.usuario, ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...rel, ...canonicalFinanceDate(hoy, hoy) });
+      if (ep.saldo > 0) tx.set(cxcRef, { cuentaId: cxcRef.id, deudorTipo, deudorId: deudorTipo === "cliente" ? rel.clienteId : cleanText(body.vendedorId || body.vendedorNombre), deudorNombre: deudorTipo === "cliente" ? rel.clienteNombre : cleanText(body.vendedorNombre || body.vendedorId), ...rel, montoTotalOperacion: ep.total, montoRecibidoInicial: ep.recibido, montoOriginalPendiente: ep.saldo, montoRecibidoPosterior: 0, saldoPendiente: ep.saldo, estado: ep.recibido > 0 ? "parcial" : "pendiente", cicloOrigen: libro.cicloId, abonos: [], creadoPor: identity.usuario, createdAt: isoNow(), updatedAt: isoNow() });
+      auditar(tx, db, identity, { origen: body.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: rel.clienteId, compraId: rel.compraId, operationId: rel.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: banco?.nombre || "", responsable: ep.saldo > 0 ? deudorTipo : "" }, detalle: `${rel.clienteNombre} · ${rel.plataforma} · total ${ep.total} · recibido ${ep.recibido}${banco ? ` en ${banco.nombre}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [] });
+      return { duplicado: false, operacionId: opId, ...ep, cuentaId: ep.saldo > 0 ? cxcRef.id : "" };
+    });
+    return reply(r);
+  }
+
+  // ---- cartera por cobrar (filtrable por cliente / vendedor)
+  if (accion === "listar_pendientes") {
+    let rows = (await db.collection(CXC).where("estado", "in", body.incluirPagadas ? ["pendiente", "parcial", "pagado"] : ["pendiente", "parcial"]).get()).docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    if (["cliente", "vendedor"].includes(body.deudorTipo)) rows = rows.filter((c) => c.deudorTipo === body.deudorTipo);
+    const t = String(body.texto || "").toLowerCase().trim();
+    if (t) rows = rows.filter((c) => [c.deudorNombre, c.clienteNombre, c.plataforma].join(" ").toLowerCase().includes(t));
+    rows.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    return res.status(200).json({ ok: true, accion, cuentas: rows.slice(0, 300), cartera: await resumenCartera(db) });
+  }
+
+  // ---- abono / cobro posterior (también después de un cierre: entra en su fecha real, el cierre no se toca)
+  if (accion === "registrar_abono") {
+    const monto = money(body.monto), banco = bancoDe(body.bancoId);
+    if (!(monto > 0)) return res.status(200).json({ ok: false, error: "Escriba el monto que pagó." });
+    if (!banco) return res.status(200).json({ ok: false, error: "Elija el banco donde entró el abono." });
+    const opId = libroOpDocId("abono", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const ref = fmov(opId), cxcRef = db.collection(CXC).doc(cleanText(body.cuentaId) || "x");
+    const r = await run(async (tx) => {
+      const [ya, cs] = await Promise.all([tx.get(ref), tx.get(cxcRef)]);
+      if (ya.exists) return { duplicado: true, movimientoId: ref.id };
+      if (!cs.exists) throw userErr("Esa cuenta por cobrar no existe.");
+      const c = cs.data() || {};
+      if (monto > money(c.saldoPendiente) + 0.001) throw userErr(`El abono (Lps. ${monto}) es mayor que el saldo pendiente (Lps. ${money(c.saldoPendiente)}).`);
+      const { libro } = await estadoLibro(db, tx);
+      const saldo = money(c.saldoPendiente - monto);
+      tx.set(ref, { ...baseMov(identity, authUser, body), movimientoId: ref.id, tipo: "ingreso", subtipo: c.deudorTipo === "vendedor" ? "cobro_pendiente_vendedor" : "cobro_pendiente_cliente", monto, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: identity.usuario, cuentaId: cxcRef.id, clienteId: c.clienteId || "", clienteNombre: c.clienteNombre || "", compraId: c.compraId || "", plataforma: c.plataforma || "", tipoOrigen: c.tipoOrigen || "", operacionId: c.operacionId || "", deudorTipo: c.deudorTipo, deudorNombre: c.deudorNombre || "", cicloId: libro.cicloId, cicloOrigen: c.cicloOrigen || "", deCicloAnterior: !!(c.cicloOrigen && c.cicloOrigen !== libro.cicloId), operationId: cleanText(body.operationId), ...canonicalFinanceDate(hoy, hoy) });
+      tx.set(cxcRef, { saldoPendiente: saldo, montoRecibidoPosterior: money((c.montoRecibidoPosterior || 0) + monto), estado: saldo <= 0 ? "pagado" : "parcial", abonos: [...(c.abonos || []), { movimientoId: ref.id, monto, bancoId: banco.id, banco: banco.nombre, fecha: hoy, por: identity.usuario }], updatedAt: isoNow() }, { merge: true });
+      auditar(tx, db, identity, { origen: body.origen, modulo: "cartera", accion: "abono", targetType: "cuenta_por_cobrar", targetId: cxcRef.id, cuentaId: cxcRef.id, movimientoId: ref.id, clienteId: c.clienteId, compraId: c.compraId, operationId: cleanText(body.operationId), monto, before: { saldo: money(c.saldoPendiente) }, after: { saldo, estado: saldo <= 0 ? "pagado" : "parcial" }, detalle: `${c.deudorNombre} (${c.deudorTipo}) abonó ${monto} en ${banco.nombre} · pendiente ${saldo}`, bancos: [{ bancoId: banco.id, monto, direccion: "entrada" }] });
+      return { duplicado: false, movimientoId: ref.id, saldoPendiente: saldo, estado: saldo <= 0 ? "pagado" : "parcial" };
+    });
+    return reply(r);
+  }
+
+  // ---- transferencia interna: resta origen y suma destino; no es ingreso ni egreso
+  if (accion === "registrar_transferencia") {
+    const monto = money(body.monto), o = bancoDe(body.origenId), d = bancoDe(body.destinoId);
+    if (!(monto > 0) || !o || !d || o.id === d.id) return res.status(200).json({ ok: false, error: "Elija banco origen, banco destino (distintos) y monto." });
+    const opId = libroOpDocId("transf", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const ref = fmov(opId), refIn = fmov(`${opId}_in`);
+    const r = await run(async (tx) => {
+      if ((await tx.get(ref)).exists) return { duplicado: true };
+      const { saldos } = await estadoLibro(db, tx);
+      const bo = saldos.bancos.find((b) => b.id === o.id), bd = saldos.bancos.find((b) => b.id === d.id);
+      if (!bo?.activado || !bd?.activado) throw userErr("Los dos bancos necesitan saldo inicial.");
+      if (monto > bo.saldo + 0.001) throw userErr(`Saldo insuficiente en ${o.nombre} (Lps. ${bo.saldo}).`);
+      const comun = { ...baseMov(identity, authUser, body), tipo: "transferencia", subtipo: "transferencia_interna", monto, transferenciaId: ref.id, nota: cleanText(body.nota).slice(0, 160), operationId: cleanText(body.operationId), ...canonicalFinanceDate(hoy, hoy) };
+      tx.set(ref, { ...comun, movimientoId: ref.id, direccion: "salida", bancoId: o.id, banco: o.nombre, contraparteId: d.id, saldoAntes: bo.saldo, saldoDespues: money(bo.saldo - monto) });
+      tx.set(refIn, { ...comun, movimientoId: refIn.id, direccion: "entrada", bancoId: d.id, banco: d.nombre, contraparteId: o.id, saldoAntes: bd.saldo, saldoDespues: money(bd.saldo + monto) });
+      auditar(tx, db, identity, { origen: body.origen, accion: "transferencia", targetType: "transferencia", targetId: ref.id, movimientoId: ref.id, operationId: cleanText(body.operationId), monto, detalle: `${o.nombre} → ${d.nombre} · ${monto}`, bancos: [{ bancoId: o.id, monto, direccion: "salida", saldoAntes: bo.saldo, saldoDespues: money(bo.saldo - monto) }, { bancoId: d.id, monto, direccion: "entrada", saldoAntes: bd.saldo, saldoDespues: money(bd.saldo + monto) }] });
+      return { duplicado: false, transferenciaId: ref.id };
+    });
+    return reply(r);
+  }
+
+  // ---- anular / corregir con reversa (nunca se borra nada confirmado)
+  if (!ACCIONES_CORRECCION.includes(accion)) return null;
+  const motivo = cleanText(body.motivo).slice(0, 200);
+  if (motivo.length < 4) return res.status(200).json({ ok: false, error: "Escriba el motivo (obligatorio)." });
+  const opKey = libroOpDocId("corr", body, authUser.uid);
+  if (!opKey) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+  const marcaRef = db.collection("finanzas_operaciones").doc(opKey);
+  const reversa = (tx, orig, id, estadoFinal) => {
+    const rev = fmov(`${id}_rev`);
+    const { createdAt, updatedAt, movimientoId, saldoAntes, saldoDespues, estadoFinanciero, reversaId, ...resto } = orig;
+    tx.set(rev, { ...resto, ...baseMov(identity, authUser, body), movimientoId: rev.id, monto: -money(orig.monto), reversaDe: id, motivo: `Reversa: ${motivo}`, ...canonicalFinanceDate(hoy, hoy) });
+    tx.set(fmov(id), { estadoFinanciero: estadoFinal, reversaId: rev.id, anuladoPor: identity.usuario, anuladoAt: isoNow(), motivoAnulacion: motivo, updatedAt: isoNow() }, { merge: true });
+    return rev.id;
+  };
+
+  if (accion === "anular_movimiento" || accion === "corregir_movimiento") {
+    const id = cleanText(body.movimientoId), ref = fmov(id || "x");
+    const r = await run(async (tx) => {
+      if ((await tx.get(marcaRef)).exists) return { duplicado: true };
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw userErr("Ese movimiento no existe.");
+      const m = snap.data() || {};
+      if (m.estadoFinanciero) throw userErr(`Ese movimiento ya está ${m.estadoFinanciero}.`);
+      if (m.reversaDe) throw userErr("No se puede anular una reversa.");
+      if (m.planillaPagoId) throw userErr("Este movimiento es parte de un pago de planilla: anule o corrija el pago completo.");
+      if (!["ingreso", "egreso", "ajuste"].includes(movementKind(m))) throw userErr("Este tipo de movimiento no se anula aquí.");
+      const cxcRef = m.cuentaId ? db.collection(CXC).doc(m.cuentaId) : null;
+      const cs = cxcRef ? await tx.get(cxcRef) : null;
+      let nuevo = null;
+      if (accion === "corregir_movimiento") {
+        const monto = body.monto != null && body.monto !== "" ? money(body.monto) : money(m.monto);
+        const b = body.bancoId ? bancoDe(body.bancoId) : bancoDe(m.bancoId || resolveBankId(m.banco || m.metodoPago, methods));
+        if (!(monto > 0) || !b) throw userErr("Corrección inválida: revise monto y banco.");
+        if (cs?.exists && movementKind(m) === "ingreso" && monto - money(m.monto) > money((cs.data() || {}).saldoPendiente) + 0.001) throw userErr("La corrección deja el cobro mayor que lo que se debía.");
+        nuevo = { monto, bancoId: b.id, banco: b.nombre };
+      }
+      const revId = reversa(tx, m, id, nuevo ? "corregido" : "anulado");
+      let sustitutoId = "";
+      if (nuevo) {
+        const sus = fmov(`${id}_c${Date.now().toString(36)}`);
+        const { createdAt, updatedAt, movimientoId, estadoFinanciero, reversaId, ...resto } = m;
+        const fOrig = movementYmd(m) || hoy; // el sustituto conserva la fecha real del movimiento original
+        tx.set(sus, { ...resto, ...nuevo, ...(m.metodoPago ? { metodoPago: nuevo.banco } : {}), ...baseMov(identity, authUser, body), movimientoId: sus.id, sustituyeA: id, motivoCorreccion: motivo, ...canonicalFinanceDate(fOrig, hoy) });
+        sustitutoId = sus.id;
+      }
+      // Cartera: anular un cobro devuelve ese dinero al pendiente; corregir el monto ajusta solo la diferencia.
+      if (cs?.exists && movementKind(m) === "ingreso") {
+        const c = cs.data() || {};
+        const delta = money((nuevo ? nuevo.monto : 0) - money(m.monto));
+        const saldo = money(Math.max(0, money(c.saldoPendiente) - delta));
+        const posterior = money((c.montoRecibidoPosterior || 0) + (String(m.subtipo).startsWith("cobro_pendiente") ? delta : 0));
+        const inicial = money((c.montoRecibidoInicial || 0) + (String(m.subtipo).startsWith("cobro_pendiente") ? 0 : delta));
+        tx.set(cxcRef, { saldoPendiente: saldo, montoRecibidoPosterior: posterior, montoRecibidoInicial: inicial, estado: saldo <= 0 ? "pagado" : (inicial + posterior > 0 ? "parcial" : "pendiente"), updatedAt: isoNow() }, { merge: true });
+      }
+      tx.set(marcaRef, { accion, movimientoId: id, reversaId: revId, sustitutoId, por: identity.usuario, motivo, createdAt: isoNow() });
+      auditar(tx, db, identity, { origen: body.origen, accion, targetType: "movimiento", targetId: id, movimientoId: id, clienteId: m.clienteId, compraId: m.compraId, cuentaId: m.cuentaId || "", operationId: cleanText(body.operationId), motivo, monto: money(m.monto), before: { monto: money(m.monto), banco: m.banco || "", bancoId: m.bancoId || "" }, after: nuevo || { estado: "anulado" }, detalle: nuevo ? `${m.banco || "—"} L${money(m.monto)} → ${nuevo.banco} L${nuevo.monto}` : `Anulado L${money(m.monto)} ${m.banco || ""}`, bancos: [{ bancoId: m.bancoId || "", monto: -money(m.monto) }, ...(nuevo ? [{ bancoId: nuevo.bancoId, monto: nuevo.monto }] : [])] });
+      return { duplicado: false, reversaId: revId, sustitutoId };
+    });
+    return reply(r);
+  }
+
+  // anular_pago_planilla / corregir_pago_planilla
+  const pagoRef = db.collection("planilla_pagos").doc(cleanText(body.planillaPagoId) || "x");
+  const r = await run(async (tx) => {
+    if ((await tx.get(marcaRef)).exists) return { duplicado: true };
+    const ps = await tx.get(pagoRef);
+    if (!ps.exists) throw userErr("Ese pago de planilla no existe.");
+    const p = ps.data() || {};
+    if (p.estado !== "confirmado") throw userErr(`Ese pago ya está ${p.estado}.`);
+    const hijos = await Promise.all((p.asignaciones || []).map((a) => tx.get(fmov(`${pagoRef.id}_${a.bancoId}`))));
+    let nuevoPago = null, v = null;
+    if (accion === "corregir_pago_planilla") {
+      const { totales, saldos } = await estadoLibro(db, tx);
+      // Se valida como si el pago original ya estuviera devuelto a sus bancos y al disponible.
+      const bancos = saldos.bancos.map((b) => { const a = (p.asignaciones || []).find((x) => x.bancoId === b.id); return a ? { ...b, saldo: money(b.saldo + a.monto) } : b; });
+      const conceptoId = PLANILLA_SUBTIPOS.has(cleanText(body.concepto)) ? cleanText(body.concepto) : p.concepto;
+      const montoTotal = body.montoTotal != null && body.montoTotal !== "" ? money(body.montoTotal) : money(p.montoTotal);
+      v = validatePlanilla({ montoTotal, asignaciones: Array.isArray(body.asignaciones) ? body.asignaciones : p.asignaciones, bancos, disponibleCiclo: money(totales.resultado + money(p.montoTotal)) });
+      if (!v.ok) throw userErr(v.errors.join(" "));
+      nuevoPago = { beneficiario: cleanText(body.beneficiario || p.beneficiario).slice(0, 80), concepto: conceptoId, conceptoLabel: PLANILLA_CONCEPTOS[conceptoId], descripcion: cleanText(body.descripcion ?? p.descripcion ?? "").slice(0, 160), montoTotal };
+    }
+    hijos.forEach((h) => { if (h.exists) reversa(tx, h.data() || {}, h.id, nuevoPago ? "corregido" : "anulado"); });
+    let sustitutoId = "";
+    if (nuevoPago) {
+      const nRef = db.collection("planilla_pagos").doc(`${pagoRef.id}_c${Date.now().toString(36)}`);
+      sustitutoId = nRef.id;
+      tx.set(nRef, { ...p, ...nuevoPago, planillaPagoId: nRef.id, asignaciones: v.asignaciones, sustituyeA: pagoRef.id, motivoCorreccion: motivo, estado: "confirmado", registradoPor: identity.usuario, createdAt: isoNow(), updatedAt: isoNow() });
+      for (const a of v.asignaciones) {
+        const mRef = fmov(`${nRef.id}_${a.bancoId}`);
+        tx.set(mRef, { ...baseMov(identity, authUser, body), movimientoId: mRef.id, tipo: "egreso", subtipo: nuevoPago.concepto, planillaPagoId: nRef.id, grupoId: nRef.id, cicloId: p.cicloId, beneficiario: nuevoPago.beneficiario, motivo: `${nuevoPago.conceptoLabel} · ${nuevoPago.beneficiario} (corrección)`, bancoId: a.bancoId, banco: a.banco, monto: a.monto, saldoAntes: a.saldoAntes, saldoDespues: a.saldoDespues, ...canonicalFinanceDate(p.fecha || hoy, hoy) });
+      }
+    }
+    tx.set(pagoRef, { estado: nuevoPago ? "corregido" : "anulado", sustituidoPor: sustitutoId, anuladoPor: identity.usuario, anuladoAt: isoNow(), motivoAnulacion: motivo, updatedAt: isoNow() }, { merge: true });
+    tx.set(marcaRef, { accion, planillaPagoId: pagoRef.id, sustitutoId, por: identity.usuario, motivo, createdAt: isoNow() });
+    auditar(tx, db, identity, { origen: body.origen, modulo: "planilla", accion, targetType: "planilla_pago", targetId: pagoRef.id, planillaPagoId: pagoRef.id, operationId: cleanText(body.operationId), motivo, monto: money(p.montoTotal), before: { beneficiario: p.beneficiario, montoTotal: p.montoTotal, asignaciones: (p.asignaciones || []).map((a) => ({ banco: a.banco, monto: a.monto })) }, after: nuevoPago ? { ...nuevoPago, asignaciones: v.asignaciones.map((a) => ({ banco: a.banco, monto: a.monto })) } : { estado: "anulado" }, detalle: nuevoPago ? `${p.beneficiario} L${p.montoTotal} (${(p.asignaciones || []).map((a) => `${a.banco} ${a.monto}`).join(" + ")}) → ${nuevoPago.beneficiario} L${nuevoPago.montoTotal} (${v.asignaciones.map((a) => `${a.banco} ${a.monto}`).join(" + ")})` : `Anulado pago a ${p.beneficiario} L${p.montoTotal}` });
+    return { duplicado: false, sustitutoId };
+  });
+  return reply(r);
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -382,6 +599,10 @@ export default async function handler(req, res) {
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
     }
+    if (["registrar_operacion_pago", "listar_pendientes", "registrar_abono", "registrar_transferencia", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
+      const handled = await handleCentro(db, accion, body, identity, authUser, res);
+      if (handled !== null) return handled;
+    }
     if (["finanzas_metodos", "finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
@@ -399,7 +620,7 @@ export default async function handler(req, res) {
       const monto = cleanMoney(body.monto);
       if (!monto) return res.status(200).json({ ok: false, error: "Falta el monto del cobro." });
 
-      const financeDate = canonicalFinanceDate(body.fechaPago || body.fecha, now.slice(0, 10));
+      const financeDate = canonicalFinanceDate(body.fechaPago || body.fecha, hoyYmdHN()); // fecha de Honduras (antes UTC: de 6 PM a medianoche quedaba con fecha de mañana)
       const offId = finOpDocId(body, authUser?.uid);
       const movRef = offId ? db.collection("finanzas_movimientos").doc(offId) : db.collection("finanzas_movimientos").doc();
       if (offId) {
@@ -436,7 +657,7 @@ export default async function handler(req, res) {
       const motivo = cleanText(body.motivo || body.descripcion);
       if (!motivo || !monto) return res.status(200).json({ ok: false, error: "Falta motivo o monto del egreso." });
 
-      const financeDate = canonicalFinanceDate(body.fecha || body.fechaPago, now.slice(0, 10));
+      const financeDate = canonicalFinanceDate(body.fecha || body.fechaPago, hoyYmdHN()); // fecha de Honduras
       const offId = finOpDocId(body, authUser?.uid);
       const movRef = offId ? db.collection("finanzas_movimientos").doc(offId) : db.collection("finanzas_movimientos").doc();
       if (offId) {
