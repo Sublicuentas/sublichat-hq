@@ -1387,6 +1387,15 @@ function finBusinessDate(m){
 }
 function finText(v){return String(v??"").trim();}
 function finKey(v){return finText(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function finActorLabel(m={}){
+  const origen=finKey(m.origenCanal||m.origen||"");
+  if(["socios","socio","revendedor","revendedores"].includes(origen))return finText(m.socioNombre||m.revendedorNombre||m.registradoPorNombre||m.registradoPor||m.cobradoPor||"Socio");
+  const raw=finText(m.userName||m.registradoPorNombre||m.usuario||m.cobradoPor||m.registradoPor||m.admin||m.creadoPor||m.createdBy||"");
+  const k=finKey(raw);
+  if(["naara","sublicuentas","sublicuentas2"].includes(k))return "Sublicuentas";
+  if(["libni","daniela","relojes","finanzas"].includes(k))return "Relojes";
+  return raw;
+}
 function finEscape(v){return finText(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function finBank(m){
   const raw=finText(m.banco||m.metodoPago||m.metodo_pago||m.metodo||m.cuenta||m.bank);
@@ -1408,7 +1417,10 @@ function finParse(m){
     banco:finBank(m),
     concepto:(esIngreso?conceptoIngreso:conceptoEgreso)||"Movimiento",
     plataforma,
-    detalle
+    detalle,
+    usuario:finActorLabel(m),
+    id:String(m.id||""),
+    source:String(m._source||"")
   };
 }
 function renderFinanzas(){
@@ -1424,10 +1436,30 @@ function renderFinanzas(){
   // movimientos recientes (ordenados por fecha desc)
   const recientes=[...movs].sort((a,b)=>b.fecha-a.fecha).slice(0,40);
   const mv=document.getElementById("finMovs");
-  if(mv)mv.innerHTML=recientes.length?recientes.map(m=>`
-    <div class="fin-mov"><div class="fm-c"><div class="fm-concept">${finEscape(m.concepto)}</div>
-    <div class="fm-meta">${m.fecha.toLocaleDateString("es-HN")} · ${finEscape(m.banco)}</div></div>
-    <div class="fm-monto ${m.tipo==="ingreso"?"ing":"egr"}">${m.tipo==="ingreso"?"+":"−"}${fmt(m.monto)}</div></div>`).join(""):`<div class="empty">Sin movimientos</div>`;
+  if(mv)mv.innerHTML=recientes.length?recientes.map(m=>{
+    const fechaIso=m.fecha?`${m.fecha.getFullYear()}-${String(m.fecha.getMonth()+1).padStart(2,"0")}-${String(m.fecha.getDate()).padStart(2,"0")}`:"";
+    const puedeFecha=m.id&&m.source==="finanzas_movimientos";
+    return `<div class="fin-mov"><div class="fm-c"><div class="fm-concept">${finEscape(m.concepto)}</div>
+    <div class="fm-meta">${m.fecha.toLocaleDateString("es-HN")} · ${finEscape(m.banco)}${m.usuario?` · ${finEscape(m.usuario)}`:""}</div>
+    ${puedeFecha?`<button type="button" data-fin-ajustar-fecha="${finEscape(m.id)}" data-fin-fecha="${fechaIso}" style="border:0;background:transparent;color:#139ce8;font-weight:800;padding:4px 0;cursor:pointer">🗓 Ajustar fecha de pago</button>`:""}</div>
+    <div class="fm-monto ${m.tipo==="ingreso"?"ing":"egr"}">${m.tipo==="ingreso"?"+":"−"}${fmt(m.monto)}</div></div>`;
+  }).join(""):`<div class="empty">Sin movimientos</div>`;
+  mv?.querySelectorAll?.("[data-fin-ajustar-fecha]").forEach(btn=>btn.addEventListener("click",async()=>{
+    const actual=btn.dataset.finFecha||"";
+    const nueva=prompt("Fecha REAL en que entró/salió el dinero (AAAA-MM-DD).\n\nLa fecha de renovación/corte del cliente NO cambia.",actual);
+    if(nueva===null)return;
+    const fecha=String(nueva).trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){mostrarToast("⚠️ Use AAAA-MM-DD.");return;}
+    const motivo=prompt("Motivo de la corrección:","Ajuste manual de fecha de pago")||"";
+    if(motivo.trim().length<3){mostrarToast("⚠️ Escriba el motivo.");return;}
+    try{
+      const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"ajustar_fecha_movimiento",movimientoId:btn.dataset.finAjustarFecha,fechaPago:fecha,motivo:motivo.trim(),origen:"web"})});
+      const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo ajustar la fecha.");
+      const raw=FINANZAS.find(x=>String(x.id||"")===String(btn.dataset.finAjustarFecha));
+      if(raw){raw.fechaPago=fecha;raw.fecha=fecha.split("-").reverse().join("/");}
+      renderFinanzas();finRenderCharts();mostrarToast("✅ Fecha financiera ajustada. La fecha de renovación no cambió.");
+    }catch(e){mostrarToast("⚠️ "+(e.message||"No se pudo ajustar la fecha."));}
+  }));
   window._finMovs=movs;
 }
 function finRenderCharts(){
@@ -1625,9 +1657,9 @@ if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
 
     // ============ HOJA 4: MOVIMIENTOS (detalle) ============
     const wsV=wb.addWorksheet("Movimientos",{views:[{state:"frozen",ySplit:1}]});
-    wsV.columns=[{width:12},{width:11},{width:40},{width:20},{width:14}];
+    wsV.columns=[{width:12},{width:11},{width:40},{width:20},{width:14},{width:20}];
     wsV.getCell(1,1).value="Fecha"; wsV.getCell(1,2).value="Tipo"; wsV.getCell(1,3).value="Concepto";
-    wsV.getCell(1,4).value="Banco / Método"; wsV.getCell(1,5).value="Monto";
+    wsV.getCell(1,4).value="Banco / Método"; wsV.getCell(1,5).value="Monto"; wsV.getCell(1,6).value="Usuario";
     finXlsHeaderRow(wsV,wsV.getRow(1));
     const movsOrd=movs.slice().sort((a,b)=>b.fecha-a.fecha);
     movsOrd.forEach((m,i)=>{
@@ -1637,10 +1669,11 @@ if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
       row.getCell(3).value=m.concepto||"—";
       row.getCell(4).value=m.banco||"—";
       row.getCell(5).value=m.monto; row.getCell(5).numFmt=finXlsMoneyFmt;
+      row.getCell(6).value=m.usuario||"";
       row.getCell(2).font={bold:true,color:{argb:m.tipo==="ingreso"?FIN_XLS_COLORS.green:FIN_XLS_COLORS.red}};
       row.eachCell(c=>{ c.border=finXlsBorderThin(); if((i+2)%2===0) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:FIN_XLS_COLORS.zebra}}; });
     });
-    wsV.autoFilter={from:{row:1,column:1},to:{row:1,column:5}};
+    wsV.autoFilter={from:{row:1,column:1},to:{row:1,column:6}};
 
     // ---- Descargar ----
     const buf=await wb.xlsx.writeBuffer();
@@ -2994,7 +3027,7 @@ function pagoOpUsuario(){
   }
   return "";
 }
-function pagoOpHabilitado(){return ["sublicuentas","naara","relojes","libni"].includes(pagoOpUsuario());}
+function pagoOpHabilitado(){return ["sublicuentas","sublicuentas2","naara","relojes","libni","daniela","finanzas"].includes(pagoOpUsuario());}
 let pagoOpMetodosCache=null;
 async function pagoOpMetodos(){
   if(pagoOpMetodosCache)return pagoOpMetodosCache;
