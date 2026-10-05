@@ -3078,6 +3078,7 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
       <div data-banco-box ${suma.recibido>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Dónde entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px">${metodos.map(m=>`<button data-banco="${pagoOpEsc(m.id)}" style="${btn(st.bancoId===m.id)}">${pagoOpEsc(m.nombre)}</button>`).join("")}</div></div>
       <div data-resp-box ${suma.saldo>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:12px 0 6px">¿Quién debe el pendiente? <span style="font-weight:400;color:#64748b">(no suma a bancos hasta cobrarse)</span></p><div style="display:flex;gap:6px"><button data-resp="cliente" style="${btn(st.responsable==="cliente")}">👤 El cliente</button><button data-resp="vendedor" style="${btn(st.responsable==="vendedor")}">🧑‍💼 Un vendedor</button></div>${st.responsable==="vendedor"?`<input data-vendedor placeholder="Nombre del vendedor" style="${inp}" value="${pagoOpEsc(st.vendedor)}">`:""}</div>`}
       <p data-error hidden style="margin:10px 0 0;color:#b91c1c;font-weight:800;font-size:13px"></p>
+      ${ajuste?"":`<p style="font-size:13px;font-weight:700;margin:12px 0 6px">📅 ¿Qué día entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${[[0,"Hoy"],[1,"Ayer"],[2,"Antier"]].map(([n,t])=>{const f=pagoOpDiasAtras(n);return `<button data-fecha="${f}" style="${btn((st.fechaPago||pagoOpHoy())===f)}">${t} ${f.slice(8,10)}/${f.slice(5,7)}</button>`;}).join("")}<input data-fecha-otra type="date" value="${pagoOpEsc(st.fechaPago||pagoOpHoy())}" max="${pagoOpHoy()}" min="${pagoOpDiasAtras(30)}" style="${inp};width:auto;margin-top:0"></div><p style="color:#64748b;font-size:12px;margin:4px 0 0">Es la fecha que queda en Finanzas; la fecha de renovación del cliente no cambia.</p>`}
       <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":(tipo==="compra"?"Confirmar compra":"Confirmar y renovar")}</button>`;
       const error=(msg)=>{const e=box.querySelector("[data-error]");if(e){e.textContent=msg;e.hidden=false;e.scrollIntoView?.({block:"nearest",behavior:"smooth"});}};
       box.querySelector("[data-x]").onclick=()=>cerrar(null);
@@ -3088,24 +3089,30 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
       box.querySelectorAll("[data-pagado]").forEach(i=>i.addEventListener("input",()=>{fila(i.dataset.pagado).pagado=i.value;pagoOpFilaEstado(fila(i.dataset.pagado));}));
       box.querySelectorAll("[data-pendiente]").forEach(i=>i.addEventListener("input",()=>{fila(i.dataset.pendiente).pendiente=i.value;pagoOpFilaEstado(fila(i.dataset.pendiente));}));
       box.querySelectorAll("[data-banco]").forEach(b=>b.onclick=()=>{st.bancoId=b.dataset.banco;pintar();});
+      box.querySelectorAll("[data-fecha]").forEach(b=>b.onclick=()=>{st.fechaPago=b.dataset.fecha;pintar();});
+      box.querySelector("[data-fecha-otra]")?.addEventListener("change",ev=>{st.fechaPago=ev.target.value||"";pintar();});
       box.querySelectorAll("[data-resp]").forEach(b=>b.onclick=()=>{st.responsable=b.dataset.resp;pintar();});
       box.querySelector("[data-vendedor]")?.addEventListener("input",ev=>{st.vendedor=ev.target.value;});
       box.querySelector("[data-ok]").onclick=()=>{
         if(st.modo==="ajuste"){if(String(st.motivo).trim().length<4)return error("Escriba el motivo del ajuste.");return cerrar({modo:"ajuste",motivo:String(st.motivo).trim()});}
         for(const r of rows){const e=pagoOpFilaEstado(fila(r.key));if(e.modo==="pagado"&&!(e.recibido>0))return error(`Escriba cuánto pagó (${r.label}).`);if(e.modo==="pagado"&&fila(r.key).tienePendiente&&!(e.saldo>0))return error(`Escriba el saldo pendiente (${r.label}).`);if(e.modo==="pendiente"&&!(e.saldo>0))return error(`Escriba cuánto queda pendiente (${r.label}).`);}
         const e3=totales();if(e3.recibido>0&&!st.bancoId)return error("Elija dónde entró el dinero.");if(e3.saldo>0&&st.responsable==="vendedor"&&String(st.vendedor).trim().length<2)return error("Escriba el vendedor responsable.");
-        cerrar({modo:"pago",filas:st.filas,bancoId:st.bancoId,banco:(metodos.find(m=>m.id===st.bancoId)||{}).nombre||"",responsable:st.responsable,vendedor:String(st.vendedor).trim()});
+        cerrar({modo:"pago",fechaPago:st.fechaPago||pagoOpHoy(),filas:st.filas,bancoId:st.bancoId,banco:(metodos.find(m=>m.id===st.bancoId)||{}).nombre||"",responsable:st.responsable,vendedor:String(st.vendedor).trim()});
       };
     }
     pintar();
   });
 }
 // R107: el pago viaja DENTRO de la misma petición de renovar/guardar compra → el servidor guarda fecha/compra y pago juntos.
-function pagoBodyWeb(pago,key,operationId){const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web"};}
+function pagoBodyWeb(pago,key,operationId){const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web",fechaPago:pago.fechaPago||pagoOpHoy()};}
+// R110: fecha del pago (día en que entró el dinero), hora de Honduras del navegador.
+function pagoOpYmd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function pagoOpHoy(){return pagoOpYmd(new Date());}
+function pagoOpDiasAtras(n){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-n);return pagoOpYmd(d);}
 function pagoOpNuevoId(){return (crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`);}
 async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",clienteNombre="",compraId="",compraIds=[],servicios=[],plataforma="",fechaAnterior="",fechaNueva="",operationId}){
   const f=(pago.filas||{})[key]||{};
-  const body={accion:"registrar_operacion_pago",tipoOrigen,montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,clienteId,clienteNombre,compraId,compraIds,servicios,plataforma,fechaAnterior,fechaNueva,origen:"web",operationId:operationId||pagoOpNuevoId()};
+  const body={accion:"registrar_operacion_pago",tipoOrigen,montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,clienteId,clienteNombre,compraId,compraIds,servicios,plataforma,fechaAnterior,fechaNueva,origen:"web",fechaPago:pago.fechaPago||pagoOpHoy(),operationId:operationId||pagoOpNuevoId()};
   let ultimo="";
   for(let i=0;i<2;i++){ // un reintento con el MISMO operationId (no duplica)
     try{const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(j.ok)return j;ultimo=j.error||`HTTP ${r.status}`;if(r.status<500)break;}
