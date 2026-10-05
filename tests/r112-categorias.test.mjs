@@ -36,3 +36,14 @@ test('R112: el servidor guarda categoría/tipo en la compra y en Finanzas', () =
   const f = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
   assert.match(f, /categoria: clsR112\.categoria, tipoVenta: clsR112\.tipoVenta/);
 });
+
+test('R112 web: categorías antes de la plataforma, cuenta completa sin PIN y payload con categoría/tipo', () => {
+  const app = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
+  assert.match(app, /from "\.\/catalogo-categorias\.js\?v=/);
+  assert.match(app, /data-ficha-cat="\$\{k\}"/);
+  assert.match(app, /const fichaNeedsPin=plat=>!fichaEsCuentaCompleta\(\)&&/);
+  assert.match(app, /categoria:fichaGetVal\("fichaCategoria"\)\|\|fichaCategoriaDe\(plat\), tipoVenta:fichaEsCuentaCompleta\(\)\?"cuenta_completa":""/);
+  const web = fs.readFileSync(new URL('../catalogo-categorias.js', import.meta.url), 'utf8');
+  const api = fs.readFileSync(new URL('../api/_catalogo-categorias.js', import.meta.url), 'utf8');
+  assert.equal(web.split('\n').slice(1).join('\n'), api.split('\n').slice(1).join('\n'), 'copia web idéntica al contrato');
+});

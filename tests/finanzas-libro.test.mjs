@@ -108,11 +108,14 @@ test("ajuste auditado mueve el saldo del banco con signo", () => {
   assert.equal(bankBalances(movs, libro, methods).bancos.find((b) => b.id === "tigo-money").saldo, 250);
 });
 
-test("movimientos antes de la activación del banco no alteran su saldo; banco sin saldo inicial no cuenta", () => {
+test("R113: sin saldo inicial cada banco es entradas − salidas desde el 01/10; saldos ya registrados se respetan", () => {
   const movs = [{ tipo: "ingreso", monto: 100, bancoId: "bac-credomatic", fechaPago: "2026-09-30" }];
   const r = bankBalances(movs, { bases: { "bac-credomatic": { saldo: 4000, desde: "2026-10-01" } } }, methods);
   assert.equal(r.bancos.find((b) => b.id === "bac-credomatic").saldo, 4000);
-  assert.equal(r.bancos.find((b) => b.id === "ficohsa").activado, false);
+  const fic = r.bancos.find((b) => b.id === "ficohsa");
+  assert.equal(fic.activado, true); assert.equal(fic.sinSaldoInicial, true); assert.equal(fic.saldo, 0);
+  const r2 = bankBalances([{ tipo: "ingreso", monto: 150, bancoId: "ficohsa", fechaPago: "2026-10-03" }, { tipo: "egreso", monto: 50, bancoId: "ficohsa", fechaPago: "2026-10-04" }], {}, methods);
+  assert.equal(r2.bancos.find((b) => b.id === "ficohsa").saldo, 100);
   assert.equal(r.total, 4000);
 });
 
