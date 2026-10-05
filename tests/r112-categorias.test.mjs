@@ -47,3 +47,14 @@ test('R112 web: categorías antes de la plataforma, cuenta completa sin PIN y pa
   const api = fs.readFileSync(new URL('../api/_catalogo-categorias.js', import.meta.url), 'utf8');
   assert.equal(web.split('\n').slice(1).join('\n'), api.split('\n').slice(1).join('\n'), 'copia web idéntica al contrato');
 });
+
+test('R114: movimientos agrupan un pago único por cliente y van en orden real de registro', () => {
+  const f = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
+  const cuerpo = f.slice(f.indexOf('function agruparPagos('), f.indexOf('async function handleLibro('));
+  const money = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const agruparPagos = new Function('money', `${cuerpo}; return agruparPagos;`)(money);
+  const base = { kind: 'ingreso', cliente: 'Ana', clienteId: 'c1', bancoId: 'bac', usuario: 'Relojes', fecha: '2026-10-03' };
+  const g = agruparPagos([{ ...base, id: 'a', monto: 75, plataforma: 'Netflix', createdAt: '2026-10-03T15:00:00Z' }, { ...base, id: 'b', monto: 75, plataforma: 'Disney', createdAt: '2026-10-03T15:00:20Z' }, { ...base, id: 'c', clienteId: 'c2', cliente: 'Luis', monto: 100, createdAt: '2026-10-03T15:01:00Z' }]);
+  assert.equal(g.length, 2); assert.equal(g[0].monto, 150); assert.deepEqual(g[0].ids, ['a', 'b']); assert.equal(g[0].plataforma, 'Netflix + Disney');
+  assert.match(f, /String\(b\.createdAt \|\| ""\)\.localeCompare\(String\(a\.createdAt \|\| ""\)\)/);
+});
