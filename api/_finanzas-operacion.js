@@ -8,6 +8,17 @@ import { financeMetadata } from "./_finance-schema.js";
 const OP_RE = /^[A-Za-z0-9-]{8,80}$/;
 function clean(v, max = 120) { return String(v ?? "").trim().slice(0, max); }
 function hoyHN() { const d = new Date(Date.now() - 6 * 3600000); return d.toISOString().slice(0, 10); }
+// R110 · Fecha del PAGO (el día que entró el dinero), elegida por el usuario. Hoy por defecto; máx. 30 días atrás; nunca futura.
+export function fechaPagoValida(v) {
+  const hoy = hoyHN(), f = String(v || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return hoy;
+  const [y, m, d] = f.split("-").map(Number), dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCMonth() !== m - 1) return hoy;
+  const dias = Math.round((Date.parse(`${hoy}T00:00:00Z`) - dt.getTime()) / 86400000);
+  if (dias < 0) throw errorUsuario("La fecha del pago no puede ser futura.");
+  if (dias > 30) throw errorUsuario("La fecha del pago no puede ser de hace más de 30 días.");
+  return f;
+}
 function fechaCampos(ymd, nowIso) {
   const [y, m, d] = ymd.split("-");
   return { fecha: `${d}/${m}/${y}`, fechaPago: ymd, mesKey: `${y}-${m}`, monthKey: `${y}-${m}`, fechaTS: new Date(Date.UTC(+y, +m - 1, +d, 12)), createdAt: nowIso, updatedAt: nowIso };
@@ -36,7 +47,7 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   if (!OP_RE.test(op)) throw errorUsuario("Falta operationId del pago (actualice la app).");
   const uid = String(user.uid || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
   const opId = `oper_op_${uid}_${op}`; // mismo esquema que registrar_operacion_pago
-  return { ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  return { ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
 }
 
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
@@ -54,7 +65,7 @@ export async function leerPago(transaction, db, prep) {
 export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   if (!prep || !lectura || lectura.yaExiste) return lectura?.yaExiste ? { duplicado: true, ...prep.ep } : null;
   const { ep, banco, deudorTipo, vendedorNombre, opId, tipoOrigen } = prep;
-  const now = new Date().toISOString(), hoy = hoyHN();
+  const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
   const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true };
   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
