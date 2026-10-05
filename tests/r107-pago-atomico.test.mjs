@@ -50,3 +50,13 @@ test('renovar.js usa el pago dentro de sus transacciones (renovar y ficha_upsert
   assert.match(src, /const lecturaPagoRenov = await leerPago\(transaction, db, prepPagoRenov\);/);
   assert.match(src, /escribirPago\(transaction, db, prepPagoRenov, lecturaPagoRenov/);
 });
+
+test('R110: fecha del pago elegida (hasta 30 días atrás, nunca futura)', async () => {
+  const { fechaPagoValida } = await import('../api/_finanzas-operacion.js');
+  const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
+  const ayer = new Date(Date.parse(hoy + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
+  assert.equal(fechaPagoValida(''), hoy);
+  assert.equal(fechaPagoValida(ayer), ayer);
+  assert.throws(() => fechaPagoValida('2999-01-01'), /futura/);
+  assert.throws(() => fechaPagoValida('2020-01-01'), /30 días/);
+});
