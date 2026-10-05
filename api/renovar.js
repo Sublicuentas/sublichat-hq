@@ -1506,7 +1506,7 @@ async function handlerCore(req, res) {
         const esRenovacionReal = compraId && servicioActualizado && fechaNueva && fechaNueva !== fechaPrevia;
         if (esCompraNueva) {
           sorteoResult = await registrarEventoSorteosSeguro({
-            tipo: "compra", clientId: docRef.id, compraId, eventoId: `compra:${compraId}`,
+            tipo: "compra", clientId: docRef.id, compraId, eventoId: `compra:${compraId}`, meses: Number(servicioGuardado?.mesesContratados) || 1, // R115: boletos según meses
             clienteNombre: nombreFinal, telefono: tel, vendedor: servicioGuardado?.vendedor || vendedor, origen: "Sublichat"
           });
         } else if (esRenovacionReal) {

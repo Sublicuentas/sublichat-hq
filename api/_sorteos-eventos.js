@@ -187,7 +187,7 @@ export async function registrarEventoSorteos(rawEvent = {}) {
     const drawRules = reglasSorteo(draw.reglas || {});
     const category = sorteoNorm(draw.categoria) === "oro" ? "club_vip" : sorteoNorm(draw.categoria);
     if (category === "club_vip" && !["oro", "diamante", "elite"].includes(loyalty.nivel)) continue;
-    if (categoryAllows(draw.categoria, type)) results.push({ sorteoId: draw.id, tipo: type, ...await createEventTickets(db, draw, event, type === "compra" ? drawRules.compra : drawRules.renovacion) });
+    if (categoryAllows(draw.categoria, type)) results.push({ sorteoId: draw.id, tipo: type, ...await createEventTickets(db, draw, event, (type === "compra" ? drawRules.compra : drawRules.renovacion) * Math.max(1, Math.min(12, Math.round(Number(rawEvent.meses) || 1)))) }); // R115: boletos × meses contratados (1–12)
   }
   return { ok: true, creados: results.reduce((sum, item) => sum + Number(item.creados || 0), 0), fidelidad: loyalty, resultados: results };
 }
