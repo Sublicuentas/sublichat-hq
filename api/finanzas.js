@@ -48,7 +48,7 @@ async function requireFirebaseUser(req, res) {
 function canonicalInternalUser(raw = "") {
   const k = String(raw || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "").trim();
   if (["naara", "sublicuentas", "sublicuentas2"].includes(k)) return "sublicuentas";
-  if (["libni", "daniela", "relojes", "finanzas"].includes(k)) return "relojes";
+  if (["libni", "daniela", "relojes", "finanzas"].includes(k) || /^libni|daniela$/.test(k)) return "relojes"; // R119: "Libni Daniela" (bot) = Relojes
   return k;
 }
 function financeActorLabel(m = {}) {
@@ -396,10 +396,12 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
       const ya = await tx.get(cicloRef);
       if (ya.exists && ya.data()?.estado === "cerrado") return { duplicado: true, cierre: { id: cicloRef.id, ...(ya.data() || {}) } };
       const hastaFin = movimientos.filter((m) => { const f = movementYmd(m); return f && f <= fechaFin; });
-      const totales = cycleTotals(hastaFin, libro.cicloInicio, fechaFin);
+      // R119: el usuario elige DESDE qué día cierra (por defecto el inicio del ciclo).
+      const inicioCierre = /^\d{4}-\d{2}-\d{2}$/.test(String(body.fechaInicio || "")) && body.fechaInicio >= libro.cicloInicio && body.fechaInicio <= fechaFin ? body.fechaInicio : libro.cicloInicio;
+      const totales = cycleTotals(hastaFin, inicioCierre, fechaFin);
       const saldos = bankBalances(hastaFin, libro, methods);
       const cierre = {
-        cicloId: libro.cicloId, estado: "cerrado", fechaInicio: libro.cicloInicio, fechaFin, ...totales,
+        cicloId: libro.cicloId, estado: "cerrado", fechaInicio: inicioCierre, fechaFin, ...totales,
         saldoRetenido: saldos.total, saldosBancos: saldos.bancos.filter((b) => b.activado).map((b) => ({ bancoId: b.id, banco: b.nombre, inicial: b.base, ingresos: b.ingresos, egresosOperativos: b.egresosOperativos, planilla: b.planilla, ajustes: b.ajustes, final: b.saldo, movimientos: b.movimientos })),
         nota: cleanText(body.nota).slice(0, 300), cerradoPor: actor, rol: identity.role, cerradoAt: now, origenCanal: cleanText(body.origen || "apk"),
       };
