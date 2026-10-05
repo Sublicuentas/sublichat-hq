@@ -47,7 +47,9 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   if (!OP_RE.test(op)) throw errorUsuario("Falta operationId del pago (actualice la app).");
   const uid = String(user.uid || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
   const opId = `oper_op_${uid}_${op}`; // mismo esquema que registrar_operacion_pago
-  return { ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  // R111: un solo pago para varios servicios del cliente (renovación múltiple de la APK) conserva la lista completa.
+  const grupo = { compraIds: Array.isArray(pago.compraIds) ? pago.compraIds.map((x) => clean(x)).filter(Boolean).slice(0, 30) : [], servicios: Array.isArray(pago.servicios) ? pago.servicios.slice(0, 30).map((x) => ({ compraId: clean(x?.compraId), plataforma: clean(x?.plataforma, 40), fechaAnterior: clean(x?.fechaAnterior), fechaNueva: clean(x?.fechaNueva) })) : [], plataforma: clean(pago.plataforma, 200) };
+  return { grupo, ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
 }
 
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
@@ -67,7 +69,7 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   const { ep, banco, deudorTipo, vendedorNombre, opId, tipoOrigen } = prep;
   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
-  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true };
+  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}) };
   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);
