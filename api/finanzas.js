@@ -253,6 +253,27 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     });
   }
 
+  // R117 · Datos del Excel Saiyajin para la APK (misma data y reglas que el reporte del bot).
+  if (accion === "finanzas_reporte") {
+    const { methods, libro, saldos } = await estadoLibro(db);
+    const hoyR = hoyYmdHN();
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : "2026-10-01";
+    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : hoyR;
+    const all = rowsOf(await movementsQuery(db, desde).limit(6000).get()).filter((m) => { const f = movementYmd(m); return f && f >= desde && f <= hasta; });
+    const views = all.map((m) => ({ ...movimientoView(m, methods), socio: m.socioNombre || "", productos: m.productosSocio || m.serviciosSocio || null, descuento: money(m.descuento || 0), categoriaLabel: m.categoriaLabel || "", operacion: m.operationId || "", pedido: m.pedidoId || m.compraId || "" }));
+    const ingresos = agruparPagos(views.filter((v) => v.kind === "ingreso"));
+    const totales = cycleTotals(all, desde, hasta);
+    const [cxc, pp, ci] = await Promise.all([db.collection(CXC).get(), db.collection("planilla_pagos").get(), db.collection("finanzas_ciclos").get()]);
+    const cuentas = rowsOf(cxc), abiertas = cuentas.filter((c) => ["pendiente", "parcial"].includes(c.estado));
+    const sum = (arr) => money(arr.reduce((a, c) => a + money(c.saldoPendiente), 0));
+    return res.status(200).json({ ok: true, accion, desde, hasta, generado: isoNow(), libroDesde: libro.cicloInicio,
+      totales, ingresos, egresos: views.filter((v) => v.kind === "egreso"), planillaMovs: views.filter((v) => v.kind === "planilla"),
+      saldos: saldos.bancos, totalBancos: saldos.total,
+      cartera: { cuentas, pendienteClientes: sum(abiertas.filter((c) => c.deudorTipo !== "vendedor")), pendienteVendedores: sum(abiertas.filter((c) => c.deudorTipo === "vendedor")) },
+      planillaPagos: rowsOf(pp).filter((p) => p.estado === "confirmado" && p.fecha >= desde && p.fecha <= hasta),
+      cierres: rowsOf(ci).filter((c) => c.fechaInicio <= hasta && c.fechaFin >= desde) });
+  }
+
   if (accion === "finanzas_movimientos") {
     const [methods, libroSnap] = await Promise.all([loadMethods(db), libroRef(db).get()]);
     const libro = libroFrom(libroSnap.exists ? libroSnap.data() : {});
@@ -685,7 +706,7 @@ export default async function handler(req, res) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
-    if (["finanzas_metodos", "finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
+    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
