@@ -4,6 +4,12 @@
 // Mismos documentos y campos que /api/finanzas · registrar_operacion_pago (mismo operationId ⇒ nunca se duplica).
 import { estadoPago, publicMethods, money } from "./_finanzas-libro.js";
 import { financeMetadata } from "./_finance-schema.js";
+import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js";
+// R112: la venta lleva su categoría y tipo GUARDADOS (no se adivinan en Finanzas por el nombre).
+function clasificacionVenta(rel = {}, prep = {}) {
+  const c = clasificarServicio({ plataforma: rel.plataforma || prep.grupo?.plataforma || "", categoria: rel.categoria || prep.categoria, tipoVenta: rel.tipoVenta || prep.tipoVenta });
+  return { categoria: c.categoria, tipoVenta: c.tipoVenta, categoriaLabel: CATEGORIAS[c.categoria]?.finanzas || "" };
+}
 
 const OP_RE = /^[A-Za-z0-9-]{8,80}$/;
 function clean(v, max = 120) { return String(v ?? "").trim().slice(0, max); }
@@ -49,7 +55,7 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   const opId = `oper_op_${uid}_${op}`; // mismo esquema que registrar_operacion_pago
   // R111: un solo pago para varios servicios del cliente (renovación múltiple de la APK) conserva la lista completa.
   const grupo = { compraIds: Array.isArray(pago.compraIds) ? pago.compraIds.map((x) => clean(x)).filter(Boolean).slice(0, 30) : [], servicios: Array.isArray(pago.servicios) ? pago.servicios.slice(0, 30).map((x) => ({ compraId: clean(x?.compraId), plataforma: clean(x?.plataforma, 40), fechaAnterior: clean(x?.fechaAnterior), fechaNueva: clean(x?.fechaNueva) })) : [], plataforma: clean(pago.plataforma, 200) };
-  return { grupo, ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  return { categoria: clean(pago.categoria, 40), tipoVenta: clean(pago.tipoVenta, 40), grupo, ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
 }
 
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
@@ -69,7 +75,7 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   const { ep, banco, deudorTipo, vendedorNombre, opId, tipoOrigen } = prep;
   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
-  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}) };
+  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}) };
   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);

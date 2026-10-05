@@ -9,7 +9,8 @@
 import admin from "firebase-admin";
 import { randomBytes } from "node:crypto";
 import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
-import { prepararPago, leerPago, escribirPago } from "./_finanzas-operacion.js"; // R107: pago en la misma transacción
+import { prepararPago, leerPago, escribirPago } from "./_finanzas-operacion.js";
+import { clasificarServicio, normalizarServicioVenta } from "./_catalogo-categorias.js"; // R112 // R107: pago en la misma transacción
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -1109,8 +1110,11 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     out.stellaDispositivos = Math.max(1, Math.min(3, Number(servicio.stellaDispositivos ?? anterior.stellaDispositivos ?? limiteCodigo) || 1));
   }
 
+  // R112: categoría y tipo de venta GUARDADOS en la compra (mismo contrato en APK, Web, Telegram y Finanzas).
+  { const cls = clasificarServicio({ plataforma: plataformaFinal, categoria: servicio.categoria ?? anterior.categoria, tipoVenta: servicio.tipoVenta ?? anterior.tipoVenta });
+    out.categoria = cls.categoria; out.tipoVenta = cls.tipoVenta; }
   if (sinClave) out.sinClave = true;
-  if (sinPinPerfil) out.sinPinPerfil = true;
+  if (sinPinPerfil || out.tipoVenta === "cuenta_completa") out.sinPinPerfil = true;
   else if (principal.pinPerfil || pinPerfil) out.pinPerfil = principal.pinPerfil || pinPerfil;
 
   if (fichaTexto) {
@@ -1295,7 +1299,9 @@ async function handlerCore(req, res) {
     // NUEVO: crear o actualizar cliente + servicio desde el panel de entrega de ficha.
     if (acc === "ficha_upsert") {
       const cliente = body.cliente || {};
-      const servicio = body.servicio || {};
+      const normVenta = normalizarServicioVenta(body.servicio || {}); // R112: cuenta completa = correo + clave + precio, sin PIN
+      if (normVenta.error) return res.status(200).json({ ok: false, error: normVenta.error });
+      const servicio = normVenta.servicio;
       const nombrePerfil = cliente.nombrePerfil || cliente.nombre || body.nombrePerfil || "";
       const tel = cliente.telefono || telefono || "";
       const vendedor = canonicalVendedor(servicio.vendedor || cliente.vendedor || body.vendedor || "");
@@ -1418,7 +1424,7 @@ async function handlerCore(req, res) {
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
           if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
-          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
 
         if (idx >= 0) servicios[idx] = aplicarNuevoServicio(servicios[idx], nuevo);
@@ -1452,7 +1458,7 @@ async function handlerCore(req, res) {
         };
         if (created) update.createdAt = isoNow();
         transaction.set(docRef, update, { merge: true });
-        const pagoOperacion = escribirPago(transaction, db, prepPagoFicha, lecturaPagoFicha, { clienteId: docRef.id, clienteNombre: nombreFinal || nombrePerfil || "", compraId: serviciosLimpios[idx]?.compraId || "", plataforma: serviciosLimpios[idx]?.plataforma || servicio.plataforma || "" });
+        const pagoOperacion = escribirPago(transaction, db, prepPagoFicha, lecturaPagoFicha, { clienteId: docRef.id, clienteNombre: nombreFinal || nombrePerfil || "", compraId: serviciosLimpios[idx]?.compraId || "", plataforma: serviciosLimpios[idx]?.plataforma || servicio.plataforma || "", categoria: serviciosLimpios[idx]?.categoria || "", tipoVenta: serviciosLimpios[idx]?.tipoVenta || "" });
         return {
           created, idx, nombreFinal, serviciosLimpios, accesos,
           servicioActualizado, servicioAnterior, compraIdReconciliado,
@@ -1821,7 +1827,7 @@ async function handlerCore(req, res) {
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
           if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
-          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
         // 2026-09-17 FIX: "cuando actualizo la clave de una cuenta, se debe
         // actualizar en todas las fichas de los clientes en automático" — esto
