@@ -330,7 +330,7 @@ const PLAT_LABELS = {
   evoutouch:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
   iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
   canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
-  viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32 · 1 año / 1 dispositivo"
+  viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32"
 };
 const platLabel = p => { const k=String(p||"").toLowerCase().trim();
   return PLAT_LABELS[k] || (p ? p.charAt(0).toUpperCase()+p.slice(1) : "—"); };
@@ -4143,7 +4143,7 @@ function gCaminoBombas(){
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
     ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
-    ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32 · 1 año / 1 dispositivo"],
+    ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
     ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
@@ -4242,7 +4242,7 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
   function fichaConstruirMensajeCliente({nombre,servicioLabel,link,variante=0}){
     const indice=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(variante)||0));
     const t=FICHA_MENSAJES_CLIENTE[indice];
-    const texto=t.cuerpo+"\n\n"+t.despedida;
+    const texto=t.cuerpo+"\n\n🚫 Prohibido usar VPN · 2 faltas = suspensión del servicio, sin reembolso.\n"+t.despedida; // R119: regla de uso (VPN)
     return texto
       .replace(/\{nombre\}/g, nombre||"Cliente")
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")

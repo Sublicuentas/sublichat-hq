@@ -633,7 +633,8 @@
     return `<div class="support-footer">
       <div class="vendor-row"><span class="vendor-name">${d.vendedor?`Vendedor ${esc(d.vendedor)}`:"Soporte Sublicuentas"}</span>${support.phone?`<span class="vendor-phone">${esc(d.vendedorTelefono)}</span>`:""}</div>
       ${support.phone?`<a href="${support.href}" target="_blank" rel="noopener" class="cta">💬 Contactar soporte</a>
-      <div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Para renovaciones y soporte, favor comunicarse directamente con este número, que fue el que le entregó su acceso.</span></div>`:""}
+      <div class="renew-support-note"><b>🔄 Renovaciones y soporte</b><span>Para renovaciones y soporte, favor comunicarse directamente con este número, que fue el que le entregó su acceso.</span>
+      <div class="renew-support-note" style="margin-top:6px"><b>🚫 Uso de VPN prohibido</b><span>2 faltas provocan la suspensión del servicio, sin reembolso.</span></div></div>`:""}
     </div>`;
   }
 
