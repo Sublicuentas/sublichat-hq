@@ -208,7 +208,23 @@ function movimientoView(m, methods) {
     detalle: m.motivo || m.descripcion || m.detalle || m.concepto || "", cliente: m.clienteNombre || "", plataforma: m.plataforma || "",
     beneficiario: m.beneficiario || "", planillaPagoId: m.planillaPagoId || "", origen: m.origenCanal || m.origen || "",
     usuario: financeActorLabel(m), operationId: m.operationId || "",
+    createdAt: m.createdAt || "", clienteId: m.clienteId || "", estadoFinanciero: m.estadoFinanciero || "", reversaDe: m.reversaDe || "",
   };
+}
+// R114 · Un cliente paga UNA vez: los cobros del mismo cliente, banco, usuario y día registrados juntos
+// (renovar varios servicios) se muestran como UN solo pago (L 150, no 75 + 75). Aplica a todo el historial.
+function agruparPagos(rows = []) {
+  const out = [];
+  const asc = [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  for (const r of asc) {
+    const t = Date.parse(r.createdAt || "") || 0;
+    const key = [r.kind, (r.clienteId || r.cliente || "").toLowerCase(), r.bancoId, r.usuario, r.fecha].join("|");
+    const g = r.kind === "ingreso" && !r.estadoFinanciero && !r.reversaDe && (r.clienteId || r.cliente)
+      ? out.find((x) => x._key === key && t && Math.abs(t - x._t) <= 10 * 60000) : null;
+    if (g) { g.monto = money(g.monto + r.monto); g.ids.push(r.id); if (r.plataforma && !g.plataformas.includes(r.plataforma)) g.plataformas.push(r.plataforma); g.n += 1; }
+    else out.push({ ...r, _key: key, _t: t, ids: [r.id], plataformas: r.plataforma ? [r.plataforma] : [], n: 1 });
+  }
+  return out.map(({ _key, _t, ...r }) => ({ ...r, plataforma: r.plataformas.join(" + ") }));
 }
 
 async function handleLibro(db, accion, body, identity, authUser, res) {
@@ -251,7 +267,9 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     if (body.bancoId) rows = rows.filter((m) => m.bancoId === body.bancoId);
     const q = String(body.texto || "").toLowerCase().trim();
     if (q) rows = rows.filter((m) => [m.detalle, m.cliente, m.beneficiario, m.plataforma, m.usuario].join(" ").toLowerCase().includes(q));
-    rows.sort((a, b) => (b.fecha + b.id).localeCompare(a.fecha + a.id));
+    rows = agruparPagos(rows);
+    // Orden REAL: por fecha y, dentro del día, en el orden en que se registraron (lo último arriba).
+    rows.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     return res.status(200).json({ ok: true, accion, desde, hasta, movimientos: rows.slice(0, 500), total: rows.length });
   }
 
@@ -502,6 +520,21 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
 
   // ---- ajustar SOLO la fecha real del dinero (sin reversa): no cambia monto/banco, solo el día financiero.
   // Nunca se deriva de la fecha de corte/renovación del cliente.
+  if (accion === "ajustar_fecha_movimiento" && Array.isArray(body.movimientoIds) && body.movimientoIds.length > 1) {
+    // R114: un pago agrupado (varios servicios) cambia de fecha completo, en una transacción.
+    const ids = body.movimientoIds.map((x) => cleanText(x)).filter(Boolean).slice(0, 30), fechaPago = cleanText(body.fechaPago || body.fecha);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPago) || fechaPago > hoy) return res.status(200).json({ ok: false, error: "Fecha inválida o futura." });
+    const r = await run(async (tx) => {
+      const snaps = await Promise.all(ids.map((id) => tx.get(fmov(id))));
+      const ventas = await Promise.all(ids.filter((id) => id.endsWith("_cobro")).map((id) => tx.get(fmov(id.replace(/_cobro$/, "_venta")))));
+      for (const sn of snaps) { const m = sn.data() || {}; if (!sn.exists || movementKind(m) !== "ingreso" || m.reversaDe || m.estadoFinanciero) throw userErr("Ese pago no admite ajuste de fecha."); }
+      const campos = { ...canonicalFinanceDate(fechaPago, hoy), fechaPagoAjustadaManualmente: true, fechaAjustadaPor: identity.usuario, fechaAjustadaAt: isoNow(), updatedAt: isoNow() };
+      [...snaps, ...ventas].forEach((sn) => { if (sn.exists) tx.set(fmov(sn.id), { ...campos, fechaAjustadaDe: movementYmd(sn.data() || {}) || "" }, { merge: true }); });
+      auditar(tx, db, identity, { origen: body.origen, accion: "ajustar_fecha_pago", targetType: "pago", targetId: ids.join(","), movimientoId: ids[0], motivo: cleanText(body.motivo || "Ajuste de fecha del pago").slice(0, 200), after: { fechaPago }, detalle: `${ids.length} servicios, un solo pago → ${fechaPago}` });
+      return { sinCambios: false, fechaPago, n: ids.length };
+    });
+    return reply(r);
+  }
   if (accion === "ajustar_fecha_movimiento") {
     const id = cleanText(body.movimientoId), fechaPago = cleanText(body.fechaPago || body.fecha);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPago)) return res.status(200).json({ ok: false, error: "Fecha inválida. Use yyyy-mm-dd." });
@@ -686,7 +719,7 @@ export default async function handler(req, res) {
         telefono_norm: normPhone(body.telefono),
         plataforma: cleanText(body.plataforma),
         monto,
-        metodoPago: cleanText(body.metodoPago || body.metodo || "No especificado"),
+        metodoPago: cleanText(body.metodoPago || body.metodo || "No especificado"), ...(cleanText(body.bancoId) ? { bancoId: cleanText(body.bancoId), banco: cleanText(body.metodoPago || body.bancoId) } : {}), // R114: banco enlazado
         ...(await cobroLinkFields(db, body)),
         cobradoPor: identity.usuario,
         vendedor: cleanText(body.vendedor),
