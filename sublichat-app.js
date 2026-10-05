@@ -1,3 +1,4 @@
+import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261005-r112"; // R112
 const CONFIG = {
   firebase: {
     apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
@@ -5000,9 +5001,26 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(cand<today){ const max=new Date(y,m+2,0).getDate(); return new Date(y,m+1,Math.min(d,max)).toISOString().slice(0,10); }
     return cand.toISOString().slice(0,10);
   };
-  const fichaNeedsClave=plat=>!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));
-  const fichaNeedsPin=plat=>!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
-  const fichaNeedsCorreo=plat=>!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
+  const fichaEsCuentaCompleta=()=>fichaGetVal("fichaCategoria")==="cuentas_completas"; // R112
+  const fichaNeedsClave=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));
+  const fichaNeedsPin=plat=>!fichaEsCuentaCompleta()&&!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
+  const fichaNeedsCorreo=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
+  // R112 · Categorías: primero la categoría, después solo sus plataformas (mismo contrato que APK y bot).
+  function fichaCategoriaDe(plat,tipoVenta=""){ return r112Clasificar({plataforma:plat,tipoVenta}).categoria; }
+  function fichaPintarCategorias(){
+    const cat=fichaGetVal("fichaCategoria")||fichaCategoriaDe(fichaGetVal("fichaPlat"));
+    document.querySelectorAll("[data-ficha-cat]").forEach(b=>b.classList.toggle("on",b.dataset.fichaCat===cat));
+    const sel=fichaQ("fichaPlat"); if(sel){ const actual=sel.value; [...sel.options].forEach(o=>{ const visible=cat==="cuentas_completas"?R112_CC.includes(o.value):fichaCategoriaDe(o.value)===cat; o.hidden=!visible&&o.value!==actual; }); }
+    const nota=document.getElementById("fichaCatNota"); if(nota)nota.hidden=cat!=="cuentas_completas";
+    const add=document.getElementById("fichaAddProfile"); if(add)add.style.display=cat==="cuentas_completas"?"none":"";
+  }
+  function fichaSetCategoria(cat,{desdePlataforma=false}={}){
+    const hid=fichaQ("fichaCategoria"); if(hid)hid.value=cat;
+    const sel=fichaQ("fichaPlat");
+    if(!desdePlataforma&&sel){ const ok=cat==="cuentas_completas"?R112_CC.includes(sel.value):fichaCategoriaDe(sel.value)===cat;
+      if(!ok){ const first=[...sel.options].find(o=>cat==="cuentas_completas"?R112_CC.includes(o.value):fichaCategoriaDe(o.value)===cat); if(first){ sel.value=first.value; sel.dispatchEvent(new Event("change")); } } }
+    fichaPintarCategorias(); try{ fichaRenderPerfilesExtra(); }catch(_){}
+  }
   const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaBaseRegla(plat));
   const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaBaseRegla(plat));
   const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaBaseRegla(plat));
@@ -5782,6 +5800,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     // autoritativo de Firebase; los IDs nuevos se generan solo al crear compras.
     const compraIdGuardar=fichaCompraIdActual||((fichaForzarNuevoServicioActual||fichaServicioIndexActual==null)?fichaNuevoId("compra"):"");
     const servicio={
+      categoria:fichaGetVal("fichaCategoria")||fichaCategoriaDe(plat), tipoVenta:fichaEsCuentaCompleta()?"cuenta_completa":"", // R112
       compraId:compraIdGuardar,
       modalidad:perfiles.length>1?"multiperfil":"individual",
       plataforma:plataformaGuardar,
@@ -6096,6 +6115,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const principal=perfiles[0]||{};
     fichaCompraIdActual=String(s.compraId||"");
     fichaPerfilesOriginalesActual=perfiles.length;
+    try{ fichaSetCategoria(r112Clasificar({plataforma:s.plataforma,tipoVenta:s.tipoVenta,categoria:s.categoria}).categoria,{desdePlataforma:true}); }catch(_){} // R112: la compra abre en su categoría guardada
     fichaPerfilPrincipalIdActual=String(principal.perfilId||fichaNuevoId("perfil"));
     fichaPerfilesExtraActuales=perfiles.slice(1).map(p=>({...p}));
     const fechaISO=(s.fechaRaw?fbAISO(s.fechaRaw):"") || (s.fecha?s.fecha.toISOString().slice(0,10):"");
@@ -6255,7 +6275,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaServicioIndexActual=null;
     fichaServicioOriginalActual=null;
     fichaPrefillFromService(grupo,{plataformaRaw:"netflix",beneficiarioTipo:"titular"});
-    fichaCompraIdActual=fichaNuevoId("compra");
+    fichaCompraIdActual=fichaNuevoId("compra"); try{ fichaSetCategoria(fichaCategoriaDe(fichaGetVal("fichaPlat")),{desdePlataforma:true}); }catch(_){} // R112
     fichaPerfilPrincipalIdActual=fichaNuevoId("perfil");
     fichaPerfilesExtraActuales=[];
     fichaQ("fichaIptvProveedor").value="latintv";
@@ -6434,6 +6454,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>¿Quién usará este acceso?</span><select class="ficha-select" id="fichaBeneficiarioTipo"><option value="titular">El cliente titular</option><option value="tercero">Otra persona / tercero</option></select></label>
           <label class="ficha-field" id="fichaBeneficiarioNombreBox" style="display:none"><span>Nombre del beneficiario</span><input class="ficha-input" id="fichaBeneficiarioNombre" placeholder="Ej. María López"></label>
           <div class="ficha-field" id="fichaBeneficiarioHelp" style="grid-column:1/-1;background:rgba(47,155,224,.10);border:1px solid rgba(47,155,224,.28);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;color:var(--muted)">🔗 Todas las plataformas de este cliente se reunirán en una sola URL permanente, aunque compre o renueve en fechas distintas.</div>
+          <input type="hidden" id="fichaCategoria" value="">
+          <div class="ficha-cats" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px">${R112_ORDEN.map(k=>`<button type="button" class="ficha-cat" data-ficha-cat="${k}" style="border:1px solid #dbe3ee;background:#fff;color:#0f2d52;border-radius:999px;padding:7px 12px;font-weight:800;cursor:pointer">${R112_CATS[k].emoji} ${R112_CATS[k].label}</button>`).join("")}</div>
+          <p id="fichaCatNota" hidden style="margin:0 0 8px;font-size:12.5px;color:#475569">🔐 Cuenta completa: solo <b>correo + clave + precio</b>. Sin PIN ni perfiles.</p>
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
           <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 Perfil 1 · ¿Dónde va a usar este perfil?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
           <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>Perfil 1 · ¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
@@ -6541,7 +6564,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const hidden=fichaQ("fichaTexto");
       if(view && hidden) hidden.value=view.innerText;
     });
-    fichaQ("fichaPlat").addEventListener("change",()=>{ fichaActualizarIptvOpciones("1",""); fichaActualizarTvDigitalOpciones("1"); fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
+    document.querySelectorAll("[data-ficha-cat]").forEach(b=>b.addEventListener("click",()=>fichaSetCategoria(b.dataset.fichaCat)));
+    fichaQ("fichaPlat").addEventListener("change",()=>{ { const p=fichaGetVal("fichaPlat"); const actual=fichaGetVal("fichaCategoria"); fichaSetCategoria(actual==="cuentas_completas"&&R112_CC.includes(p)?"cuentas_completas":fichaCategoriaDe(p),{desdePlataforma:true}); } // R112
+ fichaActualizarIptvOpciones("1",""); fichaActualizarTvDigitalOpciones("1"); fichaSetPrecioDefault(true); fichaRenderPerfilesExtra(); fichaActualizarVisibilidadUrl(false); fichaRefreshTemplate(); });
     fichaQ("fichaDispositivo").addEventListener("change",()=>{
       const rokuBox=fichaQ("fichaRokuBox");
       if(rokuBox) rokuBox.style.display = fichaUsaSelectorDispositivo(fichaGetVal("fichaPlat"))&&fichaGetVal("fichaDispositivo")==="tv" ? "block" : "none";
@@ -6629,7 +6654,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaResetButtons();
     fichaPrefillFromService(grupo||{},serv||{plataformaRaw:"netflix"});
     if(forceNewService){
-      fichaCompraIdActual=fichaNuevoId("compra");
+      fichaCompraIdActual=fichaNuevoId("compra"); try{ fichaSetCategoria(fichaCategoriaDe(fichaGetVal("fichaPlat")),{desdePlataforma:true}); }catch(_){} // R112
       fichaPerfilPrincipalIdActual=fichaNuevoId("perfil");
       fichaPerfilesExtraActuales=[];
       fichaQ("fichaIptvProveedor").value="latintv";
