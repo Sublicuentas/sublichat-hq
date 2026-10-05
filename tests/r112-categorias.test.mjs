@@ -58,3 +58,10 @@ test('R114: movimientos agrupan un pago único por cliente y van en orden real d
   assert.equal(g.length, 2); assert.equal(g[0].monto, 150); assert.deepEqual(g[0].ids, ['a', 'b']); assert.equal(g[0].plataforma, 'Netflix + Disney');
   assert.match(f, /String\(b\.createdAt \|\| ""\)\.localeCompare\(String\(a\.createdAt \|\| ""\)\)/);
 });
+
+test('R117: acción finanzas_reporte (datos del Excel Saiyajin para la APK)', () => {
+  const f = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
+  assert.match(f, /if \(accion === "finanzas_reporte"\)/);
+  assert.match(f, /const ingresos = agruparPagos\(views\.filter\(\(v\) => v\.kind === "ingreso"\)\)/);
+  assert.match(f, /\["finanzas_reporte", "finanzas_metodos"/);
+});
