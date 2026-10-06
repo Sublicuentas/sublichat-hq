@@ -35,10 +35,42 @@ export function esUsuarioLibro(user = {}) {
 }
 function errorUsuario(msg) { const e = new Error(msg); e.crmUserMessage = msg; return e; } // renovar.js responde estos errores como {ok:false,error}
 
+// ===================== R121 · "Ya pagó por Socios" =====================
+// La compra de un socio YA dejó su venta + ingreso en el libro (el socio pagó desde el Panel de Socios).
+// Cuando Sublicuentas arma la ficha de esa cuenta NO se crea otro ingreso: la ficha queda amarrada a ese pago.
+// Solo se puede usar contra un pago de socio real que todavía tenga cuentas sin ficha (nadie se salta el cobro).
+const SOCIO_MOV_RE = /^socio_compra_[A-Za-z0-9_-]{1,120}_cobro$/;
+export function unidadesSocio(mov = {}) {
+  const vinc = Array.isArray(mov.fichasVinculadas) ? mov.fichasVinculadas : [];
+  const prods = Array.isArray(mov.productosSocio) && mov.productosSocio.length ? mov.productosSocio : [{ servicio: mov.plataforma || "Servicio", cantidad: 1 }];
+  return prods.map((p, idx) => {
+    const cantidad = Math.max(1, Math.min(50, Math.round(Number(p?.cantidad) || 1)));
+    const vinculadas = vinc.filter((v) => Number(v?.productoIdx) === idx).length;
+    return { idx, servicio: clean(p?.servicio || mov.plataforma || "Servicio", 140), perfil: clean(p?.perfil || (prods.length === 1 ? mov.clienteNombre : "") || "", 80), cantidad, vinculadas, restantes: Math.max(0, cantidad - vinculadas) };
+  });
+}
+export function pagoSocioDisponible(mov = {}) {
+  return mov.subtipo === "compra_socio" && mov.tipo === "ingreso" && !mov.estadoFinanciero && !mov.reversaDe && mov.fichaPendiente !== false;
+}
+// Lo que ven web, APK y bot en la lista "compras de socios sin ficha" (sin datos sensibles).
+export function pagoSocioVista(mov = {}) {
+  return { movimientoId: clean(mov.movimientoId || mov.id, 160), pedidoId: clean(mov.pedidoId || mov.compraId, 120), socio: clean(mov.socioNombre || mov.registradoPorNombre || "Socio", 60), clienteNombre: clean(mov.clienteNombre, 80),
+    monto: money(mov.monto), banco: clean(mov.banco, 60), fecha: clean(mov.fechaPago || "", 10), plataforma: clean(mov.plataforma, 200), productos: unidadesSocio(mov).filter((u) => u.restantes > 0) };
+}
+
 // 1) Validar fuera de la transacción (métodos activos, montos, responsable). Devuelve null si no viene pago.
 export async function prepararPago(db, pago, user, tipoOrigen) {
   if (!pago || typeof pago !== "object") return null;
   if (!esUsuarioLibro(user)) throw errorUsuario("El pago de la operación solo lo registran Sublicuentas y Relojes.");
+  if (pago.pagoSocio) { // R121: la ficha se amarra a una compra de socio ya pagada → sin ingreso nuevo
+    if (tipoOrigen !== "compra") throw errorUsuario("“Ya pagó por Socios” solo aplica al armar la ficha de una compra.");
+    const movimientoId = clean(pago.pagoSocio.movimientoId, 160);
+    if (!SOCIO_MOV_RE.test(movimientoId)) throw errorUsuario("Elija la compra de socio que ya está pagada.");
+    const opS = clean(pago.operationId, 80);
+    if (!OP_RE.test(opS)) throw errorUsuario("Falta operationId del pago (actualice la app).");
+    const idx = Number(pago.pagoSocio.productoIdx);
+    return { socio: { movimientoId, productoIdx: Number.isInteger(idx) && idx >= 0 ? idx : 0 }, operationId: opS, tipoOrigen, origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  }
   const ep = estadoPago(pago.montoTotal, pago.recibido);
   if (!(ep.total > 0)) throw errorUsuario("Escriba el monto total de la operación.");
   if (ep.recibido < 0 || ep.recibido > ep.total) throw errorUsuario("Lo recibido no puede ser negativo ni mayor que el total.");
@@ -61,6 +93,22 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
 export async function leerPago(transaction, db, prep) {
   if (!prep) return null;
+  if (prep.socio) { // R121
+    const ref = db.collection("finanzas_movimientos").doc(prep.socio.movimientoId);
+    const snap = await transaction.get(ref);
+    if (!snap.exists) throw errorUsuario("Esa compra de socio ya no existe en Finanzas.");
+    const mov = snap.data() || {};
+    if (mov.subtipo !== "compra_socio" || mov.tipo !== "ingreso") throw errorUsuario("Ese movimiento no es una compra de socio.");
+    if (mov.estadoFinanciero || mov.reversaDe) throw errorUsuario("Ese pago de socio está anulado o corregido: registre el pago normal.");
+    const vinc = Array.isArray(mov.fichasVinculadas) ? mov.fichasVinculadas : [];
+    const yaExiste = vinc.some((v) => v?.operationId === prep.operationId);
+    if (!yaExiste) {
+      const u = unidadesSocio(mov)[prep.socio.productoIdx];
+      if (!u) throw errorUsuario("Ese producto no está en la compra del socio.");
+      if (u.restantes <= 0 || mov.fichaPendiente === false) throw errorUsuario("Esa compra de socio ya tiene su ficha armada. Si es otra venta, registre el pago normal.");
+    }
+    return { socio: true, ref, mov, yaExiste };
+  }
   const ventaRef = db.collection("finanzas_movimientos").doc(`${prep.opId}_venta`);
   const [libroSnap, ventaSnap] = await Promise.all([transaction.get(db.collection("finanzas_config").doc("libro_mayor")), transaction.get(ventaRef)]);
   const libro = libroSnap.exists ? (libroSnap.data() || {}) : {};
@@ -71,6 +119,17 @@ export async function leerPago(transaction, db, prep) {
 
 // 3) Escribir junto con la ficha (misma transacción). rel = cliente/compra/fechas reales de la operación.
 export function escribirPago(transaction, db, prep, lectura, rel = {}) {
+  if (prep?.socio) { // R121: NO hay venta ni ingreso nuevos; solo se anota a qué ficha corresponde el pago del socio
+    if (!lectura?.socio) return null;
+    const mov = lectura.mov, resumen = { pagoSocio: true, estado: "pagado_socio", total: money(mov.monto), recibido: 0, saldo: 0, socio: clean(mov.socioNombre || "Socio", 60), banco: clean(mov.banco, 60), movimientoId: prep.socio.movimientoId };
+    if (lectura.yaExiste) return { duplicado: true, ...resumen };
+    const ahora = new Date().toISOString();
+    const vinc = [...(Array.isArray(mov.fichasVinculadas) ? mov.fichasVinculadas : []), { productoIdx: prep.socio.productoIdx, clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), operationId: prep.operationId, por: prep.usuario, origen: prep.origen, at: ahora }];
+    const quedan = unidadesSocio({ ...mov, fichasVinculadas: vinc }).reduce((a, u) => a + u.restantes, 0);
+    transaction.set(lectura.ref, { fichasVinculadas: vinc, fichaPendiente: quedan > 0, updatedAt: ahora }, { merge: true });
+    transaction.set(db.collection("auditoria_eventos").doc(), { actorUsuario: prep.usuario, rol: prep.rol, origen: prep.origen, modulo: "compras", accion: "ficha_pago_socio", targetType: "movimiento", targetId: prep.socio.movimientoId, movimientoId: prep.socio.movimientoId, clienteId: clean(rel.clienteId), compraId: clean(rel.compraId), operationId: prep.operationId, monto: money(mov.monto), after: { socio: resumen.socio, banco: resumen.banco, fichasPendientes: quedan }, detalle: `${clean(rel.clienteNombre, 80)} · ${clean(rel.plataforma, 40)} · ya pagado por el socio ${resumen.socio} (${money(mov.monto)} en ${resumen.banco}) · sin ingreso nuevo`, resultado: "ok", tipo: "finanzas_ficha_pago_socio", createdAt: ahora });
+    return { duplicado: false, ...resumen, fichasPendientes: quedan };
+  }
   if (!prep || !lectura || lectura.yaExiste) return lectura?.yaExiste ? { duplicado: true, ...prep.ep } : null;
   const { ep, banco, deudorTipo, vendedorNombre, opId, tipoOrigen } = prep;
   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago

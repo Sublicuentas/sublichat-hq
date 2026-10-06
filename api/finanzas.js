@@ -7,7 +7,7 @@
 
 import admin from "firebase-admin";
 import { financeMetadata } from "./_finance-schema.js";
-import { fechaPagoValida } from "./_finanzas-operacion.js"; // R110
+import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
 import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js"; // R112
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
@@ -484,6 +484,29 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
     return reply(r);
   }
 
+  // ---- R121 · compras de socios YA pagadas que todavía no tienen su ficha armada ("Ya pagó por Socios")
+  if (accion === "listar_pagos_socios_sin_ficha") {
+    const pagos = rowsOf(await db.collection("finanzas_movimientos").where("fichaPendiente", "==", true).get())
+      .filter(pagoSocioDisponible).map((m) => pagoSocioVista({ ...m, movimientoId: m.id })).filter((p) => p.productos.length)
+      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.movimientoId).localeCompare(String(a.movimientoId)));
+    return res.status(200).json({ ok: true, accion, pagos: pagos.slice(0, 80) });
+  }
+  // ---- R121 · esa compra de socio ya tiene su ficha (armada antes de este cambio): se quita de la lista. No mueve dinero.
+  if (accion === "socio_ficha_lista") {
+    const id = cleanText(body.movimientoId);
+    if (!/^socio_compra_[A-Za-z0-9_-]{1,120}_cobro$/.test(id)) return res.status(200).json({ ok: false, error: "Elija la compra de socio." });
+    const r = await run(async (tx) => {
+      const snap = await tx.get(fmov(id));
+      const m = snap.exists ? (snap.data() || {}) : null;
+      if (!m || m.subtipo !== "compra_socio" || m.tipo !== "ingreso") throw userErr("Esa compra de socio no existe.");
+      if (m.fichaPendiente === false) return { yaEstaba: true };
+      tx.update(fmov(id), { fichaPendiente: false, fichaListaPor: identity.usuario, fichaListaAt: isoNow(), updatedAt: isoNow() });
+      auditar(tx, db, identity, { origen: body.origen, modulo: "compras", accion: "socio_ficha_lista", targetType: "movimiento", targetId: id, movimientoId: id, monto: money(m.monto), detalle: `${m.clienteNombre || m.plataforma || "Compra de socio"} · socio ${m.socioNombre || ""} · marcada como ficha ya armada (sin mover dinero)` });
+      return {};
+    });
+    return reply(r);
+  }
+
   // ---- cartera por cobrar (filtrable por cliente / vendedor)
   if (accion === "listar_pendientes") {
     let rows = (await db.collection(CXC).where("estado", "in", body.incluirPagadas ? ["pendiente", "parcial", "pagado"] : ["pendiente", "parcial"]).get()).docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
@@ -704,7 +727,7 @@ export default async function handler(req, res) {
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
     }
-    if (["registrar_operacion_pago", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
+    if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
