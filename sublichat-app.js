@@ -3049,16 +3049,34 @@ function pagoOpFilaEstado(f={}){
   return {modo,total,recibido,saldo,estado:saldo<=0?"PAGADO":(recibido>0?"PARCIAL":"PENDIENTE")};
 }
 // R108 · UX simple: Pagó / Pendiente. Si Pagó, puede añadir saldo pendiente. El backend conserva montoTotal + recibido.
-async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitirAjuste=false}={}){
+// R121 · "Ya pagó por Socios": compras de socios ya pagadas que todavía no tienen su ficha armada.
+async function pagoOpSociosSinFicha(){
+  const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"listar_pagos_socios_sin_ficha"})});
+  const j=await r.json().catch(()=>({}));
+  if(!j.ok)throw new Error(j.error||"No se pudieron leer las compras de socios.");
+  return Array.isArray(j.pagos)?j.pagos:[];
+}
+function pagoOpSocioTexto(p,u){const f=String(p.fecha||"");return [p.socio,u.servicio,u.perfil||p.clienteNombre,`Lps. ${p.monto}`,p.banco,f?`${f.slice(8,10)}/${f.slice(5,7)}`:""].filter(Boolean).join(" · ");}
+async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitirAjuste=false,permitirSocio=false}={}){
   let metodos=[];
   try{metodos=await pagoOpMetodos();}catch(e){alert("⚠️ "+(e.message||"Sin métodos de pago"));return null;}
   return new Promise(resolve=>{
-    const st={modo:"pago",filas:{},bancoId:"",responsable:"cliente",vendedor:"",motivo:""};
+    const st={modo:"pago",filas:{},bancoId:"",responsable:"cliente",vendedor:"",motivo:"",socios:null,socioSel:"",socioError:""};
+    const cargarSocios=async()=>{st.socios=null;st.socioError="";pintar();try{st.socios=await pagoOpSociosSinFicha();}catch(e){st.socios=[];st.socioError=e.message||"Sin conexión";}if(back.isConnected)pintar();};
+    const socioHtml=()=>{
+      if(st.socios===null)return `<p style="color:#64748b;font-size:13px;margin:12px 0">Buscando compras de socios…</p>`;
+      if(st.socioError)return `<p style="color:#b91c1c;font-weight:700;font-size:13px;margin:12px 0">⚠️ ${pagoOpEsc(st.socioError)}</p>`;
+      const filas=st.socios.flatMap(p=>(p.productos||[]).map(u=>({id:`${p.movimientoId}|${u.idx}`,p,u})));
+      if(!filas.length)return `<p style="color:#64748b;font-size:13px;margin:12px 0">No hay compras de socios pendientes de ficha. Si el cliente pagó aparte, use <b>Con pago</b>.</p>`;
+      return `<p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Cuál compra de socio es?</p>${filas.map(f=>{const on=st.socioSel===f.id;return `<div style="display:flex;gap:6px;align-items:stretch;margin-top:6px"><button data-socio="${pagoOpEsc(f.id)}" style="flex:1;text-align:left;border:1px solid ${on?"#e2231a":"#dbe3ee"};background:${on?"#fff1f0":"#fff"};color:#0f2d52;border-radius:12px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">${on?"✅ ":""}${pagoOpEsc(pagoOpSocioTexto(f.p,f.u))}${f.u.restantes>1?` <span style="font-weight:400;color:#64748b">(${f.u.restantes} sin ficha)</span>`:""}</button><button data-socio-lista="${pagoOpEsc(f.p.movimientoId)}" title="Esa compra ya tiene su ficha: quitarla de esta lista" style="border:1px solid #dbe3ee;background:#fff;color:#64748b;border-radius:12px;padding:0 10px;font-size:12px;cursor:pointer">Ya tiene ficha</button></div>`;}).join("")}<p style="color:#64748b;font-size:12px;margin:8px 0 0">El socio ya pagó desde el Panel de Socios: la ficha se guarda amarrada a ese pago y <b>no se registra otro ingreso</b>.</p>`;
+    };
     const back=document.createElement("div");
-    back.setAttribute("style","position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:14px");
+    // R121: por ENCIMA de la ficha (su fondo usa z-index 100000). Antes este cuadro quedaba escondido detrás de la
+    // ficha y el botón se quedaba en "Guardando…" sin dejar avanzar. En pantalla completa se monta dentro de ella.
+    back.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:14px");
     const box=document.createElement("div");
     box.setAttribute("style","width:min(460px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;font-family:inherit;color:#0f172a;box-shadow:0 18px 50px rgba(0,0,0,.25)");
-    back.appendChild(box);document.body.appendChild(back);
+    back.appendChild(box);(document.fullscreenElement||document.body).appendChild(back);
     const cerrar=(v)=>{back.remove();resolve(v);};
     const inp="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px";
     const btn=(on)=>`border:1px solid ${on?"#e2231a":"#dbe3ee"};background:${on?"#e2231a":"#fff"};color:${on?"#fff":"#0f2d52"};border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer`;
@@ -3071,19 +3089,26 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
       return `<div style="border:1px solid #e5eaf2;border-radius:12px;padding:10px;margin-top:10px"><b style="font-size:13.5px">${pagoOpEsc(r.label)}</b><p style="font-size:12.5px;font-weight:700;margin:8px 0 5px">Estado del cobro</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${chip("pagado","✅ Pagó")}${chip("pendiente","🕒 Pendiente")}</div>${campos}<small data-fila-estado="${pagoOpEsc(r.key)}" style="display:block;color:#64748b;margin-top:7px">${estado}</small></div>`;
     };
     function pintar(){
-      const suma=totales(),ajuste=st.modo==="ajuste";
+      const suma=totales(),ajuste=st.modo==="ajuste",socio=st.modo==="socio";
       box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">${tipo==="compra"?"💵 Pago de la compra":"💵 Renovar"} · ${pagoOpEsc(cliente)}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
       ${permitirAjuste?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0"><button data-modo="pago" style="${btn(!ajuste)}">💵 Con pago</button><button data-modo="ajuste" style="${btn(ajuste)}">🛠 Ajuste sin pago</button></div>`:""}
-      ${ajuste?`<label style="display:block;font-size:13px;font-weight:700;margin-top:8px">Motivo (garantía, cortesía, corrección…)<input data-motivo style="${inp}" value="${pagoOpEsc(st.motivo)}" maxlength="200"></label><p style="color:#64748b;font-size:12.5px">Mueve la fecha sin registrar ingreso. Queda auditado.</p>`:`
+      ${permitirSocio?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0"><button data-modo="pago" style="${btn(!socio)}">💵 Con pago</button><button data-modo="socio" style="${btn(socio)}">🤝 Ya pagó por Socios</button></div>`:""}
+      ${socio?socioHtml():ajuste?`<label style="display:block;font-size:13px;font-weight:700;margin-top:8px">Motivo (garantía, cortesía, corrección…)<input data-motivo style="${inp}" value="${pagoOpEsc(st.motivo)}" maxlength="200"></label><p style="color:#64748b;font-size:12.5px">Mueve la fecha sin registrar ingreso. Queda auditado.</p>`:`
       ${rows.map(fieldHtml).join("")}
       <div data-banco-box ${suma.recibido>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:10px 0 6px">¿Dónde entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px">${metodos.map(m=>`<button data-banco="${pagoOpEsc(m.id)}" style="${btn(st.bancoId===m.id)}">${pagoOpEsc(m.nombre)}</button>`).join("")}</div></div>
       <div data-resp-box ${suma.saldo>0?"":"hidden"}><p style="font-size:13px;font-weight:700;margin:12px 0 6px">¿Quién debe el pendiente? <span style="font-weight:400;color:#64748b">(no suma a bancos hasta cobrarse)</span></p><div style="display:flex;gap:6px"><button data-resp="cliente" style="${btn(st.responsable==="cliente")}">👤 El cliente</button><button data-resp="vendedor" style="${btn(st.responsable==="vendedor")}">🧑‍💼 Un vendedor</button></div>${st.responsable==="vendedor"?`<input data-vendedor placeholder="Nombre del vendedor" style="${inp}" value="${pagoOpEsc(st.vendedor)}">`:""}</div>`}
       <p data-error hidden style="margin:10px 0 0;color:#b91c1c;font-weight:800;font-size:13px"></p>
-      ${ajuste?"":`<p style="font-size:13px;font-weight:700;margin:12px 0 6px">📅 ¿Qué día entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${[[0,"Hoy"],[1,"Ayer"],[2,"Antier"]].map(([n,t])=>{const f=pagoOpDiasAtras(n);return `<button data-fecha="${f}" style="${btn((st.fechaPago||pagoOpHoy())===f)}">${t} ${f.slice(8,10)}/${f.slice(5,7)}</button>`;}).join("")}<input data-fecha-otra type="date" value="${pagoOpEsc(st.fechaPago||pagoOpHoy())}" max="${pagoOpHoy()}" min="${pagoOpDiasAtras(30)}" style="${inp};width:auto;margin-top:0"></div><p style="color:#64748b;font-size:12px;margin:4px 0 0">Es la fecha que queda en Finanzas; la fecha de renovación del cliente no cambia.</p>`}
-      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":(tipo==="compra"?"Confirmar compra":"Confirmar y renovar")}</button>`;
+      ${ajuste||socio?"":`<p style="font-size:13px;font-weight:700;margin:12px 0 6px">📅 ¿Qué día entró el dinero?</p><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${[[0,"Hoy"],[1,"Ayer"],[2,"Antier"]].map(([n,t])=>{const f=pagoOpDiasAtras(n);return `<button data-fecha="${f}" style="${btn((st.fechaPago||pagoOpHoy())===f)}">${t} ${f.slice(8,10)}/${f.slice(5,7)}</button>`;}).join("")}<input data-fecha-otra type="date" value="${pagoOpEsc(st.fechaPago||pagoOpHoy())}" max="${pagoOpHoy()}" min="${pagoOpDiasAtras(30)}" style="${inp};width:auto;margin-top:0"></div><p style="color:#64748b;font-size:12px;margin:4px 0 0">Es la fecha que queda en Finanzas; la fecha de renovación del cliente no cambia.</p>`}
+      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${ajuste?"Confirmar ajuste":socio?"Guardar ficha sin otro ingreso":(tipo==="compra"?"Confirmar compra":"Confirmar y renovar")}</button>`;
       const error=(msg)=>{const e=box.querySelector("[data-error]");if(e){e.textContent=msg;e.hidden=false;e.scrollIntoView?.({block:"nearest",behavior:"smooth"});}};
       box.querySelector("[data-x]").onclick=()=>cerrar(null);
-      box.querySelectorAll("[data-modo]").forEach(b=>b.onclick=()=>{st.modo=b.dataset.modo;pintar();});
+      box.querySelectorAll("[data-modo]").forEach(b=>b.onclick=()=>{st.modo=b.dataset.modo;if(st.modo==="socio"&&st.socios===null){cargarSocios();return;}pintar();});
+      box.querySelectorAll("[data-socio]").forEach(b=>b.onclick=()=>{st.socioSel=b.dataset.socio;pintar();});
+      box.querySelectorAll("[data-socio-lista]").forEach(b=>b.onclick=async()=>{
+        if(!confirm("¿Esa compra de socio ya tiene su ficha armada? Se quita de esta lista. No mueve dinero."))return;
+        try{const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"socio_ficha_lista",movimientoId:b.dataset.socioLista,origen:"web"})});const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo actualizar.");if(st.socioSel.startsWith(b.dataset.socioLista+"|"))st.socioSel="";cargarSocios();}
+        catch(e){error(e.message||"No se pudo actualizar.");}
+      });
       box.querySelector("[data-motivo]")?.addEventListener("input",ev=>{st.motivo=ev.target.value;});
       box.querySelectorAll("[data-estado]").forEach(b=>b.onclick=()=>{const f=fila(b.dataset.key);f.estadoCobro=b.dataset.estado;if(f.estadoCobro==="pendiente")f.tienePendiente=false;pintar();});
       box.querySelectorAll("[data-toggle-pendiente]").forEach(b=>b.onclick=()=>{const f=fila(b.dataset.togglePendiente);f.tienePendiente=!f.tienePendiente;pintar();});
@@ -3096,6 +3121,7 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
       box.querySelector("[data-vendedor]")?.addEventListener("input",ev=>{st.vendedor=ev.target.value;});
       box.querySelector("[data-ok]").onclick=()=>{
         if(st.modo==="ajuste"){if(String(st.motivo).trim().length<4)return error("Escriba el motivo del ajuste.");return cerrar({modo:"ajuste",motivo:String(st.motivo).trim()});}
+        if(st.modo==="socio"){const [movimientoId,idx]=String(st.socioSel||"").split("|");const p=(st.socios||[]).find(x=>x.movimientoId===movimientoId);if(!p)return error("Elija cuál compra de socio corresponde a esta ficha.");return cerrar({modo:"socio",movimientoId,productoIdx:Number(idx)||0,socio:p.socio,banco:p.banco,monto:p.monto});}
         for(const r of rows){const e=pagoOpFilaEstado(fila(r.key));if(e.modo==="pagado"&&!(e.recibido>0))return error(`Escriba cuánto pagó (${r.label}).`);if(e.modo==="pagado"&&fila(r.key).tienePendiente&&!(e.saldo>0))return error(`Escriba el saldo pendiente (${r.label}).`);if(e.modo==="pendiente"&&!(e.saldo>0))return error(`Escriba cuánto queda pendiente (${r.label}).`);}
         const e3=totales();if(e3.recibido>0&&!st.bancoId)return error("Elija dónde entró el dinero.");if(e3.saldo>0&&st.responsable==="vendedor"&&String(st.vendedor).trim().length<2)return error("Escriba el vendedor responsable.");
         cerrar({modo:"pago",fechaPago:st.fechaPago||pagoOpHoy(),filas:st.filas,bancoId:st.bancoId,banco:(metodos.find(m=>m.id===st.bancoId)||{}).nombre||"",responsable:st.responsable,vendedor:String(st.vendedor).trim()});
@@ -3105,7 +3131,8 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
   });
 }
 // R107: el pago viaja DENTRO de la misma petición de renovar/guardar compra → el servidor guarda fecha/compra y pago juntos.
-function pagoBodyWeb(pago,key,operationId){const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web",fechaPago:pago.fechaPago||pagoOpHoy()};}
+function pagoBodyWeb(pago,key,operationId){if(pago.modo==="socio")return {pagoSocio:{movimientoId:pago.movimientoId,productoIdx:pago.productoIdx},operationId,origen:"web"}; // R121: sin ingreso nuevo
+  const f=(pago.filas||{})[key]||{};return {montoTotal:Number(f.total||0),recibido:Number(f.recibido||0),bancoId:Number(f.recibido||0)>0?pago.bancoId:"",responsable:pago.responsable,vendedorNombre:pago.vendedor,operationId,origen:"web",fechaPago:pago.fechaPago||pagoOpHoy()};}
 // R110: fecha del pago (día en que entró el dinero), hora de Honduras del navegador.
 function pagoOpYmd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function pagoOpHoy(){return pagoOpYmd(new Date());}
@@ -5612,14 +5639,17 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaVendedorTelefonoActual(){
     return fichaGetVal("fichaVendedorTelefono")||fichaVendedorTel(fichaVendedorActual());
   }
+  // R121 · Al elegir vendedor sale SU número en automático. Antes solo se cambiaba si el campo estaba vacío o tenía
+  // exactamente el número de otro vendedor: con un número guardado en otro formato (+504…, con guiones) se quedaba el viejo.
   function fichaAplicarTelVendedorDefault(){
     const telEl=fichaQ("fichaVendedorTelefono");
     if(!telEl) return;
+    const ocho=v=>String(v||"").replace(/\D/g,"").slice(-8);
     const vtel=fichaVendedorTel(fichaVendedorActual());
-    const actual=(telEl.value||"").trim();
-    const esOtroDefault=actual && Object.values(FICHA_VENDEDOR_TELS).includes(actual) && actual!==vtel;
-    if(vtel && (!actual || esOtroDefault)) telEl.value=vtel;
-    else if(!vtel && esOtroDefault) telEl.value="";
+    const actual=ocho(telEl.value);
+    if(vtel){ telEl.value=vtel; return; }
+    // Vendedor sin número registrado: no se le deja pegado el número de otro vendedor.
+    if(actual && Object.values(FICHA_VENDEDOR_TELS).includes(actual)) telEl.value="";
   }
 
   function fichaRespaldoCore(){
@@ -5903,7 +5933,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const perfilesNuevos=esCompraNueva?0:Math.max(0,(payload.servicio.perfiles||[]).length-fichaPerfilesOriginalesActual);
     let pagoOp=null;
     if((esCompraNueva||perfilesNuevos>0)&&pagoOpHabilitado()){
-      pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:perfilesNuevos>0?`${payload.servicio.plataforma} · ${perfilesNuevos} perfil${perfilesNuevos===1?"":"es"} adicional${perfilesNuevos===1?"":"es"}`:payload.servicio.plataforma}]});
+      pagoOp=await pedirPagoOperacion({tipo:"compra",cliente:payload.cliente.nombrePerfil||payload.cliente.telefono||"",rows:[{key:"0",label:perfilesNuevos>0?`${payload.servicio.plataforma} · ${perfilesNuevos} perfil${perfilesNuevos===1?"":"es"} adicional${perfilesNuevos===1?"":"es"}`:payload.servicio.plataforma}],permitirSocio:true});
       if(!pagoOp){fichaStatus("Guardado cancelado: falta la información del pago de la compra.","err");return null;}
       pagoOp.operationId=`compra-${String(payload.servicio.compraId||fichaNuevoId("compra")).replace(/[^A-Za-z0-9-]/g,"-")}-p${(payload.servicio.perfiles||[]).length}`.slice(0,80);
       payload.pago=pagoBodyWeb(pagoOp,"0",pagoOp.operationId); // R107: viaja con la compra (misma transacción)
@@ -5932,6 +5962,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         fichaCompraIdActual=j.compraId||payload.servicio.compraId||fichaCompraIdActual;
         fichaPerfilesOriginalesActual=(payload.servicio.perfiles||[]).length; // lo ya guardado no vuelve a pedir pago
         if(pagoOp){
+          if(pagoOp.modo==="socio"){ // R121
+            if(j.pagoOperacion&&j.pagoOperacion.pagoSocio)fichaToast(`🤝 Ya pagado por Socios (${j.pagoOperacion.socio||pagoOp.socio}) · no se registró otro ingreso`);
+            else{const m="⚠️ La ficha se guardó, pero no quedó amarrada al pago del socio. Actualice api/_finanzas-operacion.js en Vercel.";fichaStatus(m,"err");fichaToast(m);}
+          }else
           try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:pagoOp.operationId});fichaToast(`💵 Pago de la compra: ${String(rp.estado||"").toUpperCase()}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
           catch(e){const m=`⚠️ La compra se guardó, pero el pago NO se registró (${e.message}). Regístrelo en Finanzas → Pendientes/Ingresos.`;fichaStatus(m,"err");fichaToast(m);}
         }
@@ -5985,16 +6019,28 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     }
   }
 
-  function fichaOpenWhatsApp(texto){
+  // R121 · Regla de entrega: la ficha URL se abre DIRECTO en el chat del cliente (su número); la ficha
+  // tradicional va al grupo de respaldo, por eso esa se abre sin número.
+  function fichaNumeroWhatsApp(valor){
+    let d=String(valor||"").replace(/\D/g,"");
+    if(d.startsWith("00"))d=d.slice(2);
+    if(d.length===8)d="504"+d;
+    return d.length>=10&&d.length<=15?d:"";
+  }
+  function fichaTelefonoClienteWhatsApp(){
+    return fichaNumeroWhatsApp(fichaGetVal("fichaTelefono")||(fichaGrupoActual&&fichaGrupoActual.telefono)||"");
+  }
+  function fichaOpenWhatsApp(texto,telefono){
     const enc=encodeURIComponent(texto);
+    const num=fichaNumeroWhatsApp(telefono);
     let opened=false;
     const mark=()=>{ if(document.hidden) opened=true; };
     document.addEventListener("visibilitychange",mark,{once:true});
 
     // Primero intenta abrir el WhatsApp predeterminado del teléfono.
     // Si el navegador no lo abre, cae a WhatsApp Web. No usa api.whatsapp.com.
-    const appLink="whatsapp://send?text="+enc;
-    const webLink="https://web.whatsapp.com/send?text="+enc;
+    const appLink=num?`whatsapp://send?phone=${num}&text=${enc}`:"whatsapp://send?text="+enc;
+    const webLink=num?`https://web.whatsapp.com/send?phone=${num}&text=${enc}`:"https://web.whatsapp.com/send?text="+enc;
     const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     try{ window.location.href=appLink; }catch(_){}
@@ -6004,7 +6050,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       try{
         if(isMobile){
           // En móvil, wa.me abre el selector/app si el esquema no respondió.
-          window.location.href="https://wa.me/?text="+enc;
+          window.location.href=num?`https://wa.me/${num}?text=${enc}`:"https://wa.me/?text="+enc;
         }else{
           window.open(webLink,"_blank");
         }
@@ -6013,12 +6059,18 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       }
     },1600);
   }
+  // Abre la ficha URL en el chat del cliente; si la ficha no tiene un teléfono válido, avisa y abre WhatsApp para elegirlo.
+  function fichaOpenWhatsAppCliente(mensaje){
+    const num=fichaTelefonoClienteWhatsApp();
+    if(!num)fichaToast("Este cliente no tiene un teléfono válido: elija el chat en WhatsApp.");
+    fichaOpenWhatsApp(mensaje,num);
+  }
 
   function fichaAbrirVarianteWhatsApp(){
     if(!fichaLinkActual){ fichaToast("Primero guarde el CRM para generar el enlace."); return; }
     const mensaje=fichaMensajeClienteActual;
     if(!mensaje){ fichaToast("Seleccione una variante antes de abrir WhatsApp."); return; }
-    fichaOpenWhatsApp(mensaje);
+    fichaOpenWhatsAppCliente(mensaje);
   }
 
   async function fichaGuardarYAbrirWhatsApp(tipo){
@@ -6045,7 +6097,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const mensaje=fichaMensajeClienteActual;
     if(!mensaje){fichaStatus("⚠️ No se pudo preparar el mensaje con la URL.","err");return;}
     fichaStatus(`✅ CRM guardado. Abriendo en WhatsApp la variante ${fichaVarianteMensajeActual+1} con la ficha URL.`,"ok");
-    fichaOpenWhatsApp(mensaje);
+    fichaOpenWhatsAppCliente(mensaje);
   }
 
   async function fichaAsegurarEnlacesCliente(){
