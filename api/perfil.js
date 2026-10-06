@@ -90,6 +90,15 @@ async function guardarPerfil(db, body) {
   if (typeof body.nombre === 'string') update.nombre = clean(body.nombre, 80);
   if (typeof body.cargo === 'string') update.cargo = clean(body.cargo, 120);
   if (typeof body.telefono === 'string') update.telefono = clean(body.telefono, 40);
+  // R120 · Alertas por WhatsApp (solo CONFIGURACIÓN; no se envía nada todavía, la integración futura será desde backend).
+  if (typeof body.whatsapp_alert_number === 'string') {
+    const n = body.whatsapp_alert_number.replace(/[^\d+]/g, '');
+    const dig = n.replace(/\D/g, '');
+    if (!dig) update.whatsapp_alert_number = null;
+    else if (dig.length < 8 || dig.length > 15) return { ok: false, error: 'Número de WhatsApp inválido (use +504XXXXXXXX).' };
+    else update.whatsapp_alert_number = `+${dig.length === 8 ? '504' + dig : dig}`;
+    update.whatsapp_alerts_enabled = false;
+  }
   if (typeof body.area === 'string') update.area = clean(body.area, 80);
   if (typeof body.funcionesExtra === 'string') update.funcionesExtra = clean(body.funcionesExtra, 500);
   if (typeof body.color === 'string') update.color = clean(body.color, 20);
