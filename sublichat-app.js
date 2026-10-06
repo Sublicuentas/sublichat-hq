@@ -4242,7 +4242,7 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
   function fichaConstruirMensajeCliente({nombre,servicioLabel,link,variante=0}){
     const indice=Math.max(0,Math.min(FICHA_MENSAJES_CLIENTE.length-1,Number(variante)||0));
     const t=FICHA_MENSAJES_CLIENTE[indice];
-    const texto=t.cuerpo+"\n\n🚫 Prohibido usar VPN · 2 faltas = suspensión del servicio, sin reembolso.\n"+t.despedida; // R119: regla de uso (VPN)
+    const texto=t.cuerpo+"\n\n⚠ Garantía válida al cumplir las reglas. De lo contrario, el servicio se suspende.\n"+t.despedida; // R120: advertencia corta de garantía (VPN va en las reglas)
     return texto
       .replace(/\{nombre\}/g, nombre||"Cliente")
       .replace(/\{servicio\}/g, servicioLabel||"su servicio")
@@ -4356,6 +4356,7 @@ Le compartimos sus credenciales exclusivas:
 📌 El perfil no debe ser modificado.
 📌 Servicio exclusivo para Honduras.
 📌 Cuenta con garantía total activa.
+🚫 Prohibido usar VPN.
 
 ⚠️ Aviso de Sistema:
 Es posible que en 15 días o más el sistema solicite un código temporal. Cuando le aparezca, notifíquenos y se lo daremos al instante.
@@ -4768,6 +4769,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 📌 Los perfiles no deben ser modificados.
 📌 Servicio exclusivo para Honduras.
 📌 Cuenta con garantía total activa.
+🚫 Prohibido usar VPN.
 
 ⚠️ Aviso de Sistema:
 Es posible que en 15 días o más el sistema solicite un código temporal. Cuando le aparezca, notifíquenos y se lo daremos al instante.`,
