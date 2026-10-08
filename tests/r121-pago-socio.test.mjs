@@ -94,5 +94,5 @@ test('R121 web: opción "Ya pagó por Socios", cuadro de pago por encima de la f
   assert.match(app, /fichaOpenWhatsApp\(texto\);/, 'la ficha tradicional sigue yendo al grupo, sin número');
   assert.match(app, /if\(vtel\)\{ telEl\.value=vtel; return; \}/);
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /sublichat-app\.js\?v=20261008-r125-cierres/);
+  assert.match(html, /sublichat-app\.js\?v=20261008-r134-estados/);
 });
