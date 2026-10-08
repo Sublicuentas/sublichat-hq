@@ -46,3 +46,16 @@ test('R126: el servidor manda la plataforma sin ⭐ (APK y web la muestran limpi
   assert.equal(fn('Canva · 1 mes'), 'Canva · 1 mes');
   assert.match(src, /plataforma: sinAdornosR126\(m\.plataforma\),/);
 });
+
+test('R127: un pago vigente nunca se junta con uno anulado (Yelson: 75 anulado + 75 vigente ≠ "150 anulado")', () => {
+  const src = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function agruparPagos('); let d = 0; const j = src.indexOf('{', src.indexOf(')', i)); let fin = j;
+  for (let k = j; k < src.length; k++) { if (src[k] === '{') d++; else if (src[k] === '}') { d--; if (!d) { fin = k; break; } } }
+  const agrupar = new Function('money', `${src.slice(i, fin + 1)}; return agruparPagos;`)((n) => Math.round(Number(n || 0) * 100) / 100);
+  const base = { kind: 'ingreso', cliente: 'Yelson Toledo', bancoId: 'bac', usuario: 'Sublicuentas', fecha: '2026-10-04', plataforma: 'Crunchyroll' };
+  const out = agrupar([{ ...base, id: 'a', monto: 75, createdAt: '2026-10-04T18:00:00Z', estadoFinanciero: 'anulado' }, { ...base, id: 'b', monto: 75, createdAt: '2026-10-04T18:02:00Z' }]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map((x) => [x.monto, x.estadoFinanciero || 'vigente']), [[75, 'anulado'], [75, 'vigente']]);
+  const dos = agrupar([{ ...base, id: 'c', monto: 75, createdAt: '2026-10-04T18:00:00Z' }, { ...base, id: 'd', monto: 75, createdAt: '2026-10-04T18:02:00Z' }]);
+  assert.equal(dos.length, 1); assert.equal(dos[0].monto, 150, 'dos vigentes juntos siguen siendo un solo pago');
+});
