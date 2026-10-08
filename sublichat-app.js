@@ -703,7 +703,7 @@ async function load(options={}){
           if(finHistorico)finHistorico.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas",...d.data()}));
           if(finActual)finActual.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas_movimientos",...d.data()}));
           if(session!==CONTROL_SESSION_VERSION)return;
-          FINANZAS=[...finPorId.values()];
+          FINANZAS=[...finPorId.values()].filter(finVigenteR125); // R125: mismos números que la APK y el bot
           window._finError="";
         }catch(e){console.error("fin",e);FINANZAS=[];window._finError=(e&&e.code)||(e&&e.message)||"error";}
       }
@@ -1402,6 +1402,23 @@ function finBank(m){
   const raw=finText(m.banco||m.metodoPago||m.metodo_pago||m.metodo||m.cuenta||m.bank);
   if(!raw||["no especificado","ninguno","n/a","—","-"].includes(finKey(raw)))return "Sin banco";
   return raw;
+}
+// R125 · Qué cuenta en los reportes/cierres de la web (igual que la APK y el bot):
+// · fuera los ANULADOS/CORREGIDOS y sus REVERSAS (antes el cierre del día del voucher quedaba inflado);
+// · fuera transferencias entre bancos, saldos iniciales y ajustes de saldo (no son ingresos ni egresos);
+// · desde el 01/10/2026 solo vale finanzas_movimientos: lo de la colección vieja "finanzas" de esas fechas eran copias.
+function finYmdR125(m={}){
+  if(/^\d{4}-\d{2}-\d{2}$/.test(String(m.fechaPago||"")))return String(m.fechaPago);
+  const f=String(m.fecha||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(f)return `${f[3]}-${f[2].padStart(2,"0")}-${f[1].padStart(2,"0")}`;
+  const ts=m.fechaTS&&(m.fechaTS.seconds||m.fechaTS._seconds);if(ts)return new Date(ts*1000-6*3600000).toISOString().slice(0,10);
+  return "";
+}
+function finVigenteR125(m={}){
+  if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
+  const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
+  if(t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
+  return true;
 }
 function finParse(m){
   const tipo=finText(m.tipo||m.type||m.movimiento||"ingreso").toLowerCase();
