@@ -59,3 +59,11 @@ test('R127: un pago vigente nunca se junta con uno anulado (Yelson: 75 anulado +
   const dos = agrupar([{ ...base, id: 'c', monto: 75, createdAt: '2026-10-04T18:00:00Z' }, { ...base, id: 'd', monto: 75, createdAt: '2026-10-04T18:02:00Z' }]);
   assert.equal(dos.length, 1); assert.equal(dos[0].monto, 150, 'dos vigentes juntos siguen siendo un solo pago');
 });
+
+test('R128 web: movimientos tienen "Corregir monto o banco" (bancos registrados, motivo, mismo corregir_movimiento)', () => {
+  const app = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
+  assert.match(app, /data-fin-corregir="\$\{finEscape\(m\.id\)\}"/);
+  assert.match(app, /async function finCorregirMovimientoR128\(id\)/);
+  assert.match(app, /accion:"corregir_movimiento",movimientoId:id,monto,bancoId,motivo,operationId:opId,origen:"web"/);
+  assert.match(app, /if\(motivo\.length<4\)return err\("Escriba el motivo de la corrección\."\);/);
+});
