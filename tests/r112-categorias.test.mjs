@@ -55,7 +55,7 @@ test('R114: movimientos agrupan un pago único por cliente y van en orden real d
   const agruparPagos = new Function('money', `${cuerpo}; return agruparPagos;`)(money);
   const base = { kind: 'ingreso', cliente: 'Ana', clienteId: 'c1', bancoId: 'bac', usuario: 'Relojes', fecha: '2026-10-03' };
   const g = agruparPagos([{ ...base, id: 'a', monto: 75, plataforma: 'Netflix', createdAt: '2026-10-03T15:00:00Z' }, { ...base, id: 'b', monto: 75, plataforma: 'Disney', createdAt: '2026-10-03T15:00:20Z' }, { ...base, id: 'c', clienteId: 'c2', cliente: 'Luis', monto: 100, createdAt: '2026-10-03T15:01:00Z' }]);
-  assert.equal(g.length, 2); assert.equal(g[0].monto, 150); assert.deepEqual(g[0].ids, ['a', 'b']); assert.equal(g[0].plataforma, 'Netflix + Disney');
+  assert.equal(g.length, 2); assert.equal(g[0].monto, 150); assert.deepEqual(g[0].partes, ['a', 'b']); assert.deepEqual(g[0].ids, ['grp:a,b']); assert.equal(g[0].plataforma, 'Netflix + Disney');
   assert.match(f, /String\(b\.createdAt \|\| ""\)\.localeCompare\(String\(a\.createdAt \|\| ""\)\)/);
 });
 
