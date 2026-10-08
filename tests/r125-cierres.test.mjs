@@ -67,3 +67,15 @@ test('R128 web: movimientos tienen "Corregir monto o banco" (bancos registrados,
   assert.match(app, /accion:"corregir_movimiento",movimientoId:id,monto,bancoId,motivo,operationId:opId,origen:"web"/);
   assert.match(app, /if\(motivo\.length<4\)return err\("Escriba el motivo de la corrección\."\);/);
 });
+
+test('R129: un cliente paga UNA vez — mismo cliente + banco + día = un pago, aunque se registre a horas distintas o por otro usuario', () => {
+  const src = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function agruparPagos('); let d = 0; const j = src.indexOf('{', src.indexOf(')', i)); let fin = j;
+  for (let k = j; k < src.length; k++) { if (src[k] === '{') d++; else if (src[k] === '}') { d--; if (!d) { fin = k; break; } } }
+  const agrupar = new Function('money', `${src.slice(i, fin + 1)}; return agruparPagos;`)((n) => Math.round(Number(n || 0) * 100) / 100);
+  const base = { kind: 'ingreso', clienteId: 'cli-juan', cliente: 'Juan de Dios', bancoId: 'bac', fecha: '2026-10-04', plataforma: 'Prime Video' };
+  const out = agrupar([{ ...base, id: 'j1', monto: 80, usuario: 'Relojes', createdAt: '2026-10-04T15:00:00Z' }, { ...base, id: 'j2', monto: 80, usuario: 'Sublicuentas', createdAt: '2026-10-04T19:30:00Z' }]);
+  assert.equal(out.length, 1); assert.equal(out[0].monto, 160); assert.deepEqual(out[0].ids, ['j1', 'j2']);
+  const otroBanco = agrupar([{ ...base, id: 'a', monto: 80, createdAt: '2026-10-04T15:00:00Z' }, { ...base, id: 'b', monto: 80, bancoId: 'tigo', createdAt: '2026-10-04T15:01:00Z' }]);
+  assert.equal(otroBanco.length, 2, 'si entró a bancos distintos son dos pagos');
+});
