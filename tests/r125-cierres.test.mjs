@@ -37,3 +37,12 @@ test('R125 web: Control financiero filtra anulados, reversas, transferencias, sa
   assert.equal(vig({ tipo: 'ingreso', _source: 'finanzas', fecha: '30/09/2026' }), true, 'el histórico anterior sigue');
   assert.match(app, /FINANZAS=\[\.\.\.finPorId\.values\(\)\]\.filter\(finVigenteR125\);/);
 });
+
+test('R126: el servidor manda la plataforma sin ⭐ (APK y web la muestran limpia)', () => {
+  const src = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function sinAdornosR126('); const fn = new Function(`${src.slice(i, src.indexOf('\n', i))}; return sinAdornosR126;`)();
+  assert.equal(fn('⭐ Netflix Premium VIP'), 'Netflix Premium VIP');
+  assert.equal(fn('Disney Premium + ⭐ Netflix Premium VIP'), 'Disney Premium + Netflix Premium VIP');
+  assert.equal(fn('Canva · 1 mes'), 'Canva · 1 mes');
+  assert.match(src, /plataforma: sinAdornosR126\(m\.plataforma\),/);
+});
