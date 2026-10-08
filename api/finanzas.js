@@ -9,6 +9,7 @@ import admin from "firebase-admin";
 import { financeMetadata } from "./_finance-schema.js";
 import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
 import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js"; // R112
+import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago
@@ -243,6 +244,15 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   if (accion === "finanzas_metodos") {
     // Ligero (1 lectura): para el formulario "¿Dónde pagó?" al renovar.
     return res.status(200).json({ ok: true, accion, metodos: await loadMethods(db) });
+  }
+
+  // R134 · Estados financieros del mes (resultados, flujo de caja, libro diario y balanza). Misma lógica que el bot.
+  if (accion === "estados_financieros") {
+    const { methods, libro, movimientos } = await estadoLibro(db);
+    const hoy = hoyYmdHN();
+    const mes = /^\d{4}-\d{2}$/.test(String(body.mes || "")) ? String(body.mes) : hoy.slice(0, 7);
+    const ef = estadosFinancieros({ movimientos, libro, methods, mes, hoy, clasificar: clasificarServicio });
+    return res.status(200).json({ ok: true, accion, hoy, ...ef });
   }
 
   if (accion === "finanzas_resumen") {
@@ -797,7 +807,7 @@ export default async function handler(req, res) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
-    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
+    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
@@ -913,4 +923,4 @@ export default async function handler(req, res) {
   }
 }
 // Solo para pruebas automáticas (tests/): no cambia el comportamiento del endpoint.
-export const __pruebas = { handleCentro, agruparPagos, idsDeGrupoR130 };
+export const __pruebas = { handleCentro, handleLibro, agruparPagos, idsDeGrupoR130 };
