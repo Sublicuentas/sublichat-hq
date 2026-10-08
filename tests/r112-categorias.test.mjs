@@ -62,6 +62,6 @@ test('R114: movimientos agrupan un pago único por cliente y van en orden real d
 test('R117: acción finanzas_reporte (datos del Excel Saiyajin para la APK)', () => {
   const f = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
   assert.match(f, /if \(accion === "finanzas_reporte"\)/);
-  assert.match(f, /const ingresos = agruparPagos\(views\.filter\(\(v\) => v\.kind === "ingreso"\)\)/);
+  assert.match(f, /const ingresos = agruparPagos\(vigentes\.filter\(\(v\) => v\.kind === "ingreso"\)\)/); // R123: sin anulados ni reversas
   assert.match(f, /\["finanzas_reporte", "finanzas_metodos"/);
 });
