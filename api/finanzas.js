@@ -215,6 +215,8 @@ function movimientoView(m, methods) {
 }
 // R114 · Un cliente paga UNA vez: los cobros del mismo cliente, banco, usuario y día registrados juntos
 // (renovar varios servicios) se muestran como UN solo pago (L 150, no 75 + 75). Aplica a todo el historial.
+// R130 · "grp:a,b,c" → ["a","b","c"] (ids válidos, sin repetir, máx. 30).
+function idsDeGrupoR130(v = "") { return [...new Set(String(v || "").replace(/^grp:/, "").split(",").map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{1,160}$/.test(x)))].slice(0, 30); }
 function agruparPagos(rows = []) {
   const out = [];
   const asc = [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
@@ -228,7 +230,9 @@ function agruparPagos(rows = []) {
     if (g) { g.monto = money(g.monto + r.monto); g.ids.push(r.id); if (r.plataforma && !g.plataformas.includes(r.plataforma)) g.plataformas.push(r.plataforma); g.n += 1; }
     else out.push({ ...r, _key: key, _t: t, ids: [r.id], plataformas: r.plataforma ? [r.plataforma] : [], n: 1 });
   }
-  return out.map(({ _key, _t, ...r }) => ({ ...r, plataforma: r.plataformas.join(" + ") }));
+  // R130: un pago de varios servicios viaja con id "grp:<id1>,<id2>" e ids=[ese id]. Así la APK (sin actualizarla) le
+  // muestra Corregir · Fecha · Anular como a cualquier pago, y el servidor aplica la acción al pago COMPLETO.
+  return out.map(({ _key, _t, ...r }) => (r.ids.length > 1 ? { ...r, partes: r.ids, id: `grp:${r.ids.join(",")}`, ids: [`grp:${r.ids.join(",")}`] } : r)).map((r) => ({ ...r, plataforma: r.plataformas.join(" + ") }));
 }
 
 async function handleLibro(db, accion, body, identity, authUser, res) {
@@ -575,6 +579,7 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
 
   // ---- ajustar SOLO la fecha real del dinero (sin reversa): no cambia monto/banco, solo el día financiero.
   // Nunca se deriva de la fecha de corte/renovación del cliente.
+  if (accion === "ajustar_fecha_movimiento" && /^grp:/.test(cleanText(body.movimientoId)) && !(Array.isArray(body.movimientoIds) && body.movimientoIds.length > 1)) body.movimientoIds = idsDeGrupoR130(body.movimientoId); // R130
   if (accion === "ajustar_fecha_movimiento" && Array.isArray(body.movimientoIds) && body.movimientoIds.length > 1) {
     // R114: un pago agrupado (varios servicios) cambia de fecha completo, en una transacción.
     const ids = body.movimientoIds.map((x) => cleanText(x)).filter(Boolean).slice(0, 30), fechaPago = cleanText(body.fechaPago || body.fecha);
@@ -626,6 +631,58 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
     return rev.id;
   };
 
+  // R130 · Anular o corregir un PAGO de varios servicios completo (id "grp:..."). Cada parte queda anulada/corregida con su
+  // reversa; al corregir, cada parte se rehace con el banco correcto y el monto nuevo repartido en proporción
+  // (siguen siendo un solo pago del mismo cliente, banco y día). Todo en una transacción, con motivo y auditoría.
+  if ((accion === "anular_movimiento" || accion === "corregir_movimiento") && /^grp:/.test(cleanText(body.movimientoId))) {
+    const ids = idsDeGrupoR130(body.movimientoId);
+    if (ids.length < 2) return res.status(200).json({ ok: false, error: "Ese pago ya no existe. Vuelva a buscar." });
+    const r = await run(async (tx) => {
+      if ((await tx.get(marcaRef)).exists) return { duplicado: true };
+      const snaps = await Promise.all(ids.map((x) => tx.get(fmov(x))));
+      const ms = snaps.map((sn) => { if (!sn.exists) throw userErr("Una parte de ese pago ya no existe. Vuelva a buscar."); return { id: sn.id, ...(sn.data() || {}) }; });
+      const base = ms[0], llave = (m) => [String(m.clienteId || m.clienteNombre || "").toLowerCase().trim(), m.bancoId || "", movementYmd(m)].join("|");
+      for (const m of ms) {
+        if (m.estadoFinanciero || m.reversaDe || m.planillaPagoId || movementKind(m) !== "ingreso") throw userErr("Ese pago ya fue anulado/corregido o no es un cobro. Vuelva a buscar.");
+        if (llave(m) !== llave(base)) throw userErr("Esas partes no son el mismo pago.");
+      }
+      const cxcs = await Promise.all(ms.map((m) => (m.cuentaId ? tx.get(db.collection(CXC).doc(m.cuentaId)) : null)));
+      const totalAntes = money(ms.reduce((a, m) => a + money(m.monto), 0));
+      let nuevos = null, b = null;
+      if (accion === "corregir_movimiento") {
+        const totalNuevo = body.monto != null && body.monto !== "" ? money(body.monto) : totalAntes;
+        b = body.bancoId ? bancoDe(body.bancoId) : bancoDe(base.bancoId);
+        if (!(totalNuevo > 0) || !b) throw userErr("Corrección inválida: revise monto y banco.");
+        if (totalNuevo === totalAntes && b.id === base.bancoId) throw userErr("No cambió ni el monto ni el banco.");
+        let resto = totalNuevo; nuevos = ms.map((m, i) => { const v = i === ms.length - 1 ? money(resto) : money(totalNuevo * money(m.monto) / (totalAntes || 1)); resto = money(resto - v); return v; });
+        ms.forEach((m, i) => { const c = cxcs[i]; if (c?.exists && nuevos[i] - money(m.monto) > money((c.data() || {}).saldoPendiente) + 0.001) throw userErr("La corrección deja un cobro mayor que lo que se debía."); });
+      }
+      const revs = [], sustitutos = [];
+      ms.forEach((m, i) => {
+        const { id, ...datos } = m;
+        revs.push(reversa(tx, datos, id, nuevos ? "corregido" : "anulado"));
+        if (nuevos) {
+          const sus = fmov(`${id}_c${Date.now().toString(36)}${i}`);
+          const { createdAt, updatedAt, movimientoId, estadoFinanciero, reversaId, ...resto } = datos;
+          tx.set(sus, { ...resto, monto: nuevos[i], bancoId: b.id, banco: b.nombre, ...(datos.metodoPago ? { metodoPago: b.nombre } : {}), ...baseMov(identity, authUser, body), movimientoId: sus.id, sustituyeA: id, motivoCorreccion: motivo, ...canonicalFinanceDate(movementYmd(datos) || hoy, hoy) });
+          sustitutos.push(sus.id);
+        }
+        const c = cxcs[i];
+        if (c?.exists) {
+          const cd = c.data() || {}, delta = money((nuevos ? nuevos[i] : 0) - money(m.monto));
+          const saldo = money(Math.max(0, money(cd.saldoPendiente) - delta)), deAbono = String(m.subtipo).startsWith("cobro_pendiente");
+          const posterior = money((cd.montoRecibidoPosterior || 0) + (deAbono ? delta : 0)), inicial = money((cd.montoRecibidoInicial || 0) + (deAbono ? 0 : delta));
+          tx.set(db.collection(CXC).doc(m.cuentaId), { saldoPendiente: saldo, montoRecibidoPosterior: posterior, montoRecibidoInicial: inicial, estado: saldo <= 0 ? "pagado" : (inicial + posterior > 0 ? "parcial" : "pendiente"), updatedAt: isoNow() }, { merge: true });
+        }
+      });
+      tx.set(marcaRef, { accion, movimientoId: cleanText(body.movimientoId).slice(0, 1500), partes: ids, reversaIds: revs, sustitutoIds: sustitutos, por: identity.usuario, motivo, createdAt: isoNow() });
+      auditar(tx, db, identity, { origen: body.origen, accion, targetType: "pago", targetId: ids.join(","), movimientoId: ids[0], clienteId: base.clienteId || "", operationId: cleanText(body.operationId), motivo, monto: totalAntes,
+        before: { monto: totalAntes, banco: base.banco || "", servicios: ids.length }, after: nuevos ? { monto: money(nuevos.reduce((a, v) => a + v, 0)), banco: b.nombre } : { estado: "anulado" },
+        detalle: nuevos ? `Pago de ${ids.length} servicios: ${base.banco || "—"} L${totalAntes} → ${b.nombre} L${money(nuevos.reduce((a, v) => a + v, 0))}` : `Anulado pago de ${ids.length} servicios L${totalAntes} ${base.banco || ""}` });
+      return { duplicado: false, partes: ids.length, reversaIds: revs, sustitutoIds: sustitutos };
+    });
+    return reply(r);
+  }
   if (accion === "anular_movimiento" || accion === "corregir_movimiento") {
     const id = cleanText(body.movimientoId), ref = fmov(id || "x");
     const r = await run(async (tx) => {
@@ -855,3 +912,5 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: "Error: " + (e.message || "") });
   }
 }
+// Solo para pruebas automáticas (tests/): no cambia el comportamiento del endpoint.
+export const __pruebas = { handleCentro, agruparPagos, idsDeGrupoR130 };
