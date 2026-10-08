@@ -260,14 +260,19 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : "2026-10-01";
     const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : hoyR;
     const all = rowsOf(await movementsQuery(db, desde).limit(6000).get()).filter((m) => { const f = movementYmd(m); return f && f >= desde && f <= hasta; });
-    const views = all.map((m) => ({ ...movimientoView(m, methods), socio: m.socioNombre || "", productos: m.productosSocio || m.serviciosSocio || null, descuento: money(m.descuento || 0), categoriaLabel: m.categoriaLabel || "", operacion: m.operationId || "", pedido: m.pedidoId || m.compraId || "" }));
-    const ingresos = agruparPagos(views.filter((v) => v.kind === "ingreso"));
-    const totales = cycleTotals(all, desde, hasta);
+    const views = all.map((m) => ({ ...movimientoView(m, methods), socio: m.socioNombre || "", productos: m.productosSocio || m.serviciosSocio || null, descuento: money(m.descuento || 0), categoriaLabel: m.categoriaLabel || "", operacion: m.operationId || "", pedido: m.pedidoId || m.compraId || "", motivoAnulacion: m.motivoAnulacion || m.motivoCorreccion || "", anuladoPor: m.anuladoPor || "", anuladoAt: m.anuladoAt || "" }));
+    // R123: anulados/corregidos y sus reversas van APARTE (hoja "Anulados") y no suman en Ingresos, Egresos ni Resumen:
+    // el período muestra solo lo que de verdad entró/salió. Mismo criterio que el Excel del bot.
+    const anuladoR123 = (v) => ["anulado", "corregido"].includes(v.estadoFinanciero);
+    const vigentes = views.filter((v) => !anuladoR123(v) && !v.reversaDe);
+    const anulados = views.filter((v) => anuladoR123(v) && ["ingreso", "egreso", "ajuste", "planilla"].includes(v.kind));
+    const ingresos = agruparPagos(vigentes.filter((v) => v.kind === "ingreso"));
+    const totales = cycleTotals(all.filter((m) => !["anulado", "corregido"].includes(m.estadoFinanciero) && !m.reversaDe), desde, hasta);
     const [cxc, pp, ci] = await Promise.all([db.collection(CXC).get(), db.collection("planilla_pagos").get(), db.collection("finanzas_ciclos").get()]);
     const cuentas = rowsOf(cxc), abiertas = cuentas.filter((c) => ["pendiente", "parcial"].includes(c.estado));
     const sum = (arr) => money(arr.reduce((a, c) => a + money(c.saldoPendiente), 0));
     return res.status(200).json({ ok: true, accion, desde, hasta, generado: isoNow(), libroDesde: libro.cicloInicio,
-      totales, ingresos, egresos: views.filter((v) => v.kind === "egreso"), planillaMovs: views.filter((v) => v.kind === "planilla"),
+      totales, ingresos, egresos: vigentes.filter((v) => v.kind === "egreso"), planillaMovs: vigentes.filter((v) => v.kind === "planilla"), anulados,
       saldos: saldos.bancos, totalBancos: saldos.total,
       cartera: { cuentas, pendienteClientes: sum(abiertas.filter((c) => c.deudorTipo !== "vendedor")), pendienteVendedores: sum(abiertas.filter((c) => c.deudorTipo === "vendedor")) },
       planillaPagos: rowsOf(pp).filter((p) => p.estado === "confirmado" && p.fecha >= desde && p.fecha <= hasta),
