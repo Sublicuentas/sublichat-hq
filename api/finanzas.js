@@ -220,11 +220,11 @@ function agruparPagos(rows = []) {
   const asc = [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   for (const r of asc) {
     const t = Date.parse(r.createdAt || "") || 0;
-    const key = [r.kind, (r.clienteId || r.cliente || "").toLowerCase(), r.bancoId, r.usuario, r.fecha].join("|");
+    const key = [r.kind, (r.clienteId || r.cliente || "").toLowerCase().trim(), r.bancoId, r.fecha].join("|"); // R129: mismo cliente + banco + día = 1 pago (sin importar hora ni quién lo registró)
     // R127: solo se juntan pagos VIGENTES entre sí. Antes un cobro vigente podía caer dentro del grupo de uno ANULADO
     // (ej. Yelson: 75 anulado + 75 vigente salían como "150 · anulado" en la APK, mientras el Excel decía 75).
     const g = r.kind === "ingreso" && !r.estadoFinanciero && !r.reversaDe && (r.clienteId || r.cliente)
-      ? out.find((x) => x._key === key && !x.estadoFinanciero && !x.reversaDe && t && Math.abs(t - x._t) <= 10 * 60000) : null;
+      ? out.find((x) => x._key === key && !x.estadoFinanciero && !x.reversaDe) : null;
     if (g) { g.monto = money(g.monto + r.monto); g.ids.push(r.id); if (r.plataforma && !g.plataformas.includes(r.plataforma)) g.plataformas.push(r.plataforma); g.n += 1; }
     else out.push({ ...r, _key: key, _t: t, ids: [r.id], plataformas: r.plataforma ? [r.plataforma] : [], n: 1 });
   }
