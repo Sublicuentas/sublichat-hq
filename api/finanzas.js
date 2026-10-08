@@ -199,13 +199,15 @@ function libroOpDocId(prefix, body, uid) {
   const id = finOpDocId(body, uid);
   return id ? `${prefix}_${id}` : "";
 }
+// R126 · Reportes y listas solo con datos: sin ⭐/emojis en el nombre de la plataforma (el bot guardaba "⭐ Netflix Premium VIP").
+function sinAdornosR126(v = "") { return String(v || "").replace(/[\u2B50\u2605\u2606\u2728]|\uD83C[\uDF1F\uDF20]|\uFE0F/g, "").replace(/\s+/g, " ").replace(/^[\s·+\-]+|[\s·+\-]+$/g, "").trim(); }
 function movimientoView(m, methods) {
   const kind = movementKind(m);
   const bancoId = movementBankId(m, methods);
   return {
     id: m.id, kind, tipo: m.tipo || "", subtipo: m.subtipo || "", fecha: movementYmd(m), monto: money(m.monto),
     bancoId, banco: (methods.find((x) => x.id === bancoId) || {}).nombre || (bancoId === SIN_BANCO ? "Sin banco" : bancoId),
-    detalle: m.motivo || m.descripcion || m.detalle || m.concepto || "", cliente: m.clienteNombre || "", plataforma: m.plataforma || "",
+    detalle: m.motivo || m.descripcion || m.detalle || m.concepto || "", cliente: m.clienteNombre || "", plataforma: sinAdornosR126(m.plataforma),
     beneficiario: m.beneficiario || "", planillaPagoId: m.planillaPagoId || "", origen: m.origenCanal || m.origen || "",
     usuario: financeActorLabel(m), operationId: m.operationId || "",
     createdAt: m.createdAt || "", clienteId: m.clienteId || "", estadoFinanciero: m.estadoFinanciero || "", reversaDe: m.reversaDe || "",
@@ -274,7 +276,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     return res.status(200).json({ ok: true, accion, desde, hasta, generado: isoNow(), libroDesde: libro.cicloInicio,
       totales, ingresos, egresos: vigentes.filter((v) => v.kind === "egreso"), planillaMovs: vigentes.filter((v) => v.kind === "planilla"), anulados,
       saldos: saldos.bancos, totalBancos: saldos.total,
-      cartera: { cuentas, pendienteClientes: sum(abiertas.filter((c) => c.deudorTipo !== "vendedor")), pendienteVendedores: sum(abiertas.filter((c) => c.deudorTipo === "vendedor")) },
+      cartera: { cuentas: cuentas.map((c) => ({ ...c, plataforma: sinAdornosR126(c.plataforma) })), pendienteClientes: sum(abiertas.filter((c) => c.deudorTipo !== "vendedor")), pendienteVendedores: sum(abiertas.filter((c) => c.deudorTipo === "vendedor")) },
       planillaPagos: rowsOf(pp).filter((p) => p.estado === "confirmado" && p.fecha >= desde && p.fecha <= hasta),
       cierres: rowsOf(ci).filter((c) => c.fechaInicio <= hasta && c.fechaFin >= desde) });
   }
