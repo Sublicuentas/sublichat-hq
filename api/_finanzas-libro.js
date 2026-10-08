@@ -103,9 +103,14 @@ export function movementKind(m = {}) {
 }
 
 // Totales de un ciclo [inicio, fin] (fin opcional = sin límite).
+// R125 · Un movimiento ANULADO/CORREGIDO y su REVERSA no cuentan en ningún total. Antes se sumaba el original en su fecha
+// y la reversa restaba en la fecha en que se anuló: el cierre del día del voucher quedaba inflado (ej. 01/10 con
+// L270 de más) hasta que el período incluyera también el día de la anulación. En saldos de bancos el efecto neto es el mismo.
+export function anuladoOReversa(m = {}) { return !!m.reversaDe || ["anulado", "corregido"].includes(String(m.estadoFinanciero || "")); }
 export function cycleTotals(movements = [], inicio = "", fin = "") {
   let ingresos = 0, egresosOperativos = 0, planilla = 0, ventas = 0, nIngresos = 0, nEgresos = 0, nPlanilla = 0;
   for (const m of movements) {
+    if (anuladoOReversa(m)) continue; // R125: anulados/corregidos y sus reversas no son dinero del período
     const f = movementYmd(m);
     if (!f || (inicio && f < inicio) || (fin && f > fin)) continue;
     const kind = movementKind(m), monto = money(m.monto);
@@ -137,6 +142,7 @@ export function bankBalances(movements = [], libro = {}, methods = []) {
     });
   }
   for (const m of movements) {
+    if (anuladoOReversa(m)) continue; // R125: el anulado y su reversa se cancelan; no se cuentan ninguno de los dos
     const kind = movementKind(m);
     if (!["ingreso", "egreso", "planilla", "ajuste", "transferencia"].includes(kind)) continue;
     const id = movementBankId(m, methods);
