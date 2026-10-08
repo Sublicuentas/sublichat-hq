@@ -8045,3 +8045,90 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   if(document.body.classList.contains('ready')) applyRBAC();
 })();
 
+
+// ============================================================================================================
+// R134 · ESTADOS FINANCIEROS en la web: estado de resultados, flujo de caja por banco, partida doble (libro diario y
+// balanza). Los números vienen del servidor (/api/finanzas → estados_financieros), la misma lógica que el bot.
+// ============================================================================================================
+(function(){
+  const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const L=(n)=>`Lps ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:0,maximumFractionDigits:2})}`;
+  const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:String(v||"");};
+  let datos=null;
+  async function pedir(mes){
+    const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"estados_financieros",mes,origen:"web"})});
+    const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudieron cargar los estados financieros.");
+    return j;
+  }
+  // Filas con flex (no <table>): así el monto siempre queda a la vista en el celular.
+  const fila=(a,b,{bold=false,color="",sub=false}={})=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px solid #f1f5f9;${bold?"font-weight:800;":""}${sub?"color:#475569;padding-left:16px;":""}"><span style="min-width:0;overflow-wrap:anywhere">${a}</span><span style="white-space:nowrap;${color?`color:${color};`:""}">${b}</span></div>`;
+  const sep=(t)=>`<div style="padding:10px 4px 4px;font-size:12px;font-weight:800;color:#e2231a;letter-spacing:.04em">${t}</div>`;
+  function html(ef){
+    const r=ef.resultados,f=ef.flujo,b=ef.balanza;
+    const lista=(rows)=>rows.map(x=>fila(esc(x.nombre),L(x.monto),{sub:true})).join("");
+    const card="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px;margin-top:12px";
+    const tabla="width:100%;border-collapse:collapse;font-size:14px";
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button data-ef-mes="${esc(ef.anterior)}" style="border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer">◀</button>
+      <div style="text-align:center"><div style="font-weight:900;font-size:18px">${esc(ef.nombre)}</div><div style="color:#64748b;font-size:12px">${dmy(ef.desde)} al ${dmy(ef.hasta)} · base efectivo</div></div>
+      <button data-ef-mes="${esc(ef.siguiente)}" ${ef.siguiente>String(ef.hoy||"").slice(0,7)?"disabled":""} style="border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer">▶</button>
+    </div>
+    <div style="${card}"><b style="font-size:15px">Estado de resultados</b><div style="font-size:14px">
+      ${sep("INGRESOS")}${lista(r.ingresos.porCategoria)}${fila("Total ingresos",L(r.ingresos.total),{bold:true,color:"#16a34a"})}
+      ${sep("GASTOS OPERATIVOS")}${lista(r.gastosOperativos.porConcepto)}${fila("Total gastos",`−${L(r.gastosOperativos.total)}`,{bold:true,color:"#b91c1c"})}
+      ${fila(`Utilidad operativa (${r.margenOperativo}%)`,L(r.utilidadOperativa),{bold:true})}
+      ${sep("PLANILLA Y COMISIONES")}${lista(r.planilla.porConcepto)}${fila("Total planilla",`−${L(r.planilla.total)}`,{bold:true,color:"#b91c1c"})}
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 4px;border-top:2px solid #0f172a;font-weight:900"><span>Utilidad neta · margen ${r.margenNeto}%</span><span style="white-space:nowrap;color:${r.utilidadNeta>=0?"#16a34a":"#b91c1c"}">${L(r.utilidadNeta)}</span></div>
+    </div>
+    <div style="margin-top:8px;color:#475569;font-size:12.5px">Por origen: ${r.ingresos.porOrigen.map(x=>`${esc(x.nombre)} ${L(x.monto)}`).join(" · ")||"—"}</div></div>
+    <div style="${card}"><b style="font-size:15px">Flujo de caja por banco</b> ${f.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ revisar</span>'}
+      <div style="overflow-x:auto"><table style="${tabla};font-size:12.5px;min-width:560px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Banco</th><th>Inicial</th><th>Cobros</th><th>Gastos</th><th>Planilla</th><th>Transf.</th><th>Ajustes</th><th>Final</th></tr>
+      ${f.bancos.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(x.nombre)}</td>${[x.saldoInicial,x.cobros,-x.gastos,-x.planilla,x.transferencias,x.ajustes,x.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap;${v<0?"color:#b91c1c":""}">${L(v)}</td>`).join("")}</tr>`).join("")}
+      <tr style="font-weight:900;border-top:2px solid #0f172a"><td style="padding:6px">Total</td>${[f.saldoInicial,f.cobros,-f.gastos,-f.planilla,f.transferencias,f.ajustes,f.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap">${L(v)}</td>`).join("")}</tr></table></div>
+      <div style="margin-top:6px;font-size:13px">Flujo operativo del mes: <b>${L(f.flujoOperativo)}</b>${f.sinBanco.n?` · <span style="color:#b91c1c">⚠️ ${f.sinBanco.n} sin banco (${L(f.sinBanco.neto)})</span>`:""}</div></div>
+    <div style="${card}"><b style="font-size:15px">Partida doble</b>
+      <div style="margin-top:6px;font-size:14px">${ef.diario.length} asientos · Debe <b>${L(b.debe)}</b> = Haber <b>${L(b.haber)}</b> ${b.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ NO cuadra</span>'}</div>
+      <div style="overflow-x:auto;margin-top:8px"><table style="${tabla};font-size:12.5px;min-width:560px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Cuenta</th><th style="text-align:left">Nombre</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr>
+      ${b.cuentas.map((c,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(c.cuenta)}</td><td>${esc(c.nombre)}</td><td style="text-align:right;white-space:nowrap">${L(c.debe)}</td><td style="text-align:right;white-space:nowrap">${L(c.haber)}</td><td style="text-align:right;white-space:nowrap;${c.saldo<0?"color:#b91c1c":""}">${L(c.saldo)}</td></tr>`).join("")}</table></div></div>
+    <button data-ef-xls style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">📥 Descargar Excel (resultados, flujo, diario, balanza)</button>`;
+  }
+  async function excel(ef){
+    if(typeof ExcelJS==="undefined"){mostrarToast("Cargando Excel… probá de nuevo en 2s.");return;}
+    const wb=new ExcelJS.Workbook();wb.creator="Sublichat";
+    const MON='"Lps " #,##0.00;-"Lps " #,##0.00';
+    const hoja=(nombre,titulo,headers,widths,rows,money)=>{const ws=wb.addWorksheet(nombre);ws.columns=widths.map(w=>({width:w}));ws.addRow([`${titulo} · ${ef.nombre}`]);ws.mergeCells(1,1,1,headers.length);const t=ws.getCell(1,1);t.font={bold:true,size:14,color:{argb:"FFFFFFFF"}};t.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE2231A"}};t.alignment={horizontal:"center"};ws.getRow(1).height=26;
+      const h=ws.addRow(headers);h.eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0A0A1A"}};c.alignment={horizontal:"center"};});
+      rows.forEach(v=>{const r=ws.addRow(v);money.forEach(k=>{r.getCell(k).numFmt=MON;});});ws.views=[{state:"frozen",ySplit:2}];return ws;};
+    const r=ef.resultados,f=ef.flujo;
+    hoja("Estado de resultados","ESTADO DE RESULTADOS",["Concepto","Monto"],[46,18],[
+      ["INGRESOS",""],...r.ingresos.porCategoria.map(x=>["   "+x.nombre,x.monto]),["Total ingresos",r.ingresos.total],
+      ["GASTOS OPERATIVOS",""],...r.gastosOperativos.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total gastos operativos",-r.gastosOperativos.total],
+      ["UTILIDAD OPERATIVA",r.utilidadOperativa],["PLANILLA Y COMISIONES",""],...r.planilla.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total planilla",-r.planilla.total],
+      ["UTILIDAD NETA",r.utilidadNeta],[`Margen neto ${r.margenNeto}%`,""]],[2]);
+    hoja("Flujo de caja","FLUJO DE CAJA POR BANCO",["Banco","Saldo inicial","Cobros","Gastos","Planilla","Transferencias","Ajustes","Saldo final"],[22,15,15,15,15,16,15,15],
+      [...f.bancos.map(x=>[x.nombre,x.saldoInicial,x.cobros,-x.gastos,-x.planilla,x.transferencias,x.ajustes,x.saldoFinal]),["TOTAL",f.saldoInicial,f.cobros,-f.gastos,-f.planilla,f.transferencias,f.ajustes,f.saldoFinal]],[2,3,4,5,6,7,8]);
+    const filas=[];ef.diario.forEach(a=>a.lineas.forEach((l,k)=>filas.push([k?"":a.numero,k?"":dmy(a.fecha),l.cuenta,l.nombre,l.debe||null,l.haber||null,k?"":a.descripcion,k?"":a.referencia])));
+    filas.push(["","","","TOTAL",ef.balanza.debe,ef.balanza.haber,ef.balanza.cuadra?"✔ Debe = Haber":"✖ NO cuadra",""]);
+    hoja("Libro diario","LIBRO DIARIO · PARTIDA DOBLE",["N°","Fecha","Cuenta","Nombre","Debe","Haber","Descripción","Referencia"],[7,12,14,32,15,15,38,26],filas,[5,6]);
+    hoja("Balanza","BALANZA DE COMPROBACIÓN",["Cuenta","Nombre","Tipo","Debe","Haber","Saldo"],[14,34,12,16,16,16],
+      [...ef.balanza.cuentas.map(c=>[c.cuenta,c.nombre,c.tipo,c.debe,c.haber,c.saldo]),["TOTAL",ef.balanza.cuadra?"✔ Cuadra":"✖ NO cuadra","",ef.balanza.debe,ef.balanza.haber,""]],[4,5,6]);
+    const buf=await wb.xlsx.writeBuffer();const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    const a=document.createElement("a");a.href=url;a.download=`Estados_financieros_${ef.mes}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+    mostrarToast("📥 Estados financieros descargados");
+  }
+  async function abrir(mes){
+    let back=document.getElementById("finEstadosR134");
+    if(!back){back=document.createElement("div");back.id="finEstadosR134";back.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(back);}
+    back.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:19px">📈 Estados financieros</b><button data-ef-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div><div data-ef-body style="margin-top:12px;color:#64748b">Cargando…</div></div>`;
+    back.querySelector("[data-ef-x]").onclick=()=>back.remove();
+    const body=back.querySelector("[data-ef-body]");
+    try{
+      datos=await pedir(mes);body.style.color="";body.innerHTML=html(datos);
+      body.querySelectorAll("[data-ef-mes]").forEach(b=>b.onclick=()=>abrir(b.dataset.efMes));
+      body.querySelector("[data-ef-xls]").onclick=()=>excel(datos).catch(e=>mostrarToast("⚠️ "+(e.message||e)));
+    }catch(e){body.innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message||e)}</p>`;}
+  }
+  window.finEstadosR134=abrir;
+  document.querySelectorAll("[data-fin-estados]").forEach(b=>b.addEventListener("click",()=>abrir("")));
+})();
