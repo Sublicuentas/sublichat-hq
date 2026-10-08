@@ -1459,7 +1459,7 @@ function renderFinanzas(){
     const puedeFecha=m.id&&m.source==="finanzas_movimientos";
     return `<div class="fin-mov"><div class="fm-c"><div class="fm-concept">${finEscape(m.concepto)}</div>
     <div class="fm-meta">${m.fecha.toLocaleDateString("es-HN")} · ${finEscape(m.banco)}${m.usuario?` · ${finEscape(m.usuario)}`:""}</div>
-    ${puedeFecha?`<button type="button" data-fin-ajustar-fecha="${finEscape(m.id)}" data-fin-fecha="${fechaIso}" style="border:0;background:transparent;color:#139ce8;font-weight:800;padding:4px 0;cursor:pointer">🗓 Ajustar fecha de pago</button>`:""}</div>
+    ${puedeFecha?`<button type="button" data-fin-ajustar-fecha="${finEscape(m.id)}" data-fin-fecha="${fechaIso}" style="border:0;background:transparent;color:#139ce8;font-weight:800;padding:4px 0;cursor:pointer">🗓 Ajustar fecha de pago</button>`:""}${puedeFecha&&pagoOpHabilitado()?`<button type="button" data-fin-corregir="${finEscape(m.id)}" style="border:0;background:transparent;color:#139ce8;font-weight:800;padding:4px 0 4px 12px;cursor:pointer">✏️ Corregir monto o banco</button>`:""}</div>
     <div class="fm-monto ${m.tipo==="ingreso"?"ing":"egr"}">${m.tipo==="ingreso"?"+":"−"}${fmt(m.monto)}</div></div>`;
   }).join(""):`<div class="empty">Sin movimientos</div>`;
   mv?.querySelectorAll?.("[data-fin-ajustar-fecha]").forEach(btn=>btn.addEventListener("click",async()=>{
@@ -1478,7 +1478,44 @@ function renderFinanzas(){
       renderFinanzas();finRenderCharts();mostrarToast("✅ Fecha financiera ajustada. La fecha de renovación no cambió.");
     }catch(e){mostrarToast("⚠️ "+(e.message||"No se pudo ajustar la fecha."));}
   }));
+  mv?.querySelectorAll?.("[data-fin-corregir]").forEach(btn=>btn.addEventListener("click",()=>finCorregirMovimientoR128(btn.dataset.finCorregir)));
   window._finMovs=movs;
+}
+// R128 · Corregir monto y/o BANCO de un movimiento (igual que la APK y el bot): no se edita encima; el original queda
+// "corregido" con su reversa y se crea el movimiento correcto, con motivo y en auditoría (mismo /api/finanzas).
+async function finCorregirMovimientoR128(id){
+  const raw=FINANZAS.find(x=>String(x.id||"")===String(id));if(!raw)return mostrarToast("⚠️ Movimiento no encontrado. Recargue.");
+  let metodos=[];try{metodos=await pagoOpMetodos();}catch(e){return mostrarToast("⚠️ "+(e.message||"Sin métodos de pago"));}
+  const back=document.createElement("div");
+  back.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:14px");
+  const inp="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px";
+  const nombre=pagoOpEsc(raw.clienteNombre||raw.detalle||raw.motivo||raw.plataforma||"Movimiento");
+  back.innerHTML=`<div style="width:min(420px,100%);background:#fff;border-radius:18px;padding:18px;color:#0f172a;font-family:inherit;box-shadow:0 18px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">✏️ Corregir · ${nombre}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
+    <p style="color:#64748b;font-size:12.5px;margin:6px 0 10px">Actual: Lps ${pagoOpEsc(raw.monto)} · ${pagoOpEsc(raw.banco||"Sin banco")}</p>
+    <label style="display:block;font-size:13px;font-weight:700">Monto correcto<input data-monto type="number" inputmode="decimal" min="0" style="${inp}" value="${pagoOpEsc(raw.monto)}"></label>
+    <label style="display:block;font-size:13px;font-weight:700;margin-top:10px">Banco correcto<select data-banco style="${inp}">${metodos.map(b=>`<option value="${pagoOpEsc(b.id)}" ${b.id===raw.bancoId?"selected":""}>${pagoOpEsc(b.nombre)}</option>`).join("")}</select></label>
+    <label style="display:block;font-size:13px;font-weight:700;margin-top:10px">Motivo<input data-motivo maxlength="200" placeholder="Ej. no es Ficohsa, es Tigo Money" style="${inp}"></label>
+    <p data-error hidden style="margin:10px 0 0;color:#b91c1c;font-weight:800;font-size:13px"></p>
+    <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">Guardar corrección</button></div>`;
+  (document.fullscreenElement||document.body).appendChild(back);
+  const err=(t)=>{const e=back.querySelector("[data-error]");e.textContent=t;e.hidden=false;};
+  back.querySelector("[data-x]").onclick=()=>back.remove();
+  const opId=pagoOpNuevoId();
+  back.querySelector("[data-ok]").onclick=async()=>{
+    const monto=Number(back.querySelector("[data-monto]").value||0),bancoId=back.querySelector("[data-banco]").value,motivo=String(back.querySelector("[data-motivo]").value||"").trim();
+    if(!(monto>0))return err("Escriba el monto correcto.");
+    if(motivo.length<4)return err("Escriba el motivo de la corrección.");
+    if(monto===Number(raw.monto)&&bancoId===raw.bancoId)return err("No cambió ni el monto ni el banco.");
+    const b=back.querySelector("[data-ok]");b.disabled=true;b.textContent="Guardando…";
+    try{
+      const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"corregir_movimiento",movimientoId:id,monto,bancoId,motivo,operationId:opId,origen:"web"})});
+      const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo corregir.");
+      back.remove();mostrarToast("✅ Corregido. El original queda en el historial.");
+      try{await load({forceServer:true});}catch(_){}
+      try{renderFinanzas();finRenderCharts();}catch(_){}
+    }catch(e){b.disabled=false;b.textContent="Guardar corrección";err(e.message||"No se pudo corregir.");}
+  };
 }
 function finRenderCharts(){
   if(typeof Chart==="undefined"){ setTimeout(finRenderCharts,300); return; }
