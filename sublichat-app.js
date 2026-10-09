@@ -1416,7 +1416,7 @@ function finYmdR125(m={}){
 function finVigenteR125(m={}){
   if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
   const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
-  if(t==="billetera"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(t==="billetera"||t==="compra"||t==="inventario"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
   if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
   return true;
 }
@@ -8083,9 +8083,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     </div>
     <div style="margin-top:8px;color:#475569;font-size:12.5px">Por origen: ${r.ingresos.porOrigen.map(x=>`${esc(x.nombre)} ${L(x.monto)}`).join(" · ")||"—"}</div></div>
     <div style="${card}"><b style="font-size:15px">Flujo de caja por banco</b> ${f.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ revisar</span>'}
-      <div style="overflow-x:auto"><table style="${tabla};font-size:12.5px;min-width:560px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Banco</th><th>Inicial</th><th>Cobros</th><th>Gastos</th><th>Planilla</th><th>Transf.</th><th>Ajustes</th><th>Final</th></tr>
-      ${f.bancos.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(x.nombre)}</td>${[x.saldoInicial,x.cobros,-x.gastos,-x.planilla,x.transferencias,x.ajustes,x.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap;${v<0?"color:#b91c1c":""}">${L(v)}</td>`).join("")}</tr>`).join("")}
-      <tr style="font-weight:900;border-top:2px solid #0f172a"><td style="padding:6px">Total</td>${[f.saldoInicial,f.cobros,-f.gastos,-f.planilla,f.transferencias,f.ajustes,f.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap">${L(v)}</td>`).join("")}</tr></table></div>
+      <div style="overflow-x:auto"><table style="${tabla};font-size:12.5px;min-width:640px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Banco</th><th>Inicial</th><th>Cobros</th><th>Gastos</th><th>Planilla</th><th>Compras</th><th>Transf.</th><th>Ajustes</th><th>Final</th></tr>
+      ${f.bancos.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(x.nombre)}</td>${[x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),x.transferencias,x.ajustes,x.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap;${v<0?"color:#b91c1c":""}">${L(v)}</td>`).join("")}</tr>`).join("")}
+      <tr style="font-weight:900;border-top:2px solid #0f172a"><td style="padding:6px">Total</td>${[f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),f.transferencias,f.ajustes,f.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap">${L(v)}</td>`).join("")}</tr></table></div>
       <div style="margin-top:6px;font-size:13px">Flujo operativo del mes: <b>${L(f.flujoOperativo)}</b>${f.sinBanco.n?` · <span style="color:#b91c1c">⚠️ ${f.sinBanco.n} sin banco (${L(f.sinBanco.neto)})</span>`:""}</div></div>
     <div style="${card}"><b style="font-size:15px">Partida doble</b>
       <div style="margin-top:6px;font-size:14px">${ef.diario.length} asientos · Debe <b>${L(b.debe)}</b> = Haber <b>${L(b.haber)}</b> ${b.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ NO cuadra</span>'}</div>
@@ -8106,8 +8106,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       ["GASTOS OPERATIVOS",""],...r.gastosOperativos.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total gastos operativos",-r.gastosOperativos.total],
       ["UTILIDAD OPERATIVA",r.utilidadOperativa],["PLANILLA Y COMISIONES",""],...r.planilla.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total planilla",-r.planilla.total],
       ["UTILIDAD NETA",r.utilidadNeta],[`Margen neto ${r.margenNeto}%`,""]],[2]);
-    hoja("Flujo de caja","FLUJO DE CAJA POR BANCO",["Banco","Saldo inicial","Cobros","Gastos","Planilla","Transferencias","Ajustes","Saldo final"],[22,15,15,15,15,16,15,15],
-      [...f.bancos.map(x=>[x.nombre,x.saldoInicial,x.cobros,-x.gastos,-x.planilla,x.transferencias,x.ajustes,x.saldoFinal]),["TOTAL",f.saldoInicial,f.cobros,-f.gastos,-f.planilla,f.transferencias,f.ajustes,f.saldoFinal]],[2,3,4,5,6,7,8]);
+    hoja("Flujo de caja","FLUJO DE CAJA POR BANCO",["Banco","Saldo inicial","Cobros","Gastos","Planilla","Compras inventario","Transferencias","Ajustes","Saldo final"],[22,15,15,15,15,16,16,15,15],
+      [...f.bancos.map(x=>[x.nombre,x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),x.transferencias,x.ajustes,x.saldoFinal]),["TOTAL",f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),f.transferencias,f.ajustes,f.saldoFinal]],[2,3,4,5,6,7,8,9]);
     const filas=[];ef.diario.forEach(a=>a.lineas.forEach((l,k)=>filas.push([k?"":a.numero,k?"":dmy(a.fecha),l.cuenta,l.nombre,l.debe||null,l.haber||null,k?"":a.descripcion,k?"":a.referencia])));
     filas.push(["","","","TOTAL",ef.balanza.debe,ef.balanza.haber,ef.balanza.cuadra?"✔ Debe = Haber":"✖ NO cuadra",""]);
     hoja("Libro diario","LIBRO DIARIO · PARTIDA DOBLE",["N°","Fecha","Cuenta","Nombre","Debe","Haber","Descripción","Referencia"],[7,12,14,32,15,15,38,26],filas,[5,6]);
@@ -8175,6 +8175,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const ok=back.querySelector("[data-ok]");
     ok.onclick=async()=>{const e=back.querySelector("[data-error]");e.hidden=true;ok.disabled=true;ok.textContent="Guardando…";
       try{await alGuardar(leer());back.remove();}catch(x){e.textContent=x.message||String(x);e.hidden=false;ok.disabled=false;ok.textContent=textoBoton;}};
+    return back;
   }
   // ---------------- Binance
   function vistaBinance(){
@@ -8273,16 +8274,82 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       async(v)=>{await api("fin_proveedor_termino",{proveedorId:p.id,termino:{productoId:v.productoId,costoRef:Number(v.costoRef),moneda:v.moneda,minimo:Number(v.minimo),nota:v.nota}});toast("✅ Costo guardado. El anterior queda en el historial.");await cargar();},
       {nota:"Si ya había un costo para ese producto, queda cerrado con fecha y se guarda en el historial. Las compras viejas no cambian."});
   }
+  // ---------------- FASE 2 · Compras e Inventario
+  const unidadDe=(p)=>(p&&p.unidad)||"unidad";
+  const plural=(n,u)=>Number(n)===1?u:(/[dlrn]$/i.test(u)?`${u}es`:/s$/i.test(u)?u:`${u}s`);
+  function vistaCompras(){
+    const ls=(E.lotes||[]);
+    return `<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="color:#64748b;font-size:12.5px">Una compra no es gasto: el dinero pasa a inventario.</span>${btn("＋ Nueva compra","data-comp-nueva",true)}</div>`+
+      (ls.length?ls.slice(0,80).map(l=>`<div style="${card}"><div style="display:flex;justify-content:space-between;gap:8px"><div><b>${esc(l.producto)}</b> · ${Number(l.cantidad)} ${esc(plural(l.cantidad,l.unidad))}${l.proveedor?` · ${esc(l.proveedor)}`:""}
+        <div style="color:#475569;font-size:12.5px">${dmy(l.fecha)} · ${esc(l.cuentaPagoNombre)} · ${Number(l.costoTotalMoneda)} ${esc(l.moneda)}${l.tasa?` · tasa ${Number(l.tasa).toFixed(4)}`:""}${l.vigenciaHasta?` · vence ${dmy(l.vigenciaHasta)}`:""}</div></div>
+        <div style="text-align:right;white-space:nowrap"><b>${L(l.costoTotalHnl)}</b><div style="color:#64748b;font-size:12px">${L(l.costoUnitarioHnl)} c/u</div></div></div></div>`).join(""):`<div style="${card};color:#64748b">Todavía no hay compras. Empiece cargando lo que ya tiene con <b>Inventario inicial</b> en "Pagado con".</div>`);
+  }
+  function vistaInventario(){
+    const inv=E.inventario||[];
+    const total=inv.reduce((s,r)=>s+Number(r.valorHnl||0),0),venc=inv.reduce((s,r)=>s+Number(r.vencidoSinUsar?.valorHnl||0),0);
+    const lotesDe=(id)=>(E.lotes||[]).filter(l=>l.productoId===id&&Number(l.disponible)>0);
+    return `<div style="${card}"><div style="color:#64748b;font-size:12.5px;font-weight:700">VALOR DEL INVENTARIO</div><div style="font-size:26px;font-weight:900">${L(total)}</div>${venc?`<div style="color:#b91c1c;font-size:13px;font-weight:700;margin-top:4px">⚠️ Vencido sin usar: ${L(venc)}. Ajústelo para que no infle el inventario.</div>`:""}</div>`+
+      (inv.length?inv.map(r=>`<div style="${card}"><div style="display:flex;justify-content:space-between;gap:8px"><div><b>${esc(r.nombre)}</b>${r.stockBajo?' <span style="color:#b91c1c;font-size:12px;font-weight:800">STOCK BAJO</span>':""}${r.vencePronto?' <span style="color:#b45309;font-size:12px;font-weight:800">VENCE PRONTO</span>':""}
+        <div style="color:#475569;font-size:12.5px">Quedan <b>${Number(r.disponible)}</b> de ${Number(r.comprado)} ${esc(plural(r.comprado,r.unidad))} · usados ${Number(r.consumido)}${r.proximoVencimiento?` · próximo vence ${dmy(r.proximoVencimiento)}`:""}</div></div>
+        <div style="text-align:right;white-space:nowrap"><b>${L(r.valorHnl)}</b><div style="color:#64748b;font-size:12px">${r.costoPromedioHnl?`${L(r.costoPromedioHnl)} c/u`:""}</div></div></div>
+        ${lotesDe(r.productoId).map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f1f5f9;font-size:13px"><span>Lote ${dmy(l.fecha)} · ${Number(l.disponible)}/${Number(l.cantidad)} · ${L(l.costoUnitarioHnl)} c/u${l.vigenciaHasta?` · vence ${dmy(l.vigenciaHasta)}`:""}</span>${btn("Ajustar",`data-lote-aj="${esc(l.id)}"`)}</div>`).join("")}</div>`).join(""):`<div style="${card};color:#64748b">Sin inventario. Registre compras o el inventario inicial en la pestaña Compras.</div>`);
+  }
+  function nuevaCompra(){
+    const prods=(E.productos||[]).filter(p=>p.activo!==false);
+    if(!prods.length)return toast("⚠️ Primero cargue el catálogo (pestaña Catálogo).");
+    const provs=[{v:"",t:"Sin proveedor"},...(E.proveedores||[]).filter(p=>p.activo!==false).map(p=>({v:p.id,t:p.alias}))];
+    const metodosP=(typeof pagoOpMetodos==="function"?pagoOpMetodos():Promise.resolve([])).catch(()=>[]);
+    metodosP.then(metodos=>{
+      const p0=prods.find(p=>p.modelo==="creditos")||prods[0],c0=p0.costoRef||{};
+      const opId=nuevoId(),b=E.billetera||{};
+      const fb=formulario("Nueva compra",[
+        {k:"productoId",label:"Producto",type:"select",options:prods.map(p=>({v:p.id,t:`${p.nombre} (${unidadDe(p)})`})),value:p0.id},
+        {k:"proveedorId",label:"Proveedor",type:"select",options:provs,value:""},
+        {k:"cantidad",label:"Cantidad comprada (unidades, créditos, cupos o links)",type:"number",value:c0.cantidad||1},
+        {k:"costoTotal",label:"Costo total de la compra",type:"number",value:c0.monto||""},
+        {k:"moneda",label:"Moneda",type:"select",options:(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v})),value:c0.moneda||"USDT"},
+        {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance":"banco"},
+        {k:"bancoId",label:"Banco (si pagó con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},
+        {k:"cargoHnl",label:"Cargo real en Lempiras (si pagó USD/USDT con banco o tarjeta)",type:"number",ph:"Lo que le cobró el banco"},
+        {k:"fecha",label:"Fecha de compra",type:"date",value:E.hoy},
+        {k:"vigenciaHasta",label:"Vence (vacío = según duración del producto)",type:"date",value:""},
+        {k:"cuentaInventarioId",label:"Cuenta en Bodega (cuentas madre, opcional)",type:"select",options:[{v:"",t:"—"},...(E.cuentasBodega||[]).map(c=>({v:c.id,t:`${c.plataforma} · ${c.correo} (${c.capacidad} cupos)`}))],value:""},
+        {k:"notas",label:"Notas",type:"textarea"},
+      ],async(v)=>{
+        const r=await api("fin_compra_registrar",{operationId:opId,compra:{...v,cantidad:Number(v.cantidad),costoTotal:Number(v.costoTotal),cargoHnl:Number(v.cargoHnl||0)}});
+        toast(r.duplicado?"ℹ️ Esa compra ya estaba registrada.":`✅ Compra registrada: ${L(r.costoTotalHnl)} (${L(r.costoUnitarioHnl)} c/u)`);tab="compras";await cargar();
+      },{nota:"No es gasto: baja la cuenta con que pagó y sube el inventario. El costo en Lempiras de este lote queda fijo.",textoBoton:"Registrar compra",alCambiar:(v)=>{
+        const p=prods.find(x=>x.id===v.productoId)||{},n=Number(v.cantidad),t=Number(v.costoTotal);if(!(n>0&&t>0))return "";
+        let hnl=0,como="";
+        if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L ${Number(b.costoPromedio||0).toFixed(4)})`;}
+        else if(v.moneda==="HNL"){hnl=t;}
+        else if(Number(v.cargoHnl)>0){hnl=Number(v.cargoHnl);como="con el cargo real";}
+        else if(v.pago==="inicial"&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
+        else return `<span style="color:#b45309">Escriba el cargo real en Lempiras.</span>`;
+        return `Costo en Lempiras: ${L(hnl)} · ${L(hnl/n)} por ${esc(unidadDe(p))} ${como}`;}});
+      // Al cambiar de producto se proponen cantidad, costo y moneda de su costo de referencia (se pueden cambiar).
+      const sel=fb.querySelector('[data-k="productoId"]');
+      sel.addEventListener("change",()=>{const p=prods.find(x=>x.id===sel.value)||{},c=p.costoRef||{};const set=(k,v)=>{const el=fb.querySelector(`[data-k="${k}"]`);if(el&&v!=null&&v!==""){el.value=v;el.dispatchEvent(new Event("input"));}};
+        set("cantidad",c.cantidad||1);set("costoTotal",c.monto||"");set("moneda",c.moneda||"USDT");set("pago",(c.moneda||"USDT")==="USDT"?"binance":"banco");});
+    });
+  }
+  function ajustarLote(l){
+    const opId=nuevoId();
+    formulario(`Ajustar lote · ${l.producto}`,[{k:"disponibleCorrecto",label:`Disponible correcto (hoy dice ${Number(l.disponible)})`,type:"number",value:l.disponible},{k:"motivo",label:"Motivo (obligatorio)",ph:"Venció, se cayó la cuenta, conteo…"}],
+      async(v)=>{const r=await api("fin_lote_ajustar",{loteId:l.id,disponibleCorrecto:Number(v.disponibleCorrecto),motivo:v.motivo,operationId:opId});toast(r.duplicado?"ℹ️ Ya estaba.":`✅ Ajustado ${r.delta>0?"+":""}${r.delta}${r.montoHnl>0?` · pérdida ${L(r.montoHnl)}`:""}`);await cargar();},
+      {nota:"Lo que se baja va como merma o vencimiento de inventario, con su motivo en auditoría. El lote nunca se borra.",textoBoton:"Guardar ajuste"});
+  }
   // ---------------- pantalla
   function pintar(){
     const root=document.getElementById("finEmpresaR135");if(!root||!E)return;
-    const tabs=[["binance","Binance"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
-    root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1;border:0;border-radius:10px;padding:9px;font-weight:800;font-size:14px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
+    const tabs=[["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
+    root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1 0 auto;border:0;border-radius:10px;padding:9px 8px;font-weight:800;font-size:13px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
     const body=root.querySelector("[data-emp-body]");
-    body.innerHTML=tab==="binance"?vistaBinance():tab==="catalogo"?vistaCatalogo():vistaProveedores();
+    body.innerHTML=tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
     root.querySelectorAll("[data-emp-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.empTab;pintar();});
     const on=(sel,fn)=>body.querySelectorAll(sel).forEach(el=>el.addEventListener("click",()=>fn(el)));
     const prod=(id)=>(E.productos||[]).find(p=>p.id===id),vari=(id)=>(E.productos||[]).flatMap(p=>p.variantes||[]).find(v=>v.id===id),prov=(id)=>(E.proveedores||[]).find(p=>p.id===id);
+    on("[data-comp-nueva]",()=>nuevaCompra());on("[data-lote-aj]",(el)=>ajustarLote((E.lotes||[]).find(l=>l.id===el.dataset.loteAj)));
     on("[data-bin-rec]",()=>recargar());on("[data-bin-aj]",()=>ajustar());
     on("[data-cat-sembrar]",async(el)=>{el.disabled=true;el.textContent="Cargando…";try{const r=await api("fin_sembrar_catalogo");toast(`✅ ${r.productos} productos, ${r.variantes} variantes, ${r.precios} precios, ${r.proveedores} proveedores`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
     on("[data-cat-nuevo]",()=>editarProducto(null));on("[data-cat-editar]",(el)=>editarProducto(prod(el.dataset.catEditar)));
@@ -8298,8 +8365,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(t)tab=t;
     let root=document.getElementById("finEmpresaR135");
     if(!root){root=document.createElement("div");root.id="finEmpresaR135";root.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(root);}
-    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Binance · catálogo financiero · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
-      <div data-emp-tabs style="display:flex;gap:6px;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
+    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
+      <div data-emp-tabs style="display:flex;gap:4px;overflow-x:auto;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
     root.querySelector("[data-emp-x]").onclick=()=>root.remove();
     cargar();
   }
