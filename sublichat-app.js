@@ -1416,7 +1416,7 @@ function finYmdR125(m={}){
 function finVigenteR125(m={}){
   if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
   const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
-  if(t==="billetera"||t==="compra"||t==="inventario"||t==="costo_venta"||t==="pago_cxp"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(t==="billetera"||t==="compra"||t==="inventario"||t==="costo_venta"||t==="pago_cxp"||t==="retiro"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
   if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
   return true;
 }
@@ -8083,9 +8083,9 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     </div>
     <div style="margin-top:8px;color:#475569;font-size:12.5px">Por origen: ${r.ingresos.porOrigen.map(x=>`${esc(x.nombre)} ${L(x.monto)}`).join(" · ")||"—"}</div></div>
     <div style="${card}"><b style="font-size:15px">Flujo de caja por banco</b> ${f.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ revisar</span>'}
-      <div style="overflow-x:auto"><table style="${tabla};font-size:12.5px;min-width:640px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Banco</th><th>Inicial</th><th>Cobros</th><th>Gastos</th><th>Planilla</th><th>Compras</th><th>Transf.</th><th>Ajustes</th><th>Final</th></tr>
-      ${f.bancos.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(x.nombre)}</td>${[x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),x.transferencias,x.ajustes,x.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap;${v<0?"color:#b91c1c":""}">${L(v)}</td>`).join("")}</tr>`).join("")}
-      <tr style="font-weight:900;border-top:2px solid #0f172a"><td style="padding:6px">Total</td>${[f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),f.transferencias,f.ajustes,f.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap">${L(v)}</td>`).join("")}</tr></table></div>
+      <div style="overflow-x:auto"><table style="${tabla};font-size:12.5px;min-width:700px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Banco</th><th>Inicial</th><th>Cobros</th><th>Gastos</th><th>Planilla</th><th>Compras</th><th>Retiros</th><th>Transf.</th><th>Ajustes</th><th>Final</th></tr>
+      ${f.bancos.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(x.nombre)}</td>${[x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),-(x.retiros||0),x.transferencias,x.ajustes,x.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap;${v<0?"color:#b91c1c":""}">${L(v)}</td>`).join("")}</tr>`).join("")}
+      <tr style="font-weight:900;border-top:2px solid #0f172a"><td style="padding:6px">Total</td>${[f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),-(f.retiros||0),f.transferencias,f.ajustes,f.saldoFinal].map(v=>`<td style="padding:6px;text-align:right;white-space:nowrap">${L(v)}</td>`).join("")}</tr></table></div>
       <div style="margin-top:6px;font-size:13px">Flujo operativo del mes: <b>${L(f.flujoOperativo)}</b>${f.sinBanco.n?` · <span style="color:#b91c1c">⚠️ ${f.sinBanco.n} sin banco (${L(f.sinBanco.neto)})</span>`:""}</div></div>
     <div style="${card}"><b style="font-size:15px">Partida doble</b>
       <div style="margin-top:6px;font-size:14px">${ef.diario.length} asientos · Debe <b>${L(b.debe)}</b> = Haber <b>${L(b.haber)}</b> ${b.cuadra?'<span style="color:#16a34a;font-weight:800">✔ cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ NO cuadra</span>'}</div>
@@ -8106,8 +8106,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       ["GASTOS OPERATIVOS",""],...r.gastosOperativos.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total gastos operativos",-r.gastosOperativos.total],
       ["UTILIDAD OPERATIVA",r.utilidadOperativa],["PLANILLA Y COMISIONES",""],...r.planilla.porConcepto.map(x=>["   "+x.nombre,-x.monto]),["Total planilla",-r.planilla.total],
       ["UTILIDAD NETA",r.utilidadNeta],[`Margen neto ${r.margenNeto}%`,""]],[2]);
-    hoja("Flujo de caja","FLUJO DE CAJA POR BANCO",["Banco","Saldo inicial","Cobros","Gastos","Planilla","Compras inventario","Transferencias","Ajustes","Saldo final"],[22,15,15,15,15,16,16,15,15],
-      [...f.bancos.map(x=>[x.nombre,x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),x.transferencias,x.ajustes,x.saldoFinal]),["TOTAL",f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),f.transferencias,f.ajustes,f.saldoFinal]],[2,3,4,5,6,7,8,9]);
+    hoja("Flujo de caja","FLUJO DE CAJA POR BANCO",["Banco","Saldo inicial","Cobros","Gastos","Planilla","Compras inventario","Retiros dueños","Transferencias","Ajustes","Saldo final"],[22,15,15,15,15,16,15,16,15,15],
+      [...f.bancos.map(x=>[x.nombre,x.saldoInicial,x.cobros,-x.gastos,-x.planilla,-(x.compras||0),-(x.retiros||0),x.transferencias,x.ajustes,x.saldoFinal]),["TOTAL",f.saldoInicial,f.cobros,-f.gastos,-f.planilla,-(f.compras||0),-(f.retiros||0),f.transferencias,f.ajustes,f.saldoFinal]],[2,3,4,5,6,7,8,9,10]);
     const filas=[];ef.diario.forEach(a=>a.lineas.forEach((l,k)=>filas.push([k?"":a.numero,k?"":dmy(a.fecha),l.cuenta,l.nombre,l.debe||null,l.haber||null,k?"":a.descripcion,k?"":a.referencia])));
     filas.push(["","","","TOTAL",ef.balanza.debe,ef.balanza.haber,ef.balanza.cuadra?"✔ Debe = Haber":"✖ NO cuadra",""]);
     hoja("Libro diario","LIBRO DIARIO · PARTIDA DOBLE",["N°","Fecha","Cuenta","Nombre","Debe","Haber","Descripción","Referencia"],[7,12,14,32,15,15,38,26],filas,[5,6]);
@@ -8145,7 +8145,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:"—";};
   const nuevoId=()=>(typeof pagoOpNuevoId==="function"?pagoOpNuevoId():(crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`));
   const toast=(t)=>(typeof mostrarToast==="function"?mostrarToast(t):alert(t));
-  let E=null,tab="costeo",filtro="";
+  let E=null,tab="tablero",filtro="";
   async function api(accion,datos={}){
     const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion,origen:"web",...datos})});
     const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo completar.");return j;
@@ -8399,19 +8399,90 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       async(v)=>{const r=await api("fin_cxp_pagar",{cxpId:id,monto:Number(v.monto),pago:v.pago,bancoId:v.bancoId,montoHnl:Number(v.montoHnl||0),fecha:v.fecha,operationId:opId});toast(r.duplicado?"ℹ️ Ese pago ya estaba.":`✅ Pagado ${L(r.pagadoHnl)}${r.diferencialHnl?` · diferencial cambiario ${L(r.diferencialHnl)}`:""} · ${r.estado==="pagado"?"cuenta saldada":"queda saldo"}`);await cargar();},
       {nota:`${esc(x.concepto)} · vence ${dmy(x.vence)}. Si la tasa cambió desde la compra, la diferencia sale como diferencial cambiario.`,textoBoton:"Registrar pago"});
   }
+  // ---------------- FASES 5–8 · Tablero de dirección, retiros, utilidad repartible, conciliación y respaldo
+  let T=null,mesTab="";
+  async function cargarTablero(){ try{T=await api("fin_tablero",mesTab?{mes:mesTab}:{});}catch(e){T={error:e.message};} }
+  function vistaTablero(){
+    if(!T)return `<div style="${card};color:#64748b">Cargando tablero…</div>`;
+    if(T.error)return `<div style="${card};color:#b91c1c;font-weight:800">⚠️ ${esc(T.error)}</div>`;
+    const r=T.resultados,a=T.anterior,b=T.balance,u=T.repartible,h=T.hoyRes;
+    const kpi=(t,v,sub="",col="")=>`<div style="background:#f8fafc;border:1px solid #eef1f5;border-radius:12px;padding:10px"><div style="color:#64748b;font-size:12px;font-weight:700">${t}</div><div style="font-size:17px;font-weight:900;${col?`color:${col}`:""}">${v}</div>${sub?`<div style="color:#64748b;font-size:11.5px">${sub}</div>`:""}</div>`;
+    const flecha=(x,y)=>y?`${x>=y?"▲":"▼"} ${Math.abs(Math.round(((x-y)/Math.abs(y||1))*1000)/10)}% vs ${esc(a.nombreMes)}`:"";
+    const fila=(t,v,{neg=false,bold=false,col=""}={})=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 2px;border-bottom:1px solid #f1f5f9;${bold?"font-weight:900;":""}"><span>${t}</span><span style="white-space:nowrap;${col?`color:${col}`:""}">${neg&&v?"− ":""}${L(v)}</span></div>`;
+    const tabla=(rows,cols)=>`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px"><tr style="background:#0f172a;color:#fff">${cols.map((c,i)=>`<th style="padding:6px;text-align:${i?"right":"left"}">${c[0]}</th>`).join("")}</tr>${rows.map((x,i)=>`<tr style="${i%2?"background:#f4f6f8":""}">${cols.map((c,j)=>`<td style="padding:6px;text-align:${j?"right":"left"};white-space:nowrap;${c[2]?c[2](x):""}">${c[1](x)}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${cols.length}" style="padding:8px;color:#64748b">Sin datos este mes.</td></tr>`}</table></div>`;
+    const rentCols=[["Nombre",x=>esc(x.nombre)],["Ventas",x=>L(x.ingresoHnl)],["Costo",x=>L(x.costoHnl)],["Utilidad",x=>L(x.utilidadBrutaHnl),x=>`font-weight:800;${x.utilidadBrutaHnl<0?"color:#b91c1c":""}`],["Margen",x=>`${x.margen}%`,x=>x.margen<30?"color:#b91c1c;font-weight:800":""]];
+    const al=(T.alertas||[]).map(x=>`<div style="padding:7px 0;border-top:1px solid #f1f5f9;font-size:13.5px;${x.nivel==="alta"?"color:#b91c1c;font-weight:700":"color:#b45309"}">${x.nivel==="alta"?"🔴":"🟠"} ${esc(x.texto)}</div>`).join("");
+    const conc=(T.conciliacion||{});
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">${btn("◀",`data-tab-mes="${mesVec(T.mes,-1)}"`)}<b>${esc(T.nombreMes)}</b>${btn("▶",`data-tab-mes="${mesVec(T.mes,1)}" ${mesVec(T.mes,1)>E.hoy.slice(0,7)?"disabled":""}`)}</div>
+      ${al?`<div style="${card}"><b>Alertas de dirección</b>${al}</div>`:`<div style="${card};color:#16a34a;font-weight:700">✅ Sin alertas.</div>`}
+      <div style="${card}"><b>Hoy</b><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">${kpi("Ventas hoy",L(h.ventas),`${h.nVentas} venta(s)`)}${kpi("Utilidad bruta hoy",L(h.utilidadBruta),`${h.margenBruto}%`,"#16a34a")}</div></div>
+      <div style="${card}"><b>Resultados por venta · ${esc(T.nombreMes)}</b>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 8px">${kpi("Ventas",L(r.ventas),flecha(r.ventas,a.ventas))}${kpi("Utilidad bruta",L(r.utilidadBruta),`margen ${r.margenBruto}%`,"#16a34a")}${kpi("Utilidad neta",L(r.utilidadNeta),`margen ${r.margenNeto}%`,r.utilidadNeta<0?"#b91c1c":"#0f172a")}${kpi("Gastos",L(r.gastosOperativos),flecha(r.gastosOperativos,a.gastosOperativos))}</div>
+        ${fila("Ventas",r.ventas)}${fila("Costo de ventas",r.costoVentas,{neg:true})}${fila(`= Utilidad bruta (${r.margenBruto}%)`,r.utilidadBruta,{bold:true})}${fila("Gastos operativos",r.gastosOperativos,{neg:true})}${fila("Planilla y comisiones",r.planilla,{neg:true})}${fila("= Utilidad operativa",r.utilidadOperativa,{bold:true})}${fila("Cupos sin vender",r.cuposSinVender,{neg:true})}${fila("Mermas y vencimientos",r.mermas,{neg:true})}${r.diferencialCambiario?fila("Diferencial cambiario",r.diferencialCambiario,{neg:r.diferencialCambiario>0}):""}
+        <div style="display:flex;justify-content:space-between;padding:8px 2px;border-top:2px solid #0f172a;font-weight:900"><span>= Utilidad neta (${r.margenNeto}%)</span><span style="color:${r.utilidadNeta<0?"#b91c1c":"#16a34a"}">${L(r.utilidadNeta)}</span></div>
+        <div style="color:#64748b;font-size:12px">Por venta (aunque esté pendiente de cobro: ${L(r.ventasPendientesCobro)}). Cobrado en efectivo: ${L(r.cobradoEnEfectivo)}. Los retiros de dueños (${L(r.retiros)}) no son gasto.</div></div>
+      <div style="${card}"><b>Liquidez</b>${(b.bancosDetalle||[]).map(x=>fila(esc(x.nombre),x.saldo)).join("")}${fila(`Binance · ${Number(b.binanceUsdt)} USDT`,b.binanceHnl)}${fila("Total caja",Math.round((b.bancos+b.binanceHnl)*100)/100,{bold:true})}</div>
+      <div style="${card}"><b>Balance gerencial (hoy)</b>${fila("Bancos",b.bancos)}${fila("Binance",b.binanceHnl)}${fila("Cuentas por cobrar",b.cuentasPorCobrar)}${fila("Inventario",b.inventario)}${fila("= Activos",b.activos,{bold:true})}${fila("Cuentas por pagar",b.cuentasPorPagar,{neg:true})}
+        <div style="display:flex;justify-content:space-between;padding:8px 2px;border-top:2px solid #0f172a;font-weight:900"><span>= Patrimonio (lo que es de ustedes)</span><span>${L(b.patrimonio)}</span></div></div>
+      <div style="${card}"><b>Utilidad repartible</b>
+        ${fila("Utilidad neta acumulada",u.utilidadAcumulada)}${fila("Retiros ya hechos",u.retirosAcumulados,{neg:true})}${fila(`Reserva (${u.reservaPct}%)`,u.reserva,{neg:true})}${fila("= Por utilidad",u.porUtilidad,{bold:true})}
+        ${fila("Caja (bancos + Binance)",u.caja)}${fila("Deudas con proveedores",u.deudas,{neg:true})}${fila("Capital de trabajo mínimo",u.capitalTrabajo,{neg:true})}${fila("= Por caja",u.porCaja,{bold:true})}
+        <div style="display:flex;justify-content:space-between;padding:8px 2px;border-top:2px solid #0f172a;font-weight:900"><span>Se puede repartir (limita ${u.limitaPor==="caja"?"la caja":"la utilidad"})</span><span style="color:#16a34a">${L(u.repartible)}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${btn("💸 Registrar retiro","data-tab-retiro",true)}${btn("Reserva y capital de trabajo","data-tab-config")}</div></div>
+      <div style="${card}"><b>Utilidad por producto</b>${tabla(T.rentabilidad.productos,rentCols)}</div>
+      <div style="${card}"><b>Utilidad por proveedor</b>${tabla(T.rentabilidad.proveedores,rentCols)}</div>
+      <div style="${card}"><b>Utilidad por vendedor</b>${tabla(T.rentabilidad.vendedores,rentCols)}</div>
+      <div style="${card}"><b>Costo promedio por proveedor</b>${tabla(T.costosProveedor||[],[["Producto",x=>esc(x.producto)+(x.masEconomico?' <span style="color:#16a34a;font-weight:800">más barato</span>':"")],["Proveedor",x=>esc(x.proveedor)],["Compras",x=>x.compras],["Promedio",x=>L(x.promedioHnl)],["Último",x=>L(x.ultimo)]])}</div>
+      <div style="${card}"><b>Conciliación con el libro</b> ${conc.todoCuadra?'<span style="color:#16a34a;font-weight:800">✔ todo cuadra</span>':'<span style="color:#b91c1c;font-weight:800">✖ revisar</span>'}
+        ${tabla(conc.filas||[],[["Cuenta",x=>esc(x.nombre)],["Sistema",x=>x.nombre.includes("USDT")?Number(x.sistema):L(x.sistema)],["Libro",x=>x.nombre.includes("USDT")?Number(x.libro):L(x.libro)],["Dif.",x=>x.ok?"✔":String(x.diferencia),x=>x.ok?"color:#16a34a":"color:#b91c1c;font-weight:800"]])}</div>
+      <div style="${card};display:flex;gap:8px;flex-wrap:wrap">${btn("📥 Excel de dirección","data-tab-xls",true)}${btn("💾 Descargar respaldo","data-tab-respaldo")}${btn((T.config||{}).activo===false?"▶ Reanudar Finance OS":"⏸ Pausar Finance OS","data-tab-pausa")}</div>`;
+  }
+  async function retiro(){
+    let metodos=[];try{metodos=typeof pagoOpMetodos==="function"?await pagoOpMetodos():[];}catch(e){}
+    const opId=nuevoId();
+    formulario("Retiro de dueños",[{k:"beneficiario",label:"¿Para quién?",ph:"Dueño / socio"},{k:"monto",label:`Monto (repartible hoy: ${L(T?.repartible?.repartible||0)})`,type:"number"},{k:"bancoId",label:"¿De qué banco sale?",type:"select",options:metodos.map(m=>({v:m.id,t:m.nombre})),value:metodos[0]?.id},{k:"fecha",label:"Fecha",type:"date",value:E.hoy},{k:"motivo",label:"Motivo",ph:"Utilidades de octubre"}],
+      async(v)=>{const r=await api("fin_retiro_registrar",{...v,monto:Number(v.monto),operationId:opId});toast(r.duplicado?"ℹ️ Ese retiro ya estaba.":"✅ Retiro registrado. Baja el banco, no es gasto.");await cargarTablero();await cargar();},
+      {nota:"Repartir utilidades no es gasto de la empresa: no baja la utilidad, baja el patrimonio y el banco.",textoBoton:"Registrar retiro"});
+  }
+  function configOS(){
+    const c=T?.config||{};
+    formulario("Reserva y capital de trabajo",[{k:"reservaPct",label:"Reserva sobre la utilidad (%)",type:"number",value:c.reservaPct??10},{k:"capitalTrabajoMin",label:"Capital de trabajo mínimo en caja (L)",type:"number",value:c.capitalTrabajoMin??5000}],
+      async(v)=>{await api("fin_finance_os_config",{reservaPct:Number(v.reservaPct),capitalTrabajoMin:Number(v.capitalTrabajoMin)});toast("✅ Guardado");await cargarTablero();pintar();},{nota:"La utilidad repartible deja siempre esta reserva y este colchón en caja."});
+  }
+  async function excelDireccion(){
+    if(typeof ExcelJS==="undefined"){toast("Cargando Excel… probá de nuevo en 2s.");return;}
+    const wb=new ExcelJS.Workbook();wb.creator="Sublichat";const MON='"Lps " #,##0.00;-"Lps " #,##0.00';
+    const hoja=(nombre,titulo,headers,widths,rows,money)=>{const ws=wb.addWorksheet(nombre);ws.columns=widths.map(w=>({width:w}));ws.addRow([`${titulo} · ${T.nombreMes}`]);ws.mergeCells(1,1,1,headers.length);const t=ws.getCell(1,1);t.font={bold:true,size:14,color:{argb:"FFFFFFFF"}};t.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE2231A"}};t.alignment={horizontal:"center"};
+      const h=ws.addRow(headers);h.eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0A0A1A"}};});rows.forEach(v=>{const r=ws.addRow(v);money.forEach(k=>{r.getCell(k).numFmt=MON;});});ws.views=[{state:"frozen",ySplit:2}];};
+    const r=T.resultados,b=T.balance,u=T.repartible;
+    hoja("Resultados","RESULTADOS POR VENTA",["Concepto","Monto"],[42,18],[["Ventas",r.ventas],["Costo de ventas",-r.costoVentas],["Utilidad bruta",r.utilidadBruta],["Gastos operativos",-r.gastosOperativos],["Planilla y comisiones",-r.planilla],["Utilidad operativa",r.utilidadOperativa],["Cupos sin vender",-r.cuposSinVender],["Mermas y vencimientos",-r.mermas],["Diferencial cambiario",-r.diferencialCambiario],["UTILIDAD NETA",r.utilidadNeta],[`Margen bruto ${r.margenBruto}% · neto ${r.margenNeto}%`,""]],[2]);
+    hoja("Balance","BALANCE GERENCIAL",["Cuenta","Monto"],[42,18],[["Bancos",b.bancos],["Binance",b.binanceHnl],["Cuentas por cobrar",b.cuentasPorCobrar],["Inventario",b.inventario],["ACTIVOS",b.activos],["Cuentas por pagar",-b.cuentasPorPagar],["PATRIMONIO",b.patrimonio],["",""],["Utilidad repartible",u.repartible]],[2]);
+    const rc=(x)=>[x.nombre,x.ingresoHnl,x.costoHnl,x.utilidadBrutaHnl,x.margen/100];
+    for(const [n,k] of [["Por producto","productos"],["Por proveedor","proveedores"],["Por vendedor","vendedores"]]){hoja(n,`UTILIDAD ${n.toUpperCase()}`,["Nombre","Ventas","Costo","Utilidad bruta","Margen"],[30,15,15,16,10],T.rentabilidad[k].map(rc),[2,3,4]);wb.getWorksheet(n).getColumn(5).numFmt="0.0%";}
+    hoja("Proveedores","COSTO PROMEDIO POR PROVEEDOR",["Producto","Proveedor","Compras","Promedio","Último","Más barato"],[24,22,10,14,14,12],(T.costosProveedor||[]).map(x=>[x.producto,x.proveedor,x.compras,x.promedioHnl,x.ultimo,x.masEconomico?"✔":""]),[4,5]);
+    hoja("Conciliación","CONCILIACIÓN CON EL LIBRO",["Cuenta","Sistema","Libro","Diferencia","Cuadra"],[32,16,16,14,10],(T.conciliacion.filas||[]).map(x=>[x.nombre,x.sistema,x.libro,x.diferencia,x.ok?"✔":"✖"]),[]);
+    hoja("Alertas","ALERTAS DE DIRECCIÓN",["Nivel","Alerta"],[10,90],(T.alertas||[]).map(x=>[x.nivel,x.texto]),[]);
+    const buf=await wb.xlsx.writeBuffer();const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));const a2=document.createElement("a");a2.href=url;a2.download=`Direccion_${T.mes}.xlsx`;document.body.appendChild(a2);a2.click();a2.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("📥 Excel de dirección descargado");
+  }
+  async function respaldo(){
+    try{const r=await api("fin_respaldo");const url=URL.createObjectURL(new Blob([JSON.stringify(r,null,1)],{type:"application/json"}));const a2=document.createElement("a");a2.href=url;a2.download=`respaldo_finance_os_${r.generado.slice(0,10)}.json`;document.body.appendChild(a2);a2.click();a2.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast(`💾 Respaldo: ${Object.entries(r.conteo).map(([k,v])=>`${k.replace("fin_","")} ${v}`).join(" · ")}`);}catch(e){toast("⚠️ "+e.message);}
+  }
   // ---------------- pantalla
   function pintar(){
     const root=document.getElementById("finEmpresaR135");if(!root||!E)return;
-    const tabs=[["costeo","Costo de ventas"],["cxccxp","Cobrar / Pagar"],["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
+    const tabs=[["tablero","Tablero"],["costeo","Costo de ventas"],["cxccxp","Cobrar / Pagar"],["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
     root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1 0 auto;border:0;border-radius:10px;padding:9px 8px;font-weight:800;font-size:13px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
     const body=root.querySelector("[data-emp-body]");body.style.color="#0f172a";
-    body.innerHTML=tab==="costeo"?vistaCosteo():tab==="cxccxp"?vistaCxcCxp():tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
+    body.innerHTML=tab==="tablero"?vistaTablero():tab==="costeo"?vistaCosteo():tab==="cxccxp"?vistaCxcCxp():tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
     root.querySelectorAll("[data-emp-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.empTab;pintar();});
     const on=(sel,fn)=>body.querySelectorAll(sel).forEach(el=>el.addEventListener("click",()=>fn(el)));
     const prod=(id)=>(E.productos||[]).find(p=>p.id===id),vari=(id)=>(E.productos||[]).flatMap(p=>p.variantes||[]).find(v=>v.id===id),prov=(id)=>(E.proveedores||[]).find(p=>p.id===id);
     on("[data-costeo-activar]",async(el)=>{const d=body.querySelector("[data-costeo-desde]").value;if(!confirm(`¿Costear ventas desde ${dmy(d)}? Las ventas de antes no se tocan.`))return;el.disabled=true;try{await api("fin_costeo_config",{desde:d});toast("✅ Costo de ventas activado");await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
     on("[data-costeo-correr]",async(el)=>{el.disabled=true;el.textContent="Costeando…";try{const r=await api("fin_costear");toast(`✅ ${r.costeadas||0} ventas nuevas · ${r.completadas||0} completadas · ${r.vencimientos||0} vencimientos`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
     on("[data-costeo-mes]",async(el)=>{mesCosteo=el.dataset.costeoMes;await cargar();});
+    on("[data-tab-mes]",async(el)=>{mesTab=el.dataset.tabMes;T=null;pintar();await cargarTablero();pintar();});
+    on("[data-tab-retiro]",()=>retiro());on("[data-tab-config]",()=>configOS());on("[data-tab-xls]",()=>excelDireccion().catch(e=>toast("⚠️ "+e.message)));on("[data-tab-respaldo]",()=>respaldo());
+    on("[data-tab-pausa]",async()=>{const pausar=(T.config||{}).activo!==false;if(!confirm(pausar?"¿Pausar Finance OS? El costo de ventas automático se detiene (nada se borra).":"¿Reanudar Finance OS?"))return;await api("fin_finance_os_config",{activo:!pausar});toast(pausar?"⏸ En pausa":"▶ Reanudado");await cargarTablero();pintar();});
     on("[data-cxc-abonar]",(el)=>abonarCxc(el.dataset.cxcAbonar));on("[data-cxp-pagar]",(el)=>pagarCxp(el.dataset.cxpPagar));
     on("[data-comp-nueva]",()=>nuevaCompra());on("[data-lote-aj]",(el)=>ajustarLote((E.lotes||[]).find(l=>l.id===el.dataset.loteAj)));
     on("[data-bin-rec]",()=>recargar());on("[data-bin-aj]",()=>ajustar());
@@ -8423,13 +8494,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   async function cargar(){
     const root=document.getElementById("finEmpresaR135");if(!root)return;
-    try{E=await api("fin_empresa_estado",mesCosteo?{mes:mesCosteo}:{});pintar();}catch(e){root.querySelector("[data-emp-body]").innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message)}</p>`;}
+    try{E=await api("fin_empresa_estado",mesCosteo?{mes:mesCosteo}:{});pintar();if(tab==="tablero"||!T){await cargarTablero();pintar();}}catch(e){root.querySelector("[data-emp-body]").innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message)}</p>`;}
   }
   function abrir(t){
     if(t)tab=t;
     let root=document.getElementById("finEmpresaR135");
     if(!root){root=document.createElement("div");root.id="finEmpresaR135";root.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(root);}
-    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Costo de ventas · cobrar y pagar · Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
+    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Tablero · costo de ventas · cobrar y pagar · Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
       <div data-emp-tabs style="display:flex;gap:4px;overflow-x:auto;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
     root.querySelector("[data-emp-x]").onclick=()=>root.remove();
     cargar();
