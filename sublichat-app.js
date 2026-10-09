@@ -1416,7 +1416,7 @@ function finYmdR125(m={}){
 function finVigenteR125(m={}){
   if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
   const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
-  if(t==="billetera"||t==="compra"||t==="inventario"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(t==="billetera"||t==="compra"||t==="inventario"||t==="costo_venta"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
   if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
   return true;
 }
@@ -8145,7 +8145,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:"—";};
   const nuevoId=()=>(typeof pagoOpNuevoId==="function"?pagoOpNuevoId():(crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`));
   const toast=(t)=>(typeof mostrarToast==="function"?mostrarToast(t):alert(t));
-  let E=null,tab="binance",filtro="";
+  let E=null,tab="costeo",filtro="";
   async function api(accion,datos={}){
     const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion,origen:"web",...datos})});
     const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo completar.");return j;
@@ -8305,7 +8305,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const fb=formulario("Nueva compra",[
         {k:"productoId",label:"Producto",type:"select",options:prods.map(p=>({v:p.id,t:`${p.nombre} (${unidadDe(p)})`})),value:p0.id},
         {k:"proveedorId",label:"Proveedor",type:"select",options:provs,value:""},
-        {k:"cantidad",label:"Cantidad comprada (unidades, créditos, cupos o links)",type:"number",value:c0.cantidad||1},
+        {k:"cantidad",label:"Cantidad comprada: créditos, links o unidades · en cuentas madre, paneles y gift cards: cuántas CUENTAS",type:"number",value:c0.cantidad||1},
         {k:"costoTotal",label:"Costo total de la compra",type:"number",value:c0.monto||""},
         {k:"moneda",label:"Moneda",type:"select",options:(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v})),value:c0.moneda||"USDT"},
         {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance":"banco"},
@@ -8326,6 +8326,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         else if(Number(v.cargoHnl)>0){hnl=Number(v.cargoHnl);como="con el cargo real";}
         else if(v.pago==="inicial"&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
         else return `<span style="color:#b45309">Escriba el cargo real en Lempiras.</span>`;
+        if(["cuenta_madre","panel","gift_card"].includes(p.modelo)){const cupos=n*Math.max(1,Number(p.capacidad)||1)*Math.max(1,Math.round((Number(p.duracionDias)||30)/30));return `Costo en Lempiras: ${L(hnl)} · ${cupos} perfiles-mes a ${L(hnl/cupos)} c/u ${como}`;}
         return `Costo en Lempiras: ${L(hnl)} · ${L(hnl/n)} por ${esc(unidadDe(p))} ${como}`;}});
       // Al cambiar de producto se proponen cantidad, costo y moneda de su costo de referencia (se pueden cambiar).
       const sel=fb.querySelector('[data-k="productoId"]');
@@ -8339,16 +8340,45 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       async(v)=>{const r=await api("fin_lote_ajustar",{loteId:l.id,disponibleCorrecto:Number(v.disponibleCorrecto),motivo:v.motivo,operationId:opId});toast(r.duplicado?"ℹ️ Ya estaba.":`✅ Ajustado ${r.delta>0?"+":""}${r.delta}${r.montoHnl>0?` · pérdida ${L(r.montoHnl)}`:""}`);await cargar();},
       {nota:"Lo que se baja va como merma o vencimiento de inventario, con su motivo en auditoría. El lote nunca se borra.",textoBoton:"Guardar ajuste"});
   }
+  // ---------------- FASE 3 · Costo de ventas
+  let mesCosteo="";
+  const mesVec=(m,d)=>{const [y,mm]=String(m).split("-").map(Number);const t=new Date(Date.UTC(y,mm-1+d,1));return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,"0")}`;};
+  const nomMes=(m)=>{const [y,mm]=String(m).split("-").map(Number);return `${["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mm-1]} ${y}`;};
+  function vistaCosteo(){
+    const c=E.costeo||{},cfg=c.config||{};
+    if(!cfg.desde)return `<div style="${card}"><b style="font-size:15px">Costo de ventas automático</b>
+      <div style="color:#475569;font-size:13.5px;margin:6px 0">Cada venta o renovación que registran (APK, web, Telegram o socios) va a descontar su crédito, link o perfil del inventario y guardar su <b>costo de venta</b>. No se crea otra venta ni otro ingreso.</div>
+      <div style="color:#b45309;font-size:13px;font-weight:700;margin-bottom:8px">Antes de activarlo, cargue lo que ya tiene en Compras → Nueva compra → "Inventario inicial". Las ventas de antes de la fecha no se tocan.</div>
+      <label style="display:block;font-size:13px;font-weight:700">Costear ventas desde<input data-costeo-desde type="date" value="${esc(E.hoy)}" max="${esc(E.hoy)}" style="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px"></label>
+      <div style="margin-top:10px">${btn("Activar costo de ventas","data-costeo-activar",true)}</div></div>`;
+    const m=c.mes||E.hoy.slice(0,7);
+    const kpi=(t,v,col="")=>`<div style="background:#f8fafc;border:1px solid #eef1f5;border-radius:12px;padding:10px"><div style="color:#64748b;font-size:12px;font-weight:700">${t}</div><div style="font-size:17px;font-weight:900;${col?`color:${col}`:""}">${v}</div></div>`;
+    const prods=(c.productos||[]).map((p,i)=>`<tr style="${i%2?"background:#f4f6f8":""}"><td style="padding:6px">${esc(p.nombre)}${p.pendientes?` <span style="color:#b45309">⚠️${p.pendientes}</span>`:""}</td><td style="text-align:right">${p.unidades}</td><td style="text-align:right;white-space:nowrap">${L(p.ingresoHnl)}</td><td style="text-align:right;white-space:nowrap">${L(p.costoHnl)}</td><td style="text-align:right;white-space:nowrap;font-weight:800;color:${p.utilidadBrutaHnl<0?"#b91c1c":"#0f172a"}">${L(p.utilidadBrutaHnl)}</td><td style="text-align:right;${p.margen<30?"color:#b91c1c;font-weight:800":""}">${p.margen}%</td></tr>`).join("");
+    const pend=(c.pendientes||[]).map(x=>`<div style="padding:7px 0;border-top:1px solid #f1f5f9;font-size:13px"><b>${esc(x.cliente||"—")}</b> · ${dmy(x.fecha)} · ${esc(x.plataforma)}<br>${x.faltan.map(f=>f.sinProducto?`<span style="color:#b91c1c">"${esc(f.servicio)}" no está en el catálogo: edite el producto y ponga su plataforma del bot.</span>`:`<span style="color:#b45309">Falta inventario de ${esc(f.producto||f.servicio)} (${f.faltante}). Se completa solo al registrar la compra.</span>`).join("<br>")}</div>`).join("");
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">${btn("◀",`data-costeo-mes="${mesVec(m,-1)}"`)}<b>${esc(nomMes(m))}</b>${btn("▶",`data-costeo-mes="${mesVec(m,1)}" ${mesVec(m,1)>E.hoy.slice(0,7)?"disabled":""}`)}</div>
+      <div style="${card}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${kpi("Ventas costeadas",`${L(c.ventasHnl)} · ${c.nVentas||0}`)}${kpi("Costo de ventas",L(c.costoVentasHnl))}
+        ${kpi("Utilidad bruta",`${L(c.utilidadBrutaHnl)} · ${c.margenBruto||0}%`,"#16a34a")}${kpi("Cupos sin vender",L(c.cuposSinVenderHnl),c.cuposSinVenderHnl?"#b91c1c":"")}</div>
+        ${c.mermasHnl?`<div style="margin-top:8px;font-size:13px;color:#b91c1c">Vencimientos y mermas: ${L(c.mermasHnl)}</div>`:""}
+        ${(c.pendientes||[]).length?`<div style="margin-top:8px;font-size:13px;color:#b45309;font-weight:700">⚠️ ${(c.pendientes||[]).length} venta(s) todavía sin costo completo: la utilidad bruta real puede ser menor.</div>`:""}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px"><span style="color:#64748b;font-size:12px">Desde ${dmy(cfg.desde)} · se costea solo cada 10 min${cfg.ultimaCorrida?` · última ${esc(cfg.ultimaCorrida.slice(11,16))} UTC`:""}</span>${btn("Costear ahora","data-costeo-correr")}</div></div>
+      <div style="${card}"><b>Utilidad bruta por producto</b><div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:520px"><tr style="background:#0f172a;color:#fff"><th style="padding:6px;text-align:left">Producto</th><th>Uds.</th><th>Ventas</th><th>Costo</th><th>Utilidad</th><th>Margen</th></tr>${prods||`<tr><td colspan="6" style="padding:8px;color:#64748b">Sin ventas costeadas este mes.</td></tr>`}</table></div>
+        <div style="color:#64748b;font-size:12px;margin-top:6px">Utilidad bruta = venta − costo del producto. Los gastos generales (publicidad, planilla…) se restan aparte en Resultados.</div></div>
+      ${pend?`<div style="${card}"><b>Ventas pendientes de costo (${(c.pendientes||[]).length})</b>${pend}</div>`:""}`;
+  }
   // ---------------- pantalla
   function pintar(){
     const root=document.getElementById("finEmpresaR135");if(!root||!E)return;
-    const tabs=[["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
+    const tabs=[["costeo","Costo de ventas"],["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
     root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1 0 auto;border:0;border-radius:10px;padding:9px 8px;font-weight:800;font-size:13px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
-    const body=root.querySelector("[data-emp-body]");
-    body.innerHTML=tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
+    const body=root.querySelector("[data-emp-body]");body.style.color="#0f172a";
+    body.innerHTML=tab==="costeo"?vistaCosteo():tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
     root.querySelectorAll("[data-emp-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.empTab;pintar();});
     const on=(sel,fn)=>body.querySelectorAll(sel).forEach(el=>el.addEventListener("click",()=>fn(el)));
     const prod=(id)=>(E.productos||[]).find(p=>p.id===id),vari=(id)=>(E.productos||[]).flatMap(p=>p.variantes||[]).find(v=>v.id===id),prov=(id)=>(E.proveedores||[]).find(p=>p.id===id);
+    on("[data-costeo-activar]",async(el)=>{const d=body.querySelector("[data-costeo-desde]").value;if(!confirm(`¿Costear ventas desde ${dmy(d)}? Las ventas de antes no se tocan.`))return;el.disabled=true;try{await api("fin_costeo_config",{desde:d});toast("✅ Costo de ventas activado");await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
+    on("[data-costeo-correr]",async(el)=>{el.disabled=true;el.textContent="Costeando…";try{const r=await api("fin_costear");toast(`✅ ${r.costeadas||0} ventas nuevas · ${r.completadas||0} completadas · ${r.vencimientos||0} vencimientos`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
+    on("[data-costeo-mes]",async(el)=>{mesCosteo=el.dataset.costeoMes;await cargar();});
     on("[data-comp-nueva]",()=>nuevaCompra());on("[data-lote-aj]",(el)=>ajustarLote((E.lotes||[]).find(l=>l.id===el.dataset.loteAj)));
     on("[data-bin-rec]",()=>recargar());on("[data-bin-aj]",()=>ajustar());
     on("[data-cat-sembrar]",async(el)=>{el.disabled=true;el.textContent="Cargando…";try{const r=await api("fin_sembrar_catalogo");toast(`✅ ${r.productos} productos, ${r.variantes} variantes, ${r.precios} precios, ${r.proveedores} proveedores`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
@@ -8359,13 +8389,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   async function cargar(){
     const root=document.getElementById("finEmpresaR135");if(!root)return;
-    try{E=await api("fin_empresa_estado");pintar();}catch(e){root.querySelector("[data-emp-body]").innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message)}</p>`;}
+    try{E=await api("fin_empresa_estado",mesCosteo?{mes:mesCosteo}:{});pintar();}catch(e){root.querySelector("[data-emp-body]").innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message)}</p>`;}
   }
   function abrir(t){
     if(t)tab=t;
     let root=document.getElementById("finEmpresaR135");
     if(!root){root=document.createElement("div");root.id="finEmpresaR135";root.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(root);}
-    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
+    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Costo de ventas · Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
       <div data-emp-tabs style="display:flex;gap:4px;overflow-x:auto;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
     root.querySelector("[data-emp-x]").onclick=()=>root.remove();
     cargar();
