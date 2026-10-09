@@ -9,6 +9,8 @@
 //  · Binance lleva costo promedio ponderado: una recarga nueva no recalcula compras viejas.
 //  · Ajuste de Binance: solo con motivo y queda en auditoría; nunca se cambia el historial en silencio.
 
+import { cuposMesDe, correrCosteo, CUENTA_MADRE_LIKE } from "./_finanzas-costeo.js"; // R137
+
 export const MODELOS = Object.freeze({
   unidad: { label: "Unidad individual", unidad: "unidad", ejemplo: "Netflix VIP, Office" },
   cuenta_madre: { label: "Cuenta madre / perfiles", unidad: "cupo", ejemplo: "Netflix Premium, Paramount, Crunchyroll, Spotify" },
@@ -247,7 +249,7 @@ export function resumenInventario(productos = [], lotes = [], hoy = "") {
 }
 
 // ---------------------------------------------------------------- manejador /api/finanzas
-export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar"]);
+export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear"]);
 
 export async function handleEmpresa(db, accion, body, identity, authUser, res, d) {
   if (!d.canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas empresarial es exclusivo de Sublicuentas y Relojes." });
@@ -260,6 +262,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
   const billeteraRef = col("fin_billeteras").doc(BINANCE_ID);
 
   if (accion === "fin_empresa_estado") {
+    let costeoCorrida = null; // R137: al abrir 🏢 Empresa se costean las ventas nuevas (idempotente)
+    if (d.costeoDeps) { try { costeoCorrida = await correrCosteo(db, { ...d.costeoDeps(db), hoy, actor: "sistema", limite: 150 }); } catch (e) { costeoCorrida = { error: String(e?.message || e).slice(0, 200) }; } }
     const [productos, variantes, precios, proveedores, bSnap] = await Promise.all([todos("fin_productos"), todos("fin_variantes"), todos("fin_precios"), todos("fin_proveedores"), billeteraRef.get()]);
     const movsSnap = await col("finanzas_movimientos").where("billeteraId", "==", BINANCE_ID).get().catch(() => ({ docs: [] }));
     const [lotes, bodegaSnap] = await Promise.all([todos("fin_lotes"), col("inventario").get().catch(() => ({ docs: [] }))]);
@@ -274,7 +278,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       proveedores: proveedores.sort((a, b) => a.alias.localeCompare(b.alias)),
       billetera: bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio(), movimientosBinance: movsBinance,
       pagosCompra: PAGOS_COMPRA, lotes: lotes.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 400),
-      inventario: resumenInventario(productos, lotes, hoy), cuentasBodega });
+      inventario: resumenInventario(productos, lotes, hoy), cuentasBodega,
+      costeo: await resumenCosteo(col, body.mes && /^\d{4}-\d{2}$/.test(String(body.mes)) ? String(body.mes) : hoy.slice(0, 7), costeoCorrida) });
   }
 
   if (accion === "fin_sembrar_catalogo") { // idempotente: solo crea lo que falta; nunca pisa lo que el usuario ya editó
@@ -449,10 +454,15 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const venceSolo = ["cuenta_madre", "gift_card", "panel"].includes(producto.modelo);
       const vigenciaHasta = ymdOk(c.vigenciaHasta) ? c.vigenciaHasta : (dur && venceSolo ? (() => { const [y, m, dd] = fecha.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + dur, 12)).toISOString().slice(0, 10); })() : "");
       const detalle = `${producto.nombre} · ${k.cantidad} ${producto.unidad || "u"}${proveedor ? ` · ${proveedor.alias}` : ""}`;
+      // R137 · Cuenta madre / panel / gift card: el lote se lleva en PERFILES-MES (cuentas × capacidad × meses), así cada
+      // perfil vendido carga su parte: Netflix L377 ÷ 7 = L53.86. Lo que no se venda al vencer = "Cupos sin vender".
+      const porCupo = CUENTA_MADRE_LIKE.includes(producto.modelo);
+      const unidades = porCupo ? cuposMesDe(producto, k.cantidad, dur || producto.duracionDias) : k.cantidad;
+      const unitHnl = unidades > 0 ? Math.round((k.costoTotalHnl / unidades) * 1e6) / 1e6 : 0;
       const lote = {
-        compraId: loteRef.id, proveedorId: proveedor?.id || "", proveedor: proveedor?.alias || "", productoId: producto.id, producto: producto.nombre, modelo: producto.modelo, unidad: producto.unidad || "",
-        cantidad: k.cantidad, disponible: k.cantidad, consumido: 0, moneda: k.moneda, costoUnitarioMoneda: k.costoUnitarioMoneda, costoTotalMoneda: k.costoTotalMoneda, tasa: k.tasa,
-        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: k.costoUnitarioHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : (banco?.nombre || PAGOS_COMPRA.inicial),
+        compraId: loteRef.id, cuentasCompradas: porCupo ? k.cantidad : 0, proveedorId: proveedor?.id || "", proveedor: proveedor?.alias || "", productoId: producto.id, producto: producto.nombre, modelo: producto.modelo, unidad: porCupo ? "perfil-mes" : (producto.unidad || ""),
+        cantidad: unidades, disponible: unidades, consumido: 0, moneda: k.moneda, costoUnitarioMoneda: k.costoUnitarioMoneda, costoTotalMoneda: k.costoTotalMoneda, tasa: k.tasa,
+        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : (banco?.nombre || PAGOS_COMPRA.inicial),
         fecha, vigenciaHasta, duracionDias: dur, capacidadPorUnidad: producto.modelo === "cuenta_madre" ? producto.capacidad : 1,
         cuentaInventarioId: txt(c.cuentaInventarioId, 80), referencia: txt(c.referencia, 80), notas: txt(c.notas, 300),
         operationId: String(body.operationId), movimientoId: pagoTipo === "inicial" ? "" : movRef.id, estado: "activo", createdBy: actor, createdAt: ahora, updatedAt: ahora,
@@ -469,7 +479,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
         tx.set(loteRef, { movimientoId: movRef.id }, { merge: true });
       }
       audit(tx, { accion: pagoTipo === "inicial" ? "inventario_inicial" : "compra_inventario", targetType: "lote", targetId: loteRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: k.costoTotalHnl, detalle: `${detalle} · ${k.costoTotalMoneda} ${k.moneda} = Lps. ${k.costoTotalHnl} (Lps. ${k.costoUnitarioHnl} c/u) · pagado: ${lote.cuentaPagoNombre}` });
-      return { duplicado: false, loteId: loteRef.id, costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: k.costoUnitarioHnl, tasa: k.tasa, billetera: k.salidaBinance ? k.salidaBinance.estado : undefined };
+      return { duplicado: false, loteId: loteRef.id, costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, unidades, tasa: k.tasa, billetera: k.salidaBinance ? k.salidaBinance.estado : undefined };
     });
     return reply(r);
   }
@@ -496,5 +506,47 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     });
     return reply(r);
   }
+  if (accion === "fin_costeo_config") { // desde qué fecha se costean las ventas (después de cargar el inventario inicial)
+    const desde = ymdOk(body.desde) ? body.desde : "";
+    if (!desde || desde > hoy) return res.status(200).json({ ok: false, error: "Elija una fecha válida (hoy o antes)." });
+    const r = await run(async (tx) => {
+      const ref = col("finanzas_config").doc("costeo"); const s = await tx.get(ref); const antes = s.exists ? s.data() : null;
+      tx.set(ref, { desde, activo: body.activo !== false, configuradoPor: actor, configuradoAt: ahora }, { merge: true });
+      audit(tx, { accion: "configurar_costeo", targetType: "costeo", targetId: "costeo", before: antes ? { desde: antes.desde } : null, after: { desde }, detalle: `Costo de ventas automático desde ${desde}` });
+      return { desde };
+    });
+    return reply(r);
+  }
+  if (accion === "fin_costear") {
+    if (!d.costeoDeps) return res.status(200).json({ ok: false, error: "Costeo no disponible." });
+    const r = await correrCosteo(db, { ...d.costeoDeps(db), hoy, actor, limite: 400 });
+    return res.status(200).json({ ok: true, accion, ...r });
+  }
   return null;
+}
+
+// R137 · Resumen del costo de ventas del mes: ventas costeadas, costo, utilidad bruta por producto y lo pendiente.
+async function resumenCosteo(col, mes, corrida) {
+  const [cfgSnap, csSnap, mvSnap] = await Promise.all([col("finanzas_config").doc("costeo").get(), col("fin_consumos").where("mesKey", "==", mes).get(), col("finanzas_movimientos").where("mesKey", "==", mes).get().catch(() => ({ docs: [] }))]);
+  const cfg = cfgSnap.exists ? cfgSnap.data() : {};
+  const cs = csSnap.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).filter((c) => c.estado !== "revertido");
+  const r2c = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const porProd = new Map();
+  for (const c of cs) for (const l of c.lineas || []) {
+    const k = l.productoId || `?${l.servicio}`;
+    const x = porProd.get(k) || { productoId: l.productoId || "", nombre: l.producto || l.servicio, ventas: 0, unidades: 0, ingresoHnl: 0, costoHnl: 0, pendientes: 0 };
+    x.ventas++; x.unidades += Number(l.cantidad || 0); x.ingresoHnl += Number(l.ingresoHnl || 0); x.costoHnl += Number(l.costoHnl || 0); if (l.faltante > 0 || l.sinProducto) x.pendientes++;
+    porProd.set(k, x);
+  }
+  const productos = [...porProd.values()].map((x) => ({ ...x, ingresoHnl: r2c(x.ingresoHnl), costoHnl: r2c(x.costoHnl), utilidadBrutaHnl: r2c(x.ingresoHnl - x.costoHnl), margen: x.ingresoHnl ? Math.round(((x.ingresoHnl - x.costoHnl) / x.ingresoHnl) * 1000) / 10 : 0 })).sort((a, b) => b.ingresoHnl - a.ingresoHnl);
+  const venc = mvSnap.docs.map((x) => x.data() || {}).filter((m) => m.tipo === "inventario" && !m.reversaDe && !m.estadoFinanciero);
+  const ventas = r2c(cs.reduce((a, c) => a + Number(c.ventaHnl || 0), 0)), costo = r2c(cs.reduce((a, c) => a + Number(c.costoHnl || 0), 0));
+  return {
+    config: { desde: cfg.desde || "", activo: cfg.activo !== false, ultimaCorrida: cfg.ultimaCorrida || "" }, corrida, mes,
+    ventasHnl: ventas, costoVentasHnl: costo, utilidadBrutaHnl: r2c(ventas - costo), margenBruto: ventas ? Math.round(((ventas - costo) / ventas) * 1000) / 10 : 0, nVentas: cs.length,
+    cuposSinVenderHnl: r2c(venc.filter((m) => m.subtipo === "cupos_sin_vender").reduce((a, m) => a + Number(m.monto || 0), 0)),
+    mermasHnl: r2c(venc.filter((m) => m.subtipo !== "cupos_sin_vender").reduce((a, m) => a + Number(m.monto || 0), 0)),
+    productos,
+    pendientes: cs.filter((c) => c.estado !== "completo").slice(0, 60).map((c) => ({ id: c.id, fecha: c.fecha, cliente: c.clienteNombre, plataforma: c.plataforma, estado: c.estado, faltan: (c.lineas || []).filter((l) => l.faltante > 0 || l.sinProducto).map((l) => ({ servicio: l.servicio, producto: l.producto || "", faltante: l.faltante || 0, sinProducto: !!l.sinProducto })) })),
+  };
 }
