@@ -192,7 +192,7 @@ export const varianteIdDe = (sku, nombre) => `${sku}__${slug(nombre)}`;
 // ---------------------------------------------------------------- FASE 2 · compras por lote, inventario y créditos
 // Una compra NO es gasto: baja la cuenta de pago (banco o Binance) y sube el INVENTARIO con un lote histórico.
 // El costo en Lempiras del lote queda fijo para siempre: cambiar precios, tasas o costos de referencia no lo toca.
-export const PAGOS_COMPRA = Object.freeze({ binance: "Binance (USDT)", banco: "Banco (Lempiras)", inicial: "Inventario inicial (ya lo tenía)" });
+export const PAGOS_COMPRA = Object.freeze({ binance: "Binance (USDT)", banco: "Banco (Lempiras)", credito: "A crédito (por pagar al proveedor)", inicial: "Inventario inicial (ya lo tenía)" });
 // Costea la compra en Lempiras según cómo se pagó.
 //  · USDT pagado con Binance → sale al COSTO PROMEDIO de Binance (Prueba B: 62.50 × 28.20 = L1,762.50).
 //  · Lempiras pagados del banco → el costo es lo pagado.
@@ -214,7 +214,7 @@ export function costearCompra({ producto = {}, cantidad, costoTotal, moneda, pag
     costoTotalHnl = salida.costoHnl; tasa = billetera.costoPromedio || 0;
   } else if (mon === "HNL") costoTotalHnl = r2(total);
   else if (cargo > 0) { costoTotalHnl = cargo; tasa = r6(cargo / total); }
-  else if (tipo === "inicial" && mon === "USDT" && (billetera.costoPromedio || billetera.ultimaTasa)) { tasa = billetera.costoPromedio || billetera.ultimaTasa; costoTotalHnl = r2(total * tasa); }
+  else if ((tipo === "inicial" || tipo === "credito") && mon === "USDT" && (billetera.costoPromedio || billetera.ultimaTasa)) { tasa = billetera.costoPromedio || billetera.ultimaTasa; costoTotalHnl = r2(total * tasa); }
   else throw errUsuario(`Escriba el cargo real en Lempiras de esa compra en ${mon}.`);
   return { cantidad: cant, moneda: mon, costoTotalMoneda: total, costoUnitarioMoneda: r6(total / cant), tasa, costoTotalHnl: r2(costoTotalHnl), costoUnitarioHnl: r6(costoTotalHnl / cant), salidaBinance: salida };
 }
@@ -249,7 +249,7 @@ export function resumenInventario(productos = [], lotes = [], hoy = "") {
 }
 
 // ---------------------------------------------------------------- manejador /api/finanzas
-export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear"]);
+export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear", "fin_cxp_pagar"]);
 
 export async function handleEmpresa(db, accion, body, identity, authUser, res, d) {
   if (!d.canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas empresarial es exclusivo de Sublicuentas y Relojes." });
@@ -279,6 +279,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       billetera: bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio(), movimientosBinance: movsBinance,
       pagosCompra: PAGOS_COMPRA, lotes: lotes.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 400),
       inventario: resumenInventario(productos, lotes, hoy), cuentasBodega,
+      cxp: await resumenCxp(col, hoy), cxc: await resumenCxc(col, hoy),
       costeo: await resumenCosteo(col, body.mes && /^\d{4}-\d{2}$/.test(String(body.mes)) ? String(body.mes) : hoy.slice(0, 7), costeoCorrida) });
   }
 
@@ -429,6 +430,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     const methods = pagoTipo === "banco" ? await d.loadMethods(db) : [];
     const banco = pagoTipo === "banco" ? methods.find((m) => m.id === String(c.bancoId || "")) : null;
     if (pagoTipo === "banco" && !banco) return res.status(200).json({ ok: false, error: "Elija el banco con que se pagó." });
+    if (pagoTipo === "credito" && !c.proveedorId) return res.status(200).json({ ok: false, error: "A crédito: elija a qué proveedor se le debe." });
     const opId = d.libroOpDocId("compra", body, authUser.uid);
     if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
     const fecha = ymdOk(c.fecha) && c.fecha <= hoy ? c.fecha : hoy;
@@ -453,7 +455,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       // unidades y links duran X días DESPUÉS de venderse: su lote no vence solo (se puede poner vencimiento a mano).
       const venceSolo = ["cuenta_madre", "gift_card", "panel"].includes(producto.modelo);
       const vigenciaHasta = ymdOk(c.vigenciaHasta) ? c.vigenciaHasta : (dur && venceSolo ? (() => { const [y, m, dd] = fecha.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + dur, 12)).toISOString().slice(0, 10); })() : "");
-      const detalle = `${producto.nombre} · ${k.cantidad} ${producto.unidad || "u"}${proveedor ? ` · ${proveedor.alias}` : ""}`;
+      const uni = producto.unidad || "unidad", unis = Number(k.cantidad) === 1 ? uni : (/[dlrn]$/i.test(uni) ? `${uni}es` : `${uni}s`);
+      const detalle = `${producto.nombre} · ${k.cantidad} ${unis}${proveedor ? ` · ${proveedor.alias}` : ""}`;
       // R137 · Cuenta madre / panel / gift card: el lote se lleva en PERFILES-MES (cuentas × capacidad × meses), así cada
       // perfil vendido carga su parte: Netflix L377 ÷ 7 = L53.86. Lo que no se venda al vencer = "Cupos sin vender".
       const porCupo = CUENTA_MADRE_LIKE.includes(producto.modelo);
@@ -462,7 +465,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const lote = {
         compraId: loteRef.id, cuentasCompradas: porCupo ? k.cantidad : 0, proveedorId: proveedor?.id || "", proveedor: proveedor?.alias || "", productoId: producto.id, producto: producto.nombre, modelo: producto.modelo, unidad: porCupo ? "perfil-mes" : (producto.unidad || ""),
         cantidad: unidades, disponible: unidades, consumido: 0, moneda: k.moneda, costoUnitarioMoneda: k.costoUnitarioMoneda, costoTotalMoneda: k.costoTotalMoneda, tasa: k.tasa,
-        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : (banco?.nombre || PAGOS_COMPRA.inicial),
+        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : pagoTipo === "credito" ? "A crédito (por pagar)" : (banco?.nombre || PAGOS_COMPRA.inicial),
         fecha, vigenciaHasta, duracionDias: dur, capacidadPorUnidad: producto.modelo === "cuenta_madre" ? producto.capacidad : 1,
         cuentaInventarioId: txt(c.cuentaInventarioId, 80), referencia: txt(c.referencia, 80), notas: txt(c.notas, 300),
         operationId: String(body.operationId), movimientoId: pagoTipo === "inicial" ? "" : movRef.id, estado: "activo", createdBy: actor, createdAt: ahora, updatedAt: ahora,
@@ -474,6 +477,12 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
         tx.set(billeteraRef, { ...k.salidaBinance.estado, updatedAt: ahora });
       } else if (pagoTipo === "banco") {
         tx.set(movRef, { ...comun, tipo: "compra", subtipo: "compra_inventario", direccion: "salida", monto: k.costoTotalHnl, bancoId: banco.id, banco: banco.nombre, moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa });
+      } else if (pagoTipo === "credito") { // R138 · compra a crédito: sube inventario y nace la CUENTA POR PAGAR; el banco no se toca hasta pagar
+        const vence = ymdOk(c.vencePago) ? c.vencePago : (() => { const [y, m, dd] = fecha.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + 15, 12)).toISOString().slice(0, 10); })();
+        const cxpRef = col("fin_cxp").doc(loteRef.id);
+        tx.set(movRef, { ...comun, tipo: "compra", subtipo: "compra_credito", direccion: "entrada", monto: k.costoTotalHnl, bancoId: "", banco: "Cuentas por pagar", moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa, cxpId: cxpRef.id, proveedor: proveedor.alias });
+        tx.set(cxpRef, { cxpId: cxpRef.id, proveedorId: proveedor.id, proveedor: proveedor.alias, loteId: loteRef.id, concepto: detalle, moneda: k.moneda, total: k.costoTotalMoneda, saldo: k.costoTotalMoneda, totalHnl: k.costoTotalHnl, saldoHnl: k.costoTotalHnl, tasa: k.tasa, fecha, vence, estado: "pendiente", pagos: [], movimientoId: movRef.id, createdBy: actor, createdAt: ahora, updatedAt: ahora });
+        tx.set(loteRef, { cxpId: cxpRef.id }, { merge: true });
       } else if (k.costoTotalHnl > 0) { // inventario inicial: sube inventario contra capital (sin tocar bancos)
         tx.set(movRef, { ...comun, tipo: "compra", subtipo: "inventario_inicial", direccion: "entrada", monto: k.costoTotalHnl, banco: "Inventario inicial", moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa });
         tx.set(loteRef, { movimientoId: movRef.id }, { merge: true });
@@ -522,7 +531,68 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     const r = await correrCosteo(db, { ...d.costeoDeps(db), hoy, actor, limite: 400 });
     return res.status(200).json({ ok: true, accion, ...r });
   }
+  if (accion === "fin_cxp_pagar") { // R138 · pagar (todo o parte) una cuenta por pagar, con banco o con Binance
+    const monto = r6(body.monto), pago = String(body.pago || "");
+    if (!(monto > 0)) return res.status(200).json({ ok: false, error: "Escriba cuánto se le paga (en la moneda de la deuda)." });
+    if (!["banco", "binance"].includes(pago)) return res.status(200).json({ ok: false, error: "Elija con qué se paga: banco o Binance." });
+    const methods = pago === "banco" ? await d.loadMethods(db) : [];
+    const banco = pago === "banco" ? methods.find((m) => m.id === String(body.bancoId || "")) : null;
+    if (pago === "banco" && !banco) return res.status(200).json({ ok: false, error: "Elija el banco con que se paga." });
+    const opId = d.libroOpDocId("pagocxp", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const fecha = ymdOk(body.fecha) && body.fecha <= hoy ? body.fecha : hoy;
+    const movRef = col("finanzas_movimientos").doc(opId);
+    const r = await run(async (tx) => {
+      if ((await tx.get(movRef)).exists) return { duplicado: true };
+      const cRef = col("fin_cxp").doc(String(body.cxpId || "")); const cs = await tx.get(cRef);
+      if (!cs.exists) throw errUsuario("Cuenta por pagar no encontrada.");
+      const cx = cs.data();
+      if (cx.estado === "pagado" || !(r6(cx.saldo) > 0)) throw errUsuario("Esa cuenta ya está pagada.");
+      if (monto > r6(cx.saldo) + 1e-6) throw errUsuario(`Debe ${r6(cx.saldo)} ${cx.moneda}: no puede pagar más.`);
+      const bSnap = await tx.get(billeteraRef);
+      const billetera = bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio();
+      // Lempiras que de verdad salen
+      let pagadoHnl, salida = null;
+      if (pago === "binance") { if (cx.moneda !== "USDT") throw errUsuario("Con Binance solo se pagan deudas en USDT."); salida = aplicarSalida(billetera, monto); pagadoHnl = salida.costoHnl; }
+      else if (cx.moneda === "HNL") pagadoHnl = r2(monto);
+      else { pagadoHnl = r2(body.montoHnl); if (!(pagadoHnl > 0)) throw errUsuario(`Escriba cuántos Lempiras salieron del banco por esos ${monto} ${cx.moneda}.`); }
+      if (banco) { const { saldos } = await d.estadoLibro(db, tx); const b = saldos.bancos.find((x) => x.id === banco.id); if (b && pagadoHnl > b.saldo + 0.001 && !body.forzar) throw errUsuario(`Saldo insuficiente en ${banco.nombre} según el libro (Lps. ${b.saldo}).`); }
+      const liquida = monto >= r6(cx.saldo) - 1e-6;
+      const saldadoHnl = liquida ? r2(cx.saldoHnl) : r2((monto / r6(cx.saldo)) * r2(cx.saldoHnl)); // parte de la deuda (en Lempiras de libro) que se cancela
+      const diferencialHnl = r2(pagadoHnl - saldadoHnl); // + pérdida / − ganancia por tipo de cambio
+      const comun = { ...d.baseMov(identity, authUser, body), movimientoId: movRef.id, operationId: String(body.operationId), cxpId: cRef.id, proveedorId: cx.proveedorId, proveedor: cx.proveedor, montoCxpHnl: saldadoHnl, diferencialHnl, motivo: `Pago a ${cx.proveedor} · ${cx.concepto}`, ...d.canonicalFinanceDate(fecha, hoy) };
+      if (pago === "binance") { tx.set(movRef, { ...comun, tipo: "billetera", subtipo: "pago_cxp", direccion: "salida", billeteraId: BINANCE_ID, moneda: "USDT", montoUsdt: monto, monto: pagadoHnl, tasa: billetera.costoPromedio, banco: "Binance" }); tx.set(billeteraRef, { ...salida.estado, updatedAt: ahora }); }
+      else tx.set(movRef, { ...comun, tipo: "pago_cxp", subtipo: "pago_proveedor", direccion: "salida", monto: pagadoHnl, bancoId: banco.id, banco: banco.nombre, moneda: cx.moneda, montoMoneda: monto });
+      const saldo = r6(cx.saldo - monto), saldoHnl = r2(cx.saldoHnl - saldadoHnl);
+      tx.set(cRef, { saldo: liquida ? 0 : saldo, saldoHnl: liquida ? 0 : saldoHnl, estado: liquida ? "pagado" : "parcial", pagos: [...(cx.pagos || []), { movimientoId: movRef.id, monto, moneda: cx.moneda, pagadoHnl, saldadoHnl, diferencialHnl, con: pago === "binance" ? "Binance" : banco.nombre, fecha, por: actor }], updatedAt: ahora }, { merge: true });
+      audit(tx, { accion: "pago_cuenta_por_pagar", targetType: "cuenta_por_pagar", targetId: cRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: pagadoHnl, before: { saldo: cx.saldo }, after: { saldo: liquida ? 0 : saldo }, detalle: `${cx.proveedor}: ${monto} ${cx.moneda} con ${pago === "binance" ? "Binance" : banco.nombre} (Lps. ${pagadoHnl}${diferencialHnl ? ` · diferencial ${diferencialHnl}` : ""})` });
+      return { duplicado: false, saldo: liquida ? 0 : saldo, estado: liquida ? "pagado" : "parcial", pagadoHnl, diferencialHnl };
+    });
+    return reply(r);
+  }
   return null;
+}
+
+// R138 · Cuentas por pagar (proveedores) y por cobrar (clientes/vendedores) con antigüedad de saldos.
+const diasEntre = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000);
+function tramo(dias) { return dias <= 7 ? "0–7 días" : dias <= 15 ? "8–15 días" : dias <= 30 ? "16–30 días" : "Más de 30 días"; }
+async function resumenCxp(col, hoy) {
+  const s = await col("fin_cxp").get();
+  const abiertas = s.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).filter((c) => c.estado !== "pagado").sort((a, b) => String(a.vence).localeCompare(String(b.vence)));
+  const r2c = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  return { totalHnl: r2c(abiertas.reduce((a, c) => a + Number(c.saldoHnl || 0), 0)), vencidasHnl: r2c(abiertas.filter((c) => c.vence && c.vence < hoy).reduce((a, c) => a + Number(c.saldoHnl || 0), 0)),
+    cuentas: abiertas.map((c) => ({ ...c, vencida: !!(c.vence && c.vence < hoy), diasParaVencer: c.vence ? diasEntre(hoy, c.vence) : null })) };
+}
+async function resumenCxc(col, hoy) {
+  const s = await col("cuentas_por_cobrar").get();
+  const fechaDe = (c) => String(c.fechaPago || c.fecha || c.createdAt || "").slice(0, 10).replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, "$3-$2-$1");
+  const abiertas = s.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).filter((c) => ["pendiente", "parcial"].includes(c.estado) && Number(c.saldoPendiente) > 0);
+  const r2c = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const filas = abiertas.map((c) => { const f = fechaDe(c); const dias = /^\d{4}-\d{2}-\d{2}$/.test(f) ? Math.max(0, diasEntre(f, hoy)) : 0; return { id: c.id, deudorTipo: c.deudorTipo || "cliente", deudor: c.deudorNombre || c.clienteNombre || "—", cliente: c.clienteNombre || "", plataforma: c.plataforma || "", total: r2c(c.montoTotalOperacion), saldo: r2c(c.saldoPendiente), estado: c.estado, fecha: f, dias, tramo: tramo(dias), abonos: (c.abonos || []).length }; }).sort((a, b) => b.dias - a.dias);
+  const porTramo = {}; for (const f of filas) porTramo[f.tramo] = r2c((porTramo[f.tramo] || 0) + f.saldo);
+  const porDeudor = new Map(); for (const f of filas) { const k = `${f.deudorTipo}|${f.deudor}`; const x = porDeudor.get(k) || { deudorTipo: f.deudorTipo, deudor: f.deudor, saldo: 0, cuentas: 0, diasMax: 0 }; x.saldo = r2c(x.saldo + f.saldo); x.cuentas++; x.diasMax = Math.max(x.diasMax, f.dias); porDeudor.set(k, x); }
+  return { totalHnl: r2c(filas.reduce((a, f) => a + f.saldo, 0)), clientesHnl: r2c(filas.filter((f) => f.deudorTipo !== "vendedor").reduce((a, f) => a + f.saldo, 0)), vendedoresHnl: r2c(filas.filter((f) => f.deudorTipo === "vendedor").reduce((a, f) => a + f.saldo, 0)),
+    porTramo, deudores: [...porDeudor.values()].sort((a, b) => b.saldo - a.saldo), cuentas: filas.slice(0, 300) };
 }
 
 // R137 · Resumen del costo de ventas del mes: ventas costeadas, costo, utilidad bruta por producto y lo pendiente.
