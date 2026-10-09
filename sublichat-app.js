@@ -5106,7 +5106,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaBaseRegla(plat));
   const fichaCredencialesSiempre=plat=>FICHA_CREDENCIALES_SIEMPRE.has(fichaBaseRegla(plat));
-  const fichaUsaSelectorDispositivo=plat=>FICHA_CON_DISPOSITIVO.has(fichaBaseRegla(plat));
+  const fichaUsaSelectorDispositivo=plat=>!fichaEsCuentaCompleta()&&FICHA_CON_DISPOSITIVO.has(fichaBaseRegla(plat)); // R142: cuenta completa = sin TV/celular
 
   // VERSION 28 · La ficha tradicional de WhatsApp/respaldo se arma con los
   // campos de entrega de cada plataforma. Apple TV conserva correo y clave
