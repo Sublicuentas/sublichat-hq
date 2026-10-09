@@ -101,8 +101,8 @@ test('R135: solo Sublicuentas/Relojes; el listado de movimientos de la APK no mu
   const r = resp(); await handleEmpresa(fakeDb(), 'fin_empresa_estado', {}, { usuario: 'jimena', role: 'vendedor' }, { uid: 'x' }, r, deps(fakeDb()));
   assert.equal(r.code, 403);
   const api = fs.readFileSync(new URL('../api/finanzas.js', import.meta.url), 'utf8');
-  assert.match(api, /!\["ignorar", "venta", "billetera"\]\.includes\(m\.kind\)/);
+  assert.match(api, /!\["ignorar", "venta", "billetera", "costo_venta", "inventario"\]\.includes\(m\.kind\)/);
   const app = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
-  assert.match(app, /if\(t==="billetera"\|\|t==="compra"\|\|t==="inventario"\|\|t==="transferencia"/);
+  assert.match(app, /if\(t==="billetera"\|\|t==="compra"\|\|t==="inventario"\|\|t==="costo_venta"\|\|t==="transferencia"/);
   assert.match(app, /data-fin-empresa/);
 });

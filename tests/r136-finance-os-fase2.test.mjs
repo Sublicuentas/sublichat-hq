@@ -68,8 +68,8 @@ test('Compra con banco en Lempiras baja el banco, no es gasto; USD exige cargo r
   assert.equal(cycleTotals(m, '2026-10-01', '').egresosOperativos, 0);
   const sinCargo = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-prime001', compra: { productoId: 'PRIME', cantidad: 1, costoTotal: 12.9, moneda: 'USD', pago: 'banco', bancoId: 'bac' } });
   assert.equal(sinCargo.ok, false); assert.match(sinCargo.error, /cargo real/);
-  const prime = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-prime002', compra: { productoId: 'PRIME', cantidad: 5, costoTotal: 12.9, moneda: 'USD', pago: 'banco', bancoId: 'bac', cargoHnl: 340 } });
-  assert.equal(prime.costoTotalHnl, 340); assert.equal(prime.costoUnitarioHnl, 68);
+  const prime = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-prime002', compra: { productoId: 'PRIME', cantidad: 1, costoTotal: 12.9, moneda: 'USD', pago: 'banco', bancoId: 'bac', cargoHnl: 340 } });
+  assert.equal(prime.costoTotalHnl, 340); assert.equal(prime.unidades, 15, 'gift card: 5 perfiles × 3 meses'); assert.equal(prime.costoUnitarioHnl, 22.666667);
   const ini = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-ini00001', compra: { productoId: 'OLEADA-1', cantidad: 12, costoTotal: 10.8, moneda: 'USDT', pago: 'inicial' } });
   assert.equal(ini.ok, true, JSON.stringify(ini)); assert.equal(ini.costoTotalHnl, 304.56); // 10.8 × costo promedio 28.20
   const bac2 = bankBalances(movs(db), libro, methods).bancos.find((b) => b.id === 'bac');
@@ -115,6 +115,6 @@ test('Vencimiento del lote: créditos no vencen solos; cuenta madre sí (duraci�
   const db = await base();
   const a = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-vig00001', compra: { productoId: 'STELLA', cantidad: 15, costoTotal: 37.5, moneda: 'USDT', pago: 'binance' } });
   assert.equal(db.store.get(`fin_lotes/${a.loteId}`).vigenciaHasta, '');
-  const b = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-vig00002', compra: { productoId: 'PARAMOUNT', cantidad: 4, costoTotal: 150, moneda: 'HNL', pago: 'banco', bancoId: 'bac' } });
+  const b = await llamar(db, 'fin_compra_registrar', { operationId: 'compra-vig00002', compra: { productoId: 'PARAMOUNT', cantidad: 1, costoTotal: 150, moneda: 'HNL', pago: 'banco', bancoId: 'bac' } });
   assert.equal(db.store.get(`fin_lotes/${b.loteId}`).vigenciaHasta, '2026-11-07');
 });
