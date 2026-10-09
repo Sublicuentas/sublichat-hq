@@ -10,6 +10,7 @@ import { financeMetadata } from "./_finance-schema.js";
 import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
 import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js"; // R112
 import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
+import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago
@@ -306,7 +307,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     // "venta" es el valor comercial acordado, NO dinero real. Se conserva en Firestore
     // para Ventas generadas / Auditoría, pero jamás debe mezclarse con el listado de
     // movimientos monetarios (ingresos, egresos, planilla, ajustes, etc.).
-    let rows = rowsOf(snap).map((m) => movimientoView(m, methods)).filter((m) => !["ignorar", "venta"].includes(m.kind) && (!hasta || m.fecha <= hasta));
+    let rows = rowsOf(snap).map((m) => movimientoView(m, methods)).filter((m) => !["ignorar", "venta", "billetera"].includes(m.kind) && (!hasta || m.fecha <= hasta)); // R135: Binance tiene su pantalla
     if (body.tipo) rows = rows.filter((m) => m.kind === body.tipo);
     if (body.bancoId) rows = rows.filter((m) => m.bancoId === body.bancoId);
     const q = String(body.texto || "").toLowerCase().trim();
@@ -802,6 +803,10 @@ export default async function handler(req, res) {
     // R104: egresos operativos los registran Sublicuentas y Relojes (Finanzas nueva).
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
+    }
+    if (ACCIONES_EMPRESA.includes(accion)) { // R135 · catálogo financiero, proveedores, precios con historial y Binance
+      const handled = await handleEmpresa(db, accion, body, identity, authUser, res, { canUseLibro, hoyYmdHN, auditar, loadMethods, libroOpDocId, estadoLibro, baseMov, canonicalFinanceDate });
+      if (handled !== null) return handled;
     }
     if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
