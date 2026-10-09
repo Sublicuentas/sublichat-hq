@@ -9,7 +9,9 @@
 //  · Binance lleva costo promedio ponderado: una recarga nueva no recalcula compras viejas.
 //  · Ajuste de Binance: solo con motivo y queda en auditoría; nunca se cambia el historial en silencio.
 
-import { cuposMesDe, correrCosteo, CUENTA_MADRE_LIKE } from "./_finanzas-costeo.js"; // R137
+import { cuposMesDe, correrCosteo, CUENTA_MADRE_LIKE, ventasACostear } from "./_finanzas-costeo.js"; // R137
+import { libroDiario, balanzaComprobacion } from "./_contabilidad.js"; // R139
+import { cargarTablero } from "./_finanzas-reportes.js"; // R139
 
 export const MODELOS = Object.freeze({
   unidad: { label: "Unidad individual", unidad: "unidad", ejemplo: "Netflix VIP, Office" },
@@ -249,7 +251,7 @@ export function resumenInventario(productos = [], lotes = [], hoy = "") {
 }
 
 // ---------------------------------------------------------------- manejador /api/finanzas
-export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear", "fin_cxp_pagar"]);
+export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear", "fin_cxp_pagar", "fin_tablero", "fin_retiro_registrar", "fin_finance_os_config", "fin_respaldo"]);
 
 export async function handleEmpresa(db, accion, body, identity, authUser, res, d) {
   if (!d.canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas empresarial es exclusivo de Sublicuentas y Relojes." });
@@ -311,7 +313,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       if (!body.producto?.id && snap.exists) throw errUsuario(`Ya existe un producto con el código ${p.sku}.`);
       const antes = snap.exists ? snap.data() : null;
       tx.set(ref, { ...p, sku: ref.id, updatedAt: ahora, ...(snap.exists ? {} : { createdAt: ahora, createdBy: actor }) }, { merge: true });
-      audit(tx, { accion: snap.exists ? "editar_producto" : "crear_producto", targetType: "producto", targetId: ref.id, before: antes ? { nombre: antes.nombre, modelo: antes.modelo, capacidad: antes.capacidad, costoRef: antes.costoRef, activo: antes.activo } : null, after: { nombre: p.nombre, modelo: p.modelo, capacidad: p.capacidad, costoRef: p.costoRef, activo: p.activo }, motivo: txt(body.motivo, 200) });
+      audit(tx, { accion: snap.exists ? "editar_producto" : "crear_producto", targetType: "producto", targetId: ref.id, before: antes ? { nombre: antes.nombre ?? null, modelo: antes.modelo ?? null, capacidad: antes.capacidad ?? null, costoRef: antes.costoRef ?? null, activo: antes.activo ?? null } : null, after: { nombre: p.nombre, modelo: p.modelo, capacidad: p.capacidad, costoRef: p.costoRef, activo: p.activo }, motivo: txt(body.motivo, 200) });
       return { productoId: ref.id };
     });
     return reply(r);
@@ -335,9 +337,9 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
   if (accion === "fin_precio_nuevo") { // nunca se edita una versión: se cierra la vigente y se crea otra
     const varianteId = String(body.varianteId || "");
     const desde = ymdOk(body.desde) ? body.desde : hoy;
-    const versSnap = await col("fin_precios").where("varianteId", "==", varianteId).get();
-    const versiones = versSnap.docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
     const r = await run(async (tx) => {
+      const versSnap = await tx.get(col("fin_precios").where("varianteId", "==", varianteId)); // R140: dentro de la transacción (dos cambios a la vez no se pisan)
+      const versiones = versSnap.docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
       const vRef = col("fin_variantes").doc(varianteId); const v = await tx.get(vRef);
       if (!v.exists) throw errUsuario("Variante no encontrada.");
       const plan = planNuevoPrecio(versiones, { precioHnl: body.precioHnl, desde });
@@ -504,6 +506,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const lRef = col("fin_lotes").doc(String(body.loteId || "")); const ls = await tx.get(lRef);
       if (!ls.exists) throw errUsuario("Lote no encontrado.");
       const l = ls.data();
+      if (l.estado === "vencido") throw errUsuario("Ese lote ya venció y se dio de baja. Registre una compra nueva si llegó más.");
       const nuevo = r6(body.disponibleCorrecto);
       if (!(nuevo >= 0) || nuevo > r6(l.cantidad) - r6(l.consumido) + 1e-6) throw errUsuario(`El disponible correcto va de 0 a ${r6(l.cantidad - l.consumido)}.`);
       const delta = r6(nuevo - r6(l.disponible)); if (!delta) throw errUsuario("Ese ya es el disponible del lote.");
@@ -569,6 +572,56 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       return { duplicado: false, saldo: liquida ? 0 : saldo, estado: liquida ? "pagado" : "parcial", pagadoHnl, diferencialHnl };
     });
     return reply(r);
+  }
+  if (accion === "fin_tablero") { // R139 · Fase 5: tablero de dirección (resultados por venta, balance, rentabilidad, alertas, conciliación)
+    if (!d.costeoDeps) return res.status(200).json({ ok: false, error: "Tablero no disponible." });
+    const cd = d.costeoDeps(db);
+    try { await correrCosteo(db, { ...cd, hoy, actor: "sistema", limite: 120 }); } catch (_) {}
+    const t = await cargarTablero(db, { leerMovimientos: cd.leerMovimientos, loadMethods: () => d.loadMethods(db), hoy, mes: body.mes }, { R: cd.R, ventasACostear, libroDiario, balanzaComprobacion, resumenInventario });
+    const cfgSnap = await col("finanzas_config").doc("finance_os").get();
+    return res.status(200).json({ ok: true, accion, ...t, config: { reservaPct: 10, capitalTrabajoMin: 5000, activo: true, ...(cfgSnap.exists ? cfgSnap.data() : {}) } });
+  }
+
+  if (accion === "fin_retiro_registrar") { // R139 · Fase 6: retiro de propietarios. Baja el banco, NO es gasto.
+    const monto = r2(body.monto), motivo = txt(body.motivo, 200), beneficiario = txt(body.beneficiario, 60);
+    if (!(monto > 0)) return res.status(200).json({ ok: false, error: "Escriba el monto del retiro." });
+    if (!beneficiario) return res.status(200).json({ ok: false, error: "¿Para quién es el retiro? (dueño/socio)" });
+    const methods = await d.loadMethods(db); const banco = methods.find((m) => m.id === String(body.bancoId || ""));
+    if (!banco) return res.status(200).json({ ok: false, error: "Elija de qué banco sale." });
+    const opId = d.libroOpDocId("retiro", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const fecha = ymdOk(body.fecha) && body.fecha <= hoy ? body.fecha : hoy;
+    const ref = col("finanzas_movimientos").doc(opId);
+    const r = await run(async (tx) => {
+      if ((await tx.get(ref)).exists) return { duplicado: true };
+      const { saldos } = await d.estadoLibro(db, tx);
+      const b = saldos.bancos.find((x) => x.id === banco.id);
+      if (b && monto > b.saldo + 0.001 && !body.forzar) throw errUsuario(`Saldo insuficiente en ${banco.nombre} según el libro (Lps. ${b.saldo}).`);
+      tx.set(ref, { ...d.baseMov(identity, authUser, body), movimientoId: ref.id, operationId: String(body.operationId), tipo: "retiro", subtipo: "retiro_propietario", direccion: "salida", monto, bancoId: banco.id, banco: banco.nombre, beneficiario, motivo: motivo || "Retiro de utilidades", ...d.canonicalFinanceDate(fecha, hoy) });
+      audit(tx, { accion: "retiro_propietario", targetType: "retiro", targetId: ref.id, movimientoId: ref.id, operationId: String(body.operationId), monto, motivo, detalle: `Retiro ${beneficiario} · ${banco.nombre} · Lps. ${monto}` });
+      return { duplicado: false, movimientoId: ref.id };
+    });
+    return reply(r);
+  }
+
+  if (accion === "fin_finance_os_config") { // reserva %, capital de trabajo mínimo y pausa general
+    const r = await run(async (tx) => {
+      const ref = col("finanzas_config").doc("finance_os"); const s0 = await tx.get(ref); const antes = s0.exists ? s0.data() : {};
+      const nuevo = { reservaPct: Math.max(0, Math.min(100, Number(body.reservaPct ?? antes.reservaPct ?? 10))), capitalTrabajoMin: Math.max(0, r2(body.capitalTrabajoMin ?? antes.capitalTrabajoMin ?? 5000)), activo: body.activo === undefined ? antes.activo !== false : !!body.activo, actualizadoPor: actor, actualizadoAt: ahora };
+      tx.set(ref, nuevo, { merge: true });
+      audit(tx, { accion: "configurar_finance_os", targetType: "config", targetId: "finance_os", before: antes, after: nuevo });
+      return nuevo;
+    });
+    return reply(r);
+  }
+
+  if (accion === "fin_respaldo") { // R139 · Fase 8: respaldo descargable de todo lo nuevo (antes de migrar o por seguridad)
+    const cols = ["fin_productos", "fin_variantes", "fin_precios", "fin_proveedores", "fin_lotes", "fin_consumos", "fin_cxp", "fin_billeteras"];
+    const out = {}; for (const c of cols) out[c] = await todos(c);
+    const cfg = {}; for (const id of ["costeo", "finance_os", "libro_mayor"]) { const x = await col("finanzas_config").doc(id).get(); if (x.exists) cfg[id] = x.data(); }
+    const movs = (await col("finanzas_movimientos").where("origenCanal", "==", "sistema").get().catch(() => ({ docs: [] }))).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
+    await run(async (tx) => { audit(tx, { accion: "respaldo_finance_os", targetType: "respaldo", detalle: Object.entries(out).map(([k, v]) => `${k}:${v.length}`).join(" · ") }); return {}; });
+    return res.status(200).json({ ok: true, accion, generado: ahora, colecciones: out, config: cfg, movimientosSistema: movs, conteo: Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.length])) });
   }
   return null;
 }

@@ -13,7 +13,7 @@ import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida dobl
 import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
-  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago
+  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa
 } from "./_finanzas-libro.js";
 
 function getApp() {
@@ -806,7 +806,7 @@ export default async function handler(req, res) {
     }
     if (ACCIONES_EMPRESA.includes(accion)) { // R135 · catálogo financiero, proveedores, precios con historial y Binance
       const handled = await handleEmpresa(db, accion, body, identity, authUser, res, { canUseLibro, hoyYmdHN, auditar, loadMethods, libroOpDocId, estadoLibro, baseMov, canonicalFinanceDate,
-        costeoDeps: (dbx) => ({ R: { movementYmd, movementKind, money }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(dbx, desde).get()) }) }); // R137
+        costeoDeps: (dbx) => ({ R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(dbx, desde).get()) }) }); // R137
       if (handled !== null) return handled;
     }
     if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
