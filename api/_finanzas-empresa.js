@@ -186,8 +186,68 @@ export const SEMILLA = Object.freeze({
 export const PRECIOS_DESDE_SEMILLA = "2026-10-01";
 export const varianteIdDe = (sku, nombre) => `${sku}__${slug(nombre)}`;
 
+
+// ---------------------------------------------------------------- FASE 2 · compras por lote, inventario y créditos
+// Una compra NO es gasto: baja la cuenta de pago (banco o Binance) y sube el INVENTARIO con un lote histórico.
+// El costo en Lempiras del lote queda fijo para siempre: cambiar precios, tasas o costos de referencia no lo toca.
+export const PAGOS_COMPRA = Object.freeze({ binance: "Binance (USDT)", banco: "Banco (Lempiras)", inicial: "Inventario inicial (ya lo tenía)" });
+// Costea la compra en Lempiras según cómo se pagó.
+//  · USDT pagado con Binance → sale al COSTO PROMEDIO de Binance (Prueba B: 62.50 × 28.20 = L1,762.50).
+//  · Lempiras pagados del banco → el costo es lo pagado.
+//  · USD/USDT pagados con banco o tarjeta → se usa el CARGO REAL en Lempiras (obligatorio).
+//  · Inventario inicial → Lempiras directos, o USDT al costo promedio/última tasa de Binance si no se da el cargo.
+export function costearCompra({ producto = {}, cantidad, costoTotal, moneda, pago = {}, billetera = estadoBilleteraVacio() }) {
+  const cant = r6(cantidad); if (!(cant > 0)) throw errUsuario("Escriba la cantidad comprada (unidades, créditos, cupos o links).");
+  const cero = producto.modelo === "costo_cero";
+  const total = r6(costoTotal); if (!(total > 0) && !cero) throw errUsuario("Escriba el costo total de la compra.");
+  const mon = MONEDAS.includes(moneda) ? moneda : "HNL";
+  const tipo = PAGOS_COMPRA[pago.tipo] ? pago.tipo : "";
+  if (!tipo) throw errUsuario("Elija con qué se pagó la compra.");
+  const cargo = r2(pago.cargoHnl);
+  let costoTotalHnl, tasa = 0, salida = null;
+  if (cero) costoTotalHnl = 0;
+  else if (tipo === "binance") {
+    if (mon !== "USDT") throw errUsuario("Con Binance la compra se paga en USDT.");
+    salida = aplicarSalida(billetera, total);
+    costoTotalHnl = salida.costoHnl; tasa = billetera.costoPromedio || 0;
+  } else if (mon === "HNL") costoTotalHnl = r2(total);
+  else if (cargo > 0) { costoTotalHnl = cargo; tasa = r6(cargo / total); }
+  else if (tipo === "inicial" && mon === "USDT" && (billetera.costoPromedio || billetera.ultimaTasa)) { tasa = billetera.costoPromedio || billetera.ultimaTasa; costoTotalHnl = r2(total * tasa); }
+  else throw errUsuario(`Escriba el cargo real en Lempiras de esa compra en ${mon}.`);
+  return { cantidad: cant, moneda: mon, costoTotalMoneda: total, costoUnitarioMoneda: r6(total / cant), tasa, costoTotalHnl: r2(costoTotalHnl), costoUnitarioHnl: r6(costoTotalHnl / cant), salidaBinance: salida };
+}
+const vencido = (l, hoy) => !!(l.vigenciaHasta && l.vigenciaHasta < hoy);
+// Consumo PEPS (primero en entrar, primero en salir): usa primero el lote más viejo vigente.
+// Devuelve qué lote se consume y a qué costo. Prueba C: Stella 3 dispositivos consume 1 crédito (consumo de la variante).
+export function consumirPEPS(lotes = [], cantidad, hoy = "") {
+  let falta = r6(cantidad);
+  const usables = lotes.filter((l) => r6(l.disponible) > 0 && !vencido(l, hoy)).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.id).localeCompare(String(b.id)));
+  const consumos = [];
+  for (const l of usables) {
+    if (falta <= 0) break;
+    const toma = Math.min(falta, r6(l.disponible));
+    consumos.push({ loteId: l.id, cantidad: r6(toma), costoUnitarioHnl: r6(l.costoUnitarioHnl), costoHnl: r2(toma * (l.costoUnitarioHnl || 0)) });
+    falta = r6(falta - toma);
+  }
+  return { consumos, costoHnl: r2(consumos.reduce((s, c) => s + c.costoHnl, 0)), faltante: falta > 0 ? falta : 0 };
+}
+// Resumen de inventario por producto: existencias, valor en libros, costo promedio, próximos vencimientos y stock bajo.
+export function resumenInventario(productos = [], lotes = [], hoy = "") {
+  const en30 = (() => { const [y, m, d] = hoy.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d + 30, 12)).toISOString().slice(0, 10); })();
+  return productos.map((p) => {
+    const ls = lotes.filter((l) => l.productoId === p.id);
+    const vig = ls.filter((l) => !vencido(l, hoy)), venc = ls.filter((l) => vencido(l, hoy) && r6(l.disponible) > 0);
+    const disponible = r6(vig.reduce((s, l) => s + r6(l.disponible), 0));
+    const valorHnl = r2(vig.reduce((s, l) => s + r6(l.disponible) * (l.costoUnitarioHnl || 0), 0));
+    const comprado = r6(ls.reduce((s, l) => s + r6(l.cantidad), 0)), consumido = r6(ls.reduce((s, l) => s + r6(l.consumido), 0));
+    const proximo = vig.filter((l) => l.vigenciaHasta && r6(l.disponible) > 0).map((l) => l.vigenciaHasta).sort()[0] || "";
+    const bajo = ls.length > 0 && disponible <= Math.max(2, Math.ceil(comprado * 0.15));
+    return { productoId: p.id, nombre: p.nombre, modelo: p.modelo, unidad: p.unidad, lotes: ls.length, comprado, consumido, disponible, valorHnl, costoPromedioHnl: disponible > 0 ? r6(valorHnl / disponible) : 0, proximoVencimiento: proximo, vencePronto: !!(proximo && proximo <= en30), vencidoSinUsar: { cantidad: r6(venc.reduce((s, l) => s + r6(l.disponible), 0)), valorHnl: r2(venc.reduce((s, l) => s + r6(l.disponible) * (l.costoUnitarioHnl || 0), 0)) }, stockBajo: bajo && p.modelo !== "costo_cero" };
+  }).filter((r) => r.lotes > 0);
+}
+
 // ---------------------------------------------------------------- manejador /api/finanzas
-export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar"]);
+export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar"]);
 
 export async function handleEmpresa(db, accion, body, identity, authUser, res, d) {
   if (!d.canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas empresarial es exclusivo de Sublicuentas y Relojes." });
@@ -202,6 +262,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
   if (accion === "fin_empresa_estado") {
     const [productos, variantes, precios, proveedores, bSnap] = await Promise.all([todos("fin_productos"), todos("fin_variantes"), todos("fin_precios"), todos("fin_proveedores"), billeteraRef.get()]);
     const movsSnap = await col("finanzas_movimientos").where("billeteraId", "==", BINANCE_ID).get().catch(() => ({ docs: [] }));
+    const [lotes, bodegaSnap] = await Promise.all([todos("fin_lotes"), col("inventario").get().catch(() => ({ docs: [] }))]);
+    const cuentasBodega = bodegaSnap.docs.map((x) => { const c = x.data() || {}; return { id: x.id, plataforma: c.plataforma || "", correo: c.correo || "", capacidad: Number(c.capacidad || 0), disponibles: Number(c.disponibles || 0) }; });
     const movsBinance = movsSnap.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 60);
     const vars = variantes.map((v) => {
       const hist = precios.filter((p) => p.varianteId === v.id).sort((a, b) => b.desde.localeCompare(a.desde));
@@ -210,7 +272,9 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     return res.status(200).json({ ok: true, accion, hoy, modelos: MODELOS, categorias: CATEGORIAS_FIN, monedas: MONEDAS,
       productos: productos.sort((a, b) => a.nombre.localeCompare(b.nombre)).map((p) => ({ ...p, variantes: vars.filter((v) => v.productoId === p.id) })),
       proveedores: proveedores.sort((a, b) => a.alias.localeCompare(b.alias)),
-      billetera: bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio(), movimientosBinance: movsBinance });
+      billetera: bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio(), movimientosBinance: movsBinance,
+      pagosCompra: PAGOS_COMPRA, lotes: lotes.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 400),
+      inventario: resumenInventario(productos, lotes, hoy), cuentasBodega });
   }
 
   if (accion === "fin_sembrar_catalogo") { // idempotente: solo crea lo que falta; nunca pisa lo que el usuario ya editó
@@ -351,6 +415,84 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       tx.set(billeteraRef, { ...aj.estado, updatedAt: ahora });
       audit(tx, { accion: "ajuste_binance", targetType: "billetera", targetId: BINANCE_ID, movimientoId: ref.id, motivo, monto: aj.deltaHnl, before: { saldoUsdt: est.saldo, valorHnl: est.valorHnl }, after: { saldoUsdt: aj.estado.saldo, valorHnl: aj.estado.valorHnl }, detalle: `Binance ${est.saldo} → ${aj.estado.saldo} USDT (${aj.delta > 0 ? "+" : ""}${aj.delta})` });
       return { duplicado: false, billetera: aj.estado, delta: aj.delta, deltaHnl: aj.deltaHnl };
+    });
+    return reply(r);
+  }
+  if (accion === "fin_compra_registrar") { // Prueba B: 25 Netflix VIP × 2.50 USDT → Binance −62.50 · inventario +25 · sin egreso
+    const c = body.compra || {};
+    const pagoTipo = String(c.pago || "");
+    const methods = pagoTipo === "banco" ? await d.loadMethods(db) : [];
+    const banco = pagoTipo === "banco" ? methods.find((m) => m.id === String(c.bancoId || "")) : null;
+    if (pagoTipo === "banco" && !banco) return res.status(200).json({ ok: false, error: "Elija el banco con que se pagó." });
+    const opId = d.libroOpDocId("compra", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const fecha = ymdOk(c.fecha) && c.fecha <= hoy ? c.fecha : hoy;
+    const loteRef = col("fin_lotes").doc(opId), movRef = col("finanzas_movimientos").doc(`${opId}_pago`);
+    const r = await run(async (tx) => {
+      if ((await tx.get(loteRef)).exists) return { duplicado: true, loteId: loteRef.id };
+      const pSnap = await tx.get(col("fin_productos").doc(String(c.productoId || "")));
+      if (!pSnap.exists) throw errUsuario("Elija el producto comprado.");
+      const producto = { id: pSnap.id, ...pSnap.data() };
+      let proveedor = null;
+      if (c.proveedorId) { const s2 = await tx.get(col("fin_proveedores").doc(String(c.proveedorId))); if (!s2.exists) throw errUsuario("Proveedor no encontrado."); proveedor = { id: s2.id, ...s2.data() }; }
+      const bSnap = await tx.get(billeteraRef);
+      const billetera = bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio();
+      const k = costearCompra({ producto, cantidad: c.cantidad, costoTotal: c.costoTotal, moneda: c.moneda, pago: { tipo: pagoTipo, cargoHnl: c.cargoHnl }, billetera });
+      if (banco) {
+        const { saldos } = await d.estadoLibro(db, tx);
+        const b = saldos.bancos.find((x) => x.id === banco.id);
+        if (b && k.costoTotalHnl > b.saldo + 0.001 && !c.forzar) throw errUsuario(`Saldo insuficiente en ${banco.nombre} según el libro (Lps. ${b.saldo}).`);
+      }
+      const dur = Math.max(0, Math.round(Number(c.duracionDias ?? producto.duracionDias) || 0));
+      // La vigencia automática solo aplica a lo que de verdad vence como lote (cuenta madre, gift card, panel). Créditos,
+      // unidades y links duran X días DESPUÉS de venderse: su lote no vence solo (se puede poner vencimiento a mano).
+      const venceSolo = ["cuenta_madre", "gift_card", "panel"].includes(producto.modelo);
+      const vigenciaHasta = ymdOk(c.vigenciaHasta) ? c.vigenciaHasta : (dur && venceSolo ? (() => { const [y, m, dd] = fecha.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + dur, 12)).toISOString().slice(0, 10); })() : "");
+      const detalle = `${producto.nombre} · ${k.cantidad} ${producto.unidad || "u"}${proveedor ? ` · ${proveedor.alias}` : ""}`;
+      const lote = {
+        compraId: loteRef.id, proveedorId: proveedor?.id || "", proveedor: proveedor?.alias || "", productoId: producto.id, producto: producto.nombre, modelo: producto.modelo, unidad: producto.unidad || "",
+        cantidad: k.cantidad, disponible: k.cantidad, consumido: 0, moneda: k.moneda, costoUnitarioMoneda: k.costoUnitarioMoneda, costoTotalMoneda: k.costoTotalMoneda, tasa: k.tasa,
+        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: k.costoUnitarioHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : (banco?.nombre || PAGOS_COMPRA.inicial),
+        fecha, vigenciaHasta, duracionDias: dur, capacidadPorUnidad: producto.modelo === "cuenta_madre" ? producto.capacidad : 1,
+        cuentaInventarioId: txt(c.cuentaInventarioId, 80), referencia: txt(c.referencia, 80), notas: txt(c.notas, 300),
+        operationId: String(body.operationId), movimientoId: pagoTipo === "inicial" ? "" : movRef.id, estado: "activo", createdBy: actor, createdAt: ahora, updatedAt: ahora,
+      };
+      tx.set(loteRef, lote);
+      const comun = { ...d.baseMov(identity, authUser, body), movimientoId: movRef.id, operationId: String(body.operationId), loteId: loteRef.id, productoId: producto.id, proveedorId: proveedor?.id || "", motivo: `Compra · ${detalle}`, ...d.canonicalFinanceDate(fecha, hoy) };
+      if (pagoTipo === "binance") {
+        tx.set(movRef, { ...comun, tipo: "billetera", subtipo: "pago_proveedor", direccion: "salida", billeteraId: BINANCE_ID, moneda: "USDT", montoUsdt: k.costoTotalMoneda, monto: k.costoTotalHnl, tasa: k.tasa, banco: "Binance", saldoUsdtAntes: billetera.saldo, saldoUsdtDespues: k.salidaBinance.estado.saldo });
+        tx.set(billeteraRef, { ...k.salidaBinance.estado, updatedAt: ahora });
+      } else if (pagoTipo === "banco") {
+        tx.set(movRef, { ...comun, tipo: "compra", subtipo: "compra_inventario", direccion: "salida", monto: k.costoTotalHnl, bancoId: banco.id, banco: banco.nombre, moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa });
+      } else if (k.costoTotalHnl > 0) { // inventario inicial: sube inventario contra capital (sin tocar bancos)
+        tx.set(movRef, { ...comun, tipo: "compra", subtipo: "inventario_inicial", direccion: "entrada", monto: k.costoTotalHnl, banco: "Inventario inicial", moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa });
+        tx.set(loteRef, { movimientoId: movRef.id }, { merge: true });
+      }
+      audit(tx, { accion: pagoTipo === "inicial" ? "inventario_inicial" : "compra_inventario", targetType: "lote", targetId: loteRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: k.costoTotalHnl, detalle: `${detalle} · ${k.costoTotalMoneda} ${k.moneda} = Lps. ${k.costoTotalHnl} (Lps. ${k.costoUnitarioHnl} c/u) · pagado: ${lote.cuentaPagoNombre}` });
+      return { duplicado: false, loteId: loteRef.id, costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: k.costoUnitarioHnl, tasa: k.tasa, billetera: k.salidaBinance ? k.salidaBinance.estado : undefined };
+    });
+    return reply(r);
+  }
+
+  if (accion === "fin_lote_ajustar") { // merma, vencido o conteo físico: con motivo, nunca se borra el lote
+    const motivo = txt(body.motivo, 200);
+    if (motivo.length < 4) return res.status(200).json({ ok: false, error: "Escriba el motivo del ajuste (vencido, se cayó la cuenta, conteo…)." });
+    const opId = d.libroOpDocId("invaju", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const movRef = col("finanzas_movimientos").doc(opId);
+    const r = await run(async (tx) => {
+      if ((await tx.get(movRef)).exists) return { duplicado: true };
+      const lRef = col("fin_lotes").doc(String(body.loteId || "")); const ls = await tx.get(lRef);
+      if (!ls.exists) throw errUsuario("Lote no encontrado.");
+      const l = ls.data();
+      const nuevo = r6(body.disponibleCorrecto);
+      if (!(nuevo >= 0) || nuevo > r6(l.cantidad) - r6(l.consumido) + 1e-6) throw errUsuario(`El disponible correcto va de 0 a ${r6(l.cantidad - l.consumido)}.`);
+      const delta = r6(nuevo - r6(l.disponible)); if (!delta) throw errUsuario("Ese ya es el disponible del lote.");
+      const montoHnl = r2(-delta * (l.costoUnitarioHnl || 0)); // positivo = pérdida (merma/vencido)
+      tx.set(lRef, { disponible: nuevo, ajustado: r6((l.ajustado || 0) + delta), estado: nuevo > 0 ? "activo" : "agotado", updatedAt: ahora }, { merge: true });
+      tx.set(movRef, { ...d.baseMov(identity, authUser, body), movimientoId: movRef.id, operationId: String(body.operationId), tipo: "inventario", subtipo: delta < 0 ? "merma" : "sobrante", loteId: lRef.id, productoId: l.productoId, cantidad: delta, monto: montoHnl, motivo: `Ajuste inventario · ${l.producto} · ${motivo}`, banco: "Inventario", ...d.canonicalFinanceDate(hoy, hoy) });
+      audit(tx, { accion: "ajuste_inventario", targetType: "lote", targetId: lRef.id, movimientoId: movRef.id, motivo, monto: montoHnl, before: { disponible: l.disponible }, after: { disponible: nuevo }, detalle: `${l.producto}: ${l.disponible} → ${nuevo} (${delta > 0 ? "+" : ""}${delta}) · Lps. ${montoHnl}` });
+      return { duplicado: false, delta, montoHnl };
     });
     return reply(r);
   }
