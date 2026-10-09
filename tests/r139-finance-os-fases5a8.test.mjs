@@ -19,7 +19,7 @@ function fakeDb() {
 const methods = [{ id: 'bac', nombre: 'BAC Credomatic', logoKey: 'bac', activo: true }, { id: 'ficohsa', nombre: 'Ficohsa', logoKey: 'ficohsa', activo: true }];
 const libro = { bases: { bac: { saldo: 20000, desde: '2026-10-01' } } };
 const movs = (db) => [...db.store.entries()].filter(([k]) => k.startsWith('finanzas_movimientos/')).map(([k, d]) => ({ id: k.split('/')[1], ...d }));
-const HOY = '2026-10-08';
+const HOY = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10); // handleCentro usa la fecha real de Honduras
 const costeoDeps = (db) => ({ R: { movementYmd: R.movementYmd, movementKind: R.movementKind, money: R.money, anuladoOReversa: R.anuladoOReversa, bankBalances: R.bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => movs(db).filter((m) => (R.movementYmd(m) || '') >= desde) });
 const deps = (db) => ({ canUseLibro: () => true, hoyYmdHN: () => HOY, auditar: (tx, _d, i, ev) => tx.set(db.collection('auditoria_eventos').doc(), ev), loadMethods: async () => methods,
   libroOpDocId: (p, b, u) => (b.operationId ? `${p}_${u}_${b.operationId}` : ''), estadoLibro: async () => ({ saldos: R.bankBalances(movs(db), libro, methods) }),
@@ -55,7 +55,7 @@ async function mesCompleto() {
 
 test('Prueba H: tablero del mes — todo concilia con el libro (bancos, Binance, inventario, cuentas por pagar y por cobrar)', async () => {
   const db = await mesCompleto();
-  const t = ok(await emp(db, 'fin_tablero', { mes: '2026-10' }));
+  const t = ok(await emp(db, 'fin_tablero', { mes: HOY.slice(0, 7) }));
   for (const f of t.conciliacion.filas) assert.ok(f.ok, `${f.nombre}: sistema ${f.sistema} vs libro ${f.libro}`);
   assert.equal(t.conciliacion.todoCuadra, true);
   const r = t.resultados;
@@ -85,7 +85,7 @@ test('Fase 6: retiro de dueños baja el banco pero no la utilidad; utilidad repa
 
 test('Alertas: margen bajo, stock bajo, deuda vencida y cuenta madre sin ganancia', async () => {
   const db = await mesCompleto();
-  const t = ok(await emp(db, 'fin_tablero', { mes: '2026-10' }));
+  const t = ok(await emp(db, 'fin_tablero', { mes: HOY.slice(0, 7) }));
   const txt = t.alertas.map((a) => a.texto).join(' | ');
   assert.doesNotMatch(txt, /margen de/, 'con estos precios ningún producto baja de 30%');
   // Provocamos las alertas: venta barata, stock bajo, deuda vencida.
@@ -93,7 +93,7 @@ test('Alertas: margen bajo, stock bajo, deuda vencida y cuenta madre sin gananci
   const stella = [...db.store.entries()].find(([k, v]) => k.startsWith('fin_lotes/') && v.productoId === 'STELLA')[0].split('/')[1];
   ok(await emp(db, 'fin_lote_ajustar', { loteId: stella, disponibleCorrecto: 1, motivo: 'Conteo físico', operationId: 'aju-000000001' }));
   ok(await emp(db, 'fin_compra_registrar', { operationId: 'compra-venc0001', compra: { productoId: 'GEMINI', proveedorId: 'deku-peru', cantidad: 10, costoTotal: 140, moneda: 'HNL', pago: 'credito', vencePago: '2026-10-05' } }));
-  const t2 = ok(await emp(db, 'fin_tablero', { mes: '2026-10' }));
+  const t2 = ok(await emp(db, 'fin_tablero', { mes: HOY.slice(0, 7) }));
   const txt2 = t2.alertas.map((a) => a.texto).join(' | ');
   assert.match(txt2, /Netflix VIP: margen de \d/); assert.match(txt2, /Stella TV: quedan 1/); assert.match(txt2, /deuda\(s\) con proveedores vencida/);
   assert.equal(t2.alertas[0].nivel, 'alta');
@@ -124,7 +124,7 @@ test('Revisión: retrasos no bloquean ventas nuevas; precio sin pisarse; lote ve
   db.store.set(`finanzas_movimientos/${vid}`, { ...db.store.get(`finanzas_movimientos/${vid}`), fecha: '07/10/2026', fechaPago: '2026-10-07' });
   await correrCosteo(db, { ...costeoDeps(db), hoy: HOY, actor: 't' });
   assert.equal(db.store.get(`fin_consumos/${vid}`).fecha, '2026-10-07'); assert.equal(db.store.get(`finanzas_movimientos/${vid}_cv`).fechaPago, '2026-10-07');
-  const t = ok(await emp(db, 'fin_tablero', { mes: '2026-10' })); assert.ok(t.conciliacion.todoCuadra, JSON.stringify(t.conciliacion.filas.filter((f) => !f.ok)));
+  const t = ok(await emp(db, 'fin_tablero', { mes: HOY.slice(0, 7) })); assert.ok(t.conciliacion.todoCuadra, JSON.stringify(t.conciliacion.filas.filter((f) => !f.ok)));
   const vipVar = 'NFX-VIP__1-mes-1-persona';
   ok(await emp(db, 'fin_precio_nuevo', { varianteId: vipVar, precioHnl: 120, desde: '2026-10-08' }));
   assert.equal((await emp(db, 'fin_precio_nuevo', { varianteId: vipVar, precioHnl: 125, desde: '2026-10-08' })).ok, false, 'la segunda del mismo día no pisa a la primera');
