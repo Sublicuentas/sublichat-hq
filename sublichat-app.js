@@ -1416,7 +1416,7 @@ function finYmdR125(m={}){
 function finVigenteR125(m={}){
   if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
   const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
-  if(t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(t==="billetera"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
   if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
   return true;
 }
@@ -8131,4 +8131,178 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   window.finEstadosR134=abrir;
   document.querySelectorAll("[data-fin-estados]").forEach(b=>b.addEventListener("click",()=>abrir("")));
+})();
+
+// ============================================================================================================
+// R135 · FINANCE OS · FASE 1 en la web: 🏢 Empresa → Binance (USDT) · Catálogo financiero · Proveedores.
+// Todo pasa por /api/finanzas (mismas reglas que el bot): precios con historial, costo de referencia con historial,
+// recarga Binance = transferencia (no gasto) con tasa efectiva y costo promedio. Fondo blanco, sin degradados.
+// ============================================================================================================
+(function(){
+  const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const U=(n)=>`${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:6})} USDT`;
+  const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:"—";};
+  const nuevoId=()=>(typeof pagoOpNuevoId==="function"?pagoOpNuevoId():(crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`));
+  const toast=(t)=>(typeof mostrarToast==="function"?mostrarToast(t):alert(t));
+  let E=null,tab="binance",filtro="";
+  async function api(accion,datos={}){
+    const r=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion,origen:"web",...datos})});
+    const j=await r.json().catch(()=>({}));if(!j.ok)throw new Error(j.error||"No se pudo completar.");return j;
+  }
+  const btn=(t,attr,prim=false)=>`<button ${attr} style="border:${prim?"0":"1px solid #e5e7eb"};background:${prim?"#e2231a":"#fff"};color:${prim?"#fff":"#0f172a"};font-weight:800;border-radius:10px;padding:9px 12px;font-size:13.5px;cursor:pointer">${t}</button>`;
+  const card="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px;margin-top:10px";
+  // Formulario genérico en ventana encima de todo.
+  function formulario(titulo,campos,alGuardar,{nota="",textoBoton="Guardar",alCambiar=null}={}){
+    const back=document.createElement("div");
+    back.setAttribute("style","position:fixed;inset:0;z-index:2147483100;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:14px");
+    const inp="width:100%;box-sizing:border-box;border:1px solid #d5dde8;border-radius:10px;padding:10px;font-size:15px;margin-top:4px;background:#fff;color:#0f172a";
+    const campo=(c)=>c.type==="checkbox"?`<label style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700;margin-top:10px"><input data-k="${c.k}" type="checkbox" ${c.value?"checked":""}> ${esc(c.label)}</label>`
+      :`<label style="display:block;font-size:13px;font-weight:700;margin-top:10px">${esc(c.label)}${c.type==="select"?`<select data-k="${c.k}" style="${inp}">${c.options.map(o=>`<option value="${esc(o.v)}" ${String(o.v)===String(c.value??"")?"selected":""}>${esc(o.t)}</option>`).join("")}</select>`
+      :c.type==="textarea"?`<textarea data-k="${c.k}" rows="2" style="${inp}">${esc(c.value??"")}</textarea>`
+      :`<input data-k="${c.k}" type="${c.type||"text"}" ${c.type==="number"?'inputmode="decimal" step="any"':""} value="${esc(c.value??"")}" placeholder="${esc(c.ph||"")}" style="${inp}">`}</label>`;
+    back.innerHTML=`<div style="width:min(460px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;color:#0f172a;font-family:inherit">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:17px">${esc(titulo)}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
+      ${nota?`<div style="color:#64748b;font-size:12.5px;margin-top:6px">${nota}</div>`:""}${campos.map(campo).join("")}
+      <div data-vivo style="margin-top:10px;font-size:13.5px;font-weight:700;color:#0f172a"></div>
+      <p data-error hidden style="margin:10px 0 0;color:#b91c1c;font-weight:800;font-size:13px"></p>
+      <button data-ok style="margin-top:14px;width:100%;border:0;background:#e2231a;color:#fff;font-weight:800;border-radius:12px;padding:12px;font-size:15px;cursor:pointer">${esc(textoBoton)}</button></div>`;
+    (document.fullscreenElement||document.body).appendChild(back);
+    const leer=()=>{const o={};back.querySelectorAll("[data-k]").forEach(el=>{o[el.dataset.k]=el.type==="checkbox"?el.checked:el.value;});return o;};
+    const vivo=back.querySelector("[data-vivo]");
+    if(alCambiar){const f=()=>{vivo.innerHTML=alCambiar(leer())||"";};back.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",f));f();}
+    back.querySelector("[data-x]").onclick=()=>back.remove();
+    const ok=back.querySelector("[data-ok]");
+    ok.onclick=async()=>{const e=back.querySelector("[data-error]");e.hidden=true;ok.disabled=true;ok.textContent="Guardando…";
+      try{await alGuardar(leer());back.remove();}catch(x){e.textContent=x.message||String(x);e.hidden=false;ok.disabled=false;ok.textContent=textoBoton;}};
+  }
+  // ---------------- Binance
+  function vistaBinance(){
+    const b=E.billetera||{};
+    const movs=(E.movimientosBinance||[]).map(m=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #f1f5f9;font-size:13.5px">
+      <span><b>${m.subtipo==="ajuste"?"Ajuste":"Recarga"}</b> · ${dmy(m.fechaPago)}${m.subtipo==="ajuste"?` · ${esc(m.motivo||"")}`:` · desde ${esc((m.contraparteId||"").toUpperCase())}${m.referencia?` · ref ${esc(m.referencia)}`:""}`}<br><span style="color:#64748b">${m.tasa?`Tasa L${Number(m.tasa).toFixed(4)} · `:""}${esc(m.registradoPor||"")}</span></span>
+      <span style="text-align:right;white-space:nowrap;font-weight:800;color:${Number(m.montoUsdt)<0?"#b91c1c":"#16a34a"}">${Number(m.montoUsdt)>0?"+":""}${U(m.montoUsdt)}<br><span style="color:#64748b;font-weight:600">${L(m.monto)}</span></span></div>`).join("")||`<div style="color:#64748b;font-size:13.5px;padding:8px 0">Todavía no hay movimientos de Binance.</div>`;
+    return `<div style="${card}">
+      <div style="color:#64748b;font-size:12.5px;font-weight:700">SALDO BINANCE</div>
+      <div style="font-size:28px;font-weight:900;margin-top:2px">${U(b.saldo)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;font-size:13.5px">
+        <div>Valor en libros<br><b>${L(b.valorHnl)}</b></div><div>Costo promedio<br><b>${b.costoPromedio?`L ${Number(b.costoPromedio).toFixed(4)} / USDT`:"—"}</b></div>
+        <div>Última tasa<br><b>${b.ultimaTasa?`L ${Number(b.ultimaTasa).toFixed(4)}`:"—"}</b></div><div>Recargas<br><b>${b.recargas||0}</b></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${btn("＋ Recargar desde banco","data-bin-rec",true)}${btn("Ajustar saldo","data-bin-aj")}</div>
+      <div style="color:#64748b;font-size:12px;margin-top:8px">Recargar Binance no es gasto: el banco baja y Binance sube. Cada compra con USDT usa el costo promedio del momento; una recarga nueva no cambia compras viejas.</div></div>
+      <div style="${card}"><b>Movimientos de Binance</b>${movs}</div>`;
+  }
+  async function recargar(){
+    let metodos=[];try{metodos=typeof pagoOpMetodos==="function"?await pagoOpMetodos():[];}catch(e){}
+    if(!metodos.length)return toast("⚠️ No hay bancos configurados.");
+    const opId=nuevoId();
+    formulario("Recargar Binance desde banco",[
+      {k:"bancoId",label:"¿De qué banco salió el dinero?",type:"select",options:metodos.map(m=>({v:m.id,t:m.nombre})),value:(metodos.find(m=>/bac/i.test(m.id))||metodos[0]).id},
+      {k:"hnl",label:"Lempiras que salieron del banco",type:"number",ph:"2820"},
+      {k:"usdt",label:"USDT que recibió en Binance",type:"number",ph:"100"},
+      {k:"fecha",label:"Fecha",type:"date",value:E.hoy},
+      {k:"referencia",label:"Referencia (opcional)",ph:"Orden P2P, comprobante…"},
+    ],async(v)=>{const r=await api("fin_binance_recargar",{...v,hnl:Number(v.hnl),usdt:Number(v.usdt),operationId:opId});toast(r.duplicado?"ℹ️ Esa recarga ya estaba registrada.":`✅ Binance +${Number(v.usdt)} USDT · tasa L${r.tasa}`);await cargar();},
+    {nota:"No es gasto: es una transferencia del banco a Binance.",textoBoton:"Registrar recarga",alCambiar:(v)=>{const h=Number(v.hnl),u=Number(v.usdt);return h>0&&u>0?`Tasa efectiva: L ${(h/u).toFixed(4)} por USDT`:"";}});
+  }
+  function ajustar(){
+    const opId=nuevoId(),b=E.billetera||{};
+    formulario("Ajustar saldo de Binance",[{k:"saldoCorrecto",label:"Saldo correcto en USDT",type:"number",value:b.saldo},{k:"motivo",label:"Motivo (obligatorio)",ph:"Comisión P2P, diferencia al revisar Binance…"}],
+      async(v)=>{const r=await api("fin_binance_ajustar",{saldoCorrecto:Number(v.saldoCorrecto),motivo:v.motivo,operationId:opId});toast(r.duplicado?"ℹ️ Ese ajuste ya estaba.":`✅ Ajuste ${r.delta>0?"+":""}${r.delta} USDT registrado`);await cargar();},
+      {nota:`Hoy: ${U(b.saldo)}. El ajuste queda en auditoría con su motivo; no se cambia el historial.`,textoBoton:"Guardar ajuste"});
+  }
+  // ---------------- Catálogo
+  const etiquetaCosto=(c={})=>c&&c.monto?`${Number(c.monto)} ${esc(c.moneda)}${Number(c.cantidad)>1?` por ${c.cantidad}`:""}`:"L0";
+  function vistaCatalogo(){
+    const prods=(E.productos||[]).filter(p=>!filtro||`${p.nombre} ${p.sku}`.toLowerCase().includes(filtro.toLowerCase()));
+    if(!(E.productos||[]).length)return `<div style="${card}"><b>Catálogo financiero vacío</b><div style="color:#64748b;font-size:13.5px;margin:6px 0 10px">Carga los productos, variantes, precios y proveedores del documento Finance OS. Después todo se edita aquí.</div>${btn("Cargar catálogo del documento","data-cat-sembrar",true)}</div>`;
+    const grupos={};prods.forEach(p=>{(grupos[p.modelo]=grupos[p.modelo]||[]).push(p);});
+    return `<div style="display:flex;gap:8px;margin-top:10px"><input data-cat-buscar value="${esc(filtro)}" placeholder="Buscar producto…" style="flex:1;border:1px solid #d5dde8;border-radius:10px;padding:9px;font-size:14px">${btn("＋ Producto","data-cat-nuevo",true)}</div>`+
+      Object.entries(grupos).map(([mod,ps])=>`<div style="margin-top:14px;font-size:12px;font-weight:800;color:#e2231a;letter-spacing:.04em">${esc((E.modelos[mod]||{}).label||mod).toUpperCase()}</div>`+ps.map(p=>`
+      <div style="${card};${p.activo===false?"opacity:.6":""}">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b style="font-size:15px">${esc(p.nombre)}</b> <span style="color:#64748b;font-size:12px">${esc(p.sku)}</span>${p.activo===false?' <span style="color:#b91c1c;font-size:12px;font-weight:800">INACTIVO</span>':""}
+          <div style="color:#475569;font-size:12.5px;margin-top:2px">${esc((E.categorias||{})[p.categoria]||"")} · capacidad ${p.capacidad} ${esc(p.unidad)}${p.duracionDias?` · ${p.duracionDias} días`:""} · costo ref. ${etiquetaCosto(p.costoRef)}</div>
+          ${p.costoRef&&p.costoRef.nota?`<div style="color:#64748b;font-size:12px">${esc(p.costoRef.nota)}</div>`:""}</div>${btn("Editar",`data-cat-editar="${esc(p.id)}"`)}</div>
+        ${(p.variantes||[]).map(v=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-top:1px solid #f1f5f9;font-size:13.5px">
+          <span>${esc(v.nombre)}${Number(v.consumo)!==1?` · consume ${v.consumo}`:""}<br><span style="color:#64748b;font-size:12px">${v.precioVigente?`desde ${dmy(v.precioVigente.desde)} · ${v.historialPrecios.length} versión(es)`:esc(v.notas||"Sin precio")}</span></span>
+          <span style="display:flex;gap:6px;align-items:center"><b style="white-space:nowrap">${v.precioVigente?L(v.precioVigente.precioHnl):"—"}</b>${btn("Precio",`data-cat-precio="${esc(v.id)}"`)}</span></div>`).join("")}
+        <div style="margin-top:6px">${btn("＋ Variante",`data-cat-variante="${esc(p.id)}"`)}</div></div>`).join("")).join("");
+  }
+  function editarProducto(p){
+    const m=Object.entries(E.modelos).map(([v,o])=>({v,t:o.label})),c=Object.entries(E.categorias).map(([v,t])=>({v,t})),mon=(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v}));
+    formulario(p?`Editar ${p.nombre}`:"Nuevo producto",[
+      {k:"nombre",label:"Nombre",value:p?.nombre},{k:"sku",label:"Código interno (SKU)",value:p?.sku,ph:"Se genera solo si lo deja vacío"},
+      {k:"categoria",label:"Categoría",type:"select",options:c,value:p?.categoria||"perfiles"},{k:"modelo",label:"Modelo de abastecimiento",type:"select",options:m,value:p?.modelo||"unidad"},
+      {k:"capacidad",label:"Capacidad (perfiles, cupos o pantallas)",type:"number",value:p?.capacidad??1},{k:"duracionDias",label:"Duración en días (0 = variable)",type:"number",value:p?.duracionDias??30},
+      {k:"costoMonto",label:"Costo de referencia",type:"number",value:p?.costoRef?.monto??0},{k:"costoMoneda",label:"Moneda del costo",type:"select",options:mon,value:p?.costoRef?.moneda||"USDT"},
+      {k:"costoCantidad",label:"¿Ese costo cuántas unidades trae? (ej. 15 créditos)",type:"number",value:p?.costoRef?.cantidad??1},{k:"costoNota",label:"Nota del costo",value:p?.costoRef?.nota},
+      {k:"plataformaKey",label:"Plataforma del bot (opcional)",value:p?.plataformaKey,ph:"netflix, stellatv, canva…"},{k:"notas",label:"Notas",type:"textarea",value:p?.notas},
+      {k:"activo",label:"Activo",type:"checkbox",value:p?p.activo!==false:true},
+    ],async(v)=>{await api("fin_producto_guardar",{producto:{id:p?.id,nombre:v.nombre,sku:v.sku,categoria:v.categoria,modelo:v.modelo,capacidad:Number(v.capacidad),duracionDias:Number(v.duracionDias),plataformaKey:v.plataformaKey,notas:v.notas,activo:v.activo,requierePin:p?.requierePin,requiereCorreo:p?.requiereCorreo,costoRef:{monto:Number(v.costoMonto),moneda:v.costoMoneda,cantidad:Number(v.costoCantidad),nota:v.costoNota}}});toast("✅ Producto guardado");await cargar();},
+    {nota:"El costo de referencia es solo el valor sugerido. Cada compra guarda su propio costo: cambiarlo aquí no cambia compras viejas."});
+  }
+  function nuevaVariante(p){
+    formulario(`Nueva variante · ${p.nombre}`,[{k:"nombre",label:"Nombre",ph:"1 mes · 3 dispositivos"},{k:"duracionMeses",label:"Meses",type:"number",value:1},{k:"dispositivos",label:"Dispositivos / perfiles",type:"number",value:1},{k:"consumo",label:"¿Cuánto consume cada venta? (créditos/cupos)",type:"number",value:1}],
+      async(v)=>{await api("fin_variante_guardar",{variante:{productoId:p.id,nombre:v.nombre,duracionMeses:Number(v.duracionMeses),dispositivos:Number(v.dispositivos),consumo:Number(v.consumo)}});toast("✅ Variante creada. Póngale precio.");await cargar();},
+      {nota:"Ejemplo: Stella 3 dispositivos consume 1 crédito, no 3."});
+  }
+  function cambiarPrecio(v){
+    const hist=(v.historialPrecios||[]).map(h=>`${L(h.precioHnl)} · ${dmy(h.desde)} → ${h.hasta?dmy(h.hasta):"hoy"}`).join("<br>")||"Sin precios todavía.";
+    formulario(`Precio · ${v.nombre}`,[{k:"precioHnl",label:"Precio nuevo en Lempiras",type:"number",value:v.precioVigente?.precioHnl??""},{k:"desde",label:"Vale desde",type:"date",value:E.hoy},{k:"motivo",label:"Motivo (opcional)",ph:"Subió el proveedor…"}],
+      async(x)=>{await api("fin_precio_nuevo",{varianteId:v.id,precioHnl:Number(x.precioHnl),desde:x.desde,motivo:x.motivo});toast("✅ Precio nuevo guardado. Las ventas viejas conservan su precio.");await cargar();},
+      {nota:`<b>Historial:</b><br>${hist}`,textoBoton:"Guardar precio nuevo"});
+  }
+  // ---------------- Proveedores
+  function vistaProveedores(){
+    const nombreProd=(id)=>((E.productos||[]).find(p=>p.id===id)||{}).nombre||id;
+    return `<div style="margin-top:10px;text-align:right">${btn("＋ Proveedor","data-prov-nuevo",true)}</div>`+((E.proveedores||[]).map(p=>{
+      const vig=(p.terminos||[]).filter(t=>!t.hasta),viejos=(p.terminos||[]).filter(t=>t.hasta);
+      return `<div style="${card};${p.activo===false?"opacity:.6":""}"><div style="display:flex;justify-content:space-between;gap:8px"><div><b style="font-size:15px">${esc(p.alias)}</b><div style="color:#475569;font-size:12.5px">${esc(p.pais||"—")} · ${esc(p.moneda)} · paga por ${esc(p.metodoPago||"—")}</div></div>${btn("Editar",`data-prov-editar="${esc(p.id)}"`)}</div>
+        ${vig.map(t=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;font-size:13.5px"><span>${esc(nombreProd(t.productoId))}${t.minimo?` · mínimo ${t.minimo}`:""}${t.nota?`<br><span style="color:#64748b;font-size:12px">${esc(t.nota)}</span>`:""}</span><b style="white-space:nowrap">${t.costoRef} ${esc(t.moneda)}</b></div>`).join("")}
+        ${viejos.length?`<div style="color:#64748b;font-size:12px;margin-top:4px">${viejos.length} costo(s) anteriores guardados en el historial.</div>`:""}
+        <div style="margin-top:6px">${btn("＋ Costo de referencia",`data-prov-termino="${esc(p.id)}"`)}</div></div>`;}).join("")||`<div style="${card};color:#64748b">Sin proveedores.</div>`);
+  }
+  function editarProveedor(p){
+    const mon=(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v}));
+    formulario(p?`Editar ${p.alias}`:"Nuevo proveedor",[{k:"alias",label:"Nombre / alias",value:p?.alias},{k:"pais",label:"País",value:p?.pais},{k:"moneda",label:"Moneda",type:"select",options:mon,value:p?.moneda||"USDT"},{k:"metodoPago",label:"Cómo se le paga",value:p?.metodoPago,ph:"Binance, tarjeta, transferencia…"},{k:"notas",label:"Notas",type:"textarea",value:p?.notas},{k:"activo",label:"Activo",type:"checkbox",value:p?p.activo!==false:true}],
+      async(v)=>{await api("fin_proveedor_guardar",{proveedor:{id:p?.id,...v}});toast("✅ Proveedor guardado");await cargar();});
+  }
+  function nuevoTermino(p){
+    const prods=(E.productos||[]).map(x=>({v:x.id,t:x.nombre})),mon=(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v}));
+    formulario(`Costo de referencia · ${p.alias}`,[{k:"productoId",label:"Producto",type:"select",options:prods,value:prods[0]?.v},{k:"costoRef",label:"Costo por unidad",type:"number"},{k:"moneda",label:"Moneda",type:"select",options:mon,value:p.moneda||"USDT"},{k:"minimo",label:"Compra mínima (opcional)",type:"number",value:0},{k:"nota",label:"Nota",ph:"25 o más a 2.50…"}],
+      async(v)=>{await api("fin_proveedor_termino",{proveedorId:p.id,termino:{productoId:v.productoId,costoRef:Number(v.costoRef),moneda:v.moneda,minimo:Number(v.minimo),nota:v.nota}});toast("✅ Costo guardado. El anterior queda en el historial.");await cargar();},
+      {nota:"Si ya había un costo para ese producto, queda cerrado con fecha y se guarda en el historial. Las compras viejas no cambian."});
+  }
+  // ---------------- pantalla
+  function pintar(){
+    const root=document.getElementById("finEmpresaR135");if(!root||!E)return;
+    const tabs=[["binance","Binance"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
+    root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1;border:0;border-radius:10px;padding:9px;font-weight:800;font-size:14px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
+    const body=root.querySelector("[data-emp-body]");
+    body.innerHTML=tab==="binance"?vistaBinance():tab==="catalogo"?vistaCatalogo():vistaProveedores();
+    root.querySelectorAll("[data-emp-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.empTab;pintar();});
+    const on=(sel,fn)=>body.querySelectorAll(sel).forEach(el=>el.addEventListener("click",()=>fn(el)));
+    const prod=(id)=>(E.productos||[]).find(p=>p.id===id),vari=(id)=>(E.productos||[]).flatMap(p=>p.variantes||[]).find(v=>v.id===id),prov=(id)=>(E.proveedores||[]).find(p=>p.id===id);
+    on("[data-bin-rec]",()=>recargar());on("[data-bin-aj]",()=>ajustar());
+    on("[data-cat-sembrar]",async(el)=>{el.disabled=true;el.textContent="Cargando…";try{const r=await api("fin_sembrar_catalogo");toast(`✅ ${r.productos} productos, ${r.variantes} variantes, ${r.precios} precios, ${r.proveedores} proveedores`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
+    on("[data-cat-nuevo]",()=>editarProducto(null));on("[data-cat-editar]",(el)=>editarProducto(prod(el.dataset.catEditar)));
+    on("[data-cat-variante]",(el)=>nuevaVariante(prod(el.dataset.catVariante)));on("[data-cat-precio]",(el)=>cambiarPrecio(vari(el.dataset.catPrecio)));
+    on("[data-prov-nuevo]",()=>editarProveedor(null));on("[data-prov-editar]",(el)=>editarProveedor(prov(el.dataset.provEditar)));on("[data-prov-termino]",(el)=>nuevoTermino(prov(el.dataset.provTermino)));
+    const bus=body.querySelector("[data-cat-buscar]");if(bus)bus.addEventListener("input",()=>{filtro=bus.value;const pos=bus.selectionStart;pintar();const b2=document.querySelector("#finEmpresaR135 [data-cat-buscar]");if(b2){b2.focus();b2.setSelectionRange(pos,pos);}});
+  }
+  async function cargar(){
+    const root=document.getElementById("finEmpresaR135");if(!root)return;
+    try{E=await api("fin_empresa_estado");pintar();}catch(e){root.querySelector("[data-emp-body]").innerHTML=`<p style="color:#b91c1c;font-weight:800">⚠️ ${esc(e.message)}</p>`;}
+  }
+  function abrir(t){
+    if(t)tab=t;
+    let root=document.getElementById("finEmpresaR135");
+    if(!root){root=document.createElement("div");root.id="finEmpresaR135";root.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(root);}
+    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Binance · catálogo financiero · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
+      <div data-emp-tabs style="display:flex;gap:6px;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
+    root.querySelector("[data-emp-x]").onclick=()=>root.remove();
+    cargar();
+  }
+  window.finEmpresaR135=abrir;
+  document.querySelectorAll("[data-fin-empresa]").forEach(b=>b.addEventListener("click",()=>abrir()));
 })();
