@@ -1420,7 +1420,7 @@ async function handlerCore(req, res) {
         }, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
-          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
           if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
@@ -1779,10 +1779,10 @@ async function handlerCore(req, res) {
         }, "", {}, nombreTitular);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
-          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) throw crmUserError(`Complete los datos requeridos del perfil ${i + 1}.`);
           if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
-          if (!servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`); // R142
         }
         touchedIndex = servicios.length;
         touchedCompraId = String(nuevo.compraId || "");
@@ -1823,7 +1823,7 @@ async function handlerCore(req, res) {
         }, servicio.fichaTexto || anterior.fichaTexto || "", anterior, nombreTitular);
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
-          if (servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
+          if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
           if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
