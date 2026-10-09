@@ -1416,7 +1416,7 @@ function finYmdR125(m={}){
 function finVigenteR125(m={}){
   if(m.reversaDe||["anulado","corregido"].includes(String(m.estadoFinanciero||"")))return false;
   const t=String(m.tipo||"").toLowerCase(),sub=String(m.subtipo||"").toLowerCase();
-  if(t==="billetera"||t==="compra"||t==="inventario"||t==="costo_venta"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
+  if(t==="billetera"||t==="compra"||t==="inventario"||t==="costo_venta"||t==="pago_cxp"||t==="transferencia"||t==="saldo inicial"||t==="saldo_inicial"||sub==="saldo_inicial"||t==="ajuste saldo"||t==="ajuste_saldo"||sub==="ajuste_saldo")return false;
   if(m._source==="finanzas"){const y=finYmdR125(m);if(y&&y>="2026-10-01")return false;}
   return true;
 }
@@ -8308,9 +8308,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         {k:"cantidad",label:"Cantidad comprada: créditos, links o unidades · en cuentas madre, paneles y gift cards: cuántas CUENTAS",type:"number",value:c0.cantidad||1},
         {k:"costoTotal",label:"Costo total de la compra",type:"number",value:c0.monto||""},
         {k:"moneda",label:"Moneda",type:"select",options:(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v})),value:c0.moneda||"USDT"},
-        {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance":"banco"},
+        {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"credito",t:"A crédito (se le debe al proveedor)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance":"banco"},
         {k:"bancoId",label:"Banco (si pagó con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},
         {k:"cargoHnl",label:"Cargo real en Lempiras (si pagó USD/USDT con banco o tarjeta)",type:"number",ph:"Lo que le cobró el banco"},
+        {k:"vencePago",label:"A crédito: ¿cuándo hay que pagarle? (vacío = 15 días)",type:"date",value:""},
         {k:"fecha",label:"Fecha de compra",type:"date",value:E.hoy},
         {k:"vigenciaHasta",label:"Vence (vacío = según duración del producto)",type:"date",value:""},
         {k:"cuentaInventarioId",label:"Cuenta en Bodega (cuentas madre, opcional)",type:"select",options:[{v:"",t:"—"},...(E.cuentasBodega||[]).map(c=>({v:c.id,t:`${c.plataforma} · ${c.correo} (${c.capacidad} cupos)`}))],value:""},
@@ -8324,7 +8325,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L ${Number(b.costoPromedio||0).toFixed(4)})`;}
         else if(v.moneda==="HNL"){hnl=t;}
         else if(Number(v.cargoHnl)>0){hnl=Number(v.cargoHnl);como="con el cargo real";}
-        else if(v.pago==="inicial"&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
+        else if((v.pago==="inicial"||v.pago==="credito")&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
         else return `<span style="color:#b45309">Escriba el cargo real en Lempiras.</span>`;
         if(["cuenta_madre","panel","gift_card"].includes(p.modelo)){const cupos=n*Math.max(1,Number(p.capacidad)||1)*Math.max(1,Math.round((Number(p.duracionDias)||30)/30));return `Costo en Lempiras: ${L(hnl)} · ${cupos} perfiles-mes a ${L(hnl/cupos)} c/u ${como}`;}
         return `Costo en Lempiras: ${L(hnl)} · ${L(hnl/n)} por ${esc(unidadDe(p))} ${como}`;}});
@@ -8366,19 +8367,52 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
         <div style="color:#64748b;font-size:12px;margin-top:6px">Utilidad bruta = venta − costo del producto. Los gastos generales (publicidad, planilla…) se restan aparte en Resultados.</div></div>
       ${pend?`<div style="${card}"><b>Ventas pendientes de costo (${(c.pendientes||[]).length})</b>${pend}</div>`:""}`;
   }
+  // ---------------- FASE 4 · Cuentas por cobrar y por pagar
+  function vistaCxcCxp(){
+    const cxc=E.cxc||{},cxp=E.cxp||{};
+    const kpi=(t,v,col="")=>`<div style="background:#f8fafc;border:1px solid #eef1f5;border-radius:12px;padding:10px"><div style="color:#64748b;font-size:12px;font-weight:700">${t}</div><div style="font-size:17px;font-weight:900;${col?`color:${col}`:""}">${v}</div></div>`;
+    const tramos=["0–7 días","8–15 días","16–30 días","Más de 30 días"].map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${t}</span><b style="${t==="Más de 30 días"&&(cxc.porTramo||{})[t]?"color:#b91c1c":""}">${L((cxc.porTramo||{})[t]||0)}</b></div>`).join("");
+    const deud=(cxc.deudores||[]).slice(0,40).map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid #f1f5f9;font-size:13.5px"><span><b>${esc(x.deudor)}</b> <span style="color:#64748b">${x.deudorTipo==="vendedor"?"vendedor":"cliente"} · ${x.cuentas} cuenta(s) · ${x.diasMax} días</span></span><b style="white-space:nowrap;${x.diasMax>30?"color:#b91c1c":""}">${L(x.saldo)}</b></div>`).join("")||`<div style="color:#64748b;font-size:13px;padding:6px 0">Nadie debe. 🎉</div>`;
+    const ctas=(cxc.cuentas||[]).slice(0,60).map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f1f5f9;font-size:13px"><span>${esc(x.deudor)}${x.cliente&&x.cliente!==x.deudor?` · ${esc(x.cliente)}`:""}<br><span style="color:#64748b">${esc(x.plataforma||"")} · ${dmy(x.fecha)} · ${x.dias} días · total ${L(x.total)}${x.abonos?` · ${x.abonos} abono(s)`:""}</span></span><span style="display:flex;gap:6px;align-items:center"><b style="white-space:nowrap">${L(x.saldo)}</b>${btn("Abonar",`data-cxc-abonar="${esc(x.id)}"`)}</span></div>`).join("");
+    const pag=(cxp.cuentas||[]).map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #f1f5f9;font-size:13px"><span><b>${esc(x.proveedor)}</b> · ${esc(x.concepto)}<br><span style="color:${x.vencida?"#b91c1c":"#64748b"};${x.vencida?"font-weight:800":""}">${x.vencida?"VENCIDA · ":""}vence ${dmy(x.vence)} · debe ${Number(x.saldo)} ${esc(x.moneda)}${x.moneda!=="HNL"?` (≈ ${L(x.saldoHnl)})`:""}${x.estado==="parcial"?" · abonada":""}</span></span>${btn("Pagar",`data-cxp-pagar="${esc(x.id)}"`)}</div>`).join("")||`<div style="color:#64748b;font-size:13px;padding:6px 0">No se le debe a ningún proveedor.</div>`;
+    return `<div style="${card}"><b style="font-size:15px">Cuentas por cobrar</b><div style="color:#64748b;font-size:12px">Lo que deben clientes y vendedores. No suma a bancos hasta que se cobra; el abono entra al banco y NO crea otra venta.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">${kpi("Total por cobrar",L(cxc.totalHnl))}${kpi("Vendedores",L(cxc.vendedoresHnl))}${kpi("Clientes",L(cxc.clientesHnl))}${kpi("Más de 30 días",L((cxc.porTramo||{})["Más de 30 días"]||0),(cxc.porTramo||{})["Más de 30 días"]?"#b91c1c":"")}</div>
+      <div style="margin-top:10px"><b style="font-size:13px">Antigüedad de saldos</b>${tramos}</div></div>
+      <div style="${card}"><b>Quién debe</b>${deud}</div>
+      ${ctas?`<div style="${card}"><b>Cuentas abiertas</b>${ctas}</div>`:""}
+      <div style="${card}"><b style="font-size:15px">Cuentas por pagar a proveedores</b><div style="color:#64748b;font-size:12px">Compras a crédito. Pagarlas baja el banco o Binance, pero no es gasto (el gasto fue el inventario).</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">${kpi("Total por pagar",L(cxp.totalHnl))}${kpi("Vencido",L(cxp.vencidasHnl),cxp.vencidasHnl?"#b91c1c":"")}</div>${pag}</div>`;
+  }
+  async function abonarCxc(id){
+    const x=((E.cxc||{}).cuentas||[]).find(c=>c.id===id);if(!x)return;
+    let metodos=[];try{metodos=typeof pagoOpMetodos==="function"?await pagoOpMetodos():[];}catch(e){}
+    const opId=nuevoId();
+    formulario(`Abono · ${x.deudor}`,[{k:"monto",label:`Monto del abono (debe ${L(x.saldo)})`,type:"number",value:x.saldo},{k:"bancoId",label:"¿A qué banco entró?",type:"select",options:metodos.map(m=>({v:m.id,t:m.nombre})),value:metodos[0]?.id},{k:"fechaPago",label:"Fecha real del pago",type:"date",value:E.hoy}],
+      async(v)=>{const r=await api("registrar_abono",{cuentaId:id,monto:Number(v.monto),bancoId:v.bancoId,fechaPago:v.fechaPago,operationId:opId});toast(r.duplicado?"ℹ️ Ese abono ya estaba.":`✅ Abono registrado · ${r.estado==="pagado"?"¡pagado completo!":`queda ${L(r.saldoPendiente)}`}`);await cargar();},
+      {nota:`${esc(x.plataforma||"")} · total ${L(x.total)}. El abono entra al banco y baja la deuda; no crea otra venta.`,textoBoton:"Registrar abono"});
+  }
+  async function pagarCxp(id){
+    const x=((E.cxp||{}).cuentas||[]).find(c=>c.id===id);if(!x)return;
+    let metodos=[];try{metodos=typeof pagoOpMetodos==="function"?await pagoOpMetodos():[];}catch(e){}
+    const opId=nuevoId(),b=E.billetera||{};
+    formulario(`Pagar a ${x.proveedor}`,[{k:"monto",label:`Monto en ${x.moneda} (debe ${Number(x.saldo)})`,type:"number",value:x.saldo},{k:"pago",label:"Pagar con",type:"select",options:[...(x.moneda==="USDT"?[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`}]:[]),{v:"banco",t:"Banco"}],value:x.moneda==="USDT"?"binance":"banco"},{k:"bancoId",label:"Banco (si paga con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},{k:"montoHnl",label:"Lempiras que salieron del banco (si la deuda no es en Lempiras)",type:"number"},{k:"fecha",label:"Fecha",type:"date",value:E.hoy}],
+      async(v)=>{const r=await api("fin_cxp_pagar",{cxpId:id,monto:Number(v.monto),pago:v.pago,bancoId:v.bancoId,montoHnl:Number(v.montoHnl||0),fecha:v.fecha,operationId:opId});toast(r.duplicado?"ℹ️ Ese pago ya estaba.":`✅ Pagado ${L(r.pagadoHnl)}${r.diferencialHnl?` · diferencial cambiario ${L(r.diferencialHnl)}`:""} · ${r.estado==="pagado"?"cuenta saldada":"queda saldo"}`);await cargar();},
+      {nota:`${esc(x.concepto)} · vence ${dmy(x.vence)}. Si la tasa cambió desde la compra, la diferencia sale como diferencial cambiario.`,textoBoton:"Registrar pago"});
+  }
   // ---------------- pantalla
   function pintar(){
     const root=document.getElementById("finEmpresaR135");if(!root||!E)return;
-    const tabs=[["costeo","Costo de ventas"],["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
+    const tabs=[["costeo","Costo de ventas"],["cxccxp","Cobrar / Pagar"],["binance","Binance"],["compras","Compras"],["inventario","Inventario"],["catalogo","Catálogo"],["proveedores","Proveedores"]];
     root.querySelector("[data-emp-tabs]").innerHTML=tabs.map(([k,t])=>`<button data-emp-tab="${k}" style="flex:1 0 auto;border:0;border-radius:10px;padding:9px 8px;font-weight:800;font-size:13px;cursor:pointer;background:${tab===k?"#0f172a":"#fff"};color:${tab===k?"#fff":"#0f172a"}">${t}</button>`).join("");
     const body=root.querySelector("[data-emp-body]");body.style.color="#0f172a";
-    body.innerHTML=tab==="costeo"?vistaCosteo():tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
+    body.innerHTML=tab==="costeo"?vistaCosteo():tab==="cxccxp"?vistaCxcCxp():tab==="binance"?vistaBinance():tab==="compras"?vistaCompras():tab==="inventario"?vistaInventario():tab==="catalogo"?vistaCatalogo():vistaProveedores();
     root.querySelectorAll("[data-emp-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.empTab;pintar();});
     const on=(sel,fn)=>body.querySelectorAll(sel).forEach(el=>el.addEventListener("click",()=>fn(el)));
     const prod=(id)=>(E.productos||[]).find(p=>p.id===id),vari=(id)=>(E.productos||[]).flatMap(p=>p.variantes||[]).find(v=>v.id===id),prov=(id)=>(E.proveedores||[]).find(p=>p.id===id);
     on("[data-costeo-activar]",async(el)=>{const d=body.querySelector("[data-costeo-desde]").value;if(!confirm(`¿Costear ventas desde ${dmy(d)}? Las ventas de antes no se tocan.`))return;el.disabled=true;try{await api("fin_costeo_config",{desde:d});toast("✅ Costo de ventas activado");await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
     on("[data-costeo-correr]",async(el)=>{el.disabled=true;el.textContent="Costeando…";try{const r=await api("fin_costear");toast(`✅ ${r.costeadas||0} ventas nuevas · ${r.completadas||0} completadas · ${r.vencimientos||0} vencimientos`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
     on("[data-costeo-mes]",async(el)=>{mesCosteo=el.dataset.costeoMes;await cargar();});
+    on("[data-cxc-abonar]",(el)=>abonarCxc(el.dataset.cxcAbonar));on("[data-cxp-pagar]",(el)=>pagarCxp(el.dataset.cxpPagar));
     on("[data-comp-nueva]",()=>nuevaCompra());on("[data-lote-aj]",(el)=>ajustarLote((E.lotes||[]).find(l=>l.id===el.dataset.loteAj)));
     on("[data-bin-rec]",()=>recargar());on("[data-bin-aj]",()=>ajustar());
     on("[data-cat-sembrar]",async(el)=>{el.disabled=true;el.textContent="Cargando…";try{const r=await api("fin_sembrar_catalogo");toast(`✅ ${r.productos} productos, ${r.variantes} variantes, ${r.precios} precios, ${r.proveedores} proveedores`);await cargar();}catch(e){toast("⚠️ "+e.message);el.disabled=false;}});
@@ -8395,7 +8429,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(t)tab=t;
     let root=document.getElementById("finEmpresaR135");
     if(!root){root=document.createElement("div");root.id="finEmpresaR135";root.setAttribute("style","position:fixed;inset:0;z-index:2147483000;background:#f8fafc;overflow:auto;color:#0f172a;font-family:inherit");(document.fullscreenElement||document.body).appendChild(root);}
-    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Costo de ventas · Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
+    root.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:19px">🏢 Finanzas empresa</b><div style="color:#64748b;font-size:12.5px">Costo de ventas · cobrar y pagar · Binance · compras · inventario · catálogo · proveedores</div></div><button data-emp-x style="border:0;background:#e5e7eb;border-radius:999px;width:34px;height:34px;cursor:pointer">✕</button></div>
       <div data-emp-tabs style="display:flex;gap:4px;overflow-x:auto;margin-top:12px;background:#eef1f5;border-radius:12px;padding:4px"></div><div data-emp-body style="padding-bottom:30px;color:#64748b;margin-top:12px">Cargando…</div></div>`;
     root.querySelector("[data-emp-x]").onclick=()=>root.remove();
     cargar();
