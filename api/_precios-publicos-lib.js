@@ -47,8 +47,11 @@ export function normalizarCondiciones(raw) {
     minimoMensual: Number.isFinite(n) && n > 0 ? Math.min(n, 9999) : null,
     mostrar: r ? r.mostrar !== false : true,
     texto: txt(r && r.texto, 400),
+    // R149: puntos de la tarjeta de condiciones (uno por línea en Sublichat). Valores iniciales editables.
+    puntos: (r && Array.isArray(r.puntos) ? r.puntos : PUNTOS_INICIALES).map((x) => txt(x, 140)).filter(Boolean).slice(0, 8),
   };
 }
+const PUNTOS_INICIALES = ["Puede combinar diferentes plataformas.", "Precios exclusivos para socios revendedores.", "Entrega de pedido con pago por adelantado."];
 
 export function normalizarContacto(raw = {}) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -138,7 +141,7 @@ export function armarListaPublica(docs = [], estado = {}) {
   const contacto = normalizarContacto(estado.contacto);
   const cond = normalizarCondiciones(estado.condiciones);
   return {
-    condiciones: cond.mostrar && (cond.minimoMensual || cond.texto) ? { minimoMensual: cond.minimoMensual, texto: cond.texto } : null,
+    condiciones: cond.mostrar && (cond.minimoMensual || cond.texto || cond.puntos.length) ? { minimoMensual: cond.minimoMensual, puntos: cond.puntos, texto: cond.texto } : null,
     categorias,
     total: salida.length,
     actualizadoEn: ultima || null,
@@ -155,4 +158,4 @@ export async function leerPreciosSocios(db) {
 
 export const CONFIG_DOC = ["precios_publicos", "config"];
 // R148: versión del servidor, para que la pantalla avise si Vercel no publicó la actualización.
-export const VERSION_PRECIOS_PUBLICOS = "r148";
+export const VERSION_PRECIOS_PUBLICOS = "r149";
