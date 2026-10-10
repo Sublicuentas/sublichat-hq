@@ -124,25 +124,68 @@
     .lead{font-size:17px;margin-bottom:16px}
     .grid{grid-template-columns:1fr;gap:12px}
   }
-  @media (max-width:480px){
-    .top .wrap{gap:6px;height:60px}
-    .logo img{height:24px}
-    .cta-top{font-size:13px;padding:10px 11px;gap:6px}
+  /* R150: versión celular más compacta (antes todo se veía muy grande) */
+  @media (max-width:560px){
+    .wrap{padding:0 14px}
+    .top .wrap{gap:6px;height:54px}
+    .menu-btn{width:36px;height:36px}
+    .logo img{height:22px}
+    .cta-top{font-size:12.5px;padding:8px 10px;gap:6px;border-radius:9px}
+    .cta-top .ico{width:16px;height:16px}
     .cta-top .largo{display:none}.cta-top .corto{display:inline}
-    h1{font-size:36px}
-    .benef{gap:12px}
-    .benef div{font-size:13px;gap:8px}
-    .benef i{width:34px;height:34px}
-    .cond{padding:16px}
-    .cond-h b{font-size:17.5px}
-    .cond li{font-size:15px}
-    .tools{gap:8px}
-    .btn-share{padding:0 13px;font-size:14px}
+    .hero{gap:14px;padding:14px 0 4px}
+    .pill{font-size:10.5px;padding:4px 8px}
+    .fecha{font-size:12.5px}
+    h1{font-size:28px;margin:10px 0 8px}
+    .lead{font-size:14.5px;margin-bottom:12px}
+    .benef{gap:8px 12px}
+    .benef div{font-size:12px;gap:7px}
+    .benef i{width:28px;height:28px;border-radius:8px}
+    .benef i .ico{width:15px;height:15px}
+    .cond{padding:13px 14px;border-radius:14px}
+    .cond-h{gap:10px;margin-bottom:9px}
+    .cond-h .ico{width:24px;height:24px}
+    .cond-h b{font-size:15px}
+    .cond ul{gap:7px}
+    .cond li{font-size:13.5px;gap:9px}
+    .cond li i{width:18px;height:18px}
+    .cond li i .ico{width:11px;height:11px}
+    .cond .extra{font-size:12.5px;margin-top:8px}
+    .tools{gap:8px;margin:16px 0 10px}
+    .buscar{border-radius:11px;padding:0 11px}
+    .buscar input{font-size:15px;padding:11px 0}
+    .btn-share{padding:0 12px;border-radius:11px}
     .btn-share .txt{display:none}
-    .card{padding:14px}
-    .pz{padding:9px 12px}
-    .pz strong{font-size:27px}
-    .pz-sug strong{font-size:23px}
+    .tabs{gap:7px;margin:0 -14px;padding-left:14px;padding-right:14px}
+    .tab{font-size:13px;padding:7px 10px;gap:6px;border-radius:10px}
+    .tab .ico{width:16px;height:16px}
+    .tab .n{min-width:18px;height:18px;font-size:10.5px;padding:0 5px}
+    .sec-h{margin:14px 0 9px}
+    .sec-h h2{font-size:15px;gap:9px}
+    .sec-h h2::before{width:20px;height:4px}
+    .sec-h span{font-size:12.5px}
+    .grid{gap:10px}
+    .card{padding:11px;border-radius:14px}
+    .card-h{gap:10px;margin-bottom:9px}
+    .logo-srv,.logo-ini{width:42px;height:42px;border-radius:10px}
+    .logo-ini{font-size:17px}
+    .card-h b{font-size:15px}
+    .card-h small{font-size:12.5px;margin-top:1px}
+    .card-h .chev{width:18px;height:18px}
+    .precios{gap:7px}
+    .pz{padding:7px 10px;border-radius:10px}
+    .pz span{font-size:11px}
+    .pz strong{font-size:21px;margin-top:1px}
+    .pz-sug strong{font-size:19px}
+    .pz strong.consultar{font-size:16px}
+    .gan{margin-top:7px;padding:7px;font-size:13px;gap:6px;border-radius:9px}
+    .gan .ico{width:16px;height:16px}
+    .tag{font-size:11px;margin-top:7px}
+    .cta{margin-top:24px;padding:20px 16px}
+    .cta h3{font-size:19px}
+    .cta p{font-size:14px;margin-bottom:14px}
+    .btn{padding:13px 14px;font-size:14px}
+    .btn-linea{font-size:13px;padding:12px 10px}
   }
 </style>
 </head>
@@ -171,7 +214,7 @@
 <header class="top">
   <div class="wrap">
     <button class="menu-btn" id="menuBtn" type="button" aria-label="Menú" aria-expanded="false"><svg class="ico" style="width:24px;height:24px"><use href="#i-menu"/></svg></button>
-    <a class="logo" href="/precios-mayoristas" aria-label="Sublicuentas"><img src="/assets/sublicuentas-logo-claro.png" alt="Sublicuentas"></a>
+    <a class="logo" href="/precios-mayoristas" aria-label="Sublicuentas"><img src="/assets/sublicuentas-logo-claro.png" alt="Sublicuentas" onerror="this.onerror=null;this.src='/assets/sublicuentas-logo.png';this.style.background='#0A0A1A';this.style.padding='5px 9px';this.style.borderRadius='8px'"></a>
     <a class="cta-top" id="ctaTop" href="#cierre" target="_blank" rel="noopener"><svg class="ico"><use href="#i-chat"/></svg><span class="largo">Quiero ser revendedor</span><span class="corto">Ser revendedor</span></a>
     <nav class="menu" id="menu" aria-label="Menú"></nav>
   </div>
