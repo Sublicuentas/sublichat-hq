@@ -18,6 +18,7 @@
 //   REV_API_BASE  (opcional; por defecto https://sublicuentas-panel-api.onrender.com)
 
 import admin from "firebase-admin";
+import { normalizarBorrador, firmaBorrador, armarListaPublica, leerPreciosSocios, categoriaLimpia, CONFIG_DOC } from "./_precios-publicos-lib.js"; // R145
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -114,6 +115,12 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: "Esta sección es solo para el usuario sublicuentas." });
     }
 
+    // R145 · Precios para Revendedores (página pública): se administra aquí mismo, directo en
+    // Firestore. El precio sigue saliendo de la colección "precios" del Panel de Socios.
+    if (String(req.query.ruta || "").replace(/^\/+/, "").split("/")[0] === "publico") {
+      return await manejarPublico(req, res, user);
+    }
+
     const rutaCruda = String(req.query.ruta || "").replace(/^\/+/, "").trim();
     const pathSegments = rutaCruda.split("/").filter(Boolean);
     const primerSegmento = pathSegments[0] || "";
@@ -153,4 +160,50 @@ export default async function handler(req, res) {
     console.error("REVENDEDORES_ADMIN_ERROR", err);
     return res.status(500).json({ ok: false, error: err.message || "Error interno." });
   }
+}
+
+// ─── R145 · Precios para Revendedores ─────────────────────────────────────────
+const msTs = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : (v && (v.seconds ?? v._seconds) != null ? Number(v.seconds ?? v._seconds) * 1000 : Number(v) || 0));
+async function manejarPublico(req, res, user) {
+  const db = getApp().firestore();
+  const ref = db.collection(CONFIG_DOC[0]).doc(CONFIG_DOC[1]);
+  const sub = String(req.query.ruta || "").replace(/^\/+/, "").split("/")[1] || "";
+  const method = req.method || "GET";
+  const docs = await leerPreciosSocios(db);
+  const ids = new Set(docs.map((d) => d.id));
+  const snap = await ref.get();
+  const cfg = snap.exists ? snap.data() || {} : {};
+  const quien = String(user.usuario || user.uid || "");
+
+  if (method === "GET") {
+    const productos = docs.map((d) => ({
+      id: d.id, nombre: String(d.nombre || ""), variante: String(d.variante || ""), categoriaSub: String(d.categoriaSub || ""),
+      categoriaSocios: String(d.categoria || ""), categoriaSugerida: categoriaLimpia(d.categoria),
+      precioSocio: d.precio === null || d.precio === undefined ? null : Number(d.precio), activoSocios: d.activo !== false,
+      categoriaOrden: Number(d.categoriaOrden) || 999, orden: Number(d.orden) || 999, actualizadoEn: msTs(d.updatedAt),
+    })).sort((a, b) => a.categoriaOrden - b.categoriaOrden || a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es"));
+    const borrador = normalizarBorrador(cfg.borrador || cfg.publicado || {}, ids);
+    const publicado = normalizarBorrador(cfg.publicado || {}, ids);
+    return res.status(200).json({
+      ok: true, productos, borrador, publicadoEn: msTs(cfg.publicadoEn), borradorEn: msTs(cfg.borradorEn),
+      pendiente: firmaBorrador(borrador) !== firmaBorrador(publicado),
+      vistaPrevia: armarListaPublica(docs, { ...borrador, publicadoEn: Date.now() }),
+      publicada: armarListaPublica(docs, { ...publicado, publicadoEn: cfg.publicadoEn || 0 }),
+    });
+  }
+  if (method === "PUT" && !sub) { // guardar borrador (no cambia la página pública)
+    const borrador = normalizarBorrador((req.body || {}).borrador || {}, ids);
+    await ref.set({ borrador, borradorEn: Date.now(), borradorPor: quien }, { merge: true });
+    return res.status(200).json({ ok: true, borrador, pendiente: firmaBorrador(borrador) !== firmaBorrador(cfg.publicado || {}) });
+  }
+  if (method === "POST" && sub === "publicar") {
+    const borrador = normalizarBorrador((req.body || {}).borrador || cfg.borrador || {}, ids);
+    const cambio = firmaBorrador(borrador) !== firmaBorrador(cfg.publicado || {});
+    const ahora = Date.now();
+    const patch = { borrador, borradorEn: ahora, publicado: borrador };
+    if (cambio || !cfg.publicadoEn) { patch.publicadoEn = ahora; patch.publicadoPor = quien; } // la fecha solo cambia con un cambio real
+    await ref.set(patch, { merge: true });
+    return res.status(200).json({ ok: true, cambio, publicadoEn: cambio || !cfg.publicadoEn ? ahora : msTs(cfg.publicadoEn) });
+  }
+  return res.status(405).json({ ok: false, error: "Acción no válida." });
 }
