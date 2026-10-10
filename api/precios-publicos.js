@@ -24,8 +24,9 @@ export default async function handler(req, res) {
     const cfg = cfgSnap.exists ? cfgSnap.data() || {} : {};
     const publicado = { ...(cfg.publicado || {}), publicadoEn: cfg.publicadoEn || 0 };
     const lista = armarListaPublica(docs, publicado);
-    // Caché corta en el CDN: un cambio de precio se ve en ~1 minuto, sin leer Firebase en cada visita.
-    res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60, stale-while-revalidate=300");
+    // R146: caché de solo 10 s en el CDN y SIN "stale-while-revalidate" (antes mostraba la lista vieja/vacía
+    // varios minutos después de publicar). Leer ~30 documentos por visita es barato.
+    res.setHeader("Cache-Control", "public, max-age=0, s-maxage=10");
     return res.status(200).json({ ok: true, ...lista });
   } catch (e) {
     console.error("PRECIOS_PUBLICOS_ERROR", e && e.message);
