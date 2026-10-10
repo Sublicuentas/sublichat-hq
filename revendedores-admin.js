@@ -922,7 +922,7 @@ async function loadPublico(force){
 let pubTimer=null;
 function pubGuardarLuego(){
   clearTimeout(pubTimer);const st=$('#pubEstado');if(st)st.textContent='Guardando borrador…';
-  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;pubPintarEstado();}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
+  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;state.pub.version=r.version;pubPintarEstado();if(r.version!=='r148'){const s3=$('#pubEstado');if(s3)s3.innerHTML='<b style="color:#b42318">⚠️ No se guardó la venta sugerida: el servidor de Vercel está desactualizado.</b>';}}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
 }
 function pubPintarEstado(){
   const st=$('#pubEstado');if(!st)return;
@@ -1007,6 +1007,7 @@ function renderPublico(){
   <datalist id="pubCats">${PUB_CATS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   ${state.pub.productos.length?grupos.map(g=>`<div data-pub-group><div class="pub-group">${esc(g.k||'Sin categoría')}</div><div class="pub-list">${g.items.map(pubFila).join('')}</div></div>`).join(''):'<div class="cr-empty">El catálogo del Panel de Socios está vacío. Cárguelo en la pestaña Precios.</div>'}`;
   pubPintarEstado();
+  if(state.pub.version!=='r148')b.querySelector('.pub-top').insertAdjacentHTML('afterbegin','<div class="cr-status" style="background:#fef3f2;color:#b42318;border:1px solid #fecdca;border-radius:12px;padding:10px 12px;font-weight:700">⚠️ Vercel todavía no tiene la actualización del servidor (api/). La venta sugerida y la compra mínima NO se van a guardar. Revise en Vercel → Deployments que el último despliegue esté en “Ready”.</div>');
   const filtrar=()=>{const q=String(state.pub.q||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();b.querySelectorAll('[data-pub-row]').forEach(r=>{r.style.display=!q||r.dataset.search.includes(q)?'':'none'});b.querySelectorAll('[data-pub-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('[data-pub-row]')].some(r=>r.style.display!=='none')?'':'none'});};
   $('#pubBuscar').oninput=e=>{state.pub.q=e.target.value;filtrar();};filtrar();
   b.querySelectorAll('[data-pub-more]').forEach(x=>x.onclick=()=>{const o=x.closest('[data-pub-row]').querySelector('.pub-opts');o.hidden=!o.hidden;});
