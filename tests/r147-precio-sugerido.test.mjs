@@ -20,3 +20,10 @@ test('R147: compra mínima mensual editable, se puede ocultar y cuenta como camb
   assert.doesNotMatch(page, /mínima mensual: <strong>5/);
   assert.match(page, /Precio sugerido de venta/);
 });
+test('R149: puntos de condiciones editables y sin precios fijos en la página', () => {
+  const l = armarListaPublica(docs, { items: { n1: { publico: true } }, condiciones: { minimoMensual: 7, puntos: ['Pago adelantado.'] } });
+  assert.deepEqual(l.condiciones.puntos, ['Pago adelantado.']);
+  assert.equal(l.condiciones.minimoMensual, 7);
+  const page = fs.readFileSync(new URL('../precios-revendedores.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /L 130|L 150|5 perfiles/);
+});
