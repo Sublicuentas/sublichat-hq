@@ -573,7 +573,7 @@
   .aula-btn .ico{color:#f6b73c}
   .fin-screen{position:fixed;inset:0;z-index:80;background:var(--bg);overflow-y:auto;display:none}
   .fin-screen.show{display:block}
-  .fin-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:16px clamp(13px,4vw,20px);
+  .fin-head{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:16px clamp(13px,4vw,20px);
     background:var(--bg);border-bottom:1px solid var(--line)}
   .fin-head .cobro-title{flex:1;font-size:17px}
   .fin-xls{background:rgba(105,219,124,.16);border:1px solid rgba(105,219,124,.4);color:var(--txt);
@@ -1626,6 +1626,12 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     <button class="fin-xls" id="finXls">📊 Excel</button>
   </div>
   <div class="fin-body">
+    <!-- R144: acceso visible a Finanzas empresa (precios de venta, costos, proveedores, Binance) -->
+    <button type="button" data-fin-empresa style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid #dbe3ee;border-radius:16px;padding:14px 16px;margin:0 0 14px;cursor:pointer;color:#0f172a;font:inherit">
+      <span style="font-size:26px">🏢</span>
+      <span style="flex:1"><b style="font-size:16px">Finanzas empresa</b><br><span style="color:#64748b;font-size:13px">Precios de venta · costos · proveedores · Binance · inventario</span></span>
+      <span style="font-weight:800;color:#e2231a">Abrir ›</span>
+    </button>
     <div class="card">
       <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5 .9 2.5 2-1 2-2.5 2a2.5 2 0 0 1-2.5-1.5M12 6v1.5M12 16.5V18"/></svg></span> Cierre del mes <span class="meta-r" id="mesNombre"></span></h2>
       <div class="cierre">
