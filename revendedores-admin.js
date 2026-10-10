@@ -922,7 +922,7 @@ async function loadPublico(force){
 let pubTimer=null;
 function pubGuardarLuego(){
   clearTimeout(pubTimer);const st=$('#pubEstado');if(st)st.textContent='Guardando borrador…';
-  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;state.pub.version=r.version;pubPintarEstado();if(r.version!=='r148'){const s3=$('#pubEstado');if(s3)s3.innerHTML='<b style="color:#b42318">⚠️ No se guardó la venta sugerida: el servidor de Vercel está desactualizado.</b>';}}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
+  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;state.pub.version=r.version;pubPintarEstado();if(r.version!=='r149'){const s3=$('#pubEstado');if(s3)s3.innerHTML='<b style="color:#b42318">⚠️ No se guardó la venta sugerida: el servidor de Vercel está desactualizado.</b>';}}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
 }
 function pubPintarEstado(){
   const st=$('#pubEstado');if(!st)return;
@@ -953,7 +953,7 @@ function renderPublico(){
   const b=$('#revBody');if(!state.pub)return loadPublico();
   const grupos=[];state.pub.productos.forEach(p=>{let g=grupos.find(x=>x.k===p.categoriaSocios);if(!g){g={k:p.categoriaSocios,items:[]};grupos.push(g);}g.items.push(p);});
   const c=state.pub.borrador.contacto||{};
-  const cond=state.pub.borrador.condiciones||{minimoMensual:5,mostrar:true,texto:''};
+  const cond=state.pub.borrador.condiciones||{minimoMensual:5,mostrar:true,texto:'',puntos:[]};
   b.innerHTML=`<style>
     #rbac-revendedores .pub-top{display:grid;gap:10px;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin-bottom:12px}
     #rbac-revendedores .pub-actions{display:flex;flex-wrap:wrap;gap:8px}
@@ -1000,6 +1000,7 @@ function renderPublico(){
     <div class="pub-contact">
       <label class="cr-field">Compra mínima mensual (perfiles)<input id="pubMinimo" type="number" min="1" step="1" inputmode="numeric" value="${cond.minimoMensual??''}" placeholder="Ej. 5"></label>
       <label class="pub-check" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="pubCondMostrar" ${cond.mostrar!==false?'checked':''}> Mostrar condición en la página pública</label>
+      <label class="cr-field wide" style="grid-column:1/-1">Puntos de la tarjeta de condiciones (uno por línea)<textarea id="pubCondPuntos" rows="4" maxlength="1200" style="box-sizing:border-box;width:100%;border:1px solid #d9e0e9;border-radius:12px;padding:10px 11px;font:inherit;resize:vertical">${esc((cond.puntos||[]).join('\n'))}</textarea><small>La compra mínima mensual se agrega sola como primer punto.</small></label>
       <label class="cr-field wide" style="grid-column:1/-1">Texto adicional de condiciones (opcional)<input id="pubCondTexto" maxlength="400" value="${esc(cond.texto||'')}" placeholder="Ej. Los pedidos se pagan por adelantado."></label>
     </div>
   </div>
@@ -1007,7 +1008,7 @@ function renderPublico(){
   <datalist id="pubCats">${PUB_CATS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   ${state.pub.productos.length?grupos.map(g=>`<div data-pub-group><div class="pub-group">${esc(g.k||'Sin categoría')}</div><div class="pub-list">${g.items.map(pubFila).join('')}</div></div>`).join(''):'<div class="cr-empty">El catálogo del Panel de Socios está vacío. Cárguelo en la pestaña Precios.</div>'}`;
   pubPintarEstado();
-  if(state.pub.version!=='r148')b.querySelector('.pub-top').insertAdjacentHTML('afterbegin','<div class="cr-status" style="background:#fef3f2;color:#b42318;border:1px solid #fecdca;border-radius:12px;padding:10px 12px;font-weight:700">⚠️ Vercel todavía no tiene la actualización del servidor (api/). La venta sugerida y la compra mínima NO se van a guardar. Revise en Vercel → Deployments que el último despliegue esté en “Ready”.</div>');
+  if(state.pub.version!=='r149')b.querySelector('.pub-top').insertAdjacentHTML('afterbegin','<div class="cr-status" style="background:#fef3f2;color:#b42318;border:1px solid #fecdca;border-radius:12px;padding:10px 12px;font-weight:700">⚠️ Vercel todavía no tiene la actualización del servidor (api/). La venta sugerida y la compra mínima NO se van a guardar. Revise en Vercel → Deployments que el último despliegue esté en “Ready”.</div>');
   const filtrar=()=>{const q=String(state.pub.q||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();b.querySelectorAll('[data-pub-row]').forEach(r=>{r.style.display=!q||r.dataset.search.includes(q)?'':'none'});b.querySelectorAll('[data-pub-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('[data-pub-row]')].some(r=>r.style.display!=='none')?'':'none'});};
   $('#pubBuscar').oninput=e=>{state.pub.q=e.target.value;filtrar();};filtrar();
   b.querySelectorAll('[data-pub-more]').forEach(x=>x.onclick=()=>{const o=x.closest('[data-pub-row]').querySelector('.pub-opts');o.hidden=!o.hidden;});
@@ -1021,8 +1022,8 @@ function renderPublico(){
   const contacto=()=>{state.pub.borrador.contacto={destino:$('#pubDestino').value.trim(),mensaje:$('#pubMensaje').value.trim()};pubGuardarLuego();};
   $('#pubDestino').oninput=contacto;$('#pubMensaje').oninput=contacto;
   // R147: compra mínima mensual editable (sin tocar código).
-  const condiciones=()=>{const v=$('#pubMinimo').value;state.pub.borrador.condiciones={minimoMensual:v===''?null:Math.max(1,Math.round(Number(v))||1),mostrar:$('#pubCondMostrar').checked,texto:$('#pubCondTexto').value.trim()};pubGuardarLuego();};
-  $('#pubMinimo').oninput=condiciones;$('#pubCondMostrar').onchange=condiciones;$('#pubCondTexto').oninput=condiciones;
+  const condiciones=()=>{const v=$('#pubMinimo').value;state.pub.borrador.condiciones={minimoMensual:v===''?null:Math.max(1,Math.round(Number(v))||1),mostrar:$('#pubCondMostrar').checked,texto:$('#pubCondTexto').value.trim(),puntos:$('#pubCondPuntos').value.split('\n').map(x=>x.trim()).filter(Boolean)};pubGuardarLuego();};
+  $('#pubMinimo').oninput=condiciones;$('#pubCondMostrar').onchange=condiciones;$('#pubCondTexto').oninput=condiciones;$('#pubCondPuntos').oninput=condiciones;
   // Precio socio: se guarda en su FUENTE (Panel de Socios) — se refleja en socios y en la página pública.
   b.querySelectorAll('[data-pub-socio]').forEach(el=>el.addEventListener('change',async()=>{
     const p=state.pub.productos.find(x=>x.id===el.dataset.pubSocio);if(!p)return;
@@ -1069,7 +1070,7 @@ async function pubGenerarImagen(){
     if(d.pendiente&&!confirm('Hay cambios SIN publicar. La imagen usará la lista ya publicada. ¿Continuar?'))return;
     if(!document.querySelector('link[data-inter]')){const l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap';l.dataset.inter='1';document.head.appendChild(l);}
     try{await Promise.race([Promise.all(['500 30px Inter','700 30px Inter','800 30px Inter','900 30px Inter'].map(f=>document.fonts.load(f))),new Promise(r=>setTimeout(r,2500))]);}catch(_){}
-    const [logo,qrLib]=await Promise.all([pubCargarImg('/assets/sublicuentas-logo.png'),pubCargarScript('/assets/qrcode-generator.js','qrcode')]);
+    const [logo,qrLib]=await Promise.all([pubCargarImg('/assets/sublicuentas-logo-claro.png'),pubCargarScript('/assets/qrcode-generator.js','qrcode')]);
     const F='Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',W=1080,PAD=72;
     const filas=lista.categorias.reduce((n,c)=>n+c.productos.length,0);
     const conSug=lista.categorias.some(c=>c.productos.some(p=>p.precioSugerido!=null)),FILA=conSug?128:104,minimo=lista.condiciones&&lista.condiciones.minimoMensual;
@@ -1079,8 +1080,7 @@ async function pubGenerarImagen(){
     const corta=(t,max)=>{t=String(t||'');if(x.measureText(t).width<=max)return t;while(t.length>1&&x.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…';};
     x.fillStyle='#fff';x.fillRect(0,0,W,H);
     // Marca
-    rr(PAD,64,420,96,20);x.fillStyle='#0B0B0C';x.fill();
-    const lh=58,lw=logo.width*lh/logo.height;x.drawImage(logo,PAD+(420-lw)/2,64+(96-lh)/2,lw,lh);
+    const lh=78,lw=logo.width*lh/logo.height;x.drawImage(logo,PAD-6,72,lw,lh); // R149: logo para fondo blanco
     x.fillStyle='#0B0B0C';x.font=`900 76px ${F}`;x.fillText('PRECIOS PARA',PAD,268);
     x.fillStyle='#E2231A';x.fillText('REVENDEDORES',PAD,350);
     x.fillStyle='#5B6270';x.font=`500 32px ${F}`;x.fillText('Precios especiales para socios · en Lempiras',PAD,408);
