@@ -35,6 +35,18 @@ export function normalizarItem(raw = {}) {
     disponible: r.disponible !== false,
     usarPrecioSocio: r.usarPrecioSocio !== false,
     precioMostrado: numONull(r.precioMostrado),
+    precioSugerido: numONull(r.precioSugerido), // R147: precio sugerido de venta (independiente; no toca el precio socio)
+  };
+}
+
+// R147 · Condición comercial editable (compra mínima MENSUAL). El 5 solo es el valor inicial.
+export function normalizarCondiciones(raw) {
+  const r = raw && typeof raw === "object" ? raw : null;
+  const n = r ? Math.round(Number(r.minimoMensual)) : 5;
+  return {
+    minimoMensual: Number.isFinite(n) && n > 0 ? Math.min(n, 9999) : null,
+    mostrar: r ? r.mostrar !== false : true,
+    texto: txt(r && r.texto, 400),
   };
 }
 
@@ -55,7 +67,7 @@ export function normalizarBorrador(raw = {}, idsValidos = null) {
     if (idsValidos && !idsValidos.has(limpioId)) continue;
     items[limpioId] = normalizarItem(it);
   }
-  return { items, contacto: normalizarContacto(r.contacto) };
+  return { items, contacto: normalizarContacto(r.contacto), condiciones: normalizarCondiciones(r.condiciones) };
 }
 
 // Representación estable para saber si de verdad cambió algo (la fecha de
@@ -63,7 +75,7 @@ export function normalizarBorrador(raw = {}, idsValidos = null) {
 export function firmaBorrador(b = {}) {
   const n = normalizarBorrador(b);
   const items = Object.keys(n.items).sort().filter((id) => n.items[id].publico).map((id) => [id, n.items[id]]);
-  return JSON.stringify({ items, contacto: n.contacto });
+  return JSON.stringify({ items, contacto: n.contacto, condiciones: n.condiciones });
 }
 
 export function enlaceContacto(contacto = {}, texto = "") {
@@ -98,12 +110,17 @@ export function armarListaPublica(docs = [], estado = {}) {
     const it = normalizarItem(cfg);
     const precioSocio = d.precio === null || d.precio === undefined || d.precio === "" ? null : Number(d.precio);
     const precio = it.usarPrecioSocio ? (Number.isFinite(precioSocio) ? precioSocio : null) : it.precioMostrado;
+    const precioSugerido = it.precioSugerido;
+    // Ganancia sugerida = venta sugerida − precio revendedor (margen del socio; nunca la utilidad de Sublicuentas).
+    const gananciaSugerida = precio != null && precioSugerido != null && precioSugerido > precio ? Math.round((precioSugerido - precio) * 100) / 100 : null;
     salida.push({
       id: d.id,
       nombre: txt(d.nombre, 80),
       texto: it.texto || txt([d.variante, d.categoriaSub].filter(Boolean).join(" · "), 90),
       categoria: it.categoria || categoriaLimpia(d.categoria),
       precio,
+      precioSugerido,
+      gananciaSugerida,
       disponible: it.disponible,
       _orden: it.orden ?? (Number(d.categoriaOrden) || 999) * 1000 + (Number(d.orden) || 999),
     });
@@ -119,7 +136,9 @@ export function armarListaPublica(docs = [], estado = {}) {
     g.productos.push(pub);
   }
   const contacto = normalizarContacto(estado.contacto);
+  const cond = normalizarCondiciones(estado.condiciones);
   return {
+    condiciones: cond.mostrar && (cond.minimoMensual || cond.texto) ? { minimoMensual: cond.minimoMensual, texto: cond.texto } : null,
     categorias,
     total: salida.length,
     actualizadoEn: ultima || null,
