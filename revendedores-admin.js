@@ -182,6 +182,7 @@ function shell(){
         <button class="cr-tab" data-rtab="pedidos">🛒 Pedidos</button>
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
+        <button class="cr-tab" data-rtab="publico">🏷️ Precios para Revendedores</button>
       </div>
       <div id="revBody"></div>
     </div>`;
@@ -198,7 +199,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas,publico:renderPublico}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
@@ -904,6 +905,214 @@ function renderRecompensas(){
 }
 async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+id,{estado});await loadRecompensas(true)}catch(e){alert(e.message)}}
 
+/* ═══════════ R145 · PRECIOS PARA REVENDEDORES (página pública) ═══════════
+   El precio sale de la colección "precios" (tarifa general) del Panel de Socios.
+   Aquí solo se decide qué se muestra al público y cómo. Los cambios quedan en
+   BORRADOR hasta tocar "Publicar"; el precio socio se edita en su fuente real. */
+const PUB_CATS=['Streaming','TV Digital','Música','Herramientas','Inteligencia Artificial','Recargas de juegos'];
+const pubUrl=()=>location.origin+'/precios-mayoristas';
+const pubItem=id=>{const b=state.pub.borrador;b.items=b.items||{};if(!b.items[id])b.items[id]={publico:false,categoria:'',orden:null,texto:'',disponible:true,usarPrecioSocio:true,precioMostrado:null};return b.items[id];};
+const pubFecha=ms=>ms?new Date(ms).toLocaleString('es-HN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):'nunca';
+async function loadPublico(force){
+  if(state.pub&&!force)return renderPublico();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando precios para revendedores…</div>';
+  try{state.pub=await api('GET','publico');state.pub.q=state.pub.q||'';renderPublico();}
+  catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`;}
+}
+let pubTimer=null;
+function pubGuardarLuego(){
+  clearTimeout(pubTimer);const st=$('#pubEstado');if(st)st.textContent='Guardando borrador…';
+  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;pubPintarEstado();}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
+}
+function pubPintarEstado(){
+  const st=$('#pubEstado');if(!st)return;
+  const n=Object.values(state.pub.borrador.items||{}).filter(x=>x.publico).length;
+  st.innerHTML=`${n} producto${n===1?'':'s'} en la lista · publicada: <b>${esc(pubFecha(state.pub.publicadoEn))}</b>${state.pub.pendiente?' · <b style="color:#e2231a">hay cambios sin publicar</b>':' · al día'}`;
+}
+function pubFila(p){
+  const it=pubItem(p.id),busca=[p.nombre,p.variante,p.categoriaSocios].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return `<div class="pub-row" data-pub-row="${esc(p.id)}" data-search="${esc(busca)}">
+    <div class="pub-main">
+      <div class="pub-name"><b>${esc(p.nombre)}</b>${p.variante?`<small>${esc(p.variante)}</small>`:''}${p.activoSocios?'':'<small style="color:#b42318">Apagado en el Panel de Socios: no sale en la lista</small>'}</div>
+      <label class="pub-price">Precio socio<span>L <input type="number" min="0" step="1" inputmode="decimal" data-pub-socio="${esc(p.id)}" value="${p.precioSocio??''}" placeholder="—"></span></label>
+      <label class="pub-sw"><input type="checkbox" data-pub-k="publico" data-id="${esc(p.id)}" ${it.publico?'checked':''}><i></i><span>${it.publico?'ON':'OFF'}</span></label>
+      <button class="cr-btn ghost pub-more" data-pub-more="${esc(p.id)}" type="button">Opciones</button>
+    </div>
+    <div class="pub-opts" hidden>
+      <label class="cr-field">Categoría en la lista<input list="pubCats" data-pub-k="categoria" data-id="${esc(p.id)}" value="${esc(it.categoria)}" placeholder="${esc(p.categoriaSugerida)}"></label>
+      <label class="cr-field">Orden de aparición<input type="number" data-pub-k="orden" data-id="${esc(p.id)}" value="${it.orden??''}" placeholder="Automático"></label>
+      <label class="cr-field wide">Texto secundario (opcional)<input maxlength="90" data-pub-k="texto" data-id="${esc(p.id)}" value="${esc(it.texto)}" placeholder="${esc([p.variante,p.categoriaSub].filter(Boolean).join(' · ')||'Ej. 1 perfil · 1 mes')}"></label>
+      <label class="pub-check"><input type="checkbox" data-pub-k="disponible" data-id="${esc(p.id)}" ${it.disponible?'checked':''}> Disponible</label>
+      <label class="pub-check"><input type="checkbox" data-pub-k="usarPrecioSocio" data-id="${esc(p.id)}" ${it.usarPrecioSocio?'checked':''}> Usar precio socio actual</label>
+      <label class="cr-field">Precio mostrado en página pública<input type="number" min="0" data-pub-k="precioMostrado" data-id="${esc(p.id)}" value="${it.precioMostrado??''}" ${it.usarPrecioSocio?'disabled':''} placeholder="Ej. 140"><small>No cambia el precio real de los socios.</small></label>
+    </div>
+  </div>`;
+}
+function renderPublico(){
+  const b=$('#revBody');if(!state.pub)return loadPublico();
+  const grupos=[];state.pub.productos.forEach(p=>{let g=grupos.find(x=>x.k===p.categoriaSocios);if(!g){g={k:p.categoriaSocios,items:[]};grupos.push(g);}g.items.push(p);});
+  const c=state.pub.borrador.contacto||{};
+  b.innerHTML=`<style>
+    #rbac-revendedores .pub-top{display:grid;gap:10px;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin-bottom:12px}
+    #rbac-revendedores .pub-actions{display:flex;flex-wrap:wrap;gap:8px}
+    #rbac-revendedores .pub-contact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px}
+    #rbac-revendedores .pub-group{margin:16px 0 6px;font-size:12px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:#475467}
+    #rbac-revendedores .pub-list{background:#fff;border:1px solid #e4e7ec;border-radius:14px;overflow:hidden}
+    #rbac-revendedores .pub-row{border-top:1px solid #f0f2f5;padding:10px 12px}
+    #rbac-revendedores .pub-row:first-child{border-top:0}
+    #rbac-revendedores .pub-main{display:grid;grid-template-columns:minmax(0,1fr) 112px 74px auto;gap:10px;align-items:center}
+    #rbac-revendedores .pub-name b{display:block;font-size:14.5px;color:#101828}
+    #rbac-revendedores .pub-name small{display:block;font-size:12px;color:#667085;margin-top:2px}
+    #rbac-revendedores .pub-price{font-size:10.5px;font-weight:800;color:#667085;display:grid;gap:3px}
+    #rbac-revendedores .pub-price span{display:flex;align-items:center;gap:4px;border:1px solid #d9e0e9;border-radius:10px;padding:0 8px;font-size:14px;font-weight:800;color:#101828}
+    #rbac-revendedores .pub-price input{width:100%;border:0;outline:0;padding:8px 0;font:inherit;background:transparent}
+    #rbac-revendedores .pub-sw{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:900;color:#475467}
+    #rbac-revendedores .pub-sw input{display:none}
+    #rbac-revendedores .pub-sw i{width:38px;height:22px;border-radius:22px;background:#d0d5dd;position:relative;transition:.15s;flex:0 0 auto}
+    #rbac-revendedores .pub-sw i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+    #rbac-revendedores .pub-sw input:checked+i{background:#12b76a}
+    #rbac-revendedores .pub-sw input:checked+i::after{left:19px}
+    #rbac-revendedores .pub-more{padding:7px 10px;font-size:12px}
+    #rbac-revendedores .pub-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;margin-top:10px;padding:10px;border-radius:12px;background:#f9fafb}
+    #rbac-revendedores .pub-opts[hidden]{display:none}
+    #rbac-revendedores .pub-top input,#rbac-revendedores .pub-opts input{box-sizing:border-box;width:100%;min-width:0}
+    #rbac-revendedores .pub-check{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#344054}
+    @media(max-width:640px){#rbac-revendedores .pub-main{grid-template-columns:minmax(0,1fr) 96px;}#rbac-revendedores .pub-contact,#rbac-revendedores .pub-opts{grid-template-columns:1fr}}
+  </style>
+  <div class="pub-top">
+    <div><b style="font-size:16px">Lista pública de precios</b><div style="color:#667085;font-size:13px;margin-top:3px">Página sin login para prospectos: <a href="${esc(pubUrl())}" target="_blank" rel="noopener">${esc(pubUrl().replace(/^https?:\/\//,''))}</a>. No da acceso al Panel de Socios.</div></div>
+    <div id="pubEstado" style="font-size:13px;color:#475467"></div>
+    <div class="pub-actions">
+      <button class="cr-btn ghost" id="pubPreview">👁️ Vista previa</button>
+      <button class="cr-btn red" id="pubPublicar">Publicar cambios</button>
+      <button class="cr-btn ghost" id="pubImagen">🖼️ Generar imagen de precios</button>
+      <button class="cr-btn ghost" id="pubCopiar">🔗 Copiar enlace</button>
+      <button class="cr-btn ghost" id="pubWa" type="button">💬 Compartir por WhatsApp</button>
+    </div>
+    <div class="pub-contact">
+      <label class="cr-field">Botón "Quiero ser revendedor" → WhatsApp o enlace<input id="pubDestino" value="${esc(c.destino||'')}" placeholder="9999-9999 o https://…"></label>
+      <label class="cr-field">Mensaje que llega por WhatsApp<input id="pubMensaje" maxlength="300" value="${esc(c.mensaje||'Hola, quiero ser revendedor de Sublicuentas.')}"></label>
+    </div>
+  </div>
+  <div class="price-toolbar"><label class="price-search">🔎 <input id="pubBuscar" value="${esc(state.pub.q||'')}" placeholder="Buscar producto…"></label><small>ON = aparece en la lista pública. El precio socio es el mismo del Panel de Socios.</small></div>
+  <datalist id="pubCats">${PUB_CATS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  ${state.pub.productos.length?grupos.map(g=>`<div data-pub-group><div class="pub-group">${esc(g.k||'Sin categoría')}</div><div class="pub-list">${g.items.map(pubFila).join('')}</div></div>`).join(''):'<div class="cr-empty">El catálogo del Panel de Socios está vacío. Cárguelo en la pestaña Precios.</div>'}`;
+  pubPintarEstado();
+  const filtrar=()=>{const q=String(state.pub.q||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();b.querySelectorAll('[data-pub-row]').forEach(r=>{r.style.display=!q||r.dataset.search.includes(q)?'':'none'});b.querySelectorAll('[data-pub-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('[data-pub-row]')].some(r=>r.style.display!=='none')?'':'none'});};
+  $('#pubBuscar').oninput=e=>{state.pub.q=e.target.value;filtrar();};filtrar();
+  b.querySelectorAll('[data-pub-more]').forEach(x=>x.onclick=()=>{const o=x.closest('[data-pub-row]').querySelector('.pub-opts');o.hidden=!o.hidden;});
+  b.querySelectorAll('[data-pub-k]').forEach(el=>el.addEventListener(el.type==='checkbox'?'change':'input',()=>{
+    const it=pubItem(el.dataset.id),k=el.dataset.pubK;
+    if(el.type==='checkbox')it[k]=el.checked;else if(k==='orden'||k==='precioMostrado')it[k]=el.value===''?null:Number(el.value);else it[k]=el.value;
+    if(k==='publico'){const sp=el.parentElement.querySelector('span');if(sp)sp.textContent=el.checked?'ON':'OFF';}
+    if(k==='usarPrecioSocio'){const pm=el.closest('.pub-opts').querySelector('[data-pub-k="precioMostrado"]');pm.disabled=el.checked;}
+    pubGuardarLuego();
+  }));
+  const contacto=()=>{state.pub.borrador.contacto={destino:$('#pubDestino').value.trim(),mensaje:$('#pubMensaje').value.trim()};pubGuardarLuego();};
+  $('#pubDestino').oninput=contacto;$('#pubMensaje').oninput=contacto;
+  // Precio socio: se guarda en su FUENTE (Panel de Socios) — se refleja en socios y en la página pública.
+  b.querySelectorAll('[data-pub-socio]').forEach(el=>el.addEventListener('change',async()=>{
+    const p=state.pub.productos.find(x=>x.id===el.dataset.pubSocio);if(!p)return;
+    const nuevo=el.value===''?null:Number(el.value);
+    if(nuevo===p.precioSocio)return;
+    if(!confirm(`¿Cambiar el precio socio de ${p.nombre}${p.variante?' · '+p.variante:''} de ${money(p.precioSocio)} a ${money(nuevo)}?\n\nEs el precio REAL del Panel de Socios: lo verán todos los socios y la página pública.`)){el.value=p.precioSocio??'';return;}
+    el.disabled=true;
+    try{await api('PUT','precios/'+p.id,{precio:nuevo},{tarifa:'general'});p.precioSocio=nuevo;state.precios=null;status('✅ Precio socio actualizado en el Panel de Socios y en la lista pública.','ok');}
+    catch(e){el.value=p.precioSocio??'';alert(e.message);}
+    finally{el.disabled=false;}
+  }));
+  $('#pubCopiar').onclick=async()=>{try{await navigator.clipboard.writeText(pubUrl());status('🔗 Enlace copiado.','ok');}catch(_){prompt('Copie el enlace:',pubUrl());}};
+  $('#pubWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent('Precios para revendedores de Sublicuentas: '+pubUrl()),'_blank','noopener');
+  $('#pubPreview').onclick=pubVistaPrevia;
+  $('#pubImagen').onclick=pubGenerarImagen;
+  $('#pubPublicar').onclick=async()=>{
+    const btn=$('#pubPublicar');btn.disabled=true;clearTimeout(pubTimer);
+    try{const r=await api('POST','publico/publicar',{borrador:state.pub.borrador});await loadPublico(true);status(r.cambio?'✅ Lista publicada. Ya se ve en la página pública (puede tardar ~1 minuto).':'La lista ya estaba al día: no había cambios que publicar.','ok');}
+    catch(e){alert(e.message);}finally{const b2=$('#pubPublicar');if(b2)b2.disabled=false;}
+  };
+}
+async function pubVistaPrevia(){
+  clearTimeout(pubTimer);
+  let datos;
+  try{await api('PUT','publico',{borrador:state.pub.borrador});const d=await api('GET','publico');Object.assign(state.pub,d);datos=d.vistaPrevia;pubPintarEstado();}
+  catch(e){return alert(e.message);}
+  const m=modal(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><b>👁️ Vista previa (sin publicar)</b><button class="cr-btn ghost" data-x>Cerrar</button></div>
+    <iframe title="Vista previa" src="/precios-revendedores.html?preview=1" style="width:100%;height:70vh;border:1px solid #e4e7ec;border-radius:14px;background:#fff"></iframe>`,{wide:true});
+  m.querySelector('.cr-sheet').style.maxWidth='460px';
+  m.querySelector('[data-x]').onclick=()=>m._modalClose();
+  const fr=m.querySelector('iframe');
+  const enviar=()=>{try{fr.contentWindow.postMessage({tipo:'precios-preview',datos},location.origin);}catch(_){}};
+  const onMsg=e=>{if(e.origin===location.origin&&e.data&&e.data.tipo==='precios-preview-listo')enviar();};
+  window.addEventListener('message',onMsg);fr.addEventListener('load',enviar);
+  m._modalCleanup=()=>window.removeEventListener('message',onMsg);
+}
+function pubCargarScript(src,global){return new Promise((ok,no)=>{if(window[global])return ok(window[global]);const s=document.createElement('script');s.src=src;s.onload=()=>ok(window[global]);s.onerror=()=>no(new Error('No se pudo cargar '+global));document.head.appendChild(s);});}
+function pubCargarImg(src){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('No se pudo cargar el logo'));i.src=src;});}
+async function pubGenerarImagen(){
+  const btn=$('#pubImagen');btn.disabled=true;
+  try{
+    const d=await api('GET','publico');Object.assign(state.pub,d);const lista=d.publicada;
+    if(!lista||!lista.total)throw new Error('Primero publique la lista: la imagen usa solo los productos ya publicados.');
+    if(d.pendiente&&!confirm('Hay cambios SIN publicar. La imagen usará la lista ya publicada. ¿Continuar?'))return;
+    if(!document.querySelector('link[data-inter]')){const l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap';l.dataset.inter='1';document.head.appendChild(l);}
+    try{await Promise.race([Promise.all(['500 30px Inter','700 30px Inter','800 30px Inter','900 30px Inter'].map(f=>document.fonts.load(f))),new Promise(r=>setTimeout(r,2500))]);}catch(_){}
+    const [logo,qrLib]=await Promise.all([pubCargarImg('/assets/sublicuentas-logo.png'),pubCargarScript('/assets/qrcode-generator.js','qrcode')]);
+    const F='Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',W=1080,PAD=72;
+    const filas=lista.categorias.reduce((n,c)=>n+c.productos.length,0);
+    const H=Math.max(1920,560+lista.categorias.length*96+filas*104+470);
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+    const rr=(X,Y,w,h,r)=>{x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath();};
+    const corta=(t,max)=>{t=String(t||'');if(x.measureText(t).width<=max)return t;while(t.length>1&&x.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…';};
+    x.fillStyle='#fff';x.fillRect(0,0,W,H);
+    // Marca
+    rr(PAD,64,420,96,20);x.fillStyle='#0B0B0C';x.fill();
+    const lh=58,lw=logo.width*lh/logo.height;x.drawImage(logo,PAD+(420-lw)/2,64+(96-lh)/2,lw,lh);
+    x.fillStyle='#0B0B0C';x.font=`900 76px ${F}`;x.fillText('PRECIOS PARA',PAD,268);
+    x.fillStyle='#E2231A';x.fillText('REVENDEDORES',PAD,350);
+    x.fillStyle='#5B6270';x.font=`500 32px ${F}`;x.fillText('Precios especiales para socios · en Lempiras',PAD,408);
+    const f=lista.actualizadoEn?new Intl.DateTimeFormat('es-HN',{timeZone:'America/Tegucigalpa',day:'numeric',month:'long',year:'numeric'}).format(new Date(lista.actualizadoEn)):'';
+    x.fillStyle='#00A9C7';x.beginPath();x.arc(PAD+8,452,8,0,Math.PI*2);x.fill();
+    x.fillStyle='#0B0B0C';x.font=`700 28px ${F}`;x.fillText(`Actualizado: ${f}`,PAD+28,462);
+    let y=540;
+    for(const c of lista.categorias){
+      x.fillStyle='#E2231A';x.fillRect(PAD,y-12,28,6);
+      x.fillStyle='#0B0B0C';x.font=`800 28px ${F}`;x.fillText(String(c.nombre).toUpperCase(),PAD+42,y);
+      y+=34;
+      c.productos.forEach((p,i)=>{
+        const top=y;if(i){x.fillStyle='#ECEEF1';x.fillRect(PAD,top,W-PAD*2,2);}
+        const precio=p.precio==null?'Consultar':`L ${Number(p.precio).toLocaleString('es-HN')}`;
+        x.font=`800 44px ${F}`;const pw=x.measureText(precio).width;
+        x.fillStyle=p.disponible?'#0B0B0C':'#8A919C';x.textAlign='right';x.fillText(precio,W-PAD,top+66);x.textAlign='left';
+        const maxN=W-PAD*2-pw-40;
+        x.fillStyle='#0B0B0C';x.font=`700 36px ${F}`;x.fillText(corta(p.nombre,maxN),PAD,top+50);
+        x.fillStyle='#5B6270';x.font=`500 26px ${F}`;x.fillText(corta(p.disponible?p.texto:`${p.texto?p.texto+' · ':''}No disponible por ahora`,maxN),PAD,top+86);
+        y+=104;
+      });
+      y+=62;
+    }
+    // Pie: QR + CTA
+    const yQ=Math.max(y+10,H-430);
+    x.fillStyle='#ECEEF1';x.fillRect(PAD,yQ-30,W-PAD*2,2);
+    const q=qrLib(0,'M');q.addData(pubUrl());q.make();const n=q.getModuleCount(),qs=260,cel=qs/n;
+    x.fillStyle='#fff';x.fillRect(PAD,yQ,qs,qs);x.fillStyle='#0B0B0C';
+    for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))x.fillRect(Math.floor(PAD+k*cel),Math.floor(yQ+r*cel),Math.ceil(cel),Math.ceil(cel));
+    const tx=PAD+qs+40;
+    x.fillStyle='#0B0B0C';x.font=`800 34px ${F}`;x.fillText('Lista siempre actualizada',tx,yQ+56);
+    x.fillStyle='#5B6270';x.font=`500 27px ${F}`;x.fillText('Escanee el código o entre a:',tx,yQ+100);
+    x.fillStyle='#0B0B0C';x.font=`700 27px ${F}`;x.fillText(corta(pubUrl().replace(/^https?:\/\//,''),W-PAD-tx),tx,yQ+140);
+    rr(tx,yQ+176,W-PAD-tx,84,16);x.fillStyle='#E2231A';x.fill();
+    x.fillStyle='#fff';x.font=`900 30px ${F}`;x.textAlign='center';x.fillText('QUIERO SER REVENDEDOR',tx+(W-PAD-tx)/2,yQ+229);x.textAlign='left';
+    const url=cv.toDataURL('image/png');
+    const m=modal(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><b>🖼️ Imagen de precios</b><button class="cr-btn ghost" data-x>Cerrar</button></div>
+      <img src="${url}" alt="Precios para revendedores" style="width:100%;border:1px solid #e4e7ec;border-radius:12px">
+      <div style="display:flex;gap:8px;margin-top:12px"><a class="cr-btn red" style="flex:1;text-align:center" download="sublicuentas-precios-revendedores.png" href="${url}">Descargar imagen</a><button class="cr-btn ghost" data-share style="flex:1">Compartir</button></div>
+      <small style="display:block;margin-top:8px;color:#667085">Para WhatsApp/Facebook. La referencia de precios vigentes es siempre la página web.</small>`);
+    m.querySelector('[data-x]').onclick=()=>m._modalClose();
+    m.querySelector('[data-share]').onclick=async()=>{try{const blob=await (await fetch(url)).blob();const file=new File([blob],'sublicuentas-precios-revendedores.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],text:'Precios para revendedores: '+pubUrl()});else alert('Su navegador no permite compartir imágenes directo. Use "Descargar imagen".');}catch(_){}};
+  }catch(e){alert(e.message);}
+  finally{const b2=$('#pubImagen');if(b2)b2.disabled=false;}
+}
+
 /* ═══════════ util modal ═══════════ */
 function modal(innerHtml,opts={}){
   const overlay=document.createElement('div');
@@ -926,7 +1135,7 @@ function init(){
   const screen=document.getElementById('screen-revendedores');
   if(screen?.classList.contains('active')) loadPrecios();
 }
-window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; render(); }};
+window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; state.pub=null; render(); }};
 document.addEventListener('DOMContentLoaded',init);
 new MutationObserver(()=>{
   const s=document.getElementById('screen-revendedores');

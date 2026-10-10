@@ -3,6 +3,14 @@
     {
       "source": "/c/(.*)",
       "destination": "/acceso.html?token=$1"
+    },
+    {
+      "source": "/precios-mayoristas",
+      "destination": "/precios-revendedores.html"
+    },
+    {
+      "source": "/revendedores",
+      "destination": "/precios-revendedores.html"
     }
   ],
   "headers": [

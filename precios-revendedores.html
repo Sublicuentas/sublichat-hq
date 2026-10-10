@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Precios para Revendedores · Sublicuentas</title>
+<meta name="description" content="Lista de precios para socios revendedores de Sublicuentas: streaming, TV digital, música y herramientas digitales.">
+<meta property="og:title" content="Precios para Revendedores · Sublicuentas">
+<meta property="og:description" content="Empiece a vender productos digitales con precios especiales para socios.">
+<meta property="og:image" content="/assets/sublicuentas-logo.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--rojo:#E2231A;--rojo-osc:#B81811;--cian:#00A9C7;--txt:#0B0B0C;--sub:#5B6270;--suave:#8A919C;--linea:#ECEEF1;--fondo:#FFFFFF;--gris:#F6F7F8}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--fondo);color:var(--txt);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  body{padding-bottom:env(safe-area-inset-bottom)}
+  a{color:inherit}
+  .wrap{max-width:720px;margin:0 auto;padding:0 16px}
+  .preview{display:none;background:var(--txt);color:#fff;font-size:13px;font-weight:600;text-align:center;padding:9px 16px}
+  body.es-preview .preview{display:block}
+  header.wrap{padding-top:22px;padding-bottom:6px}
+  .marca{display:inline-flex;align-items:center;background:#0B0B0C;border-radius:12px;padding:9px 14px}
+  .marca img{height:26px;width:auto;display:block}
+  h1{font-size:30px;line-height:1.08;letter-spacing:-.02em;font-weight:900;margin:20px 0 8px}
+  h1 span{color:var(--rojo)}
+  .lead{font-size:16px;line-height:1.45;color:var(--sub);margin:0 0 12px;max-width:520px}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--suave);margin:0 0 4px}
+  .meta b{color:var(--txt);font-weight:600}
+  .meta .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cian);margin-right:6px;vertical-align:1px}
+  nav.cats{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(6px);border-bottom:1px solid var(--linea);margin-top:16px}
+  nav.cats .wrap{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+  nav.cats .wrap::-webkit-scrollbar{display:none}
+  nav.cats a{flex:0 0 auto;text-decoration:none;font-size:14px;font-weight:600;color:var(--sub);padding:13px 10px 11px;border-bottom:2px solid transparent}
+  nav.cats a.on{color:var(--txt);border-bottom-color:var(--cian)}
+  section.cat{padding-top:22px;scroll-margin-top:54px}
+  section.cat h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;margin:0 0 8px;color:var(--txt);display:flex;align-items:center;gap:8px}
+  section.cat h2::before{content:"";width:14px;height:3px;border-radius:2px;background:var(--rojo)}
+  .lista{border:1px solid var(--linea);border-radius:14px;overflow:hidden}
+  .prod{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-top:1px solid var(--linea);background:#fff}
+  .prod:first-child{border-top:0}
+  .prod .info{min-width:0}
+  .prod .nom{font-size:16px;font-weight:700;line-height:1.25}
+  .prod .sec{font-size:13.5px;color:var(--sub);margin-top:3px;line-height:1.35}
+  .prod .pre{text-align:right;flex:0 0 auto}
+  .prod .lbl{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--suave);text-transform:uppercase}
+  .prod .monto{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-top:1px;white-space:nowrap}
+  .prod .monto small{font-size:13px;font-weight:700;margin-right:3px;color:var(--sub)}
+  .prod .consultar{display:inline-block;margin-top:5px;font-size:12.5px;font-weight:700;color:var(--rojo);text-decoration:none}
+  .prod.agotado .monto{color:var(--suave)}
+  .tag{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;color:var(--sub);background:var(--gris);border-radius:6px;padding:3px 7px}
+  .cta{margin:34px 0 0;padding:26px 20px;border:1px solid var(--linea);border-radius:18px;text-align:center}
+  .cta h3{font-size:22px;line-height:1.2;font-weight:900;letter-spacing:-.01em;margin:0 0 8px}
+  .cta p{margin:0 auto 18px;color:var(--sub);font-size:15px;line-height:1.45;max-width:420px}
+  .btn{display:flex;align-items:center;justify-content:center;text-align:center;gap:8px;width:100%;border:0;border-radius:12px;padding:16px 18px;font:800 15px/1 Inter,system-ui,sans-serif;letter-spacing:.04em;text-decoration:none;cursor:pointer}
+  .btn-rojo{background:var(--rojo);color:#fff}
+  .btn-rojo:active{background:var(--rojo-osc)}
+  .compartir{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 0}
+  .btn-linea{background:#fff;color:var(--txt);border:1px solid #D9DDE3;font-weight:700;letter-spacing:0;font-size:14px;padding:14px 12px}
+  .nota{font-size:12px;color:var(--suave);line-height:1.5;text-align:center;margin:22px 0 30px}
+  .estado{padding:40px 0;text-align:center;color:var(--sub);font-size:15px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--txt);color:#fff;font-size:14px;font-weight:600;padding:11px 16px;border-radius:10px;transition:.2s;pointer-events:none}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (min-width:640px){h1{font-size:40px}.prod{padding:15px 20px}}
+</style>
+</head>
+<body>
+<div class="preview">Vista previa · así se verá la lista. Todavía no está publicada.</div>
+<header class="wrap">
+  <div class="marca"><img src="/assets/sublicuentas-logo.png" alt="Sublicuentas"></div>
+  <h1>Precios para <span>Revendedores</span></h1>
+  <p class="lead">Empiece a vender productos digitales con precios especiales para socios.</p>
+  <div class="meta"><span><i class="punto"></i>Precios actualizados por Sublicuentas</span><span id="fecha"></span></div>
+</header>
+<nav class="cats" id="cats" hidden><div class="wrap" id="catsWrap"></div></nav>
+<main class="wrap">
+  <div id="lista"><div class="estado">Cargando precios…</div></div>
+  <div class="cta" id="cta">
+    <h3>¿Quiere convertirse en revendedor?</h3>
+    <p>Venda streaming, TV digital y productos digitales con Sublicuentas.</p>
+    <a class="btn btn-rojo" id="ctaBtn" href="#" target="_blank" rel="noopener">QUIERO SER REVENDEDOR</a>
+  </div>
+  <div class="compartir">
+    <a class="btn btn-linea" id="shareWa" href="#" target="_blank" rel="noopener">Compartir por WhatsApp</a>
+    <button class="btn btn-linea" id="copiar" type="button">Copiar enlace</button>
+  </div>
+  <p class="nota">Precios en Lempiras, exclusivos para socios revendedores.<br>La lista web es la referencia de precios vigentes.</p>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const L=n=>Number(n).toLocaleString("es-HN",{maximumFractionDigits:2});
+  const slug=s=>String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-");
+  const esPreview=new URLSearchParams(location.search).get("preview")==="1";
+  const urlPublica=location.origin+"/precios-mayoristas";
+  let contacto={};
+  function toast(m){const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("on"),1800);}
+  function enlaceConsulta(p){
+    if(!contacto.enlace)return "";
+    if(contacto.destino!=="whatsapp")return contacto.enlace;
+    const num=contacto.enlace.split("wa.me/")[1].split("?")[0];
+    return `https://wa.me/${num}?text=${encodeURIComponent(`Hola, quiero consultar el precio de revendedor de ${p.nombre}${p.texto?` (${p.texto})`:""}.`)}`;
+  }
+  function fechaTexto(ms){
+    if(!ms)return "";
+    try{return new Intl.DateTimeFormat("es-HN",{timeZone:"America/Tegucigalpa",day:"numeric",month:"long",year:"numeric"}).format(new Date(ms));}catch(_){return "";}
+  }
+  function pintar(d){
+    contacto=d.contacto||{};
+    const f=fechaTexto(d.actualizadoEn);
+    $("fecha").innerHTML=f?`Última actualización: <b>${esc(f)}</b>`:"";
+    const cats=d.categorias||[];
+    if(!cats.length){$("lista").innerHTML=`<div class="estado">La lista de precios se está actualizando. Escríbanos para recibirla.</div>`;$("cats").hidden=true;}
+    else{
+      $("catsWrap").innerHTML=cats.map((c,i)=>`<a href="#cat-${slug(c.nombre)}" class="${i?"":"on"}">${esc(c.nombre)}</a>`).join("");
+      $("cats").hidden=cats.length<2;
+      $("lista").innerHTML=cats.map(c=>`<section class="cat" id="cat-${slug(c.nombre)}"><h2>${esc(c.nombre)}</h2><div class="lista">${c.productos.map(p=>{
+        const consulta=enlaceConsulta(p);
+        const sinPrecio=p.precio==null;
+        const precio=sinPrecio?(consulta&&p.disponible?`<a class="monto" style="font-size:16px;color:var(--rojo);text-decoration:none;display:block" href="${esc(consulta)}" target="_blank" rel="noopener">Consultar</a>`:`<div class="monto" style="font-size:16px">Consultar</div>`):`<div class="monto"><small>L</small>${esc(L(p.precio))}</div>`;
+        const pie=!p.disponible?`<span class="tag">No disponible por ahora</span>`:(consulta&&!sinPrecio?`<a class="consultar" href="${esc(consulta)}" target="_blank" rel="noopener">Consultar</a>`:"");
+        return `<div class="prod${p.disponible?"":" agotado"}"><div class="info"><div class="nom">${esc(p.nombre)}</div>${p.texto?`<div class="sec">${esc(p.texto)}</div>`:""}</div><div class="pre"><div class="lbl">Precio revendedor</div>${precio}${pie}</div></div>`;}).join("")}</div></section>`).join("");
+    }
+    const cta=$("ctaBtn");
+    if(contacto.enlace){cta.href=contacto.enlace;cta.style.display="";}else{cta.style.display="none";}
+    marcarCategoria();
+  }
+  function marcarCategoria(){
+    const links=[...document.querySelectorAll("#catsWrap a")];if(!links.length)return;
+    const secs=links.map(a=>document.querySelector(a.getAttribute("href")));
+    let act=0;secs.forEach((s,i)=>{if(s&&s.getBoundingClientRect().top<90)act=i;});
+    links.forEach((a,i)=>a.classList.toggle("on",i===act));
+  }
+  addEventListener("scroll",marcarCategoria,{passive:true});
+  $("shareWa").href=`https://wa.me/?text=${encodeURIComponent(`Precios para revendedores de Sublicuentas: ${urlPublica}`)}`;
+  $("copiar").addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText(urlPublica);toast("Enlace copiado");}
+    catch(_){const t=document.createElement("textarea");t.value=urlPublica;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();toast("Enlace copiado");}
+  });
+  if(esPreview){
+    document.body.classList.add("es-preview");
+    addEventListener("message",e=>{if(e.origin===location.origin&&e.data&&e.data.tipo==="precios-preview")pintar(e.data.datos||{});});
+    if(window.parent!==window)window.parent.postMessage({tipo:"precios-preview-listo"},location.origin);
+    return;
+  }
+  fetch("/api/precios-publicos",{cache:"no-store"}).then(r=>r.json()).then(d=>{if(!d.ok)throw new Error(d.error);pintar(d);})
+    .catch(()=>{$("lista").innerHTML=`<div class="estado">No pudimos cargar la lista. Intente de nuevo en un momento.</div>`;});
+})();
+</script>
+</body>
+</html>
