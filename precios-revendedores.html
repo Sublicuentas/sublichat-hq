@@ -50,6 +50,17 @@
   .prod .monto small{font-size:13px;font-weight:700;margin-right:3px;color:var(--sub)}
   .prod .consultar{display:inline-block;margin-top:5px;font-size:12.5px;font-weight:700;color:var(--rojo);text-decoration:none}
   .prod.agotado .monto{color:var(--suave)}
+  /* R147 · precio sugerido + condiciones */
+  .prod .sug{margin-top:8px;padding-top:7px;border-top:1px dashed var(--linea)}
+  .prod .sug .lbl{letter-spacing:.06em}
+  .prod .sug-monto{font-size:15px;font-weight:700;white-space:nowrap}
+  .prod .gan{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;color:#007A90;background:#E6F7FA;border-radius:6px;padding:3px 7px;white-space:nowrap}
+  .cond{display:flex;gap:12px;align-items:flex-start;margin:16px 0 0;padding:14px 16px;border:1px solid var(--linea);border-radius:14px;background:var(--gris)}
+  .cond .ico{flex:0 0 auto;width:28px;height:28px;border-radius:8px;background:#fff;border:1px solid var(--linea);display:grid;place-items:center;font-size:14px;font-weight:800;color:var(--cian)}
+  .cond b.t{display:block;font-size:14.5px;line-height:1.3}
+  .cond .min{margin:4px 0 0;font-size:15px}
+  .cond .min strong{color:var(--rojo)}
+  .cond .det{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--sub)}
   .tag{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;color:var(--sub);background:var(--gris);border-radius:6px;padding:3px 7px}
   .cta{margin:34px 0 0;padding:26px 20px;border:1px solid var(--linea);border-radius:18px;text-align:center}
   .cta h3{font-size:22px;line-height:1.2;font-weight:900;letter-spacing:-.01em;margin:0 0 8px}
@@ -74,6 +85,7 @@
   <p class="lead">Empiece a vender productos digitales con precios especiales para socios.</p>
   <div class="meta"><span><i class="punto"></i>Precios actualizados por Sublicuentas</span><span id="fecha"></span></div>
 </header>
+<div class="wrap"><div class="cond" id="cond" hidden></div></div>
 <nav class="cats" id="cats" hidden><div class="wrap" id="catsWrap"></div></nav>
 <main class="wrap">
   <div id="lista"><div class="estado">Cargando precios…</div></div>
@@ -112,6 +124,12 @@
   }
   function pintar(d){
     contacto=d.contacto||{};
+    const c=d.condiciones;
+    if(c){
+      const n=Number(c.minimoMensual)||0;
+      $("cond").innerHTML=`<div class="ico">✓</div><div><b class="t">Condiciones para acceder a precios de revendedor</b>${n?`<p class="min">Compra mínima mensual: <strong>${n} perfil${n===1?"":"es"}</strong>.</p>`:""}<p class="det">${n?"Los precios mostrados son exclusivos para socios revendedores que cumplan con la compra mínima mensual.":"Los precios mostrados son exclusivos para socios revendedores."}${c.texto?` ${esc(c.texto)}`:""}</p></div>`;
+      $("cond").hidden=false;
+    }else{$("cond").hidden=true;}
     const f=fechaTexto(d.actualizadoEn);
     $("fecha").innerHTML=f?`Última actualización: <b>${esc(f)}</b>`:"";
     const cats=d.categorias||[];
@@ -124,7 +142,8 @@
         const sinPrecio=p.precio==null;
         const precio=sinPrecio?(consulta&&p.disponible?`<a class="monto" style="font-size:16px;color:var(--rojo);text-decoration:none;display:block" href="${esc(consulta)}" target="_blank" rel="noopener">Consultar</a>`:`<div class="monto" style="font-size:16px">Consultar</div>`):`<div class="monto"><small>L</small>${esc(L(p.precio))}</div>`;
         const pie=!p.disponible?`<span class="tag">No disponible por ahora</span>`:(consulta&&!sinPrecio?`<a class="consultar" href="${esc(consulta)}" target="_blank" rel="noopener">Consultar</a>`:"");
-        return `<div class="prod${p.disponible?"":" agotado"}"><div class="info"><div class="nom">${esc(p.nombre)}</div>${p.texto?`<div class="sec">${esc(p.texto)}</div>`:""}</div><div class="pre"><div class="lbl">Precio revendedor</div>${precio}${pie}</div></div>`;}).join("")}</div></section>`).join("");
+        const sug=p.precioSugerido!=null?`<div class="sug"><div class="lbl">Precio sugerido de venta</div><div class="sug-monto">L ${esc(L(p.precioSugerido))}</div>${p.gananciaSugerida!=null?`<span class="gan">Ganancia sugerida: L ${esc(L(p.gananciaSugerida))}</span>`:""}</div>`:"";
+        return `<div class="prod${p.disponible?"":" agotado"}"><div class="info"><div class="nom">${esc(p.nombre)}</div>${p.texto?`<div class="sec">${esc(p.texto)}</div>`:""}</div><div class="pre"><div class="lbl">Precio revendedor</div>${precio}${sug}${pie}</div></div>`;}).join("")}</div></section>`).join("");
     }
     const cta=$("ctaBtn");
     if(contacto.enlace){cta.href=contacto.enlace;cta.style.display="";}else{cta.style.display="none";}

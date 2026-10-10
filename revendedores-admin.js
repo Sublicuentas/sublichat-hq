@@ -911,7 +911,7 @@ async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+i
    BORRADOR hasta tocar "Publicar"; el precio socio se edita en su fuente real. */
 const PUB_CATS=['Streaming','TV Digital','Música','Herramientas','Inteligencia Artificial','Recargas de juegos'];
 const pubUrl=()=>location.origin+'/precios-mayoristas';
-const pubItem=id=>{const b=state.pub.borrador;b.items=b.items||{};if(!b.items[id])b.items[id]={publico:false,categoria:'',orden:null,texto:'',disponible:true,usarPrecioSocio:true,precioMostrado:null};return b.items[id];};
+const pubItem=id=>{const b=state.pub.borrador;b.items=b.items||{};if(!b.items[id])b.items[id]={publico:false,categoria:'',orden:null,texto:'',disponible:true,usarPrecioSocio:true,precioMostrado:null,precioSugerido:null};return b.items[id];};
 const pubFecha=ms=>ms?new Date(ms).toLocaleString('es-HN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):'nunca';
 async function loadPublico(force){
   if(state.pub&&!force)return renderPublico();
@@ -935,6 +935,7 @@ function pubFila(p){
     <div class="pub-main">
       <div class="pub-name"><b>${esc(p.nombre)}</b>${p.variante?`<small>${esc(p.variante)}</small>`:''}${p.activoSocios?'':'<small style="color:#b42318">Apagado en el Panel de Socios: no sale en la lista</small>'}</div>
       <label class="pub-price">Precio socio<span>L <input type="number" min="0" step="1" inputmode="decimal" data-pub-socio="${esc(p.id)}" value="${p.precioSocio??''}" placeholder="—"></span></label>
+      <label class="pub-price">Venta sugerida<span>L <input type="number" min="0" step="1" inputmode="decimal" data-pub-k="precioSugerido" data-id="${esc(p.id)}" value="${it.precioSugerido??''}" placeholder="—"></span></label>
       <label class="pub-sw"><input type="checkbox" data-pub-k="publico" data-id="${esc(p.id)}" ${it.publico?'checked':''}><i></i><span>${it.publico?'ON':'OFF'}</span></label>
       <button class="cr-btn ghost pub-more" data-pub-more="${esc(p.id)}" type="button">Opciones</button>
     </div>
@@ -952,6 +953,7 @@ function renderPublico(){
   const b=$('#revBody');if(!state.pub)return loadPublico();
   const grupos=[];state.pub.productos.forEach(p=>{let g=grupos.find(x=>x.k===p.categoriaSocios);if(!g){g={k:p.categoriaSocios,items:[]};grupos.push(g);}g.items.push(p);});
   const c=state.pub.borrador.contacto||{};
+  const cond=state.pub.borrador.condiciones||{minimoMensual:5,mostrar:true,texto:''};
   b.innerHTML=`<style>
     #rbac-revendedores .pub-top{display:grid;gap:10px;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin-bottom:12px}
     #rbac-revendedores .pub-actions{display:flex;flex-wrap:wrap;gap:8px}
@@ -960,7 +962,7 @@ function renderPublico(){
     #rbac-revendedores .pub-list{background:#fff;border:1px solid #e4e7ec;border-radius:14px;overflow:hidden}
     #rbac-revendedores .pub-row{border-top:1px solid #f0f2f5;padding:10px 12px}
     #rbac-revendedores .pub-row:first-child{border-top:0}
-    #rbac-revendedores .pub-main{display:grid;grid-template-columns:minmax(0,1fr) 112px 74px auto;gap:10px;align-items:center}
+    #rbac-revendedores .pub-main{display:grid;grid-template-columns:minmax(0,1fr) 104px 104px 74px auto;gap:10px;align-items:center}
     #rbac-revendedores .pub-name b{display:block;font-size:14.5px;color:#101828}
     #rbac-revendedores .pub-name small{display:block;font-size:12px;color:#667085;margin-top:2px}
     #rbac-revendedores .pub-price{font-size:10.5px;font-weight:800;color:#667085;display:grid;gap:3px}
@@ -976,8 +978,9 @@ function renderPublico(){
     #rbac-revendedores .pub-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;margin-top:10px;padding:10px;border-radius:12px;background:#f9fafb}
     #rbac-revendedores .pub-opts[hidden]{display:none}
     #rbac-revendedores .pub-top input,#rbac-revendedores .pub-opts input{box-sizing:border-box;width:100%;min-width:0}
+    #rbac-revendedores .pub-top input[type=checkbox],#rbac-revendedores .pub-opts input[type=checkbox]{width:auto;flex:0 0 auto}
     #rbac-revendedores .pub-check{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#344054}
-    @media(max-width:640px){#rbac-revendedores .pub-main{grid-template-columns:minmax(0,1fr) 96px;}#rbac-revendedores .pub-contact,#rbac-revendedores .pub-opts{grid-template-columns:1fr}}
+    @media(max-width:640px){#rbac-revendedores .pub-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}#rbac-revendedores .pub-main .pub-name{grid-column:1/-1}#rbac-revendedores .pub-contact,#rbac-revendedores .pub-opts{grid-template-columns:1fr}}
   </style>
   <div class="pub-top">
     <div><b style="font-size:16px">Lista pública de precios</b><div style="color:#667085;font-size:13px;margin-top:3px">Página sin login para prospectos: <a href="${esc(pubUrl())}" target="_blank" rel="noopener">${esc(pubUrl().replace(/^https?:\/\//,''))}</a>. No da acceso al Panel de Socios.</div></div>
@@ -993,6 +996,12 @@ function renderPublico(){
       <label class="cr-field">Botón "Quiero ser revendedor" → WhatsApp o enlace<input id="pubDestino" value="${esc(c.destino||'')}" placeholder="9999-9999 o https://…"></label>
       <label class="cr-field">Mensaje que llega por WhatsApp<input id="pubMensaje" maxlength="300" value="${esc(c.mensaje||'Hola, quiero ser revendedor de Sublicuentas.')}"></label>
     </div>
+    <div style="border-top:1px solid #eef1f4;padding-top:10px"><b style="font-size:14px">Configuración comercial</b><div style="color:#667085;font-size:12.5px;margin-top:2px">Condición para aplicar a precios de revendedor. Es mensual: no obliga a comprar esa cantidad en cada pedido.</div></div>
+    <div class="pub-contact">
+      <label class="cr-field">Compra mínima mensual (perfiles)<input id="pubMinimo" type="number" min="1" step="1" inputmode="numeric" value="${cond.minimoMensual??''}" placeholder="Ej. 5"></label>
+      <label class="pub-check" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="pubCondMostrar" ${cond.mostrar!==false?'checked':''}> Mostrar condición en la página pública</label>
+      <label class="cr-field wide" style="grid-column:1/-1">Texto adicional de condiciones (opcional)<input id="pubCondTexto" maxlength="400" value="${esc(cond.texto||'')}" placeholder="Ej. Los pedidos se pagan por adelantado."></label>
+    </div>
   </div>
   <div class="price-toolbar"><label class="price-search">🔎 <input id="pubBuscar" value="${esc(state.pub.q||'')}" placeholder="Buscar producto…"></label><small>ON = aparece en la lista pública. El precio socio es el mismo del Panel de Socios.</small></div>
   <datalist id="pubCats">${PUB_CATS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
@@ -1003,13 +1012,16 @@ function renderPublico(){
   b.querySelectorAll('[data-pub-more]').forEach(x=>x.onclick=()=>{const o=x.closest('[data-pub-row]').querySelector('.pub-opts');o.hidden=!o.hidden;});
   b.querySelectorAll('[data-pub-k]').forEach(el=>el.addEventListener(el.type==='checkbox'?'change':'input',()=>{
     const it=pubItem(el.dataset.id),k=el.dataset.pubK;
-    if(el.type==='checkbox')it[k]=el.checked;else if(k==='orden'||k==='precioMostrado')it[k]=el.value===''?null:Number(el.value);else it[k]=el.value;
+    if(el.type==='checkbox')it[k]=el.checked;else if(k==='orden'||k==='precioMostrado'||k==='precioSugerido')it[k]=el.value===''?null:Number(el.value);else it[k]=el.value;
     if(k==='publico'){const sp=el.parentElement.querySelector('span');if(sp)sp.textContent=el.checked?'ON':'OFF';}
     if(k==='usarPrecioSocio'){const pm=el.closest('.pub-opts').querySelector('[data-pub-k="precioMostrado"]');pm.disabled=el.checked;}
     pubGuardarLuego();
   }));
   const contacto=()=>{state.pub.borrador.contacto={destino:$('#pubDestino').value.trim(),mensaje:$('#pubMensaje').value.trim()};pubGuardarLuego();};
   $('#pubDestino').oninput=contacto;$('#pubMensaje').oninput=contacto;
+  // R147: compra mínima mensual editable (sin tocar código).
+  const condiciones=()=>{const v=$('#pubMinimo').value;state.pub.borrador.condiciones={minimoMensual:v===''?null:Math.max(1,Math.round(Number(v))||1),mostrar:$('#pubCondMostrar').checked,texto:$('#pubCondTexto').value.trim()};pubGuardarLuego();};
+  $('#pubMinimo').oninput=condiciones;$('#pubCondMostrar').onchange=condiciones;$('#pubCondTexto').oninput=condiciones;
   // Precio socio: se guarda en su FUENTE (Panel de Socios) — se refleja en socios y en la página pública.
   b.querySelectorAll('[data-pub-socio]').forEach(el=>el.addEventListener('change',async()=>{
     const p=state.pub.productos.find(x=>x.id===el.dataset.pubSocio);if(!p)return;
@@ -1059,7 +1071,8 @@ async function pubGenerarImagen(){
     const [logo,qrLib]=await Promise.all([pubCargarImg('/assets/sublicuentas-logo.png'),pubCargarScript('/assets/qrcode-generator.js','qrcode')]);
     const F='Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',W=1080,PAD=72;
     const filas=lista.categorias.reduce((n,c)=>n+c.productos.length,0);
-    const H=Math.max(1920,560+lista.categorias.length*96+filas*104+470);
+    const conSug=lista.categorias.some(c=>c.productos.some(p=>p.precioSugerido!=null)),FILA=conSug?128:104,minimo=lista.condiciones&&lista.condiciones.minimoMensual;
+    const H=Math.max(1920,(minimo?610:560)+lista.categorias.length*96+filas*FILA+470);
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
     const rr=(X,Y,w,h,r)=>{x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath();};
     const corta=(t,max)=>{t=String(t||'');if(x.measureText(t).width<=max)return t;while(t.length>1&&x.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…';};
@@ -1074,19 +1087,28 @@ async function pubGenerarImagen(){
     x.fillStyle='#00A9C7';x.beginPath();x.arc(PAD+8,452,8,0,Math.PI*2);x.fill();
     x.fillStyle='#0B0B0C';x.font=`700 28px ${F}`;x.fillText(`Actualizado: ${f}`,PAD+28,462);
     let y=540;
+    if(minimo){ // R147: la condición sale de la configuración, no de la plantilla
+      rr(PAD,492,W-PAD*2,64,14);x.fillStyle='#F6F7F8';x.fill();
+      x.fillStyle='#0B0B0C';x.font=`700 28px ${F}`;x.fillText(`Compra mínima mensual: ${minimo} perfil${minimo===1?'':'es'}`,PAD+24,534);
+      y=610;
+    }
     for(const c of lista.categorias){
       x.fillStyle='#E2231A';x.fillRect(PAD,y-12,28,6);
       x.fillStyle='#0B0B0C';x.font=`800 28px ${F}`;x.fillText(String(c.nombre).toUpperCase(),PAD+42,y);
+      x.fillStyle='#8A919C';x.font=`700 20px ${F}`;x.textAlign='right';x.fillText('PRECIO REVENDEDOR',W-PAD,y);x.textAlign='left';
       y+=34;
       c.productos.forEach((p,i)=>{
         const top=y;if(i){x.fillStyle='#ECEEF1';x.fillRect(PAD,top,W-PAD*2,2);}
         const precio=p.precio==null?'Consultar':`L ${Number(p.precio).toLocaleString('es-HN')}`;
         x.font=`800 44px ${F}`;const pw=x.measureText(precio).width;
         x.fillStyle=p.disponible?'#0B0B0C':'#8A919C';x.textAlign='right';x.fillText(precio,W-PAD,top+66);x.textAlign='left';
-        const maxN=W-PAD*2-pw-40;
+        const sugTxt=p.precioSugerido!=null?`Venta sugerida L ${Number(p.precioSugerido).toLocaleString('es-HN')}${p.gananciaSugerida!=null?` · gana L ${Number(p.gananciaSugerida).toLocaleString('es-HN')}`:''}`:'';
+        x.font=`600 24px ${F}`;const sw=sugTxt?x.measureText(sugTxt).width:0;
+        const maxN=W-PAD*2-Math.max(pw,sw)-40;
         x.fillStyle='#0B0B0C';x.font=`700 36px ${F}`;x.fillText(corta(p.nombre,maxN),PAD,top+50);
         x.fillStyle='#5B6270';x.font=`500 26px ${F}`;x.fillText(corta(p.disponible?p.texto:`${p.texto?p.texto+' · ':''}No disponible por ahora`,maxN),PAD,top+86);
-        y+=104;
+        if(sugTxt){x.textAlign='right';x.font=`600 24px ${F}`;x.fillStyle='#007A90';x.fillText(sugTxt,W-PAD,top+104);x.textAlign='left';}
+        y+=FILA;
       });
       y+=62;
     }
