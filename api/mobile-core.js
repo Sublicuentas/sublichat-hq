@@ -154,8 +154,9 @@ function refrescarFichaTextoMovil(texto = '', service = {}) {
     reemplazarValorEtiqueta(lines, /📅\s*Renovaci[oó]n\s*:/i, fecha);
     reemplazarValorEtiqueta(lines, /(📅|⏳)\s*Pr[oó]ximo pago\s*:/i, fecha);
   }
-  reemplazarValorEtiqueta(lines, /📧\s*Correo\s*:/i, principal.correo || service.correo);
-  reemplazarValorEtiqueta(lines, /🔑\s*Clave\s*:/i, principal.clave || service.clave);
+  reemplazarValorEtiqueta(lines, /(📧|📩|📨|✉️?)\s*Correo\s*:/i, principal.correo || service.correo);
+  // R143: Netflix VIP y otras plantillas dicen "🔑 Contraseña:" (antes solo se refrescaba "🔑 Clave:").
+  if (service.maxPlayer !== true) reemplazarValorEtiqueta(lines, /(🔑|🔒)\s*(Clave|Contrase[ñn]a)\s*:/i, principal.clave || service.clave);
   reemplazarValorEtiqueta(lines, /📎\s*Pin\s*:/i, principal.pinPerfil || principal.pin || service.pinPerfil || service.pin);
   return lines.join('\n');
 }
@@ -291,3 +292,4 @@ module.exports = async function mobileCore(req, res) {
   if (action === 'config') return getConfig(req, res);
   return res.status(400).json({ ok:false, error:'Acción no válida.' });
 };
+module.exports.__pruebas = { refrescarFichaTextoMovil }; // R143

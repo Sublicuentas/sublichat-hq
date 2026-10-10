@@ -1118,10 +1118,29 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   else if (principal.pinPerfil || pinPerfil) out.pinPerfil = principal.pinPerfil || pinPerfil;
 
   if (fichaTexto) {
-    out.fichaTexto = fichaTexto;
+    out.fichaTexto = refrescarCredencialesFicha(fichaTexto, out); // R143
     out.fichaActualizadaAt = isoNow();
   }
   return out;
+}
+
+// R143 · La APK/web reenvían la ficha de texto que ya estaba guardada. Si se corrigió la clave, el correo o el
+// PIN, ese texto viejo seguía diciendo "Contraseña: —". Aquí se actualizan esas líneas con lo que REALMENTE
+// quedó guardado (solo fichas de 1 perfil y sin Max Player; el resto del texto no se toca).
+function refrescarCredencialesFicha(texto = "", s = {}) {
+  let t = String(texto || "");
+  if (!t || s.maxPlayer === true || (Array.isArray(s.perfiles) && s.perfiles.length > 1)) return t;
+  const p0 = (Array.isArray(s.perfiles) && s.perfiles[0]) || {};
+  const linea = (etiquetas, valor) => {
+    const v = String(valor || "").trim();
+    if (!v || /[*\n]/.test(v)) return;
+    const re = new RegExp(`^([ \\t]*\\*?[^\\p{L}\\p{N}\\n]{0,8})(${etiquetas})(\\s*:\\s*)([^*\\n]*?)([ \\t]*\\*?[ \\t]*)$`, "gimu");
+    t = t.replace(re, (m, a, b, c, viejo, d) => `${a}${b}${c}${v}${d}`);
+  };
+  if (!s.sinClave) linea("Contraseña|Contrasena|Clave", p0.clave || s.clave);
+  if (s.correo) linea("Correo", p0.correo || s.correo);
+  if (s.pinPerfil) linea("Pin|PIN", p0.pinPerfil || s.pinPerfil);
+  return t;
 }
 
 function limpiarServicioCRM(servicio = {}) {
