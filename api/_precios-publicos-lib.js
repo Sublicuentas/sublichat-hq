@@ -154,3 +154,5 @@ export async function leerPreciosSocios(db) {
 }
 
 export const CONFIG_DOC = ["precios_publicos", "config"];
+// R148: versión del servidor, para que la pantalla avise si Vercel no publicó la actualización.
+export const VERSION_PRECIOS_PUBLICOS = "r148";

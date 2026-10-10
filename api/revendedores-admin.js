@@ -18,7 +18,7 @@
 //   REV_API_BASE  (opcional; por defecto https://sublicuentas-panel-api.onrender.com)
 
 import admin from "firebase-admin";
-import { normalizarBorrador, firmaBorrador, armarListaPublica, leerPreciosSocios, categoriaLimpia, CONFIG_DOC } from "./_precios-publicos-lib.js"; // R145
+import { normalizarBorrador, firmaBorrador, armarListaPublica, leerPreciosSocios, categoriaLimpia, CONFIG_DOC, VERSION_PRECIOS_PUBLICOS } from "./_precios-publicos-lib.js"; // R145
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -185,7 +185,7 @@ async function manejarPublico(req, res, user) {
     const borrador = normalizarBorrador(cfg.borrador || cfg.publicado || {}, ids);
     const publicado = normalizarBorrador(cfg.publicado || {}, ids);
     return res.status(200).json({
-      ok: true, productos, borrador, publicadoEn: msTs(cfg.publicadoEn), borradorEn: msTs(cfg.borradorEn),
+      ok: true, version: VERSION_PRECIOS_PUBLICOS, productos, borrador, publicadoEn: msTs(cfg.publicadoEn), borradorEn: msTs(cfg.borradorEn),
       pendiente: firmaBorrador(borrador) !== firmaBorrador(publicado),
       vistaPrevia: armarListaPublica(docs, { ...borrador, publicadoEn: Date.now() }),
       publicada: armarListaPublica(docs, { ...publicado, publicadoEn: cfg.publicadoEn || 0 }),
@@ -194,7 +194,7 @@ async function manejarPublico(req, res, user) {
   if (method === "PUT" && !sub) { // guardar borrador (no cambia la página pública)
     const borrador = normalizarBorrador((req.body || {}).borrador || {}, ids);
     await ref.set({ borrador, borradorEn: Date.now(), borradorPor: quien }, { merge: true });
-    return res.status(200).json({ ok: true, borrador, pendiente: firmaBorrador(borrador) !== firmaBorrador(cfg.publicado || {}) });
+    return res.status(200).json({ ok: true, version: VERSION_PRECIOS_PUBLICOS, borrador, pendiente: firmaBorrador(borrador) !== firmaBorrador(cfg.publicado || {}) });
   }
   if (method === "POST" && sub === "publicar") {
     const borrador = normalizarBorrador((req.body || {}).borrador || cfg.borrador || {}, ids);
