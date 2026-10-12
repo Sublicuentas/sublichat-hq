@@ -63,6 +63,7 @@
 (function(){
   'use strict';
   var OFFICE='generated_images/oficina-ejecutiva-hero.webp';
+  var HERO_LIGHT='generated_images/inicio-visual1-escritura.webp'; // Visual 1: foto clara predeterminada del Inicio
   function pct(v){v=Number(v);return Number.isFinite(v)?Math.max(0,Math.min(100,Math.round(v))):50;}
   function profile(){try{return typeof window.sublichatGetProfile==='function'?window.sublichatGetProfile():{};}catch(e){return {};}}
   function bgUrl(url){return 'url("'+String(url||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]/g,'')+'")';}
@@ -92,14 +93,32 @@
     }
     var hero=document.getElementById('quoteCard');
     if(hero){
-      var overlay='linear-gradient(90deg,rgba(3,25,52,.94) 0%,rgba(3,29,57,.72) 38%,rgba(3,29,57,.14) 70%),';
-      hero.style.setProperty('background-image',overlay+bgUrl(image),'important');
-      hero.style.setProperty('background-size','100% 100%,'+sizeFor(v.hz),'important');
-      hero.style.setProperty('background-position','center,'+v.hx+'% '+v.hy+'%','important');
+      // Visual 1 (12/10/2026): en tema claro el banner va con velo claro y texto azul oscuro.
+      // Se respeta la foto y el encuadre que cada usuario eligió en Perfil; solo cambia el velo
+      // y la foto predeterminada del Inicio cuando el usuario no ha subido una propia.
+      var light=document.body.classList.contains('theme-light');
+      var narrow=window.innerWidth<900;
+      var heroImage=p.banner||(light?HERO_LIGHT:OFFICE);
+      var overlay=!light?'linear-gradient(90deg,rgba(3,25,52,.94) 0%,rgba(3,29,57,.72) 38%,rgba(3,29,57,.14) 70%),'
+        :narrow?'linear-gradient(90deg,rgba(234,244,253,.97) 0%,rgba(234,244,253,.9) 55%,rgba(234,244,253,.55) 100%),'
+        :'linear-gradient(90deg,#EAF4FD 0%,#EAF4FD 44%,rgba(234,244,253,.85) 52%,rgba(234,244,253,.35) 60%,rgba(234,244,253,0) 70%),';
+      var lightDefault=light&&!p.banner&&v.mode!=='custom';
+      hero.style.setProperty('background-image',overlay+bgUrl(heroImage),'important');
+      hero.style.setProperty('background-size','100% 100%,'+(lightDefault&&!narrow?'auto 100%':sizeFor(v.hz)),'important');
+      hero.style.setProperty('background-position','center,'+(lightDefault?(narrow?'70% center':'right center'):(v.hx+'% '+v.hy+'%')),'important');
+      hero.style.setProperty('background-repeat','no-repeat','important');
+      hero.style.setProperty('background-color',light?'#EAF4FD':'','important');
     }
   }
   function applySaved(){applyActual(values(profile()));}
   window.sublichatApplyBannerCrop=applySaved;
+  // Visual 1: al cambiar tema claro/oscuro o pasar de celular a escritorio, se vuelve a pintar el velo.
+  (function(){
+    var lastLight=null,lastNarrow=null;
+    function check(){var l=document.body&&document.body.classList.contains('theme-light'),n=window.innerWidth<900;if(l!==lastLight||n!==lastNarrow){lastLight=l;lastNarrow=n;try{applySaved();}catch(e){}}}
+    function start(){if(!document.body)return;new MutationObserver(check).observe(document.body,{attributes:true,attributeFilter:['class']});window.addEventListener('resize',check,{passive:true});}
+    if(document.body)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
+  })();
   function captureEditorCrop(base){
     var px=document.getElementById('bannerPosX'),py=document.getElementById('bannerPosY'),pz=document.getElementById('bannerZoom');
     var hx=document.getElementById('heroBannerPosX'),hy=document.getElementById('heroBannerPosY'),hz=document.getElementById('heroBannerZoom');
@@ -5477,6 +5496,173 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <script src="/catalogo-relojes-admin.js?v=20260907-8"></script>
 <script src="/revendedores-admin.js?v=20261010-r148"></script>
 <script src="/sorteos-admin.js?v=20261002-1"></script>
+<style id="licInicioVisual1Web20261012">
+/* ==================================================================
+   VISUAL 1 · INICIO (Sublichat Web) · 12/10/2026
+   Solo capa visual: no cambia datos, ids, handlers ni rutas.
+   Todo va bajo #screen-inicio, excepto el pulido de la barra lateral
+   (que es la misma en todas las pantallas y solo cambia colores/espacios).
+   ================================================================== */
+
+/* ---------- Banner: foto clara + texto azul oscuro (tema claro) ---------- */
+body.theme-light #screen-inicio #quoteCard.home-daily-hero{border:1px solid #DCEAF7!important;box-shadow:0 10px 26px rgba(16,82,150,.07)!important}
+body.theme-light #screen-inicio #quoteCard .daily-thought-shade{
+  display:block!important;
+  background:radial-gradient(120% 90% at 30% 120%,rgba(255,255,255,.55) 0 38%,rgba(255,255,255,0) 39%)!important;
+}
+body.theme-light #screen-inicio #quoteCard .home-greeting{color:#0E8FDB!important;text-shadow:none!important;font-weight:800!important}
+body.theme-light #screen-inicio #quoteCard .quote-text{color:#0B2244!important;text-shadow:none!important;font-weight:800!important;font-style:italic!important;max-width:640px!important}
+body.theme-light #screen-inicio #quoteCard .quote-author{
+  color:#0E8FDB!important;text-shadow:none!important;font-size:13px!important;font-weight:800!important;
+  display:flex!important;align-items:center!important;gap:12px!important;
+}
+body.theme-light #screen-inicio #quoteCard .quote-source{color:#6B7F97!important;text-shadow:none!important}
+body.theme-light #screen-inicio #quoteCard .daily-quote-mark{color:#fff!important;opacity:.95!important;text-shadow:0 6px 18px rgba(10,40,80,.18)!important}
+
+/* ---------- Barra superior del Inicio ---------- */
+#screen-inicio .home-info-bar{
+  background:var(--card)!important;border:1px solid var(--line)!important;border-radius:20px!important;
+  box-shadow:0 6px 18px rgba(16,82,150,.05)!important;min-height:66px!important;padding:12px 22px!important;margin-bottom:14px!important;
+}
+#screen-inicio .home-info-title>span{width:38px!important;height:38px!important;border-radius:12px!important;font-size:20px!important}
+#screen-inicio .home-info-title b{font-size:18px!important;font-weight:800!important}
+#screen-inicio .home-info-live{gap:0!important}
+#screen-inicio .home-info-live>span{padding:0 18px!important;border-left:1px solid var(--line)!important;font-size:13px!important;font-weight:700!important;color:var(--txt2)!important}
+#screen-inicio .home-info-live>span:first-child{border-left:0!important}
+#screen-inicio .home-info-live>span b{color:var(--txt)!important;font-weight:800!important}
+
+/* ---------- Tarjetas (base común) ---------- */
+#screen-inicio .home-due-card,
+#screen-inicio .home-mini-card,
+#screen-inicio .home-panel,
+#screen-inicio .home-tools .focus-action-card{
+  position:relative!important;overflow:hidden!important;border-radius:20px!important;
+  box-shadow:0 8px 22px rgba(16,82,150,.06)!important;
+}
+/* Ondas pastel suaves al pie (decorativas, no tapan contenido) */
+#screen-inicio .home-mini-card::after,
+#screen-inicio .home-due-card::after,
+#screen-inicio .home-tools .focus-action-card::after{
+  content:""!important;position:absolute!important;left:0!important;right:0!important;bottom:0!important;height:46px!important;
+  pointer-events:none!important;z-index:0!important;opacity:.55!important;
+  background:var(--v1wave,#D7ECFB)!important;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 26 C35 8 70 34 105 22 S170 4 200 18 V40 H0Z'/%3E%3C/svg%3E") center/100% 100% no-repeat!important;
+          mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 26 C35 8 70 34 105 22 S170 4 200 18 V40 H0Z'/%3E%3C/svg%3E") center/100% 100% no-repeat!important;
+}
+#screen-inicio .home-mini-card>*,#screen-inicio .home-due-card>*,#screen-inicio .home-tools .focus-action-card>*{position:relative;z-index:1}
+#screen-inicio .home-mini-card:nth-child(2){--v1wave:#E7DDFB}
+#screen-inicio .home-mini-card:nth-child(3){--v1wave:#D3EEFA}
+#screen-inicio .home-mini-card:nth-child(4){--v1wave:#FBDCDD}
+#screen-inicio .home-mini-card:nth-child(5){--v1wave:#D6F1E2}
+#screen-inicio .home-due-card{--v1wave:#FCE6B8}
+#screen-inicio .home-tools .focus-action-card:nth-child(1){--v1wave:#D3EAFB}
+#screen-inicio .home-tools .focus-action-card:nth-child(2){--v1wave:#FCE7BE}
+#screen-inicio .home-tools .focus-action-card:nth-child(3){--v1wave:#E6DCFB}
+#screen-inicio .home-tools .focus-action-card:nth-child(4){--v1wave:#D3EAFB}
+#screen-inicio .home-tools .focus-action-card:nth-child(5){--v1wave:#D3EAFB}
+
+/* ---------- Vencen hoy: tarjeta destacada amarilla suave ---------- */
+body.theme-light #screen-inicio .home-due-card{background:#FFF7E6!important;border:1px solid #F6E2B3!important}
+#screen-inicio .home-due-card{padding:22px 20px 24px!important;align-items:stretch!important;justify-content:flex-start!important;gap:6px!important;text-align:center!important}
+#screen-inicio .home-due-card .due-head{justify-content:flex-start!important;text-align:left!important}
+#screen-inicio .home-due-card .due-head b{font-size:16px!important;font-weight:800!important;color:var(--txt)!important}
+#screen-inicio .home-due-card #kHoy{margin-top:14px!important;font-family:var(--ff)!important;font-size:60px!important;line-height:1!important;font-weight:900!important;color:var(--txt)!important}
+#screen-inicio .home-due-card #kHoyMonto{font-style:normal!important;font-size:21px!important;font-weight:800!important;color:#0E9BE0!important}
+#screen-inicio .home-due-card>small{margin-top:10px!important;font-size:13px!important;font-weight:700!important;color:var(--txt2)!important}
+#screen-inicio .home-due-card>small::first-letter{color:#F2A93B!important}
+#screen-inicio .home-due-card #homeExpiryBtn{
+  margin-top:auto!important;width:100%!important;height:44px!important;border-radius:999px!important;
+  border:1.5px solid #19A7EE!important;background:var(--card)!important;color:#0E8FDB!important;font-weight:800!important;font-size:14px!important;box-shadow:none!important;
+}
+
+/* ---------- Clientes / Servicios / Tickets / Objetivo ---------- */
+#screen-inicio .home-mini-card>span.metric-icon{width:54px!important;height:54px!important;flex:0 0 54px!important}
+#screen-inicio .home-mini-card>span.metric-icon svg{width:54px!important;height:54px!important}
+#screen-inicio .home-due-card .due-head>span.metric-icon{width:58px!important;height:58px!important;flex:0 0 58px!important}
+#screen-inicio .home-due-card .due-head>span.metric-icon svg{width:58px!important;height:58px!important}
+#screen-inicio .home-mini-card{
+  background:var(--card)!important;border:1px solid var(--line)!important;
+  padding:18px 18px 22px!important;align-items:flex-start!important;gap:14px!important;
+}
+#screen-inicio .home-mini-card>div{min-width:0!important;flex:1!important;display:flex!important;flex-direction:column!important;gap:2px!important;padding-top:6px!important}
+#screen-inicio .home-mini-card>div>small{font-size:13px!important;font-weight:700!important;color:var(--txt2)!important;white-space:normal!important;line-height:1.2!important}
+#screen-inicio .home-mini-card>div>b{font-family:var(--ff)!important;font-size:30px!important;line-height:1.1!important;font-weight:900!important;color:var(--txt)!important}
+#screen-inicio .home-mini-card>div>em{font-style:normal!important;font-size:12px!important;font-weight:600!important;color:var(--txt2)!important;white-space:normal!important;line-height:1.25!important}
+#screen-inicio .home-goal-mini>div>i{display:block!important;width:100%!important;height:8px!important;margin:6px 0 4px!important;border-radius:8px!important;background:#E6EEF6!important;overflow:hidden!important}
+#screen-inicio .home-goal-mini>div>i>u{display:block!important;height:100%!important;border-radius:8px!important;background:#169BEA!important}
+#screen-inicio .home-goal-mini>div>em{color:#0E8FDB!important;font-weight:800!important}
+
+/* ---------- Próximas prioridades ---------- */
+#screen-inicio .home-priorities{padding:18px 18px 12px!important;background:var(--card)!important}
+#screen-inicio .home-priorities .home-panel-title{padding:0 4px 14px!important;margin:0 0 4px!important;border-bottom:1px solid var(--line)!important}
+#screen-inicio .home-priorities .home-panel-title>span{width:36px!important;height:36px!important;border-radius:11px!important;display:grid!important;place-items:center!important;background:#E5F3FD!important;color:#169BEA!important;font-size:18px!important}
+#screen-inicio .home-priorities .home-panel-title h3{font-size:17px!important;font-weight:800!important;color:var(--txt)!important}
+#screen-inicio .home-priorities #homeAllPriorities{color:#0E8FDB!important;font-weight:800!important;font-size:13.5px!important;background:transparent!important;border:0!important}
+#screen-inicio .home-priorities .priority-list{display:flex!important;flex-direction:column!important;gap:0!important}
+#screen-inicio .home-priorities .priority-row{
+  min-height:62px!important;padding:10px 8px!important;margin:0!important;border:0!important;border-bottom:1px solid var(--line)!important;
+  border-radius:0!important;background:transparent!important;box-shadow:none!important;display:flex!important;align-items:center!important;gap:14px!important;text-align:left!important;
+}
+#screen-inicio .home-priorities .priority-row:last-child{border-bottom:0!important}
+#screen-inicio .home-priorities .priority-row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)!important;border-radius:12px!important}
+#screen-inicio .home-priorities .priority-check{width:20px!important;height:20px!important;flex:none!important;border:1.5px solid #B9C8D8!important;border-radius:5px!important;background:var(--card)!important}
+#screen-inicio .home-priorities .priority-icon{width:40px!important;height:40px!important;flex:none!important;border-radius:50%!important;background:#EAF4FD!important;border:0!important;box-shadow:none!important;display:grid!important;place-items:center!important;font-size:18px!important}
+#screen-inicio .home-priorities .priority-copy{flex:1!important;min-width:0!important;display:flex!important;flex-direction:column!important;gap:3px!important}
+#screen-inicio .home-priorities .priority-copy b{font-size:14px!important;font-weight:800!important;color:var(--txt)!important}
+#screen-inicio .home-priorities .priority-copy small{font-size:12.5px!important;color:var(--txt2)!important;font-weight:600!important}
+#screen-inicio .home-priorities .priority-tag{flex:none!important;min-width:54px!important;text-align:center!important;padding:5px 12px!important;border-radius:999px!important;font-style:normal!important;font-size:12px!important;font-weight:800!important;opacity:1!important}
+#screen-inicio .home-priorities .priority-tag.high{background:#FFE7EA!important;color:#E23A4E!important}
+#screen-inicio .home-priorities .priority-tag.medium{background:#FFF1D9!important;color:#D98A00!important}
+#screen-inicio .home-priorities .priority-tag.low{background:#E3F7EA!important;color:#1E9E57!important}
+
+/* ---------- Accesos rápidos ---------- */
+#screen-inicio .home-tools{padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
+#screen-inicio .home-tools .inicio-cards-row{gap:14px!important}
+#screen-inicio .home-tools .focus-action-card{
+  height:auto!important;min-height:122px!important;padding:18px 48px 40px 16px!important;margin:0!important;
+  display:flex!important;flex-direction:row!important;align-items:flex-start!important;gap:12px!important;
+  background:var(--card)!important;border:1px solid var(--line)!important;color:var(--txt)!important;text-align:left!important;
+}
+#screen-inicio .home-tools .focus-action-icon{width:50px!important;height:50px!important;flex:0 0 50px!important;font-size:26px!important;border-radius:16px!important}
+#screen-inicio .home-tools .focus-action-text{flex:1!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important;text-align:left!important;gap:4px!important;min-width:0!important;padding-top:4px!important}
+#screen-inicio .home-tools .focus-action-text b{font-size:14.5px!important;line-height:1.2!important;font-weight:800!important;color:var(--txt)!important;white-space:normal!important}
+#screen-inicio .home-tools .focus-action-text small{
+  font-size:12px!important;line-height:1.35!important;color:var(--txt2)!important;font-weight:600!important;text-align:left!important;
+  white-space:normal!important;overflow:visible!important;text-overflow:clip!important;display:block!important;-webkit-line-clamp:unset!important;opacity:1!important;
+}
+#screen-inicio .home-tools .fob-arrow{position:absolute!important;top:16px!important;right:14px!important;margin:0!important;width:32px!important;height:32px!important;font-size:20px!important;border-radius:50%!important;display:grid!important;place-items:center!important;color:#fff!important;background:#169BEA!important;box-shadow:none!important}
+#screen-inicio .home-tools .focus-action-card:nth-child(2) .fob-arrow{background:#F2A21E!important}
+#screen-inicio .home-tools .focus-action-card:nth-child(3) .fob-arrow{background:#7C4DFF!important}
+#screen-inicio .home-tools .focus-action-card::after{height:40px!important}
+
+/* ---------- Distribución de escritorio (igual a la Visual 1) ---------- */
+@media(min-width:1200px){
+  #screen-inicio .home-command-grid{display:grid!important;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr)!important;gap:14px!important;margin-bottom:14px!important;align-items:stretch!important}
+  #screen-inicio .home-metric-cluster{display:grid!important;grid-template-columns:1.2fr 1fr 1fr!important;grid-template-rows:1fr 1fr!important;gap:14px!important;min-height:322px!important}
+  #screen-inicio .home-due-card{grid-row:1/3!important}
+  #screen-inicio .home-tools .inicio-cards-row{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important}
+}
+@media(min-width:900px) and (max-width:1199px){
+  #screen-inicio .home-command-grid{display:grid!important;grid-template-columns:1fr!important;gap:14px!important}
+  #screen-inicio .home-metric-cluster{display:grid!important;grid-template-columns:1.2fr 1fr 1fr!important;grid-template-rows:1fr 1fr!important;gap:14px!important;min-height:300px!important}
+  #screen-inicio .home-due-card{grid-row:1/3!important}
+  #screen-inicio .home-tools .inicio-cards-row{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+/* Teléfono: el texto del banner encima de la foto necesita un velo más claro */
+@media(max-width:899px){
+  #screen-inicio .home-mini-card>div>b{font-size:26px!important}
+  #screen-inicio .home-tools .focus-action-card{min-height:108px!important}
+}
+
+/* ---------- Barra lateral (escritorio): blanca, iconos a color, activo azul ---------- */
+@media(min-width:900px){
+  body.theme-light #sidebarWrap .nav .nav-btn.active,
+  body.theme-light #sidebarWrap .nav .nav-btn.active span{color:#fff!important;opacity:1!important}
+  body.theme-light #sidebarWrap .nav .nav-btn.active{background:#16A0EC!important;box-shadow:0 6px 14px rgba(22,160,236,.28)!important;border-radius:14px!important}
+  body.theme-light #sidebarWrap .nav .nav-btn:not(.active) span:not(.nico){color:#24364F!important;font-weight:700!important}
+}
+</style>
+
 </body>
 </html>
 
