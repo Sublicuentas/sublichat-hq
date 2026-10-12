@@ -98,12 +98,14 @@
       // y la foto predeterminada del Inicio cuando el usuario no ha subido una propia.
       var light=document.body.classList.contains('theme-light');
       var narrow=window.innerWidth<900;
-      // En tema claro el Inicio usa siempre la foto de la Visual 1; el banner propio sigue en Perfil y en tema oscuro.
-      var heroImage=light?HERO_LIGHT:(p.banner||OFFICE);
+      // El fondo del Inicio es SIEMPRE el banner que el usuario eligió en Perfil (con su encuadre).
+      // Solo si no tiene banner propio se usa la foto clara de la Visual 1 (tema claro) o la oficina (tema oscuro).
+      var heroImage=p.banner||(light?HERO_LIGHT:OFFICE);
       var overlay=!light?'linear-gradient(90deg,rgba(3,25,52,.94) 0%,rgba(3,29,57,.72) 38%,rgba(3,29,57,.14) 70%),'
         :narrow?'linear-gradient(90deg,rgba(234,244,253,.97) 0%,rgba(234,244,253,.9) 55%,rgba(234,244,253,.55) 100%),'
-        :'linear-gradient(90deg,#EAF4FD 0,#EAF4FD max(40%,calc(100% - 640px)),rgba(234,244,253,.6) max(46%,calc(100% - 590px)),rgba(234,244,253,0) max(52%,calc(100% - 520px))),';
-      var lightDefault=light;
+        :(p.banner?'linear-gradient(90deg,#EAF4FD 0%,#EAF4FD 32%,rgba(234,244,253,.92) 40%,rgba(234,244,253,.72) 48%,rgba(234,244,253,.42) 56%,rgba(234,244,253,.16) 64%,rgba(234,244,253,0) 72%),'
+          :'linear-gradient(90deg,#EAF4FD 0,#EAF4FD max(40%,calc(100% - 640px)),rgba(234,244,253,.6) max(46%,calc(100% - 590px)),rgba(234,244,253,0) max(52%,calc(100% - 520px))),');
+      var lightDefault=light&&!p.banner;
       hero.style.setProperty('background-image',overlay+bgUrl(heroImage),'important');
       hero.style.setProperty('background-size','100% 100%,'+(lightDefault?(narrow?'cover':'auto 112%'):sizeFor(v.hz)),'important');
       hero.style.setProperty('background-position','center,'+(lightDefault?(narrow?'70% center':'100% 80%'):(v.hx+'% '+v.hy+'%')),'important');
@@ -5728,6 +5730,21 @@ body.theme-light #screen-inicio #quoteCard .home-greeting{font-family:'Nunito',s
   #screen-inicio .home-tools .focus-action-text{padding-top:0!important;padding-right:0!important}
   #screen-inicio .home-tools .fob-arrow{top:18px!important}
 }
+
+/* ===== Visual 1 · ajuste 3: barra superior con buscador y campana (como el PDF) ===== */
+#screen-inicio .home-info-live{align-items:center!important}
+#screen-inicio .home-info-live>.v1-search{border-left:0!important;padding:0 18px 0 0!important}
+#screen-inicio .v1-search label{display:flex!important;align-items:center!important;gap:10px!important;width:260px!important;height:42px!important;padding:0 16px!important;border:1px solid var(--line)!important;border-radius:999px!important;background:#F6F9FD!important;color:var(--txt2)!important;cursor:text!important}
+#screen-inicio .v1-search svg{flex:none!important;width:17px!important;height:17px!important}
+#screen-inicio .v1-search input{flex:1!important;min-width:0!important;border:0!important;outline:0!important;background:transparent!important;font:600 13px 'Nunito',system-ui,sans-serif!important;color:var(--txt)!important;padding:0!important;height:auto!important;box-shadow:none!important}
+#screen-inicio .home-info-live>.v1-bell{padding:0 0 0 18px!important}
+#screen-inicio .v1-bell button{position:relative!important;width:42px!important;height:42px!important;border-radius:50%!important;border:1px solid var(--line)!important;background:#F6F9FD!important;display:grid!important;place-items:center!important;color:var(--txt)!important;cursor:pointer!important;padding:0!important}
+#screen-inicio .v1-bell button svg{width:19px!important;height:19px!important}
+#screen-inicio .v1-bell button i{position:absolute!important;top:9px!important;right:10px!important;width:8px!important;height:8px!important;border-radius:50%!important;background:#EF3B4E!important;border:2px solid #fff!important;display:none!important}
+#screen-inicio .v1-bell button.has i{display:block!important}
+#screen-inicio .home-info-live #homeWeather{display:flex!important;align-items:center!important;gap:6px!important}
+@media(max-width:1300px){#screen-inicio .v1-search label{width:190px!important}}
+@media(max-width:899px){#screen-inicio .v1-search{display:none!important}}
 </style>
 <script id="licInicioVisual1Flechas20261012">
 /* Visual 1: flechas en las tarjetas de números. Solo reutilizan las mismas pantallas del menú
@@ -5744,7 +5761,29 @@ body.theme-light #screen-inicio #quoteCard .home-greeting{font-family:'Nunito',s
     card.addEventListener('click',function(e){if(e.target.closest('button'))return;fn();});
     card.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}});
   }
+
+  // Barra superior del PDF: buscador (usa el mismo buscador de Clientes) y campana (abre Tickets).
+  function topbar(){
+    var live=document.querySelector('#screen-inicio .home-info-live');
+    if(!live||live.querySelector('.v1-search'))return;
+    var sr=document.createElement('span');sr.className='v1-search';
+    sr.innerHTML='<label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Buscar en Sublicuentas..." aria-label="Buscar cliente"></label>';
+    live.insertBefore(sr,live.firstChild);
+    var inp=sr.querySelector('input');
+    inp.addEventListener('keydown',function(e){
+      if(e.key!=='Enter')return;e.preventDefault();
+      var v=inp.value.trim();go('clientes');
+      setTimeout(function(){var q=document.getElementById('q');if(q){q.value=v;q.dispatchEvent(new Event('input',{bubbles:true}));q.focus();}},250);
+    });
+    var bl=document.createElement('span');bl.className='v1-bell';
+    bl.innerHTML='<button type="button" aria-label="Tickets y avisos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></button>';
+    live.appendChild(bl);
+    bl.querySelector('button').addEventListener('click',function(){go('tickets');});
+    function dot(){var n=parseInt((document.getElementById('homeTicketCount')||{}).textContent,10);bl.querySelector('button').classList.toggle('has',n>0);}
+    dot();setInterval(dot,4000);
+  }
   function bind(){
+    topbar();
     var due=document.querySelector('#screen-inicio .home-due-card');
     link(due,function(){var b=document.getElementById('homeExpiryBtn');if(b)b.click();});
     var minis=document.querySelectorAll('#screen-inicio .home-mini-card');
