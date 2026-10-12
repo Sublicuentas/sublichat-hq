@@ -8,7 +8,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-69';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-70';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -2103,7 +2103,7 @@
       const base64=bufferToBase64(buffer);
       const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
       await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_fila_solo_excel',metricas:state.analysis?.metrics||{}});
-      state.templateBase64=base64;state.localTemplateFresh=true;state.accountAudit=null; // se conserva el análisis anterior en pantalla mientras se recalcula
+      state.templateBase64=base64;state.localTemplateFresh=true;state.analysis=null;state.accountAudit=null;
       let reloadWarning='';
       try{await refreshMeta();await analyze(false);}
       catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar la vista.';}
@@ -2116,6 +2116,7 @@
       const detail=String(e?.message||'No se pudo guardar el archivo.');
       console.error('[Control Maestro] No se pudo borrar del Excel:',e);
       mutationMessage(`⚠️ No se pudo borrar del Excel: ${detail}`,'error');
+      try{alert(`⚠️ No se pudo borrar del Excel: ${detail}`);}catch(_){}
       state.busy=false;
       return {ok:false,message:detail};
     }
@@ -2161,7 +2162,7 @@
       const base64=bufferToBase64(buffer);
       const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
       await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_solo_excel',metricas:state.analysis?.metrics||{}});
-      state.templateBase64=base64;state.localTemplateFresh=true;state.accountAudit=null; // se conserva el análisis anterior en pantalla mientras se recalcula
+      state.templateBase64=base64;state.localTemplateFresh=true;state.analysis=null;state.accountAudit=null;
       let reloadWarning='';
       try{await refreshMeta();await analyze(false);}catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar.';}
       mutationMessage(`✅ ${account.email||'La cuenta'} fue borrada únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
@@ -2298,7 +2299,7 @@
           state.templateBase64=base64;state.localTemplateFresh=true;
         }
       }
-      if(repairedAnalysisAfterDelete&&!state.analysis)state.analysis=repairedAnalysisAfterDelete;
+      if(repairedAnalysisAfterDelete)state.analysis=repairedAnalysisAfterDelete;
       if(state.accountAudit?.accounts){
         state.accountAudit.accounts=state.accountAudit.accounts.filter((x)=>x!==account&&String(x.key||'')!==String(account.key||''));
       }
@@ -2312,7 +2313,7 @@
       view.expandedAccountKey='';
       mutationMessage(`✅ Cuenta ${account.email||''} eliminada de ${where}.`,'good');
       queueSilentControlReload();
-      Promise.resolve(refreshMeta()).then(()=>{if(state.templateBase64&&!state.busy)return analyze(false).then(()=>{state.accountAudit=null;if(screenActive())render();});}).catch(()=>{});
+      Promise.resolve(refreshMeta()).catch(()=>{});
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();restoreControlView(view,{keepExpanded:false});}
   }
@@ -2387,10 +2388,8 @@
       const nextMeta=await api({accion:'control_estado'});
       const nextTemplateId=String(nextMeta?.plantilla?.id||'');
       state.meta=nextMeta;
-      // ⚠️ BUG REAL (12/10/2026): al borrar algo, Control Maestro guarda una plantilla nueva (id nuevo).
-      // Aquí se borraba el análisis y nadie lo volvía a calcular → la pantalla se quedaba para siempre en
-      // "Cargando datos reales de Control Maestro…". Si el Excel nuevo lo acabamos de guardar desde este
-      // navegador, ya lo tenemos en memoria: se conserva y no se vuelve a descargar.
+      // Si el cambio de plantilla lo hizo esta misma pestaña (borrar fila/cuenta),
+      // el Excel nuevo ya está en memoria: no se borra ni se vuelve a descargar.
       if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId&&!state.localTemplateFresh){state.templateBase64='';state.analysis=null;}
       state.localTemplateFresh=false;
       state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
@@ -2399,8 +2398,8 @@
     catch(e){state.status=e.message||'No se pudo cargar Control Maestro.';state.statusType='error';}
     finally{
       state.loading=false;render();
-      // Nunca dejar la pantalla en "Cargando…" sin nadie que termine el cruce con el Excel.
-      if(state.meta?.plantilla&&!state.analysis&&!state.busy&&screenActive())autoAnalyzeWithRetry(0);
+      // Nunca dejar la pantalla en "Cargando datos reales…" sin un análisis en curso.
+      if(state.meta?.plantilla&&!state.analysis&&!state.busy&&screenActive())setTimeout(()=>autoAnalyzeWithRetry(0),400);
     }
   }
 
@@ -2808,14 +2807,18 @@
   // se van a corregir solos.
   async function autoAnalyzeWithRetry(attempt){
     if(state.analysis||state.busy)return;
+    // Un solo ciclo de lectura a la vez (boot y refreshMeta podían lanzar dos).
+    if(!attempt&&state.autoAnalyzing)return;
+    state.autoAnalyzing=true;
     try{
       await analyze(false);
-      render();
+      state.autoAnalyzing=false;
+      if(screenActive()){const v=captureControlView();render();restoreControlView(v,{keepExpanded:true});}
       setTimeout(()=>maybeAutoBackup(),80);
       return;
     }catch(e){
-      if(attempt<10){setTimeout(()=>autoAnalyzeWithRetry(attempt+1),Math.min(5000,900*(attempt+1)));}
-      else{setStatus('⚠️ '+(e.message||'No se pudo leer el Excel para el cruce histórico.'),'error');render();}
+      if(attempt<10){setTimeout(()=>{state.autoAnalyzing=false;autoAnalyzeWithRetry(attempt+1);},Math.min(5000,900*(attempt+1)));}
+      else{state.autoAnalyzing=false;setStatus('⚠️ '+(e.message||'No se pudo leer el Excel para el cruce histórico.'),'error');render();}
     }
   }
 
