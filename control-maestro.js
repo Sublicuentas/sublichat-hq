@@ -8,7 +8,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20260926-68';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-69';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -2103,9 +2103,9 @@
       const base64=bufferToBase64(buffer);
       const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
       await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_fila_solo_excel',metricas:state.analysis?.metrics||{}});
-      state.templateBase64=base64;state.analysis=null;state.accountAudit=null;
+      state.templateBase64=base64;state.localTemplateFresh=true;state.accountAudit=null; // se conserva el análisis anterior en pantalla mientras se recalcula
       let reloadWarning='';
-      try{await refreshMeta();await analyze(true);}
+      try{await refreshMeta();await analyze(false);}
       catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar la vista.';}
       state.expandedAccountKey=account.key;
       mutationMessage(`✅ ${row.name||'El registro'} fue borrado únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
@@ -2161,9 +2161,9 @@
       const base64=bufferToBase64(buffer);
       const filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
       await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_solo_excel',metricas:state.analysis?.metrics||{}});
-      state.templateBase64=base64;state.analysis=null;state.accountAudit=null;
+      state.templateBase64=base64;state.localTemplateFresh=true;state.accountAudit=null; // se conserva el análisis anterior en pantalla mientras se recalcula
       let reloadWarning='';
-      try{await refreshMeta();await analyze(true);}catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar.';}
+      try{await refreshMeta();await analyze(false);}catch(_){reloadWarning=' La eliminación sí se guardó; presione “Actualizar base” para refrescar.';}
       mutationMessage(`✅ ${account.email||'La cuenta'} fue borrada únicamente del respaldo Excel.${backupCreated?' Se guardó una copia anterior para recuperación.':''}${reloadWarning}`,'good');
     }catch(e){
       const text='⚠️ '+(e.message||'No se pudo borrar la cuenta del Excel.');mutationMessage(text,'error');alert(text);
@@ -2295,10 +2295,10 @@
           repairedAnalysisAfterDelete=parseWorkbook(workbook,{servicios:[],cuentas:[]});rebuildConditionalFormatting(repairedAnalysisAfterDelete);
           const buffer=await workbook.xlsx.writeBuffer(),base64=bufferToBase64(buffer),filename=state.meta?.plantilla?.filename||'Sublicuentas.xlsx';
           await api({accion:'control_guardar_plantilla',filename,size:buffer.byteLength,mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64,motivo:'eliminar_cuenta_completa',metricas:state.analysis?.metrics||{}});
-          state.templateBase64=base64;
+          state.templateBase64=base64;state.localTemplateFresh=true;
         }
       }
-      if(repairedAnalysisAfterDelete)state.analysis=repairedAnalysisAfterDelete;
+      if(repairedAnalysisAfterDelete&&!state.analysis)state.analysis=repairedAnalysisAfterDelete;
       if(state.accountAudit?.accounts){
         state.accountAudit.accounts=state.accountAudit.accounts.filter((x)=>x!==account&&String(x.key||'')!==String(account.key||''));
       }
@@ -2312,7 +2312,7 @@
       view.expandedAccountKey='';
       mutationMessage(`✅ Cuenta ${account.email||''} eliminada de ${where}.`,'good');
       queueSilentControlReload();
-      Promise.resolve(refreshMeta()).catch(()=>{});
+      Promise.resolve(refreshMeta()).then(()=>{if(state.templateBase64&&!state.busy)return analyze(false).then(()=>{state.accountAudit=null;if(screenActive())render();});}).catch(()=>{});
     }catch(e){const text='⚠️ '+(e.message||'No se pudo eliminar la cuenta.');mutationMessage(text,'error');alert(text);}
     finally{state.busy=false;render();restoreControlView(view,{keepExpanded:false});}
   }
@@ -2387,12 +2387,23 @@
       const nextMeta=await api({accion:'control_estado'});
       const nextTemplateId=String(nextMeta?.plantilla?.id||'');
       state.meta=nextMeta;
-      if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId){state.templateBase64='';state.analysis=null;}
+      // ⚠️ BUG REAL (12/10/2026): al borrar algo, Control Maestro guarda una plantilla nueva (id nuevo).
+      // Aquí se borraba el análisis y nadie lo volvía a calcular → la pantalla se quedaba para siempre en
+      // "Cargando datos reales de Control Maestro…". Si el Excel nuevo lo acabamos de guardar desde este
+      // navegador, ya lo tenemos en memoria: se conserva y no se vuelve a descargar.
+      if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId){
+        if(state.localTemplateFresh){state.localTemplateFresh=false;}
+        else{state.templateBase64='';state.analysis=null;}
+      }
       state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
       if(state.metaRetryTimer){clearTimeout(state.metaRetryTimer);state.metaRetryTimer=0;}
     }
     catch(e){state.status=e.message||'No se pudo cargar Control Maestro.';state.statusType='error';}
-    finally{state.loading=false;render();}
+    finally{
+      state.loading=false;render();
+      // Nunca dejar la pantalla en "Cargando…" sin nadie que termine el cruce con el Excel.
+      if(state.meta?.plantilla&&!state.analysis&&!state.busy&&screenActive())autoAnalyzeWithRetry(0);
+    }
   }
 
   async function uploadTemplate(file){

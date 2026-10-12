@@ -665,12 +665,18 @@ async function load(options={}){
       // Clientes y Bodega se leen antes de sustituir la copia visible. Así una
       // falla de red no deja Control Maestro con una mitad nueva y otra antigua.
       let snap=null;
-      if(!sharedControl&&!clientesLiveStarted&&!requireServer)snap=await primeraFotoClientes(db,collection,onSnapshot);
+      // Velocidad Control Maestro (12/10/2026): después de borrar/editar se volvía a descargar TODA la
+      // colección de clientes por /api/importar, página por página, aunque la escucha en vivo ya trae ese
+      // cambio al instante. Si la escucha en vivo está activa y ya entregó datos confirmados, en la
+      // recarga rápida de Control Maestro solo se vuelve a leer Bodega (inventario).
+      const reusarClientesEnVivo=controlOnly&&clientesLiveStarted&&CONTROL_DATA_READY;
+      if(reusarClientesEnVivo)snap={docs:null};
+      if(!snap&&!sharedControl&&!clientesLiveStarted&&!requireServer)snap=await primeraFotoClientes(db,collection,onSnapshot);
       if(!snap)snap=await readCollection(CONFIG.collection);
       let invSnap=null,invError=null;
       try{invSnap=await readCollection("inventario");}
       catch(e){if(requireServer||sharedControl)throw e;invError=e;}
-      const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+      const nextData=snap.docs?snap.docs.flatMap(d=>flattenCliente(d.data(),d.id)):DATA;
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       if(session!==CONTROL_SESSION_VERSION)return;
       DATA=nextData;INVENTARIO=nextInventory;CONTROL_DATA_ERROR='';CONTROL_DATA_READY=true;
