@@ -252,6 +252,30 @@ const CONFIG_DEFAULTS = Object.freeze({
   calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
 });
 const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
+const VENDEDORES_EQUIPO = Object.freeze(['Relojes','Sublicuentas','Sublicuentas 2','Geisell','Yami','Manuel','Heber','Abner','Jimena','Elizabeth','Lucy','WolfTeam']);
+function vendedorClave(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+async function vendedoresParaApp(db, basePhones) {
+  const phones = { ...(basePhones && typeof basePhones === 'object' ? basePhones : {}) };
+  const sellers = [...VENDEDORES_EQUIPO];
+  const vistos = new Set(sellers.map(vendedorClave));
+  vistos.add('geissel'); vistos.add('sublicuentas2');
+  const snap = await db.collection('revendedores').get();
+  const extra = [];
+  snap.forEach((doc) => {
+    const d = doc.data() || {};
+    if (d.activo === false) return;
+    const nombre = String(d.nombre || d.usuario || doc.id || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const clave = vendedorClave(nombre);
+    if (!clave) return;
+    const tel = String(d.telefono || d.whatsapp || '').replace(/\D/g, '').slice(-8);
+    if (tel && !phones[clave]) phones[clave] = tel;
+    if (vistos.has(clave) || vistos.has(clave.replace(/\s+/g, ''))) return;
+    vistos.add(clave);
+    extra.push(nombre);
+  });
+  extra.sort((x, y) => x.localeCompare(y, 'es'));
+  return { sellers: sellers.concat(extra), phones };
+}
 async function getConfig(req, res) {
   const user = await requireFirebaseUser(req, res);
   if (!user) return;
@@ -265,6 +289,13 @@ async function getConfig(req, res) {
   // al frente (WhatsApp ↔ app) si el último refresco tiene más de syncStaleSeconds. Con 15 s eso eran cientos de
   // descargas completas al día por vendedor. Piso de 5 min (los cambios propios se ven al instante igual).
   config.syncStaleSeconds = Math.max(300, Number(config.syncStaleSeconds) || 300);
+  // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
+  // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
+  try {
+    const vend = await vendedoresParaApp(getApp().firestore(), config.sellerPhones);
+    config.sellers = vend.sellers;
+    config.sellerPhones = vend.phones;
+  } catch (e) { console.error('APP_SELLERS_ERROR', e && e.message || e); }
   if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
   return res.status(200).json({ ok: true, config });
 }
