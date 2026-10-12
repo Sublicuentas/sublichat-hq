@@ -6823,6 +6823,43 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   fichaInjectButtons();
   document.addEventListener("DOMContentLoaded",fichaInjectButtons);
   setTimeout(fichaInjectButtons,600);
+
+  // Vendedores en vivo: misma lista que recibe la APK (equipo + revendedores activos
+  // de Catálogo Socios / bot). Si se agrega o cambia un vendedor, aparece aquí sin
+  // tocar código. Si el servidor no responde, se queda la lista fija de arriba.
+  let vendedoresRemotosAt=0;
+  async function sincronizarVendedoresRemotos(force=false){
+    if(!force&&Date.now()-vendedoresRemotosAt<5*60*1000)return;
+    try{
+      if(!await sublichatCurrentAuthUser())return;
+      vendedoresRemotosAt=Date.now();
+      const r=await fetch("/api/mobile-core",{method:"POST",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"config"})});
+      const j=await r.json().catch(()=>null);
+      const cfg=j&&j.config;if(!cfg)return;
+      const lista=Array.isArray(cfg.sellers)?cfg.sellers.map(v=>String(v||"").replace(/\s+/g," ").trim()).filter(Boolean):[];
+      const tels=cfg.sellerPhones&&typeof cfg.sellerPhones==="object"?cfg.sellerPhones:{};
+      Object.entries(tels).forEach(([k,v])=>{const tel=String(v||"").replace(/\D/g,"").slice(-8);if(tel.length===8){FICHA_VENDEDOR_TELS[fichaNorm(k)]=tel;if(typeof VENDEDORES_SERVICIO_TEL==="object")VENDEDORES_SERVICIO_TEL[String(k).toLowerCase().trim()]=tel;}});
+      lista.forEach(v=>{
+        if(!FICHA_VENDEDORES.some(x=>fichaNorm(x)===fichaNorm(v)))FICHA_VENDEDORES.push(v);
+        if(Array.isArray(VENDEDORES_SERVICIO)&&!VENDEDORES_SERVICIO.some(x=>fichaNorm(x)===fichaNorm(v)))VENDEDORES_SERVICIO.push(v);
+      });
+      const sel=document.getElementById("fichaVendedor");
+      if(sel){
+        const nuevo=sel.querySelector('option[value="__nuevo__"]');
+        FICHA_VENDEDORES.forEach(v=>{
+          if([...sel.options].some(o=>o.value===v))return;
+          const o=document.createElement("option");o.value=v;o.textContent=v;
+          sel.insertBefore(o,nuevo||null);
+        });
+      }
+      const dl=document.getElementById("servVendedoresList");
+      if(dl&&Array.isArray(VENDEDORES_SERVICIO))dl.innerHTML=VENDEDORES_SERVICIO.map(v=>`<option value="${String(v).replace(/"/g,"&quot;")}"></option>`).join("");
+    }catch(_){vendedoresRemotosAt=0;}
+  }
+  window.sublichatSincronizarVendedores=sincronizarVendedoresRemotos;
+  setTimeout(()=>sincronizarVendedoresRemotos(true),4000);
+  setTimeout(()=>sincronizarVendedoresRemotos(true),15000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)sincronizarVendedoresRemotos();});
 })();
 
 
