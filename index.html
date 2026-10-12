@@ -98,14 +98,15 @@
       // y la foto predeterminada del Inicio cuando el usuario no ha subido una propia.
       var light=document.body.classList.contains('theme-light');
       var narrow=window.innerWidth<900;
-      var heroImage=p.banner||(light?HERO_LIGHT:OFFICE);
+      // En tema claro el Inicio usa siempre la foto de la Visual 1; el banner propio sigue en Perfil y en tema oscuro.
+      var heroImage=light?HERO_LIGHT:(p.banner||OFFICE);
       var overlay=!light?'linear-gradient(90deg,rgba(3,25,52,.94) 0%,rgba(3,29,57,.72) 38%,rgba(3,29,57,.14) 70%),'
         :narrow?'linear-gradient(90deg,rgba(234,244,253,.97) 0%,rgba(234,244,253,.9) 55%,rgba(234,244,253,.55) 100%),'
-        :'linear-gradient(90deg,#EAF4FD 0%,#EAF4FD 44%,rgba(234,244,253,.85) 52%,rgba(234,244,253,.35) 60%,rgba(234,244,253,0) 70%),';
-      var lightDefault=light&&!p.banner&&v.mode!=='custom';
+        :'linear-gradient(90deg,#EAF4FD 0,#EAF4FD max(40%,calc(100% - 640px)),rgba(234,244,253,.6) max(46%,calc(100% - 590px)),rgba(234,244,253,0) max(52%,calc(100% - 520px))),';
+      var lightDefault=light;
       hero.style.setProperty('background-image',overlay+bgUrl(heroImage),'important');
-      hero.style.setProperty('background-size','100% 100%,'+(lightDefault&&!narrow?'auto 100%':sizeFor(v.hz)),'important');
-      hero.style.setProperty('background-position','center,'+(lightDefault?(narrow?'70% center':'right center'):(v.hx+'% '+v.hy+'%')),'important');
+      hero.style.setProperty('background-size','100% 100%,'+(lightDefault?(narrow?'cover':'auto 112%'):sizeFor(v.hz)),'important');
+      hero.style.setProperty('background-position','center,'+(lightDefault?(narrow?'70% center':'100% 80%'):(v.hx+'% '+v.hy+'%')),'important');
       hero.style.setProperty('background-repeat','no-repeat','important');
       hero.style.setProperty('background-color',light?'#EAF4FD':'','important');
     }
@@ -5661,7 +5662,100 @@ body.theme-light #screen-inicio .home-due-card{background:#FFF7E6!important;bord
   body.theme-light #sidebarWrap .nav .nav-btn.active{background:#16A0EC!important;box-shadow:0 6px 14px rgba(22,160,236,.28)!important;border-radius:14px!important}
   body.theme-light #sidebarWrap .nav .nav-btn:not(.active) span:not(.nico){color:#24364F!important;font-weight:700!important}
 }
+
+/* ===== Visual 1 · ajuste 2: más fiel al PDF ===== */
+/* Banner: tarjeta de vidrio "Disciplina hoy" + comillas encima (decorativo) */
+@media(min-width:900px){
+  body.theme-light #screen-inicio #quoteCard.home-daily-hero{height:272px!important;min-height:272px!important}
+  body.theme-light #screen-inicio #quoteCard::after{
+    content:"Disciplina hoy,\A resultados mañana."!important;white-space:pre!important;
+    position:absolute!important;right:22px!important;bottom:20px!important;z-index:3!important;
+    padding:16px 26px!important;border-radius:16px!important;
+    background:rgba(255,255,255,.18)!important;border:1px solid rgba(255,255,255,.55)!important;
+    -webkit-backdrop-filter:blur(10px)!important;backdrop-filter:blur(10px)!important;
+    color:#fff!important;font:700 16px/1.25 'Nunito',system-ui,sans-serif!important;text-shadow:0 1px 6px rgba(0,0,0,.35)!important;
+    box-shadow:0 10px 24px rgba(5,25,55,.18)!important;pointer-events:none!important;
+  }
+  body.theme-light #screen-inicio #quoteCard .daily-quote-mark{display:none!important}
+  body.theme-light #screen-inicio #quoteCard::before{content:"\201C"!important;display:block!important;position:absolute!important;right:40px!important;bottom:86px!important;z-index:3!important;color:#fff!important;font:900 120px/1 'Montserrat',Georgia,serif!important;text-shadow:0 6px 18px rgba(10,40,80,.18)!important;pointer-events:none!important;background:none!important;width:auto!important;height:auto!important;inset:auto 40px 86px auto!important}
+}
+body.theme-light #screen-inicio #quoteCard .quote-text{font-family:'Montserrat',system-ui,sans-serif!important;font-weight:800!important;font-size:clamp(28px,2.4vw,40px)!important;line-height:1.15!important;letter-spacing:-.6px!important;max-width:600px!important}
+body.theme-light #screen-inicio #quoteCard .home-greeting{font-family:'Nunito',system-ui,sans-serif!important;font-weight:900!important;font-size:17px!important}
+
+/* Tarjetas de números: flecha redonda arriba a la derecha (lleva a la misma pantalla del menú) */
+#screen-inicio .home-mini-card>span.v1-go,#screen-inicio .home-due-card>span.v1-go{
+  flex:none!important;padding:0!important;font-size:18px!important;
+  position:absolute!important;top:16px!important;right:16px!important;z-index:2!important;
+  width:30px!important;height:30px!important;border-radius:50%!important;display:grid!important;place-items:center!important;
+  background:#fff!important;border:1px solid var(--line)!important;color:var(--txt)!important;
+  font:900 18px/1 'Nunito',system-ui,sans-serif!important;box-shadow:0 4px 10px rgba(16,82,150,.10)!important;pointer-events:none!important;
+}
+#screen-inicio .home-mini-card.v1-link,#screen-inicio .home-due-card.v1-link{cursor:pointer!important;transition:transform .15s ease,box-shadow .15s ease!important}
+#screen-inicio .home-mini-card.v1-link:hover,#screen-inicio .home-due-card.v1-link:hover{transform:translateY(-2px)!important;box-shadow:0 12px 26px rgba(16,82,150,.10)!important}
+#screen-inicio .home-mini-card{padding:20px 52px 26px 18px!important;align-items:center!important}
+#screen-inicio .home-mini-card>div{padding-top:0!important}
+#screen-inicio .home-mini-card>div>small{font-size:14px!important;color:var(--txt)!important;opacity:.8!important}
+#screen-inicio .home-mini-card>div>b{font-size:32px!important}
+#screen-inicio .home-mini-card::after,#screen-inicio .home-due-card::after{height:58px!important;opacity:.7!important}
+#screen-inicio .home-due-card{padding-top:24px!important}
+#screen-inicio .home-due-card .due-head{padding-right:40px!important}
+#screen-inicio .home-due-card #kHoy{font-size:72px!important;margin-top:22px!important}
+#screen-inicio .home-due-card #kHoyMonto{font-size:23px!important}
+#screen-inicio .home-due-card #homeExpiryBtn{margin-bottom:8px!important}
+
+/* Accesos rápidos: icono grande, título con flecha al lado, onda pastel marcada */
+#screen-inicio .home-tools .focus-action-card{min-height:150px!important;padding:22px 18px 56px!important;gap:16px!important}
+#screen-inicio .home-tools .focus-action-icon{width:64px!important;height:64px!important;flex:0 0 64px!important;font-size:32px!important;border-radius:20px!important;background:#F2F8FE!important;border:1px solid #E1EDF8!important;box-shadow:0 6px 14px rgba(16,82,150,.08)!important}
+#screen-inicio .home-tools .focus-action-card:nth-child(2) .focus-action-icon{background:#FFF7E8!important;border-color:#F8E6C2!important}
+#screen-inicio .home-tools .focus-action-card:nth-child(3) .focus-action-icon{background:#F5F0FF!important;border-color:#E6DCFB!important}
+#screen-inicio .home-tools .focus-action-text{padding-top:6px!important;padding-right:40px!important}
+#screen-inicio .home-tools .focus-action-text b{font-size:15.5px!important;font-weight:900!important}
+#screen-inicio .home-tools .fob-arrow{top:24px!important;right:16px!important;width:34px!important;height:34px!important}
+#screen-inicio .home-tools .focus-action-card::after{height:60px!important;opacity:.75!important}
+#screen-inicio .home-tools .inicio-cards-row{gap:16px!important}
+#screen-inicio .home-command-grid{margin-bottom:16px!important}
+
+/* Pantallas de escritorio medianas (laptop 1366): tarjetas en columna para que no se aprieten */
+@media(min-width:900px) and (max-width:1560px){
+  #screen-inicio .home-mini-card{flex-direction:column!important;align-items:flex-start!important;gap:10px!important;padding:16px 16px 24px!important}
+  #screen-inicio .home-mini-card>span.metric-icon{width:48px!important;height:48px!important;flex:0 0 48px!important}
+  #screen-inicio .home-mini-card>span.metric-icon svg{width:48px!important;height:48px!important}
+  #screen-inicio .home-mini-card>div>small{white-space:nowrap!important}
+  #screen-inicio .home-mini-card>div>b{font-size:28px!important}
+  #screen-inicio .home-due-card .due-head b{white-space:nowrap!important}
+  #screen-inicio .home-tools .focus-action-card{flex-direction:column!important;min-height:170px!important;padding:16px 14px 50px!important;gap:10px!important}
+  #screen-inicio .home-tools .focus-action-icon{width:52px!important;height:52px!important;flex:0 0 52px!important;font-size:26px!important}
+  #screen-inicio .home-tools .focus-action-text{padding-top:0!important;padding-right:0!important}
+  #screen-inicio .home-tools .fob-arrow{top:18px!important}
+}
 </style>
+<script id="licInicioVisual1Flechas20261012">
+/* Visual 1: flechas en las tarjetas de números. Solo reutilizan las mismas pantallas del menú
+   (y "Vencen hoy" el mismo botón "Ver vencimientos"); no crean rutas ni lógica nueva. */
+(function(){
+  function go(screen){
+    if(window.subliRBAC&&typeof window.subliRBAC.go==='function'){window.subliRBAC.go(screen);return;}
+    var b=document.querySelector('.nav-btn[data-screen="'+screen+'"]');if(b)b.click();
+  }
+  function link(card,fn){
+    if(!card||card.dataset.v1Link)return;
+    card.dataset.v1Link='1';card.classList.add('v1-link');card.setAttribute('role','button');card.tabIndex=0;
+    var a=document.createElement('span');a.className='v1-go';a.setAttribute('aria-hidden','true');a.textContent='›';card.appendChild(a);
+    card.addEventListener('click',function(e){if(e.target.closest('button'))return;fn();});
+    card.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}});
+  }
+  function bind(){
+    var due=document.querySelector('#screen-inicio .home-due-card');
+    link(due,function(){var b=document.getElementById('homeExpiryBtn');if(b)b.click();});
+    var minis=document.querySelectorAll('#screen-inicio .home-mini-card');
+    var dest=['clientes','clientes','tickets','objetivos'];
+    minis.forEach(function(c,i){if(dest[i])link(c,function(){go(dest[i]);});});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
+  setTimeout(bind,800);
+})();
+</script>
+
 
 </body>
 </html>
