@@ -2391,10 +2391,8 @@
       // Aquí se borraba el análisis y nadie lo volvía a calcular → la pantalla se quedaba para siempre en
       // "Cargando datos reales de Control Maestro…". Si el Excel nuevo lo acabamos de guardar desde este
       // navegador, ya lo tenemos en memoria: se conserva y no se vuelve a descargar.
-      if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId){
-        if(state.localTemplateFresh){state.localTemplateFresh=false;}
-        else{state.templateBase64='';state.analysis=null;}
-      }
+      if(previousTemplateId&&nextTemplateId&&previousTemplateId!==nextTemplateId&&!state.localTemplateFresh){state.templateBase64='';state.analysis=null;}
+      state.localTemplateFresh=false;
       state.accountAudit=null;state.status='';state.statusType='';state.metaRetryCount=0;
       if(state.metaRetryTimer){clearTimeout(state.metaRetryTimer);state.metaRetryTimer=0;}
     }
