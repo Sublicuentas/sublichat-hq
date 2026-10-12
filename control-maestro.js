@@ -8,7 +8,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-70';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-71';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -553,7 +553,7 @@
     if(name.includes('extra')||(name.includes('netflix')&&/\bvip\b/.test(name))||/\bvip\b/.test(name))return 'vipnetflix';
     if(name.includes('netflix belice'))return 'netflix';
     if(name.includes('netflix'))return 'netflix';
-    if(name.includes('vix')&&name.includes('viki'))return 'vixmix';
+    if(name.includes('vix')&&name.includes('viki'))return 'vix'; // Una sola tarjeta ViX: Viki ya tiene la suya (las filas de Viki se reconocen por correo arriba).
     return allowed[0]||'sin_plataforma';
   }
 
