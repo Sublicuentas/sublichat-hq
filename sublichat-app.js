@@ -651,6 +651,20 @@ async function load(options={}){
       if(!await sublichatCurrentAuthUser())throw new Error('Vuelva a iniciar sesión para cargar los datos.');
       const readCollection=async(name)=>{
         if(sharedControl&&[CONFIG.collection,'inventario'].includes(name))return readControlSharedCollection(name);
+        if(name==='inventario'){
+          // Misma reparación y paginación que la APK, también para Relojes.
+          const docs=[],seen=new Set();let cursor='';
+          do{
+            const r=await fetch('/api/mobile-core',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'list',resource:'inventario',cursor})});
+            const j=await r.json();
+            if(!r.ok||!j.ok||!Array.isArray(j.items))throw new Error(j.error||'No se pudo sincronizar Bodega.');
+            j.items.forEach(item=>docs.push({id:item.id,data:()=>item}));
+            cursor=String(j.nextCursor||'');
+            if(cursor&&seen.has(cursor))throw new Error('Página repetida de Bodega.');
+            if(cursor)seen.add(cursor);
+          }while(cursor);
+          return {docs};
+        }
         const ref=collection(db,name);
         if(forceServer&&typeof getDocsFromServer==="function"){
           try{return await getDocsFromServer(ref);}
