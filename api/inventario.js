@@ -115,6 +115,147 @@ function findInventoryClientIndex(clients, clientIndex, nombreCliente, slot) {
   return uniqueFallbacks.size === 1 ? [...uniqueFallbacks][0] : -1;
 }
 
+// Sin un límite total: tanto la reparación como las claves deben incluir toda
+// la cartera. Se pagina por ID para no cargar una sola respuesta enorme.
+async function* clientPages(db) {
+  let cursor = "";
+  for (;;) {
+    let query = db.collection("clientes").orderBy("__name__").limit(500);
+    if (cursor) query = query.startAfter(cursor);
+    const snap = await query.get();
+    if (!snap.docs.length) return;
+    yield snap.docs;
+    cursor = snap.docs[snap.docs.length - 1].id;
+    if (snap.docs.length < 500) return;
+  }
+}
+
+function accountKey(platform, email) {
+  return `${canonPlatform(platform)}|${normEmail(email)}`;
+}
+
+function renameInventoryLink(link, platform, oldEmail, newEmail) {
+  try {
+    const value = JSON.parse(link);
+    const identity = JSON.parse(value[0]);
+    if (identity[1] !== accountKey(platform, oldEmail)) return link;
+    identity[1] = accountKey(platform, newEmail);
+    return JSON.stringify([JSON.stringify(identity), value[1]]);
+  } catch (_) { return link; }
+}
+
+// Repara únicamente cuentas ya existentes. Los cupos manuales se conservan;
+// las fichas consolidadas son alias y no generan ocupaciones adicionales.
+export async function reconciliarInventario(db, accounts = []) {
+  if (!accounts.length) return [];
+  const wanted = new Map(accounts.map(a => [accountKey(a.plataforma, a.correo), []]));
+  for await (const docs of clientPages(db)) {
+    for (const doc of docs) {
+      const client = doc.data() || {};
+      if (String(client.consolidadoEn || "").trim()) continue;
+      const titular = String(client.nombrePerfil || client.nombre || "").trim();
+      const services = Array.isArray(client.servicios) ? client.servicios : [];
+      const occurrences = new Map();
+      services.forEach((service) => {
+        const profiles = Array.isArray(service?.perfiles) && service.perfiles.length ? service.perfiles : [service];
+        profiles.forEach((p, profileIndex) => {
+          const correo = p?.correo || service?.correo || "";
+          if (!normEmail(correo)) return;
+          const rows = wanted.get(accountKey(service?.plataforma, correo));
+          if (!rows) return;
+          const tercero = service.beneficiarioTipo === "tercero" ? String(service.beneficiarioNombre || service.beneficiario || "").trim() : "";
+          const nombre = plainClientValue(p?.nombre || p?.nombrePerfil || p?.perfil || "") || titular || "Cliente";
+          // Sin IDs, el vínculo depende del contenido y no de la posición del
+          // servicio: borrar otra compra no desplaza ni duplica este perfil.
+          const profileId = p?.perfilId || p?.id || "";
+          const identity = JSON.stringify([doc.id, service.compraId || (profileId ? canonPlatform(service.plataforma) : accountKey(service.plataforma, correo)), profileId || normText(nombre)]);
+          const occurrence = occurrences.get(identity) || 0;
+          occurrences.set(identity, occurrence + 1);
+          rows.push({ clienteId:doc.id, compraId:String(service.compraId || ""), perfilId:String(p?.perfilId || p?.id || ""),
+            vinculoInventario:JSON.stringify([identity, occurrence]),
+            nombre:tercero && (profiles.length === 1 || normText(nombre) === normText(titular)) ? tercero : nombre,
+            pin:plainClientValue(p?.pinPerfil || p?.pin_perfil || p?.perfilPin || (p !== service ? p?.pin : "") || ""),
+            telefono:String(client.telefono || ""), ...(titular && normText(titular) !== normText(nombre) ? { pagadoPor:titular } : {}) });
+        });
+      });
+    }
+  }
+  const merge = (account, rows) => {
+    const exclusions = new Set(Array.isArray(account.exclusionesSincronizacion) ? account.exclusionesSincronizacion : []);
+    rows = rows.filter(row => !exclusions.has(row.vinculoInventario));
+    const active = new Set(rows.map(row => row.vinculoInventario));
+    // Solo se retiran vínculos administrados por esta reparación que ya no
+    // existen en las fichas. Las asignaciones manuales nunca se purgan.
+    const clients = (Array.isArray(account.clientes) ? account.clientes : [])
+      .filter(c => !c.vinculoInventario || active.has(c.vinculoInventario)).map(c => ({...c}));
+    const used = new Set();
+    for (const row of rows) {
+      let index = clients.findIndex((c,i) => !used.has(i) && (
+        c.vinculoInventario === row.vinculoInventario ||
+        row.perfilId && String(c.perfilId || "") === row.perfilId && (!c.clienteId || c.clienteId === row.clienteId)
+      ));
+      if (index < 0) {
+        const legacy = clients.map((c,i) => ({c,i})).filter(({c,i}) => !used.has(i) &&
+          !c.vinculoInventario && !c.perfilId && (!c.clienteId || c.clienteId === row.clienteId) &&
+          (!c.compraId || c.compraId === row.compraId) && normText(c.nombre) === normText(row.nombre) &&
+          (!c.pin || !row.pin || plainClientValue(c.pin) === row.pin));
+        if (legacy.length === 1) index = legacy[0].i;
+      }
+      if (index < 0) {
+        const slots = new Set(clients.map(c => Number(plainClientValue(c.slot))));
+        let slot = 1; while (slots.has(slot)) slot++;
+        index = clients.length; clients.push({ slot });
+      }
+      used.add(index);
+      const old = clients[index];
+      clients[index] = {...old, ...row, pin:row.pin || old.pin || ""};
+      if (old.edicionManualInventario) for (const field of ["nombre", "pin", "telefono"]) {
+        if (old[field] != null) clients[index][field] = old[field];
+      }
+    }
+    const disponibles = Math.max(0, (Number(account.capacidad) || 0) - clients.length);
+    return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}) };
+  };
+  // Solo se escriben diferencias y se relee la cuenta dentro de una transacción,
+  // para conservar ediciones simultáneas. No se trunca al llegar a capacidad:
+  // una sobreasignación real debe seguir siendo visible, con cero libres.
+  return Promise.all(accounts.map(async account => {
+    const rows = wanted.get(accountKey(account.plataforma, account.correo)) || [];
+    const patch = merge(account, rows);
+    if (Object.keys(patch).every(key => JSON.stringify(account[key]) === JSON.stringify(patch[key]))) return account;
+    return db.runTransaction(async tx => {
+      const ref = db.collection("inventario").doc(account.id);
+      const snap = await tx.get(ref);
+      if (!snap.exists) return account;
+      const current = snap.data() || {};
+      if (accountKey(current.plataforma, current.correo) !== accountKey(account.plataforma, account.correo)) return {...current, id:account.id};
+      const update = merge(current, rows);
+      tx.update(ref, {...update, updatedAt:new Date().toISOString()});
+      return {...current, ...update, id:account.id};
+    });
+  }));
+}
+
+function refreshAccountFicha(service) {
+  if (!service.fichaTexto) return service;
+  const profiles = Array.isArray(service.perfiles) && service.perfiles.length ? service.perfiles : [service];
+  let text = String(service.fichaTexto);
+  const replace = (labels, field) => {
+    const regex = new RegExp(`^([ \\t]*\\*?[^\\p{L}\\p{N}\\n]{0,8}(?:${labels})[ \\t]*:[ \\t]*)([^*\\n]*?)([ \\t]*\\*?[ \\t]*)$`, "gimu");
+    if ([...text.matchAll(regex)].length !== profiles.length) return;
+    let index = 0;
+    text = text.replace(regex, (match, start, old, end) => {
+      const p = profiles[index++];
+      const value = p[field] ?? service[field];
+      if (value == null || /[\r\n*]/.test(String(value))) return match;
+      return `${start}${value}${end}`;
+    });
+  };
+  replace("Correo|Usuario", "correo");
+  if (!service.sinClave && service.maxPlayer !== true) replace("Contraseña|Contrasena|Clave", "clave");
+  return {...service, fichaTexto:text};
+}
+
 async function inspectOrUpdateAccountServices(db, options = {}) {
   const platform = canonPlatform(options.platform);
   const oldEmail = normEmail(options.oldEmail);
@@ -125,13 +266,11 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
     compraId: String(item?.compraId || "").trim(),
     perfilId: String(item?.perfilId || "").trim()
   })).filter((item) => item.clientId || item.compraId || item.perfilId);
-  const snap = await db.collection("clientes").limit(5000).get();
-  let references = 0, documents = 0, updated = 0, operations = 0;
-  let batch = db.batch();
-  for (const doc of snap.docs) {
-    const data = doc.data() || {};
+  let references = 0, documents = 0, updated = 0;
+  const transform = (data, clientId) => {
+    let localReferences = 0, localUpdated = 0;
     const services = Array.isArray(data.servicios) ? data.servicios : [];
-    const linkedToClient = assignments.filter((item) => !item.clientId || item.clientId === doc.id);
+    const linkedToClient = assignments.filter((item) => !item.clientId || item.clientId === clientId);
     let changed = false;
     const next = services.map((service) => {
       if (canonPlatform(service && service.plataforma) !== platform) return service;
@@ -149,14 +288,19 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
           // clave cambiaba en Bodega pero nunca llegaba a la URL del cliente.
           const inheritedEmail = perfil?.correo || service?.correo || "";
           const perfilId = String(perfil?.perfilId || perfil?.id || "").trim();
-          const profileLinked = serviceLinked || linkedToClient.some((item) => item.perfilId && perfilId && item.perfilId === perfilId);
-          if (!profileLinked && normEmail(inheritedEmail) !== oldEmail) return perfil;
-          references++;
+          // Una compra puede incluir varios correos. Su ID NO identifica la
+          // cuenta de todos los perfiles. Un correo explícito distinto manda.
+          const profileLinked = linkedToClient.some((item) => item.perfilId && perfilId && item.perfilId === perfilId);
+          const accountLinked = options.accountId && perfil?.inventarioId === options.accountId &&
+            normEmail(inheritedEmail) === normEmail(options.emailProvided ? options.newEmail : options.oldEmail);
+          if (!accountLinked && normEmail(inheritedEmail) !== oldEmail && !(profileLinked && !normEmail(inheritedEmail))) return perfil;
+          localReferences++;
           if (options.countOnly) return perfil;
           const copy = { ...(perfil || {}) };
+          if (options.accountId) copy.inventarioId = options.accountId;
           if (options.emailProvided) copy.correo = String(options.newEmail || "").trim();
           if (options.passwordProvided) copy.clave = String(options.newPassword == null ? "" : options.newPassword).trim();
-          profileChanged = true;updated++;
+          profileChanged = true;localUpdated++;
           return copy;
         });
         if (!profileChanged) return service;
@@ -165,26 +309,34 @@ async function inspectOrUpdateAccountServices(db, options = {}) {
         copy.correo = principal.correo || copy.correo || "";
         copy.clave = principal.clave != null ? String(principal.clave) : String(copy.clave || "");
         changed = true;
-        return copy;
+        return refreshAccountFicha(copy);
       }
-      const matches = serviceLinked || normEmail(service && service.correo) === oldEmail;
+      const alreadyUpdated = options.accountId && service?.inventarioId === options.accountId &&
+        normEmail(service?.correo) === normEmail(options.emailProvided ? options.newEmail : options.oldEmail);
+      const matches = alreadyUpdated || normEmail(service && service.correo) === oldEmail || (serviceLinked && !normEmail(service?.correo));
       if (!matches) return service;
-      references++;
+      localReferences++;
       if (options.countOnly) return service;
       const copy = { ...service };
+      if (options.accountId) copy.inventarioId = options.accountId;
       if (options.emailProvided) copy.correo = String(options.newEmail || "").trim();
       if (options.passwordProvided) copy.clave = String(options.newPassword == null ? "" : options.newPassword).trim();
       copy.updatedAt = new Date().toISOString();
-      changed = true;updated++;
-      return copy;
+      changed = true;localUpdated++;
+      return refreshAccountFicha(copy);
     });
-    if (changed) {
-      batch.update(doc.ref, { servicios: next, updatedAt: new Date().toISOString() });
-      documents++;operations++;
-      if (operations >= 400) { await batch.commit();batch = db.batch();operations = 0; }
-    }
+    return { references:localReferences, updated:localUpdated, documents:changed ? 1 : 0, servicios:next };
+  };
+  for await (const docs of clientPages(db)) for (const doc of docs) {
+    const preview = transform(doc.data() || {}, doc.id);
+    const result = !preview.documents ? preview : await db.runTransaction(async tx => {
+      const latest = await tx.get(doc.ref);
+      const current = transform(latest.data() || {}, doc.id);
+      if (current.documents) tx.update(doc.ref, {servicios:current.servicios, updatedAt:new Date().toISOString()});
+      return current;
+    });
+    references += result.references; updated += result.updated; documents += result.documents;
   }
-  if (operations) await batch.commit();
   return { references, documents, updated };
 }
 
@@ -244,29 +396,48 @@ export default async function handler(req, res) {
         update.ocupados = clients.length;
         update.disponibles = Math.max(0, cap - clients.length);
       }
-      await ref.update(update);
       const sync = await inspectOrUpdateAccountServices(db, {
         platform: current.plataforma,
         oldEmail: current.correo,
         accountId: docId,
         assignments: clients,
-        emailProvided: correo != null && normEmail(correo) !== normEmail(current.correo),
+        emailProvided: correo != null,
         newEmail: correo,
-        passwordProvided: clave != null && String(clave) !== String(current.clave || ""),
+        passwordProvided: clave != null,
         newPassword: clave
+      });
+      // La cuenta se guarda al terminar la réplica. Si falla a mitad, conserva
+      // el correo anterior y repetir Guardar vuelve a encontrar los pendientes.
+      await db.runTransaction(async tx => {
+        const latest = await tx.get(ref);
+        const account = latest.data() || {};
+        const patch = {...update};
+        if (update.correo && normEmail(update.correo) !== normEmail(current.correo)) {
+          const rename = link => renameInventoryLink(link, current.plataforma, current.correo, update.correo);
+          // Mantiene retiros y ediciones incluso en compras legacy sin IDs,
+          // cuyo vínculo depende del correo. Se relee para conservar cambios
+          // simultáneos del inventario durante la réplica de fichas.
+          patch.clientes = (Array.isArray(account.clientes) ? account.clientes : []).map(c =>
+            c.vinculoInventario ? {...c, vinculoInventario:rename(c.vinculoInventario)} : c);
+          if (Array.isArray(account.exclusionesSincronizacion)) patch.exclusionesSincronizacion = account.exclusionesSincronizacion.map(rename);
+        }
+        tx.update(ref, patch);
       });
       await db.collection("auditoria_eventos").add({tipo:"inventario_cuenta_editada",inventarioId:docId,plataforma:current.plataforma||"",correoAnterior:current.correo||"",correoNuevo:update.correo||current.correo||"",serviciosActualizados:sync.updated,usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
       return res.status(200).json({ ok: true, serviciosActualizados: sync.updated, documentosActualizados: sync.documents });
     }
 
     if (accion === "quitarCliente") {
-      const clients = Array.isArray(current.clientes) ? current.clientes : [];
+      const [linked] = await reconciliarInventario(db, [{...current, id:docId}]);
+      const clients = Array.isArray(linked.clientes) ? linked.clientes : [];
       const index = findInventoryClientIndex(clients, clienteIndex, nombreCliente, slot);
       if (index < 0) return res.status(200).json({ error: "No encontré ese cliente dentro de la cuenta." });
       const removed = clients[index] || {};
       const next = clients.filter((_, i) => i !== index);
       const cap = Math.max(next.length, Number(current.capacidad) || clients.length || 1);
-      await ref.update({clientes:next,ocupados:next.length,disponibles:Math.max(0,cap-next.length),updatedAt:new Date().toISOString()});
+      const exclusions = Array.isArray(linked.exclusionesSincronizacion) ? linked.exclusionesSincronizacion : [];
+      if (removed.vinculoInventario && !exclusions.includes(removed.vinculoInventario)) exclusions.push(removed.vinculoInventario);
+      await ref.update({clientes:next,exclusionesSincronizacion:exclusions,ocupados:next.length,disponibles:Math.max(0,cap-next.length),updatedAt:new Date().toISOString()});
       await db.collection("auditoria_eventos").add({tipo:"inventario_cliente_retirado",inventarioId:docId,plataforma:current.plataforma||"",correo:current.correo||"",cliente:String(removed.nombre||nombreCliente||""),slot:plainClientValue(removed.slot),usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
       return res.status(200).json({ok:true,retirado:{nombre:String(removed.nombre||""),slot:plainClientValue(removed.slot)},ocupados:next.length,disponibles:Math.max(0,cap-next.length)});
     }
@@ -286,6 +457,7 @@ export default async function handler(req, res) {
       const before = { ...(clients[index] || {}) };
       const next = clients.slice();
       const updated = { ...next[index] };
+      updated.edicionManualInventario = true;
       if (nuevoNombre != null) {
         const cleanName = String(nuevoNombre).trim();
         if (!cleanName) return res.status(200).json({ error: "El nombre no puede quedar vacío." });

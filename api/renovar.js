@@ -645,7 +645,7 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
       perfilId: String(p?.perfilId || p?.id || ""),
       nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
       perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
-      correo: String(p?.correo ?? servicio.correo ?? "").trim(),
+      correo: String(p?.correo || servicio.correo || "").trim(),
       clave: String(p?.clave ?? p?.password ?? p?.contrasena ?? servicio.clave ?? servicio.password ?? servicio.contrasena ?? "").trim(),
       pinPerfil: perfilPinRaw(p) || (index === 0 ? perfilPinRaw(servicio) : ""),
       dispositivo,
@@ -870,16 +870,16 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
         // Nombre real + PIN es más seguro que compraId en compras multiperfil:
         // varios perfiles pueden compartir el mismo compraId.
         if (idxExiste === -1) {
-          idxExiste = clientes.findIndex(c => normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
         }
         // Adopta registros legacy donde quedó guardado el pagador como si fuera
         // el titular del perfil. El PIN evita cambiar otra persona por accidente.
         if (idxExiste === -1 && pagadorNorm) {
-          idxExiste = clientes.findIndex(c => normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
         }
         // Último fallback: compraId, pero solo si identifica una única fila.
         if (idxExiste === -1 && compraKey) {
-          const porCompra = clientes.map((c,i)=>({c,i})).filter(({c}) => String(c?.compraId || "").trim() === compraKey && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          const porCompra = clientes.map((c,i)=>({c,i})).filter(({c}) => (!perfilKey || !c?.perfilId) && String(c?.compraId || "").trim() === compraKey && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
           if (porCompra.length === 1) idxExiste = porCompra[0].i;
         }
         if (idxExiste !== -1) {

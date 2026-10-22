@@ -1,6 +1,6 @@
 // api/importar.js · Respaldos Excel Sublichat
 // Guarda, lista, abre y busca tablas de Excel guardadas en Firestore.
-// No modifica clientes, servicios, inventario operativo ni bot Telegram.
+// control_datos repara las asociaciones de inventario al sincronizar Bodega.
 // Requiere variables: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 const admin = require("firebase-admin");
@@ -651,6 +651,14 @@ async function controlDatos(db, body) {
   }
   const more = documentos.length < snap.docs.length || snap.docs.length === pageSize;
   const nextCursor = more && documentos.length ? documentos[documentos.length - 1].id : "";
+  if (coleccion === "inventario" && documentos.length) {
+    const { reconciliarInventario } = await import("./inventario.js");
+    const repaired = await reconciliarInventario(db, documentos.map(item => ({...item.data, id:item.id})));
+    repaired.forEach((account, index) => {
+      const {id, ...data} = account;
+      documentos[index].data = data;
+    });
+  }
   return { status: 200, json: { ok: true, coleccion, documentos, nextCursor } };
 }
 

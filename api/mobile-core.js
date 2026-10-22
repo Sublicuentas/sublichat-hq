@@ -232,12 +232,18 @@ async function listResource(req, res) {
   // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
   // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
   // usando el último documento leído, así la paginación no se altera.
-  const items = snap.docs
+  let items = snap.docs
     .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
     .map(doc => {
-      const item = { id:doc.id, ...(doc.data() || {}) };
+      const item = { ...(doc.data() || {}), id:doc.id };
       return resource === 'clientes' ? prepareClientForMobile(item) : item;
     });
+  if (resource === 'inventario' && items.length) {
+    // La APK instalada ya usa esta lectura al sincronizar. Se conserva el
+    // formato y cursor; solo se reparan cupos faltantes y sus contadores.
+    const { reconciliarInventario } = await import('./inventario.js');
+    items = await reconciliarInventario(db, items);
+  }
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
   // Monitoreo de lecturas (Vercel → Logs, buscar "fs_read"): quién descarga qué y cuántos documentos.
   console.log(JSON.stringify({ evt:'fs_read', src:'mobile-core', resource, docs:snap.size, page:cursor ? 'next' : 'first', uid:String(user.uid || '').slice(0, 8) }));
