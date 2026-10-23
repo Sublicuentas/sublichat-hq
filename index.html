@@ -1612,6 +1612,11 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
         <button class="cobro-btn renew" id="invNGuardar" type="button" style="width:100%;margin-top:12px">💾 Guardar en inventario</button>
         <div class="cr-hint" id="invNHint"></div>
       </div>
+      <div class="toolbar" style="gap:8px">
+        <button class="cobro-btn" id="invValidarBtn" type="button" style="flex:1;margin:0">🔎 Validar / reparar inventario</button>
+        <button class="cobro-btn" id="invUrlsTvBtn" type="button" style="flex:1;margin:0">🌐 URLs TV Digital</button>
+      </div>
+      <div id="invAuditBox" class="iv-perfiles" style="display:none;margin-bottom:10px"></div>
       <div class="toolbar"><div class="search">🔎 <input id="invQ" type="text" placeholder="Buscar usuario, correo o plataforma…"></div></div>
       <div class="toolbar">
         <select id="invPlat"><option value="">Todas las plataformas</option></select>
@@ -1735,15 +1740,27 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     </div>
     <div class="cobro-renovar" id="cobroRenovar" style="display:none">
       <div class="cr-label">¿Ya pagó? Elegí cuánto renovar:</div>
-      <div class="cobro-actions">
-        <button class="cobro-btn renew" data-dias="30" id="cobroR30">+30 días</button>
-        <button class="cobro-btn renew" data-dias="31" id="cobroR31">+31 días</button>
+      <!-- Oct-2026 · duraciones predefinidas; la fecha la calcula el servidor (vigente: desde el vencimiento · vencido: desde hoy) -->
+      <div class="cobro-dur-grid" id="cobroDuraciones" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0">
+        <button class="cobro-btn renew" data-dur-unidad="dias" data-dur-cantidad="15" type="button" style="margin:0">+15 días</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="1" type="button" style="margin:0">+1 mes</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="2" type="button" style="margin:0">+2 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="3" type="button" style="margin:0">+3 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="4" type="button" style="margin:0">+4 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="6" type="button" style="margin:0">+6 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="7" type="button" style="margin:0">+7 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="9" type="button" style="margin:0">+9 meses</button>
+        <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="12" type="button" style="margin:0">+12 meses</button>
       </div>
+      <label class="cr-label" style="display:flex;gap:8px;align-items:center;margin:6px 0">Contar desde:
+        <select id="cobroBaseRenov" class="serv-input" style="margin:0;flex:1">
+          <option value="auto">Automático (vigente: vencimiento · vencido: hoy)</option>
+          <option value="vencimiento">La fecha de vencimiento</option>
+          <option value="hoy">Hoy</option>
+        </select>
+      </label>
       <div class="cobro-actions">
-        <button class="cobro-btn renew" data-dias="60" id="cobroR60">+2 meses</button>
-        <button class="cobro-btn renew" data-dias="90" id="cobroR90">+3 meses</button>
-      </div>
-      <div class="cobro-actions">
+        <button class="cobro-btn ghost" id="cobroRPersonal" type="button">✏️ Personalizado (días o meses)</button>
         <button class="cobro-btn ghost" id="cobroRManual">📅 Elegir fecha en calendario</button>
         <input type="date" id="cobroFecha" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
       </div>
@@ -2475,7 +2492,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
       }else{ dt=raw?dt0:lastDate; if(raw&&dt){lastDate=dt;parsed++;} }
       const name=cleanCell(r[nc]||'').split('\n')[0].trim(); if(!name||!dt)return;
       if(cc>=0&&!state.antigTodos){const cobro=antigParseFuturo(r[cc]);if(!cobro||cobro<minCobro||cobro>maxCobro){noAlDia++;return;}}
-      const phone=pc>=0?cleanCell(r[pc]||'').replace(/\D/g,'').slice(-8):'';
+      const phone=pc>=0?cleanCell(r[pc]||'').replace(/\D/g,'').replace(/^504(?=\d{8}$)/,''):'';
       const key=norm(name)+'|'+phone;const prev=people.get(key);
       if(!prev||dt<prev.dt)people.set(key,{name,phone,dt});
     });
@@ -2815,7 +2832,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   });
 })();
 </script>
-<script defer src="./control-maestro.js?v=20261012-71"></script>
+<script defer src="./control-maestro.js?v=20261023-72"></script>
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

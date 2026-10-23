@@ -1,4 +1,4 @@
-import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261005-r112"; // R112
+import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261023-r150"; // R112
 const CONFIG = {
   firebase: {
     apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
@@ -328,6 +328,7 @@ const PLAT_LABELS = {
   latintv:"LatinTV", latintv1:"LatinTV (1 dispositivo)", latintv2:"LatinTV (2 dispositivos)", latintv3:"LatinTV (3 dispositivos)", latintv4:"LatinTV (4 dispositivos)",
   liontv:"LionTV", liontv1:"LionTV (1 dispositivo)", liontv2:"LionTV (2 dispositivos)", liontv3:"LionTV (3 dispositivos)", liontv5:"LionTV (5 dispositivos)",
   evoutouch:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
+  icomplay:"ICOMPLAY MAX", icomplay1:"ICOMPLAY MAX (1 pantalla)", icomplay3:"ICOMPLAY MAX (3 pantallas)", icomplay5:"ICOMPLAY MAX (5 pantallas)", icomplay7:"ICOMPLAY MAX (7 pantallas)",
   iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
   canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
   viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32"
@@ -465,6 +466,9 @@ function flattenCliente(doc, clienteId=""){
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
       beneficiarioTipo,beneficiarioNombre,beneficiarioKey,
       visibilidadUrl:s.visibilidadUrl||{modo:"plataforma"},
+      // Oct-2026 · notas internas (solo personal; nunca van en entregas ni cobros)
+      notaInternaCliente:doc.notaInterna&&typeof doc.notaInterna==="object"?doc.notaInterna:null,
+      notaInternaServicio:s.notaInterna&&typeof s.notaInterna==="object"?s.notaInterna:null,
       iptvProveedor:String(s.iptvProveedor||s.proveedorIptv||""),
       iptvPantallas:Number(s.iptvPantallas||0)||0,
       iptvLista:String(s.iptvLista||s.listaIptv||""),
@@ -892,12 +896,15 @@ function renderCharts(byP){
   }
 }
 
+// Teléfonos internacionales: Honduras se guarda con 8 dígitos (sin 504); otros países
+// llevan su código completo (+52, +1, +34…). Para WhatsApp solo a los de 8 dígitos se les pone 504.
+function telWhatsApp(v){let d=String(v||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.length===8)d="504"+d;return d.length>=10&&d.length<=15?d:"";}
+function telClave(v){let d=String(v||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.length===11&&d.startsWith("504"))d=d.slice(3);return d;}
 function clienteEsc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 function clienteIniciales(nombre){return String(nombre||"C").trim().split(/\s+/).slice(0,2).map(x=>x.charAt(0)).join("").toUpperCase()||"C";}
 function abrirWhatsAppCliente(g){
-  const tel=String(g&&g.telefono||"").replace(/\D/g,"");
-  if(!tel){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene teléfono guardado.");return;}
-  const num=tel.startsWith("504")?tel:"504"+tel;
+  const num=telWhatsApp(g&&g.telefono);
+  if(!num){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene un teléfono válido guardado.");return;}
   window.open("https://wa.me/"+num,"_blank","noopener");
 }
 function clienteSearchNorm(v){return String(v??"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
@@ -986,8 +993,8 @@ async function loadRecuperacionData(force=false){
 function recFecha(value){const d=parseDate(value);return d instanceof Date&&!isNaN(d)?d:null;}
 function recPlatKey(value){return clienteSearchNorm(platLabel(String(value||""))).replace(/[^a-z0-9]+/g,"");}
 function recClienteKey(x={}){
-  const tel=String(x.telefono||"").replace(/\D/g,"");
-  if(tel.length>=8)return `tel:${tel.slice(-8)}`;
+  const tel=telClave(x.telefono);
+  if(tel.length>=8)return `tel:${tel}`;
   return x.clienteId?`id:${x.clienteId}`:`legacy:${clienteSearchNorm(x.nombre||x.cliente||"")}`;
 }
 function carteraRecuperable(){
@@ -1026,9 +1033,8 @@ function mensajeRecuperacion(g){
   return `Hola, ${g.nombre||""} 👋 Esperamos que se encuentre bien. Notamos que su servicio de ${plataformas||"entretenimiento"} finalizó. ¿Desea renovarlo y recuperar su acceso? Con gusto le ayudamos.`;
 }
 function abrirWhatsAppRecuperacion(g){
-  const tel=String(g?.telefono||"").replace(/\D/g,"");
-  if(!tel){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene teléfono histórico.");return;}
-  const num=tel.startsWith("504")?tel:`504${tel}`;
+  const num=telWhatsApp(g?.telefono);
+  if(!num){if(typeof mostrarToast==="function")mostrarToast("⚠️ Este cliente no tiene teléfono histórico válido.");return;}
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensajeRecuperacion(g))}`,"_blank","noopener");
 }
 function verHistorialRecuperacion(g){
@@ -1240,14 +1246,28 @@ async function invNuevoGuardar(){
 invNuevoInit();
 
 /* ===== INVENTARIO DE CUENTAS ===== */
-function invDisp(c){
-  // disponibles: usa el campo si existe, si no calcula capacidad - ocupados
-  if(c.disponibles!=null) return Number(c.disponibles);
-  if(c.disp!=null) return Number(c.disp);
-  const cap=Number(c.capacidad)||0, ocu=Number(c.ocupados)|| (Array.isArray(c.clientes)?c.clientes.length:0);
-  return Math.max(0,cap-ocu);
+// Oct-2026 · Los cupos salen SIEMPRE de los clientes realmente asignados (clientes[]).
+// Los contadores guardados (ocupados/disponibles/disp) pueden quedar viejos; ya no mandan.
+function invOcupados(c){ return Array.isArray(c.clientes)?c.clientes.length:(Number(c.ocupados)||0); }
+function invCap(c){ return Number(c.capacidad)||Number(c.total)||invOcupados(c)||0; }
+function invDisp(c){ return Math.max(0,invCap(c)-invOcupados(c)); }
+function invSobreasignada(c){ const cap=Number(c.capacidad)||0; return cap>0&&invOcupados(c)>cap; }
+// Familia de plataforma (Disney Premium y sin ESPN comparten Bodega; TV Digital por proveedor).
+function invFamilia(p){
+  const k=String(p||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+  if(/^disney/.test(k))return "disney";
+  return k;
 }
-function invCap(c){ return Number(c.capacidad)|| (Array.isArray(c.clientes)?c.clientes.length:0) || 0; }
+// Orden "cuenta más vacía": menor % de ocupación; empate → más libres. Llenas al final.
+function invOrdenarPorVacia(lista){
+  return [...lista].sort((a,b)=>{
+    const ca=invCap(a)||1, cb=invCap(b)||1, la=invDisp(a), lb=invDisp(b);
+    if((la>0)!==(lb>0))return la>0?-1:1;
+    const pa=invOcupados(a)/ca, pb=invOcupados(b)/cb;
+    if(pa!==pb)return pa-pb;
+    return lb-la;
+  });
+}
 function renderInventario(){
   // llenar selector de plataformas (por CÓDIGO único, así no se duplica)
   const codigos=[...new Set(INVENTARIO.map(c=>c.plataforma).filter(Boolean))].sort((a,b)=>platLabel(a).localeCompare(platLabel(b)));
@@ -1276,24 +1296,28 @@ function invFiltrar(){
     const matchP=!fp || c.plataforma===fp;
     const matchC=!fc || (fc==="libre"?disp>0:disp<=0);
     return matchQ&&matchP&&matchC;
-  }).sort((a,b)=>(a.plataforma||"").localeCompare(b.plataforma||"")|| (a.correo||"").localeCompare(b.correo||""));
+  });
+  // Dentro de cada plataforma: la cuenta más vacía primero (misma regla del selector de la ficha y de la APK).
+  const recomendadas=new Set();
+  const porPlat={};rows.forEach(c=>{const f=invFamilia(c.plataforma);(porPlat[f]=porPlat[f]||[]).push(c);});
+  rows=Object.keys(porPlat).sort((a,b)=>platLabel(a).localeCompare(platLabel(b))).flatMap(f=>{const orden=invOrdenarPorVacia(porPlat[f]);if(orden[0]&&invDisp(orden[0])>0&&invCap(orden[0])>1&&!invEsTvDigital(orden[0].plataforma))recomendadas.add(orden[0]);return orden;});
   window._invRows=rows;
   document.getElementById("invCount").textContent=window._invError?`⚠️ No pude leer el inventario (${window._invError}). Revisá las reglas de Firestore.`:`${rows.length} cuenta${rows.length===1?"":"s"}`;
   const list=document.getElementById("invList");
   list.innerHTML=rows.length?rows.map((c,i)=>{
-    const disp=invDisp(c), cap=invCap(c), ocu=cap-disp;
-    const pct=cap?Math.round((ocu/cap)*100):0;
-    const libre=disp>0;
+    const disp=invDisp(c), cap=invCap(c), ocu=invOcupados(c);
+    const pct=cap?Math.min(100,Math.round((ocu/cap)*100)):0;
+    const libre=disp>0, sobre=invSobreasignada(c);
     return `<div class="inv-card" data-i="${i}">
       <div class="ic-top">
         <div style="flex:1;min-width:0">
           <div class="ic-plat">${platLabel(c.plataforma)}</div>
           <div class="ic-correo">${c.correo||"sin acceso"}</div>
         </div>
-        <span class="ic-cupo ${libre?"libre":"lleno"}">${libre?`${disp} libre${disp>1?"s":""}`:"llena"}</span>
+        <span class="ic-cupo ${libre?"libre":"lleno"}">${sobre?`⚠️ sobreasignada`:(cap===1?(libre?"disponible":"asignada"):(libre?`${disp} libre${disp>1?"s":""}`:"llena"))}</span>${recomendadas.has(c)?`<span class="ic-cupo libre" style="margin-left:6px">⭐ Más vacía</span>`:""}
       </div>
       <div class="inv-bar"><i style="width:${pct}%"></i></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px">${ocu}/${cap} ocupados${c.estado&&c.estado!=="activa"?" · "+c.estado:""}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">${ocu}/${cap} ocupados${c.estado&&c.estado!=="activa"&&c.estado!=="llena"?" · "+c.estado:""}</div>
     </div>`;
   }).join(""):`<div class="empty">Sin cuentas que coincidan</div>`;
   list.querySelectorAll(".inv-card").forEach(el=>el.addEventListener("click",()=>invAbrir(window._invRows[+el.dataset.i])));
@@ -1318,15 +1342,20 @@ function invAbrir(c){
     <div class="iv-row"><span class="k">Clave</span><span class="v">${c.clave||"—"}</span></div>
     <div class="iv-row"><span class="k">Plataforma</span><span class="v">${platLabel(c.plataforma)}</span></div>
     <div class="iv-row"><span class="k">Capacidad</span><span class="v">${cap}</span></div>
-    <div class="iv-row"><span class="k">Ocupados</span><span class="v">${cap-disp}</span></div>
+    <div class="iv-row"><span class="k">Ocupados</span><span class="v">${invOcupados(c)}${invSobreasignada(c)?" ⚠️ sobreasignada":""}</span></div>
     <div class="iv-row"><span class="k">Disponibles</span><span class="v">${disp}</span></div>
+    ${c.url?`<div class="iv-row"><span class="k">URL propia</span><span class="v">${clienteEsc(c.url)}</span></div>`:""}
     <div class="iv-row"><span class="k">Estado</span><span class="v">${c.estado||"—"}</span></div>
     ${perfilesHtml}
     <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar ${identLabel.toLowerCase()} / clave</button>
+    <button class="cobro-btn iv-edit-btn" id="invCapBtn" style="width:100%;margin-top:8px">👥 Editar capacidad</button>
+    ${invEsTvDigital(c.plataforma)?`<button class="cobro-btn iv-edit-btn" id="invUrlBtn" style="width:100%;margin-top:8px">🌐 URL propia de esta cuenta</button>`:""}
     <div class="cr-hint" id="invHint"></div>`;
   document.getElementById("invModal").classList.add("show");
   const eb=document.getElementById("invEditBtn");
   if(eb)eb.addEventListener("click",()=>invEditar(c));
+  const cb=document.getElementById("invCapBtn");if(cb)cb.addEventListener("click",()=>invEditarCapacidad(c));
+  const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
 }
 function invCerrar(){ document.getElementById("invModal").classList.remove("show"); }
 document.getElementById("invClose").addEventListener("click",invCerrar);
@@ -1348,6 +1377,100 @@ async function invEditar(c){
     else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
   }catch(e){ if(hint)hint.textContent="⚠️ No pude conectar."; }
 }
+
+function invEsTvDigital(p){return /^(latintv|liontv|evoutouch|iptv|icomplay)/.test(invFamilia(p));}
+async function invPost(body){
+  const r=await fetch(CONFIG.invEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  return r.json();
+}
+// Capacidad editable: subir recalcula libres; bajar por debajo de los ocupados se bloquea (nunca se sacan clientes).
+async function invEditarCapacidad(c){
+  const ocu=invOcupados(c);
+  const raw=prompt(`Capacidad TOTAL de la cuenta (ocupados ahora: ${ocu}):`,String(invCap(c)));
+  if(raw===null)return;
+  const n=Math.round(Number(raw));
+  const hint=document.getElementById("invHint");
+  if(!Number.isFinite(n)||n<1){if(hint)hint.textContent="⚠️ Escriba un número entero mayor que 0.";return;}
+  if(n<ocu){if(hint)hint.textContent=`⚠️ La cuenta tiene ${ocu} clientes asignados. Primero saque clientes; la capacidad no puede quedar en ${n}.`;return;}
+  if(hint)hint.textContent="Guardando…";
+  try{
+    const j=await invPost({accion:"editarCuenta",docId:c.id,capacidad:n});
+    if(j.ok){mostrarToast(`✅ Capacidad: ${invCap(c)} → ${n} · ${n-ocu} libre${n-ocu===1?"":"s"}`);invCerrar();setTimeout(()=>load(),700);}
+    else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
+  }catch(_){if(hint)hint.textContent="⚠️ No pude conectar.";}
+}
+async function invEditarUrl(c){
+  const raw=prompt("URL propia de esta cuenta (vacío = usar la URL del proveedor):",c.url||"");
+  if(raw===null)return;
+  const hint=document.getElementById("invHint");if(hint)hint.textContent="Guardando…";
+  try{
+    const j=await invPost({accion:"editarCuenta",docId:c.id,url:String(raw).trim()});
+    if(j.ok){mostrarToast("✅ URL actualizada · las entregas enlazadas ya usan la nueva");invCerrar();setTimeout(()=>load(),700);}
+    else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
+  }catch(_){if(hint)hint.textContent="⚠️ No pude conectar.";}
+}
+// URLs de TV Digital por proveedor (una sola fuente para Web, APK, bot y portal del cliente).
+async function invCargarUrlsTv(){
+  try{const j=await invPost({accion:"tvUrls"});if(j&&j.ok&&j.urls&&typeof window.sublichatAplicarUrlsTv==="function")window.sublichatAplicarUrlsTv(j.urls);return j&&j.urls||null;}catch(_){return null;}
+}
+async function invEditarUrlsTv(){
+  const box=document.getElementById("invAuditBox");if(!box)return;
+  box.style.display="block";box.innerHTML="Cargando URLs…";
+  const urls=await invCargarUrlsTv();
+  if(!urls){box.innerHTML="⚠️ No pude leer las URLs.";return;}
+  box.innerHTML=`<div class="cr-label">URLs de TV Digital (por proveedor)</div>`+Object.entries(urls).map(([k,v])=>`
+    <div class="iv-row" style="gap:8px;align-items:center"><span class="k" style="min-width:110px">${clienteEsc(v.nombre||k)}</span>
+    <input class="serv-input" data-tv-url="${clienteEsc(k)}" value="${clienteEsc(v.url||"")}" style="flex:1;margin:0">
+    <button class="cobro-btn" data-tv-url-save="${clienteEsc(k)}" type="button" style="width:auto;margin:0">Guardar</button></div>`).join("")+
+    `<div class="cr-hint">Se acepta http:// (ICOMPLAY usa http y puerto 80). Al guardar, todas las entregas de ese proveedor muestran la URL nueva.</div>`;
+  box.querySelectorAll("[data-tv-url-save]").forEach(b=>b.addEventListener("click",async()=>{
+    const k=b.dataset.tvUrlSave,inp=box.querySelector(`[data-tv-url="${k}"]`);
+    if(!confirm(`¿Cambiar la URL de ${urls[k]?.nombre||k}?\n\n${urls[k]?.url||"—"} → ${inp.value.trim()}`))return;
+    b.disabled=true;b.textContent="Guardando…";
+    try{const j=await invPost({accion:"guardarTvUrl",proveedor:k,url:inp.value.trim()});
+      if(j.ok){mostrarToast(`✅ URL de ${urls[k]?.nombre||k} actualizada`);await invCargarUrlsTv();b.textContent="Guardado";}
+      else{mostrarToast("⚠️ "+(j.error||"Error"));b.textContent="Guardar";}
+    }catch(_){mostrarToast("⚠️ No pude conectar.");b.textContent="Guardar";}
+    finally{b.disabled=false;}
+  }));
+}
+// Validar (solo lee) y Reparar (idempotente) Bodega ↔ fichas.
+async function invAuditar(aplicar){
+  const box=document.getElementById("invAuditBox");if(!box)return;
+  if(aplicar&&!confirm("¿Reparar inventario?\n\nSe enlazan los perfiles a su cuenta (accountId), se corrigen correos viejos y se recalculan los cupos reales. No se borra ningún cliente. Se puede correr varias veces."))return;
+  box.style.display="block";box.innerHTML=aplicar?"Reparando… (puede tardar un minuto)":"Validando…";
+  try{
+    const j=await invPost({accion:aplicar?"repararInventario":"diagnosticarInventario"});
+    if(!j.ok){box.innerHTML="⚠️ "+clienteEsc(j.error||"Error");return;}
+    const r=j.resumen||{};
+    const fila=(t,v,warn)=>`<div class="iv-row"><span class="k">${t}</span><span class="v" style="${warn&&Number(v)>0?"color:var(--accent);font-weight:800":""}">${v}</span></div>`;
+    const dups=(r.cuentasDuplicadas||[]).length, sobre=(r.sobreasignadas||[]).length;
+    box.innerHTML=`<div class="cr-label">${aplicar?"✅ Reparación terminada":"🔎 Resultado de la validación"}</div>`+
+      fila("Cuentas en Bodega",r.cuentas)+
+      fila("Cuentas con conteo incorrecto",r.cuentasConConteoIncorrecto,true)+
+      fila("Perfiles faltantes en Bodega",r.perfilesFaltantesEnBodega,true)+
+      fila("Perfiles sobrantes en Bodega",r.perfilesSobrantesEnBodega,true)+
+      fila("Perfiles sin accountId",r.perfilesSinAccountId,true)+
+      fila("Perfiles con correo viejo",r.perfilesConCorreoViejo,true)+
+      fila("Enlaces rotos",r.enlacesRotos,true)+
+      fila("Clientes sin cuenta en Bodega",r.clientesHuerfanos,true)+
+      fila("Cuentas duplicadas",dups,true)+
+      fila("Cuentas sobreasignadas",sobre,true)+
+      fila("Cuentas sin accountId",r.cuentasSinAccountId,true)+
+      (aplicar?fila("Fichas corregidas",r.fichasCorregidas)+fila("Cuentas corregidas",r.cuentasCorregidas):"")+
+      (dups?`<div class="cr-hint">Duplicadas (revisar a mano, no se tocan): ${(r.cuentasDuplicadas||[]).map(d=>clienteEsc(d.clave)).join(" · ")}</div>`:"")+
+      (sobre?`<div class="cr-hint">Sobreasignadas: ${(r.sobreasignadas||[]).map(s=>`${clienteEsc(platLabel(s.plataforma))} ${clienteEsc(s.correo)} (${s.ocupados}/${s.capacidad})`).join(" · ")}</div>`:"")+
+      ((r.ejemplosHuerfanos||[]).length?`<div class="cr-hint">Ejemplos sin cuenta: ${(r.ejemplosHuerfanos||[]).slice(0,10).map(h=>`${clienteEsc(h.cliente)} · ${clienteEsc(platLabel(h.plataforma))} · ${clienteEsc(h.correo)}`).join(" | ")}</div>`:"")+
+      (!aplicar?`<button class="cobro-btn renew" id="invRepararBtn" type="button" style="width:100%;margin-top:10px">🛠️ Reparar ahora</button>`:"");
+    const rb=document.getElementById("invRepararBtn");if(rb)rb.addEventListener("click",()=>invAuditar(true));
+    if(aplicar)setTimeout(()=>load({forceServer:true}),600);
+  }catch(_){box.innerHTML="⚠️ No pude conectar.";}
+}
+(function invHerramientasInit(){
+  const v=document.getElementById("invValidarBtn");if(v&&!v._w){v._w=true;v.addEventListener("click",()=>invAuditar(false));}
+  const u=document.getElementById("invUrlsTvBtn");if(u&&!u._w){u._w=true;u.addEventListener("click",invEditarUrlsTv);}
+  setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);
+})();
 
 /* ===== FINANZAS (reportes con gráficos interactivos) ===== */
 let _finCharts=[];
@@ -3058,7 +3181,34 @@ function abrirCobro(grupo){
   const gb=$cobro("cobroGestion"); if(gb)gb.style.display="none";
   const gbtn=$cobro("cobroGestionar"); if(gbtn)gbtn.textContent="⚙️ Gestionar servicios";
   const gh=$cobro("cgHint"); if(gh)gh.textContent="";
+  pintarNotasInternas(g);
   $cobro("cobroModal").classList.add("show");
+}
+// Oct-2026 · Nota interna por cliente y por servicio. Campo separado (no es fichaTexto); se muestra solo aquí.
+function notaInternaTexto(n){return n&&String(n.texto||"").trim()?`${clienteEsc(n.texto)}<small style="display:block;color:var(--muted);margin-top:3px">Nota interna · ${clienteEsc(n.actualizadoPor||"")} · ${n.actualizadoAt?clienteEsc(new Date(n.actualizadoAt).toLocaleString("es-HN")):""}</small>`:`<span style="color:var(--muted)">Sin nota</span>`;}
+function pintarNotasInternas(g){
+  let box=document.getElementById("cobroNotas");
+  if(!box){const anchor=$cobro("cobroRenovarBtn")?.closest(".cobro-actions");if(!anchor)return;box=document.createElement("div");box.id="cobroNotas";box.className="iv-perfiles";box.style.margin="10px 0";anchor.parentElement.insertBefore(box,anchor);}
+  const servicios=(g.servicios||[]).filter(s=>s.compraId);
+  const cliente=(g.servicios||[])[0]?.notaInternaCliente||null;
+  box.innerHTML=`<div class="cr-label">📝 Notas internas <small style="color:var(--muted);font-weight:600">(no las ve el cliente)</small></div>
+    <div class="iv-row" style="align-items:flex-start;gap:8px"><span class="k">Cliente</span><span class="v" style="flex:1;white-space:pre-wrap">${notaInternaTexto(cliente)}</span><button class="cobro-btn ghost" type="button" data-nota-edit="" style="width:auto;margin:0">Editar</button></div>
+    ${servicios.map((s,i)=>`<div class="iv-row" style="align-items:flex-start;gap:8px"><span class="k">${clienteEsc(s.plataforma)}</span><span class="v" style="flex:1;white-space:pre-wrap">${notaInternaTexto(s.notaInternaServicio)}</span><button class="cobro-btn ghost" type="button" data-nota-edit="${clienteEsc(s.compraId)}" style="width:auto;margin:0">Editar</button></div>`).join("")}`;
+  box.querySelectorAll("[data-nota-edit]").forEach(b=>b.addEventListener("click",()=>editarNotaInterna(g,b.dataset.notaEdit)));
+}
+async function editarNotaInterna(g,compraId){
+  const s=compraId?(g.servicios||[]).find(x=>x.compraId===compraId):null;
+  const actual=compraId?(s?.notaInternaServicio?.texto||""):((g.servicios||[])[0]?.notaInternaCliente?.texto||"");
+  const texto=prompt(compraId?`Nota interna de ${s?.plataforma||"este servicio"} (no la ve el cliente):`:`Nota interna de ${g.nombre} (no la ve el cliente):`,actual);
+  if(texto===null)return;
+  try{
+    const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"nota_interna",clienteId:g.clienteId||(g.servicios||[])[0]?.clienteId||"",compraId:compraId||"",texto})});
+    const j=await r.json().catch(()=>({}));
+    if(!j.ok){mostrarToast("⚠️ "+(j.error||"No se guardó la nota."));return;}
+    (DATA||[]).forEach(x=>{if(String(x.clienteId)!==String(j.clienteId))return;if(compraId){if(x.compraId===compraId)x.notaInternaServicio=j.notaInterna;}else x.notaInternaCliente=j.notaInterna;});
+    (g.servicios||[]).forEach(x=>{if(compraId){if(x.compraId===compraId)x.notaInternaServicio=j.notaInterna;}else x.notaInternaCliente=j.notaInterna;});
+    pintarNotasInternas(g);mostrarToast("✅ Nota interna guardada");
+  }catch(_){mostrarToast("⚠️ No pude conectar.");}
 }
 function cerrarCobro(){ $cobro("cobroModal").classList.remove("show"); }
 
@@ -3217,7 +3367,7 @@ async function registrarPagoOperacionWeb({tipoOrigen,pago,key="0",clienteId="",c
   throw new Error(ultimo||"No se registró el pago.");
 }
 
-async function renovarServicio(dias, fechaExacta){
+async function renovarServicio(dias, fechaExacta, duracion=null){
   if(!cobroActual) return;
   const g=cobroActual;
   const servicios=g.servicios||[{plataformaRaw:g.plataformaRaw,plataforma:g.plataforma,fechaRaw:g.fechaRaw}];
@@ -3236,7 +3386,9 @@ async function renovarServicio(dias, fechaExacta){
   // Texto descriptivo según modo
   const descRenov = fechaExacta
     ? `hasta el ${fechaExacta.split("-").reverse().join("/")}`
-    : `+${dias} días`;
+    : duracion
+      ? `+${duracion.cantidad} ${duracion.unidad==="dias"?"día"+(duracion.cantidad===1?"":"s"):"mes"+(duracion.cantidad===1?"":"es")}${duracion.base==="hoy"?" desde hoy":duracion.base==="vencimiento"?" desde el vencimiento":""}`
+      : `+${dias} días`;
   const nombres=aRenovar.map(s=>s.plataforma).join(", ");
   let pagoOp=null; // R106: Sublicuentas/Relojes registran el pago real (o ajuste sin pago con motivo)
   if(pagoOpHabilitado()){
@@ -3255,7 +3407,7 @@ async function renovarServicio(dias, fechaExacta){
   for(const s of aRenovar){
     try{
       const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,fechaActual:s.fechaRaw})});
+        body:JSON.stringify({...(pagoOp?.modo==="ajuste"?{ajusteAdministrativo:true,motivoAjuste:pagoOp.motivo,origen:"web"}:{}),clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||"",dias,fechaExacta,...(duracion?{duracion,...(duracion.unidad==="meses"?{meses:duracion.cantidad}:{})}:{}),origen:"web",fechaActual:s.fechaRaw})});
       const j=await r.json().catch(()=>({}));
       if(j.ok&&j.verified===true){
         aplicarRenovacionLocal(g,s,j);
@@ -3298,12 +3450,20 @@ async function renovarServicio(dias, fechaExacta){
     hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
   }
 }
-const r30=$cobro("cobroR30"), r31=$cobro("cobroR31");
-if(r30)r30.addEventListener("click",()=>renovarServicio(30));
-if(r31)r31.addEventListener("click",()=>renovarServicio(31));
-const r60=$cobro("cobroR60"), r90=$cobro("cobroR90");
-if(r60)r60.addEventListener("click",()=>renovarServicio(60));
-if(r90)r90.addEventListener("click",()=>renovarServicio(90));
+// Oct-2026 · Duraciones: 15 días, 1, 2, 3, 4, 6, 7, 9 y 12 meses + personalizado. El servidor calcula la fecha
+// (vigente → desde el vencimiento; vencido → desde hoy; o la base elegida) y la guarda para auditoría.
+const cobroBaseRenov=()=>($cobro("cobroBaseRenov")?.value)||"auto";
+document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:cobroBaseRenov()})));
+const rPersonal=$cobro("cobroRPersonal");
+if(rPersonal)rPersonal.addEventListener("click",()=>{
+  const raw=prompt("Duración personalizada:\n• días: 15d, 40d…\n• meses: 5m, 10m…","1m");
+  if(raw==null)return;
+  const m=String(raw).trim().toLowerCase().match(/^\+?(\d{1,3})\s*(d|dias|días|m|mes|meses)$/);
+  if(!m){mostrarToast("⚠️ Escriba por ejemplo 15d o 5m.");return;}
+  const unidad=m[2].startsWith("d")?"dias":"meses", cantidad=Number(m[1]);
+  if(cantidad<1||(unidad==="meses"&&cantidad>24)||(unidad==="dias"&&cantidad>730)){mostrarToast("⚠️ Duración fuera de rango (máx. 24 meses o 730 días).");return;}
+  renovarServicio(null,null,{unidad,cantidad,base:cobroBaseRenov()});
+});
 
 // Botón que despliega/oculta las opciones de renovación
 const renovarBtn=$cobro("cobroRenovarBtn"), renovarBox=$cobro("cobroRenovar");
@@ -3457,17 +3617,18 @@ function servPlataformaBase(value){
   if(p.startsWith("latintv"))return "latintv";
   if(p.startsWith("liontv"))return "liontv";
   if(p.startsWith("evoutouch"))return "evoutouch";
+  if(p.startsWith("icomplay"))return "icomplay";
   if(p.startsWith("iptv"))return "iptv";
   return p;
 }
-const SERVICIO_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","iptv","windows10","windows11","adobeexpress","eset"]);
+const SERVICIO_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset"]);
 const SERVICIO_SIN_CLAVE=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
 const SERVICIO_SERIAL=new Set(["windows10","windows11","eset"]);
 const servNeedsCorreo=plat=>!SERVICIO_SERIAL.has(servPlataformaBase(plat));
 const servNeedsClave=plat=>!SERVICIO_SIN_CLAVE.has(servPlataformaBase(plat));
 const servNeedsPin=plat=>!SERVICIO_SIN_PIN.has(servPlataformaBase(plat));
 const servEsSerial=plat=>SERVICIO_SERIAL.has(servPlataformaBase(plat));
-const servUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","evoutouch","iptv"].includes(servPlataformaBase(plat));
+const servUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv"].includes(servPlataformaBase(plat));
 function servActualizarCampos(){
   const plat=$cobro("servPlat")?.value||"";
   const correoBox=$cobro("servCorreoField"),correoLabel=$cobro("servCorreoLabel"),correoInput=$cobro("servCorreo"),keyBox=$cobro("servClaveField"),pinBox=$cobro("servPinPerfilField"),keyLabel=$cobro("servClaveLabel"),keyInput=$cobro("servPin");
@@ -3535,7 +3696,7 @@ $cobro("cobroWA").addEventListener("click",()=>{
   const rawMsg=$cobro("cobroText").value||"";
   const msg=encodeURIComponent(rawMsg);
   if(!tel){ alert("Este cliente no tiene teléfono guardado. Puede copiar el mensaje y enviarlo manualmente."); return; }
-  const num=tel.length<=8?("504"+tel):tel;
+  const num=telWhatsApp(tel)||tel;
   // Android: forzar WhatsApp Business (package oficial com.whatsapp.w4b).
   // Así Relojes/Sublicuentas trabajan desde la cuenta Business instalada en su teléfono.
   const isAndroid=/Android/i.test(navigator.userAgent||"");
@@ -4239,7 +4400,7 @@ function gCaminoBombas(){
     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
     ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
     ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
-    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"]
+    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY MAX"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", sublicuentas2:"89464328", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
@@ -4397,6 +4558,7 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, stellatv:0, oleada:90, evoutouch:0, evoutouch1:0, evoutouch2:0, evoutouch3:0, iptv:130,
+    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399,
     office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
   };
   const FICHA_PRECIOS_ESPECIALES={
@@ -4405,21 +4567,41 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
     canva:69, gemini:170, duolingo:89, office:449, office2021:449, eset:399,
     oleada1:90, oleada3:200,
     latintv1:99, latintv2:149, latintv3:199, latintv4:249,
-    liontv1:250, liontv2:275, liontv3:300, liontv5:350, evoutouch1:0, evoutouch2:0, evoutouch3:0, evoutouch4:0, evoutouch:0
+    liontv1:250, liontv2:275, liontv3:300, liontv5:350, evoutouch1:0, evoutouch2:0, evoutouch3:0, evoutouch4:0, evoutouch:0,
+    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399
   };
+  // ICOMPLAY MAX (oct-2026) · precio por pantallas × meses (Max Player incluido).
+  const ICOMPLAY_PRECIOS={1:{1:179,3:499,6:949,12:1799},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
   const FICHA_VENDEDORES_TARIFA_ESPECIAL=new Set(["sublicuentas","sublicuentas2","relojes","geisell","geissel"]);
   // Reglas reales de entrega por plataforma. Se separan de la pregunta de
   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
   // regla "TV ya vinculada" y oculte correo/clave.
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","iptv","windows10","windows11","adobeexpress","eset"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset"]);
   const FICHA_SERIAL=new Set(["windows10","windows11","eset"]);
   const FICHA_SIN_CLAVE=new Set([...FICHA_SOLO_CORREO]);
   const FICHA_SIN_CORREO=new Set([...FICHA_SERIAL]);
-  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","stellatv","oleada","latintv","liontv","evoutouch","iptv","viki","deezer","crunchyroll"]);
+  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","viki","deezer","crunchyroll"]);
   const FICHA_CON_DISPOSITIVO=new Set(["netflix","disneyp","disneys","hbomax","vix","universal","primevideo"]);
-  const IPTV_URLS={latintv:"http://latgt.com:8080", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80", evoutouch:"http://smarterstv99.dyndns.tv:25461/"};
+  // Respaldo local; las URLs vigentes llegan del servidor (Bodega → URLs TV Digital) y reemplazan estos valores.
+  const IPTV_URLS={latintv:"http://latgt.com:8080", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80", evoutouch:"http://smarterstv99.dyndns.tv:25461/", icomplay:"http://latinostream.xyz:80"};
+  window.sublichatAplicarUrlsTv=(urls={})=>{Object.entries(urls||{}).forEach(([k,v])=>{const u=String(v&&v.url||v||"").trim();if(/^https?:\/\/\S+$/i.test(u))IPTV_URLS[k]=u;});};
   const FICHA_TEMPLATES={
+    // Oct-2026 · Cuenta completa: sin perfil, sin PIN de perfil, sin "perfiles ocupados".
+    cuentaCompleta:
+`*🎬 Entrega de su cuenta completa {plat} 🎬*
+
+*📧 Correo / usuario: {correo}*
+*🔑 Clave: {clave}*{urlcuentaLine}
+*📅 Renovación: {renovTexto}*
+
+🚨 Condiciones del servicio:
+📌 Cuenta completa de uso exclusivo
+📌 No cambiar el correo ni la contraseña de la cuenta
+📌 No usar vpn
+📌 Garantía vigente
+
+🚀 Sublicuentas`,
     default:
 `*🎬 Entrega de su acceso {plat} 🎬*
 
@@ -5014,6 +5196,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(/^latintv[1234]$/.test(p))return "latintv";
     if(/^liontv[1235]$/.test(p))return "liontv";
     if(/^evoutouch[1-4]?$/.test(p))return "evoutouch";
+    if(/^icomplay(max)?[1357]?$/.test(p))return "icomplay";
     if(/^iptv[1234]$/.test(p))return "iptv";
     return p;
   };
@@ -5035,8 +5218,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const esperada=fichaBaseRegla(plat);
     return especificas.some(item=>fichaBaseRegla(item.key)===esperada);
   }
-  const fichaEsIptv=plat=>["latintv","liontv","evoutouch","iptv"].includes(fichaBaseRegla(plat));
-  const fichaUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","evoutouch","iptv"].includes(fichaBaseRegla(plat));
+  const fichaEsIptv=plat=>["latintv","liontv","evoutouch","icomplay","iptv"].includes(fichaBaseRegla(plat));
+  const fichaUsaUsuario=plat=>["stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv"].includes(fichaBaseRegla(plat));
   const fichaQ=id=>document.getElementById(id);
   let fichaClienteIdActual="";
   let fichaGrupoActual=null;
@@ -5080,8 +5263,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const corte=new Date(a.getFullYear(),a.getMonth()+meses,a.getDate(),12); if(corte<b)meses+=1;
     return Math.max(1,Math.min(24,meses||1));
   };
-  const FICHA_TV_MESES_VALIDOS={latintv:[1,4,8,12],liontv:[1,3,5,12],stellatv:[1,3,7],oleada:[1,3,7,14],evoutouch:[1,3,6,12]};
-  const fichaFamiliaMesesTv=plat=>{const p=fichaBaseRegla(plat);if(p==="latintv")return "latintv";if(p==="liontv")return "liontv";if(p==="stellatv")return "stellatv";if(p==="oleada")return "oleada";if(p==="evoutouch")return "evoutouch";return "";};
+  const FICHA_TV_MESES_VALIDOS={latintv:[1,4,8,12],liontv:[1,3,5,12],stellatv:[1,3,7],oleada:[1,3,7,14],evoutouch:[1,3,6,12],icomplay:[1,3,6,12]};
+  const fichaFamiliaMesesTv=plat=>{const p=fichaBaseRegla(plat);if(p==="latintv")return "latintv";if(p==="liontv")return "liontv";if(p==="stellatv")return "stellatv";if(p==="oleada")return "oleada";if(p==="evoutouch")return "evoutouch";if(p==="icomplay")return "icomplay";return "";};
   const fichaMesesValidosTv=plat=>FICHA_TV_MESES_VALIDOS[fichaFamiliaMesesTv(plat)]||[];
   const fichaNormalizarMesesLegacyTv=(plat,n)=>{const f=fichaFamiliaMesesTv(plat),m=Math.max(1,Math.min(24,Math.round(Number(n)||1))),bonus={latintv:{3:4},liontv:{10:12},stellatv:{6:7},oleada:{6:7,12:14}};return bonus[f]?.[m]||m;};
   const fichaMesesContratadosActual=fecha=>{
@@ -5337,7 +5520,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(p.includes("office")||p.includes("windows"))return "🪟";
     if(p.includes("adobe"))return "🅰️";
     if(p.includes("eset"))return "🛡️";
-    if(p.includes("oleada")||p.includes("iptv")||p.includes("latintv")||p.includes("liontv")||p.includes("evoutouch")||p.includes("nanotech"))return "📺";
+    if(p.includes("oleada")||p.includes("iptv")||p.includes("latintv")||p.includes("liontv")||p.includes("evoutouch")||p.includes("nanotech")||p.includes("icomplay"))return "📺";
     return "📱";
   }
   function fichaPlatValue(raw){
@@ -5382,7 +5565,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     // Debe resolverse ANTES del fallback; de lo contrario la ficha termina en
     // Netflix (primer elemento del selector) al abrir una compra creada en TG.
     if(n.includes("evoutouch") || n.includes("evotouch") || n.includes("nanotech")) return "evoutouch";
-    if(n.includes("iptv") || n.includes("icomplay") || n.includes("tvgo") || n.includes("titan")) return "iptv";
+    if(n.includes("icomplay")) return "icomplay";
+    if(n.includes("iptv") || n.includes("tvgo") || n.includes("titan")) return "iptv";
     const hit=FICHA_PLATS.find(([v,l])=>fichaNorm(v)===n || fichaNorm(l)===n);
     return hit?hit[0]:"netflix";
   }
@@ -5523,13 +5707,13 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   function fichaCantidadDesdePlataforma(raw, fallback="1"){
     const n=fichaNorm(raw);
-    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/);
+    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/)||n.match(/icomplay(?:max)?([1357])$/);
     return m?m[1]:String(fallback||"1");
   }
   function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
     const plat=fichaBaseRegla(fichaGetVal("fichaPlat"));
     const pantallas=fichaQ("fichaIptvPantallas"), proveedor=fichaQ("fichaIptvProveedor");
-    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:[1,2,3,4]);
+    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:(plat==="icomplay"?[1,3,5,7]:[1,2,3,4]));
     if(pantallas){
       const deseada=String(cantidadPreferida||pantallas.value||"1");
       pantallas.innerHTML=permitidas.map(n=>`<option value="${n}">${n} dispositivo${n===1?"":"s"}</option>`).join("");
@@ -5543,6 +5727,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           ? [["latintv","LatinTV (latgt.com:8080)"],["latintv2","LatinTV (enlatv.com)"]]
           : plat==="evoutouch"
             ? [["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]]
+          : plat==="icomplay"
+            ? [["icomplay","ICOMPLAY MAX (URL vigente de Bodega)"]]
             : [["latintv","LatinTV (latgt.com:8080)"],["latintv2","LatinTV (enlatv.com)"],["liontv","LionTV (liontv.es)"],["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]];
       proveedor.innerHTML=opciones.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
       proveedor.value=opciones.some(([v])=>v===anterior)?anterior:opciones[0][0];
@@ -5582,6 +5768,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const n=["1","2","3"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
       return `evoutouch${n}`;
     }
+    if(p==="icomplay"){
+      const n=["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
+      return `icomplay${n}`;
+    }
     if(p==="iptv") return `iptv${fichaGetVal("fichaIptvPantallas")||"1"}`;
     return p;
   }
@@ -5591,11 +5781,19 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     if(p==="oleada")return `oleada${fichaGetVal("fichaOleadaDispositivos")||"1"}`;
     if(p==="latintv"||p==="liontv")return `${p}${fichaGetVal("fichaIptvPantallas")||"1"}`;
     if(p==="evoutouch")return `evoutouch${["1","2","3"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
+    if(p==="icomplay")return `icomplay${["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
     return p;
   }
   const fichaPrecioDefault=plat=>{
     const clave=fichaPrecioClave(plat);
     const base=fichaBaseRegla(plat);
+    if(base==="icomplay"){
+      // Precio del plan: pantallas × meses contratados (1, 3, 6 o 12) según la fecha elegida.
+      const pant=Number(String(clave).replace(/\D/g,""))||1;
+      const meses=fichaMesesContratadosActual(fichaGetVal("fichaFecha"));
+      const valido=[1,3,6,12].reduce((a,b)=>Math.abs(b-meses)<Math.abs(a-meses)?b:a,1);
+      return Number((ICOMPLAY_PRECIOS[pant]||ICOMPLAY_PRECIOS[1])[valido]||0);
+    }
     const especial=FICHA_VENDEDORES_TARIFA_ESPECIAL.has(fichaNorm(fichaVendedorActual()));
     const mapa=especial?FICHA_PRECIOS_ESPECIALES:FICHA_PRECIOS_GENERAL;
     const valor=Object.prototype.hasOwnProperty.call(mapa,clave)?mapa[clave]
@@ -5637,6 +5835,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 
   // R83 · Respaldo para el grupo de WhatsApp: con Max Player se agregan SUS credenciales (además de la lista).
   function fichaMaxPlayerTexto(plat){
+    // ICOMPLAY MAX trae Max Player incluido: se informa el reproductor aunque no tenga credenciales aparte.
+    if(fichaBaseRegla(plat)==="icomplay"&&fichaGetVal("fichaMaxPlayer")!=="si")return "\n*📱 Reproductor: Max Player (incluido)*";
     if(!fichaEsIptv(plat)||fichaGetVal("fichaMaxPlayer")!=="si")return "";
     return `\n\n*📱 App: Max Player*\n*👤 Usuario Max Player: ${fichaGetVal("fichaMpUsuario")||"—"}*\n*🔒 Contraseña Max Player: ${fichaGetVal("fichaMpClave")||"—"}*`;
   }
@@ -5658,8 +5858,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const claveLine=fichaNeedsClave(plat)?`\n*🔑 Clave: ${clave||"—"}*`:"";
     const pinLine=fichaNeedsPin(plat)?`\n*📎 Pin: ${pin||"—"}*`:"";
     const iptvProv=fichaGetVal("fichaIptvProveedor")||"latintv";
-    const iptvurl=IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
-    const iptvlista=fichaGetVal("fichaIptvLista")||"—";
+    const cuentaBodega=fichaCuentaBodegaPara(plat,correo);
+    const iptvurl=(cuentaBodega&&cuentaBodega.url)||(fichaBaseRegla(plat)==="icomplay"?IPTV_URLS.icomplay:"")||IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
+    const urlcuentaLine=cuentaBodega&&cuentaBodega.url?`\n*🌐 URL: ${cuentaBodega.url}*`:"";
+    const iptvlista=fichaGetVal("fichaIptvLista")||(fichaBaseRegla(plat)==="icomplay"?"ICOMPLAY MAX":"—");
     const iptvhora=fichaGetVal("fichaIptvHora")||"";
     const iptvPant=fichaGetVal("fichaIptvPantallas")||"1";
     const iptvpantallas=iptvPant+" DISPOSITIVO"+(iptvPant==="1"?"":"S");
@@ -5670,7 +5872,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     const perfiles=fichaRecolectarPerfiles();
     const variables={
       plat:fichaPlatformLabel(plat),nombre:nombre||"Cliente",perfil:perfil||nombre||"Cliente",correo,clave:clave||"—",pin:pin||"—",
-      claveLine,pinLine,iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
+      claveLine,pinLine,urlcuentaLine,iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
       dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
     };
     const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
@@ -5692,7 +5894,36 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     }
     // Individual o multiperfil: el respaldo no cambia por dispositivo. Incluye
     // los campos de entrega de cada plataforma; Apple TV entrega solo el PIN.
-    return aplicarVariables(fichaTemplateFor(plat));
+    return aplicarVariables(fichaEsCuentaCompleta()?FICHA_TEMPLATES.cuentaCompleta:fichaTemplateFor(plat));
+  }
+  function fichaMostrarCuentas(){
+    const box=fichaQ("fichaCuentasLista");if(!box)return;
+    if(box.style.display==="block"){box.style.display="none";return;}
+    const plat=fichaPlataformaGuardar(fichaGetVal("fichaPlat"));
+    const fam=invFamilia(plat);
+    const lista=invOrdenarPorVacia((typeof INVENTARIO!=="undefined"?INVENTARIO:[]).filter(c=>invFamilia(c.plataforma)===fam&&String(c.estado||"activa").toLowerCase()!=="suspendida"));
+    const conBadge=!fichaEsCuentaCompleta()&&!fichaEsIptv(fichaBaseRegla(plat));
+    if(!lista.length){box.innerHTML=`<div style="padding:10px;font-size:12.5px;color:var(--muted)">No hay cuentas de ${clienteEsc(fichaPlatformLabel(plat))} en Bodega.</div>`;box.style.display="block";return;}
+    const recomendada=lista.find(c=>invDisp(c)>0&&invCap(c)>1);
+    box.innerHTML=`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px 10px;padding:8px 10px;font-size:12px;align-items:center">
+      <b>Cuenta</b><b>Uso</b><b>Libres</b><b>Estado</b>
+      ${lista.map((c,i)=>{const d=invDisp(c),cap=invCap(c),o=invOcupados(c);const estado=invSobreasignada(c)?"⚠️ Sobreasignada":(d<=0?(cap===1?"Asignada":"Llena"):(conBadge&&c===recomendada?"⭐ RECOMENDADA":"Disponible"));
+        return `<button type="button" data-cuenta-i="${i}" style="all:unset;cursor:${d>0?"pointer":"not-allowed"};opacity:${d>0?1:.55};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${clienteEsc(c.correo||"—")}</button><span>${o} / ${cap}</span><span>${d}</span><span style="${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${estado}</span>`;}).join("")}
+    </div>`;
+    box.style.display="block";
+    box.querySelectorAll("[data-cuenta-i]").forEach(b=>b.addEventListener("click",ev=>{ev.preventDefault();ev.stopPropagation();
+      const c=lista[+b.dataset.cuentaI];if(!c||invDisp(c)<=0)return;
+      const ci=fichaQ("fichaCorreo");if(ci){ci.value=c.correo||"";ci.dispatchEvent(new Event("input",{bubbles:true}));}
+      if(fichaNeedsClave(plat)&&c.clave){const k=fichaQ("fichaClave");if(k){k.value=c.clave;k.dispatchEvent(new Event("input",{bubbles:true}));}}
+      box.style.display="none";
+      fichaToast(`📦 ${c.correo} · ${invOcupados(c)}/${invCap(c)} ocupados · ${invDisp(c)} libre${invDisp(c)===1?"":"s"}`);
+    }));
+  }
+  // Cuenta de Bodega que corresponde a la plataforma + correo/usuario escritos en la ficha.
+  function fichaCuentaBodegaPara(plat,correo){
+    const c=fichaNorm(correo);if(!c||typeof INVENTARIO==="undefined")return null;
+    const fam=invFamilia(plat);
+    return (INVENTARIO||[]).find(x=>fichaNorm(x.correo)===c&&invFamilia(x.plataforma)===fam)||null;
   }
 
   function fichaVendedorIcono(v){
@@ -5712,12 +5943,11 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function fichaAplicarTelVendedorDefault(){
     const telEl=fichaQ("fichaVendedorTelefono");
     if(!telEl) return;
-    const ocho=v=>String(v||"").replace(/\D/g,"").slice(-8);
     const vtel=fichaVendedorTel(fichaVendedorActual());
-    const actual=ocho(telEl.value);
+    const actual=telClave(telEl.value);
     if(vtel){ telEl.value=vtel; return; }
     // Vendedor sin número registrado: no se le deja pegado el número de otro vendedor.
-    if(actual && Object.values(FICHA_VENDEDOR_TELS).includes(actual)) telEl.value="";
+    if(actual && Object.values(FICHA_VENDEDOR_TELS).some(t=>telClave(t)===actual)) telEl.value="";
   }
 
   function fichaRespaldoCore(){
@@ -6604,7 +6834,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
           <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
           <label class="ficha-field"><span>Día de cada mes</span><input class="ficha-input" id="fichaDia" inputmode="numeric" placeholder="04"></label>
-          <label class="ficha-field" id="fichaCorreoBox"><span id="fichaCorreoLabel">Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"></label>
+          <label class="ficha-field" id="fichaCorreoBox"><span id="fichaCorreoLabel">Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"><button type="button" class="ficha-cuenta-pick" id="fichaElegirCuenta" style="margin-top:6px;font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--line2,#d6dbe4);background:transparent;color:inherit;cursor:pointer">📦 Elegir cuenta de Bodega</button><div id="fichaCuentasLista" style="display:none;margin-top:6px;max-height:220px;overflow:auto;border:1px solid var(--line2,#d6dbe4);border-radius:10px"></div></label>
           <label class="ficha-field" id="fichaClaveBox"><span id="fichaClaveLabel">Perfil 1 · Clave / contraseña</span><input class="ficha-input" id="fichaClave" placeholder="Clave de acceso"></label>
           <label class="ficha-field" id="fichaPinBox"><span>Perfil 1 · PIN individual</span><input class="ficha-input" id="fichaPinPerfil" placeholder="0000"></label>
           <label class="ficha-field" id="fichaIptvBox" style="display:none"><span>Servidor / URL del IPTV seleccionado</span><select class="ficha-select" id="fichaIptvProveedor"><option value="latintv">LatinTV (latgt.com:8080)</option><option value="latintv2">LatinTV (enlatv.com)</option><option value="liontv">LionTV (liontv.es)</option><option value="evoutouch">Nanotech (smarterstv99.dyndns.tv)</option></select></label>
@@ -6666,6 +6896,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     ["fichaNombre","fichaPerfil","fichaTelefono","fichaVendedorTelefono","fichaCorreo","fichaClave","fichaPinPerfil","fichaDia"].forEach(id=>{
       const el=fichaQ(id); if(el) el.addEventListener("input",fichaRefreshTemplate);
     });
+    // Oct-2026 · Selector de cuenta: muestra correo, ocupados/capacidad y libres; la más vacía primero.
+    fichaQ("fichaElegirCuenta")?.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();fichaMostrarCuentas();});
     fichaQ("fichaNombre").addEventListener("input",()=>{
       if(fichaGetVal("fichaBeneficiarioTipo")!=="tercero")fichaSincronizarBeneficiarioEnPerfil();
       if(fichaLinkActual)fichaMostrarVarianteMensajeCliente();
@@ -6738,7 +6970,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       fichaAplicarVisibilidadUrl(nuevo.visibilidadUrl||{modo:"plataforma"});
       fichaRenderPerfilesExtra();fichaRefreshTemplate();
     });
-    fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); fichaRefreshTemplate(); });
+    fichaQ("fichaFecha").addEventListener("change",()=>{ fichaQ("fichaDia").value=fichaDayFromDate(fichaQ("fichaFecha").value); if(fichaBaseRegla(fichaGetVal("fichaPlat"))==="icomplay")fichaSetPrecioDefault(true); fichaRefreshTemplate(); });
     fichaQ("fichaRegen").onclick=()=>{
       const tieneDatos=fichaGetVal("fichaNombre")||fichaGetVal("fichaCorreo")||fichaGetVal("fichaTelefono");
       if(tieneDatos && !confirm("¿Iniciar una ficha nueva para otro cliente? Se borrarán los datos de esta pantalla que no haya guardado en CRM."))return;
@@ -6852,7 +7084,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const cfg=j&&j.config;if(!cfg)return;
       const lista=Array.isArray(cfg.sellers)?cfg.sellers.map(v=>String(v||"").replace(/\s+/g," ").trim()).filter(Boolean):[];
       const tels=cfg.sellerPhones&&typeof cfg.sellerPhones==="object"?cfg.sellerPhones:{};
-      Object.entries(tels).forEach(([k,v])=>{const tel=String(v||"").replace(/\D/g,"").slice(-8);if(tel.length===8){FICHA_VENDEDOR_TELS[fichaNorm(k)]=tel;if(typeof VENDEDORES_SERVICIO_TEL==="object")VENDEDORES_SERVICIO_TEL[String(k).toLowerCase().trim()]=tel;}});
+      Object.entries(tels).forEach(([k,v])=>{const tel=telClave(v);if(tel.length>=8&&tel.length<=15){FICHA_VENDEDOR_TELS[fichaNorm(k)]=tel;if(typeof VENDEDORES_SERVICIO_TEL==="object")VENDEDORES_SERVICIO_TEL[String(k).toLowerCase().trim()]=tel;}});
       lista.forEach(v=>{
         if(!FICHA_VENDEDORES.some(x=>fichaNorm(x)===fichaNorm(v)))FICHA_VENDEDORES.push(v);
         if(Array.isArray(VENDEDORES_SERVICIO)&&!VENDEDORES_SERVICIO.some(x=>fichaNorm(x)===fichaNorm(v)))VENDEDORES_SERVICIO.push(v);

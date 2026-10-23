@@ -8,7 +8,7 @@
   const API='/api/importar';
   const INVENTORY_API='/api/inventario';
   const RENEW_API='/api/renovar';
-  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261012-71';
+  const BUILD='CONTROL-MAESTRO-COMPARTIDO-20261023-72';
   // Regla de negocio: Sublicuentas y Geisell tienen control maestro; la
   // auditoría por cuenta ahora se solicita 1 vez al mes (antes cada 15 días).
   const REVIEW_CYCLE_DAYS=30;
@@ -43,7 +43,7 @@
 
   const esc=(v)=>String(v??'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const norm=(v)=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9@.+\s_-]/g,' ').replace(/\s+/g,' ').trim();
-  const phone=(v)=>String(v??'').replace(/\D/g,'').replace(/^504(?=\d{8}$)/,'').slice(-8);
+  const phone=(v)=>String(v??'').replace(/\D/g,'').replace(/^00/,'').replace(/^504(?=\d{8}$)/,''); // internacionales completos
   const email=(v)=>String(v??'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase().replace(/\s+/g,'');
   // Varias plataformas usan usuario, número o identificador en vez de correo.
   // Control Maestro los trata igualmente como "cuenta" para no descartarlos.
@@ -289,7 +289,7 @@
       office:'office',office365:'office',office2021:'office2021',microsoft:'office',microsoft365:'office',
       windows10:'windows10',win10:'windows10',windows11:'windows11',win11:'windows11',
       adobeexpress:'adobeexpress',adobe:'adobeexpress',eset:'eset',esetnod32:'eset',nod32:'eset',
-      magis:'magis',magistv:'magis',stellatv:'stellatv',stella:'stellatv',oleada:'oleada',oleadatv:'oleada',latintv:'latintv',liontv:'liontv',iptv:'iptv',nanotech:'evoutouch',evoutouch:'evoutouch'
+      magis:'magis',magistv:'magis',stellatv:'stellatv',stella:'stellatv',oleada:'oleada',oleadatv:'oleada',latintv:'latintv',liontv:'liontv',iptv:'iptv',nanotech:'evoutouch',evoutouch:'evoutouch',icomplay:'icomplay',icomplaymax:'icomplay'
     };
     if(aliases[k])return aliases[k];
     // Compatibilidad con códigos históricos o etiquetas extendidas de Bodega.
@@ -311,6 +311,8 @@
     if(/^latintv[1234]$/.test(k)||/^liontv[1235]$/.test(k)||/^iptv[134]$/.test(k))return k;
     const nano=k.match(/^(?:nanotech|evoutouch)([1-4])$/);if(nano)return `evoutouch${nano[1]==='4'?'1':nano[1]}`;
     if(k.startsWith('nanotech')||k.startsWith('evoutouch'))return 'evoutouch';
+    const icom=k.match(/^icomplay(?:max)?([1357])$/);if(icom)return `icomplay${icom[1]}`;
+    if(k.startsWith('icomplay'))return 'icomplay';
     if(k.startsWith('stellatv')||k.startsWith('stella'))return 'stellatv';
     if(k.startsWith('oleada'))return 'oleada';
     if(k.startsWith('latintv'))return 'latintv';
@@ -376,6 +378,10 @@
     if(n.includes('nanotech')||n.includes('evoutouch')||n.includes('evotouch')){
       const m=n.match(/(?:nanotech|evoutouch|evotouch)\s*([123])\b/);
       return m?[`evoutouch${m[1]}`]:['evoutouch1','evoutouch2','evoutouch3'];
+    }
+    if(n.includes('icomplay')){
+      const m=n.match(/icomplay(?:\s*max)?\s*([1357])\b/);
+      return m?[`icomplay${m[1]}`]:['icomplay1','icomplay3','icomplay5','icomplay7'];
     }
     const tvFamily=[];
     if(n.includes('magis'))tvFamily.push('magis');
@@ -493,7 +499,7 @@
     appletv:'Apple TV',star:'Star+',office:'Office 365',office2021:'Office 2021',windows10:'Windows 10',windows11:'Windows 11',
     adobeexpress:'Adobe Express',eset:'ESET NOD32',magis:'Magis TV',stellatv:'Stella TV',stellatv1:'Stella TV (1)',stellatv2:'Stella TV (2)',stellatv3:'Stella TV (3)',oleada:'Oleada TV',oleadatv1:'Oleada TV (1)',oleadatv3:'Oleada TV (3)',
     latintv:'LatinTV',latintv1:'LatinTV (1)',latintv2:'LatinTV (2)',latintv3:'LatinTV (3)',latintv4:'LatinTV (4)',
-    liontv:'LionTV',liontv1:'LionTV (1)',liontv2:'LionTV (2)',liontv3:'LionTV (3)',liontv5:'LionTV (5)',evoutouch:'Nanotech',evoutouch1:'Nanotech (1)',evoutouch2:'Nanotech (2)',evoutouch3:'Nanotech (3)',iptv:'IPTV anterior',
+    liontv:'LionTV',liontv1:'LionTV (1)',liontv2:'LionTV (2)',liontv3:'LionTV (3)',liontv5:'LionTV (5)',evoutouch:'Nanotech',evoutouch1:'Nanotech (1)',evoutouch2:'Nanotech (2)',evoutouch3:'Nanotech (3)',icomplay:'ICOMPLAY MAX',icomplay1:'ICOMPLAY MAX (1)',icomplay3:'ICOMPLAY MAX (3)',icomplay5:'ICOMPLAY MAX (5)',icomplay7:'ICOMPLAY MAX (7)',iptv:'IPTV anterior',
     vixmix:'ViX / Viki / Universal+'
   };
 
@@ -507,6 +513,7 @@
     if(['latintv','latintv1','latintv2','latintv3','latintv4','latintv5'].includes(p))return 'latintv';
     if(['stellatv','stellatv1','stellatv2','stellatv3'].includes(p))return 'stellatv';
     if(['evoutouch','evoutouch1','evoutouch2','evoutouch3','evoutouch4'].includes(p))return 'evoutouch';
+    if(['icomplay','icomplay1','icomplay3','icomplay5','icomplay7'].includes(p))return 'icomplay';
     return p||'sin_plataforma';
   }
 
@@ -1067,7 +1074,7 @@
     paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
     spotify:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
     appletv:'#555b66',star:'#7d30c9',office:'#d83b01',office2021:'#d83b01',windows10:'#0078d4',windows11:'#0067c0',adobeexpress:'#e60023',eset:'#008f83',
-    magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',evoutouch:'#3b5bdb',evoutouch1:'#3b5bdb',evoutouch2:'#3b5bdb',evoutouch3:'#3b5bdb',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
+    magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',evoutouch:'#3b5bdb',icomplay:'#e2231a',icomplay1:'#e2231a',icomplay3:'#e2231a',icomplay5:'#e2231a',icomplay7:'#e2231a',evoutouch1:'#3b5bdb',evoutouch2:'#3b5bdb',evoutouch3:'#3b5bdb',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
   };
 
   function platformColor(family){return AUDIT_PLATFORM_COLORS[auditFamily(family)]||'#168fd3';}
@@ -1307,6 +1314,9 @@
       evoutouch1:{label:'Nanotech (1)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
       evoutouch2:{label:'Nanotech (2)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
       evoutouch3:{label:'Nanotech (3)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
+      icomplay:{label:'ICOMPLAY MAX',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
+      icomplay1:{label:'ICOMPLAY MAX (1)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay3:{label:'ICOMPLAY MAX (3)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
+      icomplay5:{label:'ICOMPLAY MAX (5)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay7:{label:'ICOMPLAY MAX (7)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
       iptv:{label:'IPTV',short:'IP',logo:'/assets/platformas/iptv.jpg'},
       iptv1:{label:'IPTV (1)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
       iptv3:{label:'IPTV (3)',short:'IP',logo:'/assets/platformas/iptv.jpg'},

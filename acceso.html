@@ -276,6 +276,7 @@
     latintv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LatinTV"},
     liontv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"LionTV"},
     evoutouch:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"Nanotech"},
+    icomplay:{logo:"/assets/platformas/icomplay.jpg",bg:"#E2231A",fallback:"ICOMPLAY"},
     iptv:{logo:"/assets/platformas/iptv.jpg",bg:"#111827",fallback:"TV"},
     viki:{logo:"/assets/platformas/viki.jpg",bg:"#eefcff",fallback:"Viki",color:"#00b8d9"},
     appletv:{logo:"/assets/platformas/appletv.jpg",bg:"#111111",fallback:"🍎"},
@@ -291,7 +292,7 @@
     netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
-    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",evoutouch:"📡",iptv:"📺",
+    chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",evoutouch:"📡",icomplay:"📺",iptv:"📺",
     viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
   };
 
@@ -307,6 +308,7 @@
     if(k.startsWith("latintv"))return PLAT_VISUALS.latintv;
     if(k.startsWith("liontv"))return PLAT_VISUALS.liontv;
     if(k.startsWith("evoutouch"))return PLAT_VISUALS.evoutouch;
+    if(k.startsWith("icomplay"))return PLAT_VISUALS.icomplay;
     if(k.startsWith("iptv"))return PLAT_VISUALS.iptv;
     return PLAT_VISUALS[k]||{logo:"",bg:"#111827",fallback:"TV"};
   }
@@ -319,7 +321,7 @@
 
   function supportData(d){
     const phone=String(d.vendedorTelefono||"").replace(/\D/g,"");
-    const intl=phone?(phone.startsWith("504")?phone:`504${phone}`):"";
+    const intl=phone?(phone.length===8?`504${phone}`:phone):""; // otros países ya traen su código
     return {phone,href:intl?`https://wa.me/${intl}`:"#"};
   }
 
@@ -445,7 +447,7 @@
   function datosPerfilHtml(d, serviceIndex){
     const perfiles=perfilesDelServicio(d);
     const plataforma=platKey(d.plataforma);
-    const etiquetaAcceso=["oleada","latintv","liontv","evoutouch","iptv","stella"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
+    const etiquetaAcceso=["oleada","latintv","liontv","evoutouch","icomplay","iptv","stella"].some(prefijo=>plataforma.startsWith(prefijo))?"Usuario":"Correo";
     const contenido=perfiles.map((p,profileIndex)=>{
       const prefix=`s${serviceIndex}-p${profileIndex}`;
       const modo=p.modo||d.modo;
