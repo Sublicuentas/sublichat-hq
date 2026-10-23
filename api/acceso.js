@@ -9,6 +9,9 @@
 //   FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+import tvDigital from "./_tv-digital.js";
+// URLs vigentes de TV Digital (editables desde Bodega). Se cargan al inicio de cada solicitud (caché 60 s).
+let TV_URLS_VIGENTES = null, TV_URLS_CUENTAS = null;
 
 const accessUsage = new Map();
 
@@ -77,7 +80,7 @@ function canonPlat(v) {
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
-    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1"
+    adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1", icomplay: "icomplay1", icomplaymax: "icomplay1"
   };
   if (aliases[p]) return aliases[p];
   if (p.includes("disney") && (p.includes("standard") || p.includes("sinespn"))) return "disneys";
@@ -91,6 +94,7 @@ function canonPlat(v) {
   if (p.startsWith("latintv")) return "latintv";
   if (p.startsWith("liontv")) return "liontv";
   if (p.startsWith("evoutouch")) { const m=p.match(/([123])$/); return `evoutouch${m?m[1]:"1"}`; }
+  { const ic = p.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; }
   return p;
 }
 
@@ -103,7 +107,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("office") || p.includes("paramount") ||
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("stella") || p.includes("oleada") ||
-    p.includes("latintv") || p.includes("liontv") || p.includes("evoutouch") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
+    p.includes("latintv") || p.includes("liontv") || p.includes("evoutouch") || p.includes("icomplay") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
     p.includes("adobe") || p.includes("eset")
   );
 }
@@ -123,7 +127,7 @@ function servicioRequiereCorreo(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 function servicioUsaSelectorDispositivo(plataforma) {
@@ -175,7 +179,7 @@ function termsFor(plataforma) {
   if (p === "netflixpremium") return TERMS.netflix;
   if (p === "vipnetflix" || (p.includes("netflix") && p.includes("vip"))) return TERMS.vipnetflix;
   if (p.startsWith("stellatv")) return TERMS.stellatv;
-  if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return TERMS.iptv;
+  if (p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv")) return TERMS.iptv;
   if (p.startsWith("oleada")) return TERMS.oleada;
   if (p === "office2021") return TERMS.office;
   return TERMS[p] || TERMS.default;
@@ -193,6 +197,7 @@ const PLAT_LABELS = {
   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
   evoutouch1: "Nanotech (1 dispositivo)", evoutouch2: "Nanotech (2 dispositivos)", evoutouch3: "Nanotech (3 dispositivos)", evoutouch4: "Nanotech (1 dispositivo)", evoutouch: "Nanotech",
+  icomplay: "ICOMPLAY MAX", icomplay1: "ICOMPLAY MAX (1 pantalla)", icomplay3: "ICOMPLAY MAX (3 pantallas)", icomplay5: "ICOMPLAY MAX (5 pantallas)", icomplay7: "ICOMPLAY MAX (7 pantallas)",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
 };
@@ -415,6 +420,7 @@ const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
   stellatv:[1,3,7],
   oleadatv:[1,3,7,14],
   evoutouch:[1,3,6,12],
+  icomplay:[1,3,6,12],
 });
 function familiaMesesTvDigital(plataforma=""){
   const p=canonPlat(plataforma||"");
@@ -423,6 +429,7 @@ function familiaMesesTvDigital(plataforma=""){
   if(p.startsWith("stellatv"))return "stellatv";
   if(p.startsWith("oleada"))return "oleadatv";
   if(p.startsWith("evoutouch"))return "evoutouch";
+  if(p.startsWith("icomplay"))return "icomplay";
   return "";
 }
 function normalizarMesesLegacyTvDigital(plataforma="",meses=1){
@@ -445,7 +452,7 @@ function mesesHastaRenovacion(fechaRenovacion) {
 // Si el vendedor eligió otros datos en "Datos visibles en la ficha URL", se respetan (y entonces sí va la URL).
 function esFamiliaIptv(plataforma = "") {
   const p = canonPlat(plataforma || "");
-  return p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv");
+  return p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv");
 }
 function iptvModoVisibilidad(servicio = {}) {
   const raw = servicio.visibilidadUrl;
@@ -491,7 +498,7 @@ function tvDigitalOcultaServidor(servicio = {}) {
 
 function tvDigitalInfo(servicio = {}) {
   const p = canonPlat(servicio.plataforma || "");
-  const esTv = p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv");
+  const esTv = p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv");
   if (!esTv) return { esTvDigital:false, mesesContratados:0, dispositivosContratados:0, urlServidor:"" };
   const guardados = Number(servicio.mesesContratados || 0);
   const meses = guardados > 0
@@ -500,10 +507,13 @@ function tvDigitalInfo(servicio = {}) {
   let dispositivos = Number(servicio.iptvPantallas || servicio.oleadaDispositivos || servicio.stellaDispositivos || 0) || 0;
   if (!dispositivos) { const m=p.match(/(\d)$/); if(m) dispositivos=Number(m[1]); }
   if (p.startsWith("evoutouch")) dispositivos=Math.max(1,Math.min(3,Number(servicio.iptvPantallas||dispositivos||1)||1));
-  let url = "";
-  if (p.startsWith("latintv")) url = servicio.iptvProveedor === "latintv2" ? "http://enlatv.com" : TV_DIGITAL_URLS.latintv;
-  else if (p.startsWith("liontv")) url = TV_DIGITAL_URLS.liontv;
-  else if (p.startsWith("evoutouch")) url = TV_DIGITAL_URLS.evoutouch4;
+  // Oct-2026: URL vigente (cuenta → proveedor → respaldo). Antes estaba fija en el código.
+  let url = tvDigital.urlTvServicio(servicio, TV_URLS_VIGENTES || undefined, TV_URLS_CUENTAS);
+  if (!url) {
+    if (p.startsWith("latintv")) url = servicio.iptvProveedor === "latintv2" ? "http://enlatv.com" : TV_DIGITAL_URLS.latintv;
+    else if (p.startsWith("liontv")) url = TV_DIGITAL_URLS.liontv;
+    else if (p.startsWith("evoutouch")) url = TV_DIGITAL_URLS.evoutouch4;
+  }
   return { esTvDigital:true, mesesContratados:meses, dispositivosContratados:dispositivos, urlServidor:url };
 }
 
@@ -624,6 +634,7 @@ export default async function handler(req, res) {
 
   try {
     const db = getApp().firestore();
+    try { TV_URLS_VIGENTES = await tvDigital.leerUrlsTv(db); TV_URLS_CUENTAS = await tvDigital.leerUrlsCuentas(db); } catch (_) {}
 
     const puntero = await db.collection("enlaces").doc(token).get();
     if (!puntero.exists || puntero.data().activo === false) {

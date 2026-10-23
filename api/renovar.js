@@ -55,6 +55,7 @@ const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
   stellatv:[1,3,7],
   oleadatv:[1,3,7,14],
   evoutouch:[1,3,6,12], // Nanotech: 1, 3, 6 y 12 meses (sin meses gratis)
+  icomplay:[1,3,6,12],  // ICOMPLAY MAX (oct-2026): 1, 3, 6 y 12 meses
 });
 function familiaMesesTvDigital(plataforma=""){
   const p=canonPlat(plataforma||"");
@@ -63,6 +64,7 @@ function familiaMesesTvDigital(plataforma=""){
   if(p.startsWith("stellatv"))return "stellatv";
   if(p.startsWith("oleada"))return "oleadatv";
   if(p.startsWith("evoutouch"))return "evoutouch";
+  if(p.startsWith("icomplay"))return "icomplay";
   return "";
 }
 function mesesValidosTvDigital(plataforma=""){return TV_DIGITAL_MESES_VALIDOS[familiaMesesTvDigital(plataforma)]||[];}
@@ -135,6 +137,36 @@ function sumarDias(fechaStr, dias) {
   return `${dd}/${mm}/${base.getFullYear()}`;
 }
 
+// Oct-2026 · Renovación por duración (15 días, 1–12 meses o personalizado).
+// Regla: si el servicio sigue vigente se suma desde su vencimiento; si ya venció, desde hoy.
+// base "vencimiento" u "hoy" fuerza la base cuando el negocio lo requiere.
+function dmyDe(d) {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+function sumarMesesDMY(fechaStr, meses) {
+  const base = parseFechaDMY(fechaStr);
+  const n = Number(meses);
+  if (!base || !Number.isInteger(n) || n <= 0) return "";
+  const dia = base.getDate();
+  const destino = new Date(base.getFullYear(), base.getMonth() + n, 1);
+  const ultimo = new Date(destino.getFullYear(), destino.getMonth() + 1, 0).getDate();
+  destino.setDate(Math.min(dia, ultimo)); // 31/01 + 1 mes = 28/02 (o 29), nunca salta a marzo
+  return dmyDe(destino);
+}
+function calcularRenovacionPorDuracion(fechaActual, duracion = {}) {
+  const unidad = String(duracion.unidad || "").toLowerCase() === "dias" ? "dias" : "meses";
+  const cantidad = Math.round(Number(duracion.cantidad));
+  const max = unidad === "dias" ? 730 : 24;
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > max) throw crmUserError(`Duración inválida: use 1 a ${max} ${unidad === "dias" ? "días" : "meses"}.`);
+  const hoy = hoyDMYTegucigalpa();
+  const actual = parseFechaDMY(fechaActual);
+  const vigente = actual && actual >= parseFechaDMY(hoy);
+  const baseElegida = ["vencimiento", "hoy"].includes(String(duracion.base || "")) ? String(duracion.base) : "auto";
+  const fechaBase = baseElegida === "hoy" || !actual ? hoy : (baseElegida === "vencimiento" || vigente ? fechaActual : hoy);
+  const fechaNueva = unidad === "dias" ? sumarDias(fechaBase, cantidad) : sumarMesesDMY(fechaBase, cantidad);
+  return { unidad, cantidad, base: baseElegida, baseUsada: fechaBase === hoy && fechaBase !== fechaActual ? "hoy" : "vencimiento", fechaBase, fechaNueva, vigente: !!vigente };
+}
+
 function normPlat(v) {
   return String(v || "")
     .trim()
@@ -174,7 +206,8 @@ const PLAT_ALIASES = {
   windows11: "windows11", win11: "windows11",
   adobeexpress: "adobeexpress", adobe: "adobeexpress",
   eset: "eset", esetnod32: "eset",
-  stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1"
+  stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1",
+  icomplay: "icomplay1", icomplaymax: "icomplay1"
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
@@ -187,6 +220,7 @@ function canonPlat(v) {
   if (/^liontv[1235]$/.test(key)) return key;
   if (/^evoutouch[1-4]?$/.test(key)) return key.endsWith("2") ? "evoutouch2" : key.endsWith("3") ? "evoutouch3" : "evoutouch1";
   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
+  { const ic = key.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; } // ICOMPLAY MAX · 1/3/5/7 dispositivos
   if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
@@ -294,6 +328,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("latintv") ||
     p.includes("liontv") ||
     p.includes("evoutouch") ||
+    p.includes("icomplay") ||
     p.includes("iptv") ||
     p.includes("viki") ||
     p.includes("windows") ||
@@ -321,7 +356,7 @@ function servicioEsSerial(plataforma) {
 function servicioCredencialesSiempre(plataforma) {
   const p = canonPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
-  if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("iptv")) return true;
+  if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv")) return true;
   return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
 }
 
@@ -428,6 +463,7 @@ function clienteTieneVendedor(cliente = {}, vendedor = "") {
 
 function normPhone(v) {
   let digits = String(v || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2); // 00 52… = +52…
   // Honduras: +504 8777-7777 y 87777777 representan el mismo número.
   if (digits.length === 11 && digits.startsWith("504")) digits = digits.slice(3);
   return digits;
@@ -643,6 +679,7 @@ function perfilesOperativos(servicio = {}, nombreTitular = "") {
     const esRokuRaw = p?.esRoku != null ? p.esRoku : servicio.esRoku;
     return {
       perfilId: String(p?.perfilId || p?.id || ""),
+      inventarioId: String(p?.inventarioId || servicio.inventarioId || ""),
       nombre: String(p?.nombre || p?.nombrePerfil || p?.cliente || p?.perfil || nombreTitular || `Perfil ${index + 1}`).trim(),
       perfil: String(p?.perfil || p?.nombrePerfil || p?.nombre || "").trim(),
       correo: String(p?.correo || servicio.correo || "").trim(),
@@ -694,6 +731,10 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       ? raw.dispositivo
       : (previo.dispositivo != null ? previo.dispositivo : (servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo));
     out.dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || "")) ? String(dispositivoRaw) : "";
+    // accountId (= ID del documento de Bodega). Se conserva mientras el correo del perfil sea el mismo;
+    // si el usuario mueve el perfil a otro correo, el enlace se recalcula al sincronizar Bodega.
+    const invPrevio = String(raw.inventarioId || previo.inventarioId || "").trim();
+    if (invPrevio && (!previo.correo || normCorreo(previo.correo) === normCorreo(out.correo))) out.inventarioId = invPrevio;
     const esRokuRaw = raw.esRoku != null
       ? raw.esRoku
       : (previo.esRoku != null ? previo.esRoku : (servicio.esRoku != null ? servicio.esRoku : anterior.esRoku));
@@ -726,7 +767,7 @@ function nombrePerfilRealInventario(servicio = {}, perfil = {}, nombreTitular = 
   return guardado || beneficiario || pagador || "—";
 }
 
-async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "" } = {}) {
+async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null, nombreTitular = "", clienteId = "" } = {}) {
   const plataformaAnterior = anterior?.plataforma || nuevo?.plataforma || "";
   const plataformaNueva = nuevo?.plataforma || anterior?.plataforma || "";
   const antes = anterior && servicioRequiereCorreo(plataformaAnterior) ? perfilesOperativos(anterior, nombreTitular) : [];
@@ -741,17 +782,22 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
         modo: "liberar", plataforma: plataformaAnterior, correo: p.correo,
         nombreCliente: nombrePerfilRealInventario(anterior,p,nombreTitular,antes.length),
         pagadoPor: nombreTitular, pin: p.pinPerfil || "",
-        perfilId: p.perfilId || "", compraId: anterior?.compraId || ""
+        perfilId: p.perfilId || "", compraId: anterior?.compraId || "",
+        clienteId, inventarioId: p.inventarioId || ""
       }));
     }
   }
+  const enlaces = [];
   for (const p of despues) {
-    resultados.push(await ajustarInventario(db, {
+    const r = await ajustarInventario(db, {
       modo: "ocupar", plataforma: plataformaNueva, correo: p.correo,
       nombreCliente: nombrePerfilRealInventario(nuevo,p,nombreTitular,despues.length),
       pagadoPor: nombreTitular, pin: p.pinPerfil || "",
-      perfilId: p.perfilId || "", compraId: nuevo?.compraId || ""
-    }));
+      perfilId: p.perfilId || "", compraId: nuevo?.compraId || "",
+      clienteId, inventarioId: p.inventarioId || ""
+    });
+    resultados.push(r);
+    if (r?.accountId && p.perfilId && r.accountId !== p.inventarioId) enlaces.push({ perfilId: p.perfilId, inventarioId: r.accountId });
   }
 
   const ultimo = [...resultados].reverse().find((x) => x && x.tocado) || {};
@@ -761,8 +807,39 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
     ocupados: ultimo.ocupados,
     disponibles: ultimo.disponibles,
     resultados,
+    enlaces,
+    sobreasignadas: resultados.filter((x) => x?.sobreasignada).length,
     advertencias: resultados.filter((x) => x && !x.tocado && x.motivo).map((x) => x.motivo)
   };
+}
+
+// Guarda en la ficha el accountId (inventarioId) de cada perfil recién enlazado.
+// Va por compraId + perfilId dentro de una transacción para no pisar otra edición simultánea.
+async function guardarEnlacesInventario(db, clienteRef, compraId, enlaces = []) {
+  if (!clienteRef || !compraId || !enlaces.length) return 0;
+  const porPerfil = new Map(enlaces.map((e) => [String(e.perfilId), String(e.inventarioId)]));
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(clienteRef);
+    if (!snap.exists) return 0;
+    const data = snap.data() || {};
+    const servicios = Array.isArray(data.servicios) ? data.servicios : [];
+    let cambios = 0;
+    const next = servicios.map((s) => {
+      if (String(s?.compraId || "") !== String(compraId)) return s;
+      const perfiles = Array.isArray(s.perfiles) ? s.perfiles : [];
+      let local = false;
+      const nuevos = perfiles.map((p) => {
+        const id = porPerfil.get(String(p?.perfilId || ""));
+        if (!id || p.inventarioId === id) return p;
+        local = true; cambios++;
+        return { ...p, inventarioId: id };
+      });
+      if (!local) return s;
+      return { ...s, perfiles: nuevos, inventarioId: nuevos[0]?.inventarioId || s.inventarioId || "" };
+    });
+    if (cambios) tx.set(clienteRef, { servicios: next }, { merge: true });
+    return cambios;
+  });
 }
 
 // 2026-09-17: replica una clave nueva a todas las demás fichas que comparten
@@ -837,21 +914,47 @@ async function propagarClaveCompartida(db, plan) {
 // cambió, se actualiza en el mismo registro en vez de crear uno nuevo.
 // También se agregó el tope de capacidad, que antes no existía acá (por eso
 // una cuenta de 5 cupos podía terminar con 15 "clientes").
-async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "" }) {
-  if (!correo) return { tocado: false, motivo: "sin correo" };
-  try {
-    const correoOriginal = String(correo || "").trim();
-    const correoNormalizado = normCorreo(correoOriginal);
-    let invSnap = await db.collection("inventario").where("correo", "==", correoOriginal).get();
-    if (invSnap.empty && correoNormalizado !== correoOriginal) {
-      invSnap = await db.collection("inventario").where("correo", "==", correoNormalizado).get();
+async function buscarCuentaInventario(db, { plataforma, correo, inventarioId = "" }) {
+  const familiaBuscada = familiaInventario(plataforma);
+  const correoNormalizado = normCorreo(correo);
+  // 1) accountId inmutable: sobrevive a cambios de correo hechos desde Web, Bot o APK.
+  const id = String(inventarioId || "").trim();
+  if (id && !id.includes("/")) {
+    const byId = await db.collection("inventario").doc(id).get();
+    if (byId.exists) {
+      const d = byId.data() || {};
+      if (familiaInventario(d.plataforma) === familiaBuscada && (!correoNormalizado || normCorreo(d.correo) === correoNormalizado)) return byId;
     }
-    if (invSnap.empty) return { tocado: false, motivo: "correo no está en inventario" };
+  }
+  // 2) Compatibilidad: plataforma + correo (fichas que todavía no tienen accountId).
+  if (!correoNormalizado) return null;
+  const correoOriginal = String(correo || "").trim();
+  let invSnap = await db.collection("inventario").where("correo", "==", correoOriginal).get();
+  if (invSnap.empty && correoNormalizado !== correoOriginal) {
+    invSnap = await db.collection("inventario").where("correo", "==", correoNormalizado).get();
+  }
+  if (invSnap.empty) return null;
+  let cuenta = invSnap.docs.find((d) => familiaInventario(d.data()?.plataforma) === familiaBuscada) || null;
+  // Cuenta antigua sin plataforma: solo es segura cuando el correo devuelve un único documento.
+  if (!cuenta && invSnap.docs.length === 1 && !String(invSnap.docs[0].data()?.plataforma || "").trim()) cuenta = invSnap.docs[0];
+  return cuenta;
+}
+
+// Ajusta los cupos de UNA cuenta de Bodega para UN perfil.
+// modo "ocupar": registra (o actualiza) el perfil en la cuenta.
+// modo "liberar": retira únicamente ese perfil.
+//
+// Reglas (oct-2026, sincronización total):
+// - La cuenta se busca primero por accountId (inventarioId) y luego por plataforma+correo.
+// - Si la ficha dice que el perfil está en la cuenta, Bodega lo refleja aunque la cuenta esté llena:
+//   la sobreasignación queda visible (sobreasignada:true, 0 libres) en vez de esconder al cliente.
+//   Antes se devolvía "cuenta llena" sin registrarlo y la cuenta mostraba menos clientes de los reales.
+// - "liberar" nunca quita a otro cliente: antes, si no encontraba el perfil, sacaba el último de la lista.
+async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "", clienteId = "", inventarioId = "" }) {
+  if (!correo && !inventarioId) return { tocado: false, motivo: "sin correo" };
+  try {
     const familiaBuscada = familiaInventario(plataforma);
-    let cuenta = invSnap.docs.find((d) => familiaInventario(d.data()?.plataforma) === familiaBuscada) || null;
-    // Compatibilidad con una cuenta antigua sin plataforma: solo es seguro usarla
-    // cuando el correo devuelve un único documento.
-    if (!cuenta && invSnap.docs.length === 1 && !String(invSnap.docs[0].data()?.plataforma || "").trim()) cuenta = invSnap.docs[0];
+    const cuenta = await buscarCuentaInventario(db, { plataforma, correo, inventarioId });
     if (!cuenta) return { tocado: false, motivo: `correo no está en inventario para ${familiaBuscada || "esa plataforma"}` };
     const ref = cuenta.ref;
     return await db.runTransaction(async transaction => {
@@ -860,22 +963,24 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
       const data = latest.data() || {};
       let clientes = Array.isArray(data.clientes) ? [...data.clientes] : [];
       const cap = Number(data.capacidad) || 0;
+      const perfilKey = String(perfilId || "").trim();
+      const compraKey = String(compraId || "").trim();
+      const clienteKey = String(clienteId || "").trim();
+      const pinNorm = String(pin || "").trim();
+      let removido = false;
 
       if (modo === "ocupar") {
-        const pinNorm = String(pin || "").trim();
-        const perfilKey = String(perfilId || "").trim();
-        const compraKey = String(compraId || "").trim();
         const pagadorNorm = normName(pagadoPor || "");
         let idxExiste = perfilKey ? clientes.findIndex(c => String(c?.perfilId || "").trim() === perfilKey) : -1;
         // Nombre real + PIN es más seguro que compraId en compras multiperfil:
         // varios perfiles pueden compartir el mismo compraId.
         if (idxExiste === -1) {
-          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
         }
         // Adopta registros legacy donde quedó guardado el pagador como si fuera
         // el titular del perfil. El PIN evita cambiar otra persona por accidente.
         if (idxExiste === -1 && pagadorNorm) {
-          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
         }
         // Último fallback: compraId, pero solo si identifica una única fila.
         if (idxExiste === -1 && compraKey) {
@@ -889,13 +994,12 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
             nombre: nombreCliente || actual.nombre || "—",
             ...(pinNorm ? { pin: pinNorm } : {}),
             ...(perfilKey ? { perfilId: perfilKey } : {}),
-            ...(compraKey ? { compraId: compraKey } : {})
+            ...(compraKey ? { compraId: compraKey } : {}),
+            ...(clienteKey ? { clienteId: clienteKey } : {})
           };
           if (pagadoPor && normName(pagadoPor) !== normName(nombreCliente)) actualizado.pagadoPor = String(pagadoPor).trim();
           else delete actualizado.pagadoPor;
           clientes[idxExiste] = actualizado;
-        } else if (cap > 0 && clientes.length >= cap) {
-          return { tocado: false, motivo: "cuenta llena", ocupados: clientes.length, capacidad: cap };
         } else {
           const usados = clientes.map(c => Number(c.slot) || 0);
           let slot = 1; while (usados.includes(slot)) slot++;
@@ -903,29 +1007,28 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
             nombre: nombreCliente || "—", pin: pinNorm, slot,
             ...(perfilKey ? { perfilId: perfilKey } : {}),
             ...(compraKey ? { compraId: compraKey } : {}),
+            ...(clienteKey ? { clienteId: clienteKey } : {}),
             ...(pagadoPor && normName(pagadoPor) !== normName(nombreCliente) ? { pagadoPor: String(pagadoPor).trim() } : {})
           });
         }
       } else if (modo === "liberar") {
-        const perfilKey = String(perfilId || "").trim();
-        const compraKey = String(compraId || "").trim();
         let i = perfilKey ? clientes.findIndex(c => String(c?.perfilId || "").trim() === perfilKey) : -1;
-        if (i === -1) i = clientes.findIndex(c => (nombreCliente && normName(c.nombre) === normName(nombreCliente) && (!pin || String(c?.pin || "").trim() === String(pin).trim())));
-        if (i === -1 && pagadoPor) i = clientes.findIndex(c => normName(c.nombre) === normName(pagadoPor) && (!pin || String(c?.pin || "").trim() === String(pin).trim()));
+        if (i === -1) i = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && nombreCliente && normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
+        if (i === -1 && pagadoPor) i = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && normName(c.nombre) === normName(pagadoPor) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
         if (i === -1 && compraKey) {
-          const porCompra = clientes.map((c,idx)=>({c,idx})).filter(({c}) => String(c?.compraId || "").trim() === compraKey && (!pin || String(c?.pin || "").trim() === String(pin).trim()));
+          const porCompra = clientes.map((c,idx)=>({c,idx})).filter(({c}) => String(c?.compraId || "").trim() === compraKey && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
           if (porCompra.length === 1) i = porCompra[0].idx;
         }
-        if (i !== -1) clientes.splice(i, 1);
-        else if (clientes.length) clientes.pop();
+        if (i !== -1) { clientes.splice(i, 1); removido = true; }
       }
 
       const ocupados = clientes.length;
       const disponibles = Math.max(0, cap - ocupados);
-      const update = { clientes, ocupados, disponibles, updatedAt: isoNow() };
+      const update = { clientes, ocupados, disponibles, accountId: ref.id, sobreasignada: cap > 0 && ocupados > cap, updatedAt: isoNow() };
       if (data.disp != null) update.disp = disponibles;
       transaction.set(ref, update, { merge: true });
-      return { tocado: true, plataforma: familiaBuscada, ocupados, disponibles };
+      return { tocado: modo === "ocupar" || removido, accountId: ref.id, plataforma: familiaBuscada, ocupados, disponibles, capacidad: cap, sobreasignada: update.sobreasignada,
+        ...(modo === "liberar" && !removido ? { motivo: "el perfil no estaba registrado en esa cuenta" } : {}) };
     });
   } catch (e) {
     return { tocado: false, motivo: e.message };
@@ -960,7 +1063,7 @@ async function findCliente(db, { clienteNorm, telefono, nombrePerfil, vendedorNo
 async function findClienteExactoPorNombreTelefono(db, nombreNorm, telefonoNorm) {
   const n = normName(nombreNorm || "");
   const t = normPhone(telefonoNorm || "");
-  if (!n || t.length !== 8) return { doc: null, duplicados: [] };
+  if (!n || t.length < 8 || t.length > 15) return { doc: null, duplicados: [] }; // 8 = Honduras; más = otro país con su código
   const snap = await db.collection("clientes").where("nombre_norm", "==", n).limit(50).get();
   const matches = snap.docs.filter((item) => {
     const data = item.data() || {};
@@ -1089,10 +1192,16 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     updatedAt: isoNow()
   };
 
+  // Oct-2026: la nota interna se edita aparte (accion "nota_interna"); editar la ficha la conserva.
+  if (anterior.notaInterna && out.notaInterna == null) out.notaInterna = anterior.notaInterna;
+  if (perfiles[0] && perfiles[0].inventarioId) out.inventarioId = perfiles[0].inventarioId;
   const familia = canonPlat(plataformaFinal);
-  if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("evoutouch") || familia.startsWith("iptv")) {
-    out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : ""));
-    out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1)) : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
+  if (familia.startsWith("latintv") || familia.startsWith("liontv") || familia.startsWith("evoutouch") || familia.startsWith("icomplay") || familia.startsWith("iptv")) {
+    out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : familia.startsWith("icomplay") ? "icomplay" : ""));
+    if (familia.startsWith("icomplay")) out.iptvProveedor = "icomplay";
+    out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1))
+      : familia.startsWith("icomplay") ? Number((familia.match(/([1357])$/) || [])[1] || 1)
+      : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
     // R58 · Max Player: app aparte con SU PROPIO usuario y contraseña (distintos a los de la lista IPTV).
@@ -1259,6 +1368,34 @@ async function handlerCore(req, res) {
 
     if (!clienteId && !clienteNorm && !telefono && acc !== "ficha_upsert")
       return res.status(200).json({ error: "Falta identificar el cliente." });
+
+    // Oct-2026 · Nota interna por cliente o por servicio (compraId). Campo SEPARADO de fichaTexto:
+    // nunca entra en entregas, mensajes de cobro ni en el portal /c/ (que arma sus campos uno por uno).
+    if (acc === "nota_interna") {
+      const rol = String(authUser.role || "").toLowerCase();
+      const usr = String(authUser.usuario || "").toLowerCase();
+      const staff = ["admin", "administrador", "sublicuentas", "owner", "relojes", "finanzas", "geisell_admin", "control_admin"].includes(rol)
+        || ["sublicuentas", "naara", "relojes", "libni", "geisell", "geissel"].includes(usr);
+      if (!staff) return res.status(403).json({ ok: false, error: "Solo el personal autorizado puede editar notas internas." });
+      const exactId = cleanExistingDocId(clienteId);
+      if (!exactId) return res.status(200).json({ error: "Falta identificar exactamente al cliente." });
+      const texto = String(body.texto == null ? "" : body.texto).replace(/\r\n/g, "\n").trim().slice(0, 2000);
+      const compraNota = String(body.compraId || "").trim();
+      const nota = { texto, actualizadoPor: String(authUser.usuario || authUser.uid || ""), actualizadoAt: isoNow() };
+      const docRef = db.collection("clientes").doc(exactId);
+      await db.runTransaction(async (tx) => {
+        const doc = await tx.get(docRef);
+        if (!doc.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
+        if (!compraNota) { tx.set(docRef, { notaInterna: nota, updatedAt: isoNow() }, { merge: true }); return; }
+        const servicios = Array.isArray(doc.data()?.servicios) ? doc.data().servicios : [];
+        const idx = servicios.findIndex((s) => String(s?.compraId || "") === compraNota);
+        if (idx === -1) throw crmUserError("No encontré ese servicio en el cliente.");
+        const next = servicios.slice(); next[idx] = { ...next[idx], notaInterna: nota };
+        tx.set(docRef, { servicios: next, updatedAt: isoNow() }, { merge: true });
+      });
+      await db.collection("auditoria_eventos").add({ tipo: "nota_interna_editada", clienteId: exactId, compraId: compraNota, largo: texto.length, usuario: nota.actualizadoPor, createdAt: nota.actualizadoAt });
+      return res.status(200).json({ ok: true, accion: acc, clienteId: exactId, compraId: compraNota, notaInterna: nota });
+    }
 
     // Permite recuperar/generar las URLs de clientes antiguos desde
     // Clientes → Acciones, sin obligar a editar ni volver a guardar sus datos.
@@ -1588,11 +1725,15 @@ async function handlerCore(req, res) {
         invResult = await sincronizarInventarioServicio(db, {
           anterior: servicioAnterior,
           nuevo: servicioGuardado,
-          nombreTitular: nombreFinal
+          nombreTitular: nombreFinal,
+          clienteId: docRef.id
         });
       } catch (e) {
         invResult = { tocado: false, motivo: e.message };
       }
+      try {
+        if (invResult?.enlaces?.length) await guardarEnlacesInventario(db, docRef, String(servicioGuardado?.compraId || ""), invResult.enlaces);
+      } catch (e) { /* se completa con el próximo guardado o con Reparar inventario */ }
 
       const perfilesGuardados = perfilesOperativos(servicioGuardado, nombreFinal);
 
@@ -1701,7 +1842,7 @@ async function handlerCore(req, res) {
       if (acc === "renovar") {
         const { dias, fechaActual, fechaExacta, servicioIndex } = body;
         if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Faltan datos (plataforma o fecha).");
-        if (!dias && !fechaExacta) throw crmUserError("Faltan datos (plataforma o fecha).");
+        if (!dias && !fechaExacta && !(body.duracion && typeof body.duracion === "object")) throw crmUserError("Faltan datos (plataforma o fecha).");
         // R104 · Ajuste administrativo (garantía, cortesía, corrección): mueve la fecha SIN crear ingreso,
         // pero exige motivo y queda auditado. Nunca se registra un ingreso ficticio de Lps. 0.
         const ajusteAdministrativo = body.ajusteAdministrativo === true;
@@ -1711,8 +1852,13 @@ async function handlerCore(req, res) {
         if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
         const s = servicios[idx];
         fechaAnterior = s.fechaRenovacion || fechaActual || null;
-        const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10));
+        // Oct-2026: "duracion" = {unidad:"dias"|"meses", cantidad, base:"auto"|"vencimiento"|"hoy"}.
+        // Clientes viejos siguen mandando dias/fechaExacta y conservan su comportamiento.
+        const duracionPedida = body.duracion && typeof body.duracion === "object" ? body.duracion : null;
+        const calculo = !fechaExacta && duracionPedida ? calcularRenovacionPorDuracion(aFechaFB(s.fechaRenovacion || fechaActual || ""), duracionPedida) : null;
+        const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : (calculo ? calculo.fechaNueva : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10)));
         if (!parseFechaDMY(nuevaFecha)) throw crmUserError("La fecha de renovación no es válida.");
+        const elegida = calculo || (body.duracionElegida && typeof body.duracionElegida === "object" ? body.duracionElegida : null);
         fechaNueva = nuevaFecha;
         touchedIndex = idx;
         touchedCompraId = String(s.compraId || compraIdBody || "");
@@ -1722,6 +1868,13 @@ async function handlerCore(req, res) {
           mesesContratados: mesesRenovacionSeguro(s.plataforma || plataforma || "", body.meses ?? body.mesesContratados, fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
           ultimaRenovacionProcesadaAt: isoNow(),
+          // Auditoría: duración elegida + fecha calculada (y desde qué fecha se contó).
+          ultimaRenovacion: {
+            duracion: elegida ? { unidad: String(elegida.unidad || "").slice(0, 10), cantidad: Number(elegida.cantidad) || 0, base: String(elegida.base || "auto").slice(0, 12) } : (fechaExacta ? { unidad: "fecha_exacta" } : { unidad: "dias", cantidad: parseInt(dias, 10) || 0, base: "vencimiento" }),
+            fechaBase: calculo ? calculo.fechaBase : String(fechaAnterior || ""),
+            fechaAnterior: String(fechaAnterior || ""), fechaNueva: nuevaFecha,
+            por: String(authUser.usuario || authUser.uid || "sublichat"), at: isoNow(), origen: String(body.origen || "").slice(0, 20)
+          },
           ...(ajusteAdministrativo ? { ultimoAjusteAdministrativo: { motivo: motivoAjuste, fechaAnterior: fechaAnterior || "", fechaNueva: nuevaFecha, por: String(authUser.usuario || authUser.uid || "sublichat"), at: isoNow(), origen: String(body.origen || "apk").slice(0, 20) } } : {}),
           updatedAt: isoNow()
         };
@@ -1938,8 +2091,12 @@ async function handlerCore(req, res) {
       } catch (e) { console.error("auditoria ajuste renovacion", e?.message || e); }
     }
     if (mutation.inventarioPlan) {
-      try { invResult = await sincronizarInventarioServicio(db, mutation.inventarioPlan); }
+      try { invResult = await sincronizarInventarioServicio(db, { ...mutation.inventarioPlan, clienteId: docRef.id }); }
       catch (e) { invResult = { tocado: false, motivo: e.message }; }
+      try {
+        const compraEnlace = String(mutation.inventarioPlan?.nuevo?.compraId || "");
+        if (invResult?.enlaces?.length) await guardarEnlacesInventario(db, docRef, compraEnlace, invResult.enlaces);
+      } catch (e) { /* el enlace se completa en el próximo guardado o con Reparar inventario */ }
     }
     if (mutation.claveCompartidaPlan) {
       try { await propagarClaveCompartida(db, mutation.claveCompartidaPlan); }

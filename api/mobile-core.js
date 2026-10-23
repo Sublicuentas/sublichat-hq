@@ -2,6 +2,7 @@
 // Core mínimo para la APK Sublicuentas: login CORS + lecturas operativas autenticadas.
 const admin = require('firebase-admin');
 const loginHandler = require('./login');
+const tvDigital = require('./_tv-digital.js');
 
 const ALLOWED_ORIGINS = new Set([
   'https://localhost',
@@ -144,7 +145,7 @@ function reemplazarValorEtiqueta(lines, regex, valor) {
   const i = idx[0];
   lines[i] = lines[i].replace(/(:\s*)(.*?)(\*?\s*)$/, (_m, sep, _old, tail) => `${sep}${v}${tail}`);
 }
-function refrescarFichaTextoMovil(texto = '', service = {}) {
+function refrescarFichaTextoMovil(texto = '', service = {}, urlTv = '') {
   const raw = String(texto || '');
   if (!raw.trim()) return raw;
   const principal = perfilPrincipalMovil(service);
@@ -158,6 +159,8 @@ function refrescarFichaTextoMovil(texto = '', service = {}) {
   // R143: Netflix VIP y otras plantillas dicen "🔑 Contraseña:" (antes solo se refrescaba "🔑 Clave:").
   if (service.maxPlayer !== true) reemplazarValorEtiqueta(lines, /(🔑|🔒)\s*(Clave|Contrase[ñn]a)\s*:/i, principal.clave || service.clave);
   reemplazarValorEtiqueta(lines, /📎\s*Pin\s*:/i, principal.pinPerfil || principal.pin || service.pinPerfil || service.pin);
+  // Oct-2026: la URL de TV Digital es editable; la ficha muestra siempre la URL vigente.
+  if (urlTv) reemplazarValorEtiqueta(lines, /🧾\s*URL\s*:/i, urlTv);
   return lines.join('\n');
 }
 
@@ -188,7 +191,7 @@ function fechaDMYMovil(v) {
   return s;
 }
 
-function prepareClientForMobile(client = {}) {
+function prepareClientForMobile(client = {}, tv = null) {
   const out = { ...(client || {}) };
   const telefono = String(out.telefono || '').trim();
   const clientSeller = String(out.vendedor || '').trim();
@@ -198,7 +201,9 @@ function prepareClientForMobile(client = {}) {
     if (!service || typeof service !== 'object') return service;
     const copy = { ...service };
     if (copy.fechaRenovacion != null && copy.fechaRenovacion !== '') copy.fechaRenovacion = fechaDMYMovil(copy.fechaRenovacion);
-    const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy);
+    const urlTv = tv ? tvDigital.urlTvServicio(copy, tv.urls, tv.cuentas) : '';
+    if (urlTv) copy.urlServidorTv = urlTv;
+    const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy, urlTv);
     if (!fichaTexto.trim()) return copy;
     const vendedor = String(copy.vendedor || clientSeller || '').trim();
     copy.fichaTexto = ensureMobileFichaFooter(fichaTexto, telefono, vendedor);
@@ -229,6 +234,7 @@ async function listResource(req, res) {
     if (cursorSnap.exists) query = query.startAfter(cursorSnap);
   }
   const snap = await query.get();
+  const tv = resource === 'clientes' ? { urls: await tvDigital.leerUrlsTv(db), cuentas: await tvDigital.leerUrlsCuentas(db) } : null;
   // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
   // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
   // usando el último documento leído, así la paginación no se altera.
@@ -236,7 +242,7 @@ async function listResource(req, res) {
     .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
     .map(doc => {
       const item = { ...(doc.data() || {}), id:doc.id };
-      return resource === 'clientes' ? prepareClientForMobile(item) : item;
+      return resource === 'clientes' ? prepareClientForMobile(item, tv) : item;
     });
   if (resource === 'inventario' && items.length) {
     // La APK instalada ya usa esta lectura al sincronizar. Se conserva el
@@ -258,6 +264,7 @@ const CONFIG_DEFAULTS = Object.freeze({
   calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
 });
 const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
+// tvDigitalUrls no es un secreto (la URL la ve el cliente final); se agrega aparte de CONFIG_ALLOWED.
 const VENDEDORES_EQUIPO = Object.freeze(['Relojes','Sublicuentas','Sublicuentas 2','Geisell','Yami','Manuel','Heber','Abner','Jimena','Elizabeth','Lucy','WolfTeam']);
 function vendedorClave(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 async function vendedoresParaApp(db, basePhones) {
@@ -273,7 +280,9 @@ async function vendedoresParaApp(db, basePhones) {
     const nombre = String(d.nombre || d.usuario || doc.id || '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const clave = vendedorClave(nombre);
     if (!clave) return;
-    const tel = String(d.telefono || d.whatsapp || '').replace(/\D/g, '').slice(-8);
+    let tel = String(d.telefono || d.whatsapp || '').replace(/\D/g, '').replace(/^00/, '');
+    if (tel.length === 11 && tel.startsWith('504')) tel = tel.slice(3); // Honduras sin código; otros países completos
+    if (tel.length < 8 || tel.length > 15) tel = '';
     if (tel && !phones[clave]) phones[clave] = tel;
     if (vistos.has(clave) || vistos.has(clave.replace(/\s+/g, ''))) return;
     vistos.add(clave);
@@ -295,6 +304,10 @@ async function getConfig(req, res) {
   // al frente (WhatsApp ↔ app) si el último refresco tiene más de syncStaleSeconds. Con 15 s eso eran cientos de
   // descargas completas al día por vendedor. Piso de 5 min (los cambios propios se ven al instante igual).
   config.syncStaleSeconds = Math.max(300, Number(config.syncStaleSeconds) || 300);
+  try {
+    const urls = await tvDigital.leerUrlsTv(getApp().firestore());
+    config.tvDigitalUrls = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.url]));
+  } catch (_) { /* la APK conserva sus URLs guardadas */ }
   // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
   // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
   try {

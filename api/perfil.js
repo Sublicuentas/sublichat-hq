@@ -95,7 +95,7 @@ async function guardarPerfil(db, body) {
     const n = body.whatsapp_alert_number.replace(/[^\d+]/g, '');
     const dig = n.replace(/\D/g, '');
     if (!dig) update.whatsapp_alert_number = null;
-    else if (dig.length < 8 || dig.length > 15) return { ok: false, error: 'Número de WhatsApp inválido (use +504XXXXXXXX).' };
+    else if (dig.length < 8 || dig.length > 15) return { ok: false, error: 'Número de WhatsApp inválido. Use el código del país: +504 9999-9999, +52 55 1234 5678, +1 305 555 1234.' };
     else update.whatsapp_alert_number = `+${dig.length === 8 ? '504' + dig : dig}`;
     update.whatsapp_alerts_enabled = false;
   }

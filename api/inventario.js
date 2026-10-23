@@ -4,6 +4,7 @@
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+import tvDigital from "./_tv-digital.js";
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -146,9 +147,13 @@ function renameInventoryLink(link, platform, oldEmail, newEmail) {
 
 // Repara únicamente cuentas ya existentes. Los cupos manuales se conservan;
 // las fichas consolidadas son alias y no generan ocupaciones adicionales.
-export async function reconciliarInventario(db, accounts = []) {
+export async function reconciliarInventario(db, accounts = [], opciones = {}) {
   if (!accounts.length) return [];
   const wanted = new Map(accounts.map(a => [accountKey(a.plataforma, a.correo), []]));
+  // accountId inmutable → filas de esa cuenta. Un perfil enlazado por inventarioId pertenece a su
+  // cuenta aunque el correo guardado en la ficha esté desactualizado (cambio de correo a medias).
+  const porId = new Map(accounts.filter(a => a.id).map(a => [String(a.id), wanted.get(accountKey(a.plataforma, a.correo))]));
+  const familiaDe = new Map(accounts.filter(a => a.id).map(a => [String(a.id), canonPlatform(a.plataforma)]));
   for await (const docs of clientPages(db)) {
     for (const doc of docs) {
       const client = doc.data() || {};
@@ -160,8 +165,12 @@ export async function reconciliarInventario(db, accounts = []) {
         const profiles = Array.isArray(service?.perfiles) && service.perfiles.length ? service.perfiles : [service];
         profiles.forEach((p, profileIndex) => {
           const correo = p?.correo || service?.correo || "";
-          if (!normEmail(correo)) return;
-          const rows = wanted.get(accountKey(service?.plataforma, correo));
+          const enlace = String(p?.inventarioId || service?.inventarioId || "");
+          let rows = enlace && porId.has(enlace) && familiaDe.get(enlace) === canonPlatform(service?.plataforma) ? porId.get(enlace) : null;
+          if (!rows) {
+            if (!normEmail(correo)) return;
+            rows = wanted.get(accountKey(service?.plataforma, correo));
+          }
           if (!rows) return;
           const tercero = service.beneficiarioTipo === "tercero" ? String(service.beneficiarioNombre || service.beneficiario || "").trim() : "";
           const nombre = plainClientValue(p?.nombre || p?.nombrePerfil || p?.perfil || "") || titular || "Cliente";
@@ -213,12 +222,33 @@ export async function reconciliarInventario(db, accounts = []) {
         if (old[field] != null) clients[index][field] = old[field];
       }
     }
-    const disponibles = Math.max(0, (Number(account.capacidad) || 0) - clients.length);
-    return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}) };
+    const capacidad = Number(account.capacidad) || 0;
+    const disponibles = Math.max(0, capacidad - clients.length);
+    return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}),
+      ...(account.id ? { accountId:String(account.id) } : {}), sobreasignada: capacidad > 0 && clients.length > capacidad };
   };
   // Solo se escriben diferencias y se relee la cuenta dentro de una transacción,
   // para conservar ediciones simultáneas. No se trunca al llegar a capacidad:
   // una sobreasignación real debe seguir siendo visible, con cero libres.
+  if (opciones.soloDiagnostico) {
+    return accounts.map(account => {
+      const rows = wanted.get(accountKey(account.plataforma, account.correo)) || [];
+      const patch = merge(account, rows);
+      const antes = Array.isArray(account.clientes) ? account.clientes : [];
+      const clave = c => c.vinculoInventario || `${c.clienteId || ""}|${c.perfilId || ""}|${normText(c.nombre)}`;
+      const antesSet = new Set(antes.map(clave)), despuesSet = new Set(patch.clientes.map(clave));
+      return {
+        id: account.id, plataforma: account.plataforma || "", correo: account.correo || "",
+        capacidad: Number(account.capacidad) || 0,
+        ocupadosGuardados: Number.isFinite(Number(account.ocupados)) ? Number(account.ocupados) : antes.length,
+        ocupadosReales: patch.clientes.length,
+        agregados: patch.clientes.filter(c => !antesSet.has(clave(c))).length,
+        retirados: antes.filter(c => !despuesSet.has(clave(c))).length,
+        sobreasignada: patch.sobreasignada,
+        cambios: !Object.keys(patch).every(key => JSON.stringify(account[key]) === JSON.stringify(patch[key]))
+      };
+    });
+  }
   return Promise.all(accounts.map(async account => {
     const rows = wanted.get(accountKey(account.plataforma, account.correo)) || [];
     const patch = merge(account, rows);
@@ -229,11 +259,146 @@ export async function reconciliarInventario(db, accounts = []) {
       if (!snap.exists) return account;
       const current = snap.data() || {};
       if (accountKey(current.plataforma, current.correo) !== accountKey(account.plataforma, account.correo)) return {...current, id:account.id};
-      const update = merge(current, rows);
+      const update = merge({...current, id:account.id}, rows);
       tx.update(ref, {...update, updatedAt:new Date().toISOString()});
       return {...current, ...update, id:account.id};
     });
   }));
+}
+
+// ===== Sincronización total · diagnóstico y reparación idempotente (oct-2026) =====
+// accountId = ID del documento de Bodega. Nunca cambia aunque cambie el correo/usuario.
+// Diagnóstico: solo lee. Reparación: enlaza perfiles por accountId, corrige correos/claves de perfiles
+// enlazados a una cuenta cuyo correo cambió, recalcula ocupados reales y marca accountId.
+// Correrlo dos veces seguidas debe dar 0 cambios la segunda vez (salvo datos nuevos).
+function transformarEnlacesCliente(client, ctx) {
+  const stats = { perfiles: 0, sinEnlace: 0, enlazados: 0, correoActualizado: 0, enlacesRotos: 0, huerfanos: [] };
+  const servicios = Array.isArray(client.servicios) ? client.servicios : [];
+  let changed = false;
+  const next = servicios.map((s) => {
+    if (!s || typeof s !== "object") return s;
+    const plat = canonPlatform(s.plataforma);
+    if (!ctx.plataformasConBodega.has(plat)) return s;
+    const perfiles = Array.isArray(s.perfiles) && s.perfiles.length ? s.perfiles : null;
+    const lista = perfiles || [s];
+    let local = false;
+    const nuevos = lista.map((p) => {
+      const correo = String(p?.correo || s.correo || "");
+      if (!normEmail(correo)) return p;
+      stats.perfiles++;
+      const actual = String(p?.inventarioId || (perfiles ? "" : s.inventarioId) || "").trim();
+      const enlazada = actual ? ctx.cuentaPorId.get(actual) : null;
+      if (actual && !enlazada) stats.enlacesRotos++;
+      const porCorreo = ctx.cuentaPorClave.get(accountKey(s.plataforma, correo));
+      if (enlazada && canonPlatform(enlazada.plataforma) === plat && (!porCorreo || porCorreo.id === enlazada.id)) {
+        if (normEmail(enlazada.correo) === normEmail(correo)) return p;
+        // Enlazado por ID pero con el correo viejo (y ese correo ya no es de otra cuenta): la cuenta manda.
+        stats.correoActualizado++; local = true;
+        const copia = { ...p, correo: String(enlazada.correo || "").trim() };
+        if (enlazada.clave != null && String(enlazada.clave).trim() && !s.sinClave && s.maxPlayer !== true) copia.clave = String(enlazada.clave).trim();
+        return copia;
+      }
+      const esperada = porCorreo;
+      if (!esperada) {
+        if (!actual) stats.sinEnlace++;
+        stats.huerfanos.push({ plataforma: String(s.plataforma || ""), correo, cliente: String(client.nombrePerfil || client.nombre || "") });
+        return p;
+      }
+      if (!actual) stats.sinEnlace++;
+      stats.enlazados++; local = true;
+      return { ...p, inventarioId: esperada.id };
+    });
+    if (!local) return s;
+    changed = true;
+    if (perfiles) {
+      const principal = nuevos[0] || {};
+      return { ...s, perfiles: nuevos, inventarioId: principal.inventarioId || s.inventarioId || "",
+        correo: principal.correo || s.correo || "", ...(principal.clave != null ? { clave: principal.clave } : {}) };
+    }
+    return { ...s, ...nuevos[0] };
+  });
+  return { changed, servicios: next, stats };
+}
+
+export async function auditarInventario(db, { aplicar = false, usuario = "" } = {}) {
+  const invSnap = await db.collection("inventario").get();
+  const cuentas = invSnap.docs.map((d) => ({ ...(d.data() || {}), id: d.id }));
+  const porClave = new Map();
+  cuentas.forEach((c) => {
+    if (!normEmail(c.correo)) return;
+    const k = accountKey(c.plataforma, c.correo);
+    if (!porClave.has(k)) porClave.set(k, []);
+    porClave.get(k).push(c.id);
+  });
+  const duplicados = [...porClave.entries()].filter(([, ids]) => ids.length > 1).map(([clave, ids]) => ({ clave, ids }));
+  const idsDuplicados = new Set(duplicados.flatMap((d) => d.ids));
+  const ctx = {
+    cuentaPorId: new Map(cuentas.map((c) => [c.id, c])),
+    cuentaPorClave: new Map(cuentas.filter((c) => normEmail(c.correo) && !idsDuplicados.has(c.id)).map((c) => [accountKey(c.plataforma, c.correo), c])),
+    plataformasConBodega: new Set(cuentas.map((c) => canonPlatform(c.plataforma)).filter(Boolean))
+  };
+  const total = { perfiles: 0, sinEnlace: 0, enlazados: 0, correoActualizado: 0, enlacesRotos: 0, huerfanos: 0 };
+  const ejemplosHuerfanos = [];
+  const fichasACorregir = [];
+  for await (const docs of clientPages(db)) for (const doc of docs) {
+    const client = doc.data() || {};
+    if (String(client.consolidadoEn || "").trim()) continue;
+    const r = transformarEnlacesCliente(client, ctx);
+    for (const k of ["perfiles", "sinEnlace", "enlazados", "correoActualizado", "enlacesRotos"]) total[k] += r.stats[k];
+    total.huerfanos += r.stats.huerfanos.length;
+    for (const h of r.stats.huerfanos) if (ejemplosHuerfanos.length < 30) ejemplosHuerfanos.push({ clienteId: doc.id, ...h });
+    if (r.changed) fichasACorregir.push(doc.ref);
+  }
+  let fichasCorregidas = 0;
+  if (aplicar) {
+    for (const ref of fichasACorregir) {
+      const ok = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return false;
+        const r = transformarEnlacesCliente(snap.data() || {}, ctx);
+        if (!r.changed) return false;
+        tx.update(ref, { servicios: r.servicios, updatedAt: new Date().toISOString() });
+        return true;
+      });
+      if (ok) fichasCorregidas++;
+    }
+  }
+  // Recalcular cupos (después de enlazar, para que el conteo use los enlaces nuevos).
+  const cuentasConciliables = cuentas.filter((c) => normEmail(c.correo) && !idsDuplicados.has(c.id));
+  const diag = await reconciliarInventario(db, cuentasConciliables, { soloDiagnostico: true });
+  const cuentasConCambios = diag.filter((d) => d.cambios);
+  let cuentasCorregidas = 0;
+  if (aplicar && cuentasConCambios.length) {
+    const ids = new Set(cuentasConCambios.map((d) => d.id));
+    const res = await reconciliarInventario(db, cuentasConciliables.filter((c) => ids.has(c.id)));
+    cuentasCorregidas = res.length;
+  }
+  const resumen = {
+    modo: aplicar ? "reparacion" : "diagnostico",
+    cuentas: cuentas.length,
+    cuentasSinAccountId: cuentas.filter((c) => c.accountId !== c.id).length,
+    cuentasDuplicadas: duplicados,
+    capacidadIncoherente: cuentas.filter((c) => !(Number(c.capacidad) > 0)).map((c) => ({ id: c.id, plataforma: c.plataforma || "", correo: c.correo || "" })),
+    sobreasignadas: diag.filter((d) => d.sobreasignada).map((d) => ({ id: d.id, plataforma: d.plataforma, correo: d.correo, ocupados: d.ocupadosReales, capacidad: d.capacidad })),
+    cuentasConConteoIncorrecto: cuentasConCambios.length,
+    perfilesFaltantesEnBodega: diag.reduce((s, d) => s + d.agregados, 0),
+    perfilesSobrantesEnBodega: diag.reduce((s, d) => s + d.retirados, 0),
+    perfilesEnFichas: total.perfiles,
+    perfilesSinAccountId: total.sinEnlace,
+    perfilesAEnlazar: total.enlazados,
+    perfilesConCorreoViejo: total.correoActualizado,
+    enlacesRotos: total.enlacesRotos,
+    clientesHuerfanos: total.huerfanos,
+    ejemplosHuerfanos,
+    ejemplos: cuentasConCambios.slice(0, 30),
+    fichasCorregidas, cuentasCorregidas
+  };
+  if (aplicar) {
+    await db.collection("auditoria_eventos").add({ tipo: "inventario_reparado", usuario: String(usuario || "sublicuentas"),
+      resumen: { fichasCorregidas, cuentasCorregidas, perfilesAEnlazar: total.enlazados, perfilesConCorreoViejo: total.correoActualizado,
+        cuentasDuplicadas: duplicados.length, clientesHuerfanos: total.huerfanos }, createdAt: new Date().toISOString() });
+  }
+  return resumen;
 }
 
 function refreshAccountFicha(service) {
@@ -344,21 +509,48 @@ export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(200).json({ ok: true, version: 7, msg: "inventario v7 activo (Sacar seguro + claves enlazadas a fichas + Stella TV). Usá POST." });
 
-  const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono } = req.body || {};
+  const { accion, docId, correo, clave, plataforma, capacidad, clienteIndex, nombreCliente, slot, confirmarCorreo, nuevoNombre, nuevoPin, nuevoTelefono, url, tipoEntrega } = req.body || {};
 
   try {
     const db = getApp().firestore();
     const authUser = await requireFirebaseUser(req, res);
     if (!authUser) return;
+    // Lectura de URLs de TV Digital: cualquier usuario con sesión (las entregas las necesitan).
+    if (accion === "tvUrls") {
+      return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db) });
+    }
     if (!isAdminUser(authUser)) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
+    }
+
+    const usuarioAccion = String(authUser.usuario || authUser.uid || "sublicuentas");
+
+    // Diagnóstico (solo lee) y reparación idempotente de Bodega ↔ fichas.
+    if (accion === "diagnosticarInventario" || accion === "repararInventario") {
+      const resumen = await auditarInventario(db, { aplicar: accion === "repararInventario", usuario: usuarioAccion });
+      return res.status(200).json({ ok: true, resumen });
+    }
+    // URLs de TV Digital editables (proveedor). La APK y el portal las leen al momento de entregar.
+    if (accion === "guardarTvUrl") {
+      try {
+        const out = await tvDigital.guardarUrlTv(db, { proveedor: req.body.proveedor, url, nombre: req.body.nombre, usuario: usuarioAccion });
+        return res.status(200).json({ ok: true, ...out });
+      } catch (e) { return res.status(200).json({ error: e.message }); }
     }
 
     if (accion === "crearCuenta") {
       if (!plataforma) return res.status(200).json({ error: "Falta la plataforma." });
       if (!correo) return res.status(200).json({ error: "Falta el correo." });
+      // No crear una cuenta paralela: misma plataforma + mismo correo/usuario = misma cuenta.
+      const dupSnap = await db.collection("inventario").where("plataforma", "==", String(plataforma).toLowerCase().trim()).get();
+      if (dupSnap.docs.some(d => normEmail(d.data()?.correo) === normEmail(correo)))
+        return res.status(200).json({ error: "Ya existe esa cuenta en Bodega para esa plataforma." });
+      const urlCuenta = url != null && String(url).trim() ? tvDigital.validarUrlTv(url) : "";
+      if (urlCuenta === null) return res.status(200).json({ error: "URL inválida. Use http:// o https://." });
       const cap = Math.max(1, Number(capacidad) || 1);
       const nuevaCuenta = {
+        ...(urlCuenta ? { url: urlCuenta } : {}),
+        ...(tipoEntrega ? { tipoEntrega: String(tipoEntrega).slice(0, 20) } : {}),
         plataforma: String(plataforma).toLowerCase().trim(),
         correo: String(correo).trim(),
         clave: clave != null ? String(clave).trim() : "",
@@ -370,7 +562,9 @@ export default async function handler(req, res) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      const ref = await db.collection("inventario").add(nuevaCuenta);
+      const ref = db.collection("inventario").doc();
+      await ref.set({ ...nuevaCuenta, accountId: ref.id });
+      await db.collection("auditoria_eventos").add({tipo:"inventario_cuenta_creada",inventarioId:ref.id,plataforma:nuevaCuenta.plataforma,correo:nuevaCuenta.correo,capacidad:cap,usuario:usuarioAccion,createdAt:new Date().toISOString()});
       return res.status(200).json({ ok: true, id: ref.id });
     }
 
@@ -389,6 +583,12 @@ export default async function handler(req, res) {
         update.correo = cleanEmail;
       }
       if (clave != null) update.clave = String(clave).trim();
+      if (url != null) {
+        const limpia = String(url).trim() ? tvDigital.validarUrlTv(url) : "";
+        if (limpia === null) return res.status(200).json({ error: "URL inválida. Use http:// o https:// (ejemplo: http://latinostream.xyz:80)." });
+        update.url = limpia;
+      }
+      update.accountId = docId;
       if (capacidad != null) {
         const cap = Math.max(1, Math.round(Number(capacidad) || 0));
         if (cap < clients.length) return res.status(200).json({ error: `La capacidad no puede ser menor que los ${clients.length} clientes asignados.` });
@@ -423,7 +623,10 @@ export default async function handler(req, res) {
         }
         tx.update(ref, patch);
       });
-      await db.collection("auditoria_eventos").add({tipo:"inventario_cuenta_editada",inventarioId:docId,plataforma:current.plataforma||"",correoAnterior:current.correo||"",correoNuevo:update.correo||current.correo||"",serviciosActualizados:sync.updated,usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
+      await db.collection("auditoria_eventos").add({tipo:"inventario_cuenta_editada",inventarioId:docId,plataforma:current.plataforma||"",correoAnterior:current.correo||"",correoNuevo:update.correo||current.correo||"",
+        ...(update.capacidad != null ? {capacidadAnterior:Number(current.capacidad)||0,capacidadNueva:update.capacidad} : {}),
+        ...(update.url != null ? {urlAnterior:String(current.url||""),urlNueva:update.url} : {}),
+        claveCambiada: clave != null,serviciosActualizados:sync.updated,usuario:usuarioAccion,createdAt:new Date().toISOString()});
       return res.status(200).json({ ok: true, serviciosActualizados: sync.updated, documentosActualizados: sync.documents });
     }
 
