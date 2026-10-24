@@ -281,7 +281,8 @@ async function pushAccion(req, res) {
   const db = getApp().firestore();
   const grupo = acc.sublicuentas ? 'sublicuentas' : acc.relojes ? 'relojes' : acc.geisell ? 'geisell' : acc.usuario;
   try {
-    if (op === 'registrar') return res.status(200).json(await push.registrarToken(db, { token: body.token, usuario: acc.usuario || grupo, role: acc.role, grupo, appBuild: body.appBuild }));
+    if (op === 'registrar') return res.status(200).json(await push.registrarToken(db, { token: body.token, usuario: acc.usuario || grupo, role: acc.role, grupo, appBuild: body.appBuild, cobros: body.cobros !== false }));
+    if (op === 'preferencias') return res.status(200).json(await push.preferenciasToken(db, { token: body.token, usuario: acc.usuario || grupo, cobros: body.cobros !== false }));
     if (op === 'baja') return res.status(200).json(await push.bajaToken(db, { token: body.token, usuario: acc.usuario || grupo }));
     if (op === 'probar') {
       const r = await push.enviarPush(db, admin, { usuarios: [acc.usuario || grupo], titulo: '✅ Prueba de Sublichat', cuerpo: 'Las notificaciones push funcionan en este teléfono.', data: { tipo: 'prueba', ir: 'inicio' } });
