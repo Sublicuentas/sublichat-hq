@@ -90,3 +90,20 @@ test('Moneda: L pegado al número (L300), sin "Lps"', () => {
   assert.match(app, /const fmt = n => "L" \+ Number/);
   assert.doesNotMatch(app.replace(/base64,[A-Za-z0-9+/=]+/g, ''), /Lps\.? ?\$\{|"Lps "/);
 });
+
+test('vendedor desactivado desaparece de todas las listas; Sublicuentas/Relojes/Geisell nunca; orden alfabético', async () => {
+  const reg = V.armarRegistro(
+    [{ id: 'sublicuentas 1', data: { clave: 'sublicuentas 1', nombre: 'Sublicuentas 1', telefono: '22554675', tipo: 'equipo' } }],
+    [
+      { id: 'manuel', data: { nombre: 'Manuel', nombre_norm: 'manuel', telefono: '88940804', activo: false } },
+      { id: 'relojes', data: { nombre: 'Relojes', nombre_norm: 'relojes', activo: false } },
+      { id: 'christian valle', data: { nombre: 'Christian Valle', nombre_norm: 'christian valle', activo: true } },
+    ],
+  );
+  assert.ok(!reg.nombres.includes('Manuel'), 'Manuel desactivado no sale');
+  assert.ok(reg.nombres.includes('Relojes'), 'acceso del sistema sigue aunque su cuenta del Panel esté desactivada');
+  const i = reg.nombres.indexOf('Sublicuentas');
+  assert.deepEqual(reg.nombres.slice(i, i + 3), ['Sublicuentas', 'Sublicuentas 1', 'Sublicuentas 2']);
+  assert.deepEqual([...reg.nombres].sort((a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })), reg.nombres);
+  assert.equal(V.telefonoVigente(reg, 'Manuel', ''), '88940804', 'sus fichas viejas siguen mostrando su número');
+});
