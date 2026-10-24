@@ -80,3 +80,13 @@ test('el bot usa el mismo archivo de push', () => {
   const sinCab = (x) => x.split('\n').slice(1).join('\n');
   assert.equal(sinCab(fs.readFileSync(bot, 'utf8')), sinCab(fs.readFileSync(path.join(root, 'api/_push.js'), 'utf8')));
 });
+
+test('interruptor de cobros por teléfono: el aviso 7 AM / 7 PM solo va a los que lo tienen encendido', async () => {
+  const db = fakeDb();
+  await P.registrarToken(db, { token: TOK('r'), usuario: 'relojes', grupo: 'relojes', cobros: false });
+  await P.registrarToken(db, { token: TOK('s'), usuario: 'sublicuentas', grupo: 'sublicuentas' });
+  assert.deepEqual(await P.gruposConCobros(db), ['sublicuentas']);
+  await P.preferenciasToken(db, { token: TOK('r'), usuario: 'relojes', cobros: true });
+  assert.deepEqual((await P.gruposConCobros(db)).sort(), ['relojes', 'sublicuentas']);
+  assert.deepEqual(await P.preferenciasToken(db, { token: TOK('r'), usuario: 'geisell', cobros: false }), { ok: false }, 'solo el dueño del teléfono');
+});
