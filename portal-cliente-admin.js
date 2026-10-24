@@ -439,8 +439,8 @@
           <label class="pc-label wide">Descripción<textarea name="descripcion" maxlength="500" placeholder="Explique brevemente la oferta">${esc(promo.descripcion||'')}</textarea></label>
           <label class="pc-label">Etiqueta<input name="etiqueta" maxlength="40" value="${esc(promo.etiqueta||'PROMOCIÓN')}"></label>
           <label class="pc-label">Color principal<input name="color" type="color" value="${esc(promo.color||'#E2231A')}"></label>
-          <label class="pc-label">Precio actual<input name="precio" maxlength="60" value="${esc(promo.precio||'')}" placeholder="Ej. Lps. 120"></label>
-          <label class="pc-label">Precio anterior opcional<input name="precioAnterior" maxlength="60" value="${esc(promo.precioAnterior||'')}" placeholder="Ej. Lps. 160"></label>
+          <label class="pc-label">Precio actual<input name="precio" maxlength="60" value="${esc(promo.precio||'')}" placeholder="Ej. L120"></label>
+          <label class="pc-label">Precio anterior opcional<input name="precioAnterior" maxlength="60" value="${esc(promo.precioAnterior||'')}" placeholder="Ej. L160"></label>
           <label class="pc-label">Fecha inicial<input name="fechaInicio" type="date" value="${esc(promo.fechaInicio||'')}"></label>
           <label class="pc-label">Fecha final<input name="fechaFin" type="date" value="${esc(promo.fechaFin||'')}"></label>
           <label class="pc-label">Texto del botón<input name="ctaTexto" maxlength="50" value="${esc(promo.ctaTexto||'Solicitar promoción')}"></label>

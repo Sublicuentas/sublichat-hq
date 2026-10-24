@@ -179,7 +179,7 @@
   }
 
   function money(value){
-    return value==null?'Consultar':`Lps. ${Number(value).toLocaleString('es-HN')}`;
+    return value==null?'Consultar':`L${Number(value).toLocaleString('es-HN')}`;
   }
 
   function validateCatalog(catalog,options={}){
@@ -969,7 +969,7 @@
     const settings=state.catalog.settings||{};
     body.innerHTML=`<div class="cr-note">Edite y luego presione <b>Guardar ajustes</b>.</div><div class="cr-settings">
       <label class="cr-field">Marca<input id="csBrand" value="${esc(settings.brand||'Sublicuentas')}"></label>
-      <label class="cr-field">Moneda<input id="csCurrency" value="${esc(settings.currencyLabel||'Lps.')}"></label>
+      <label class="cr-field">Moneda<input id="csCurrency" value="${esc(settings.currencyLabel||'L')}"></label>
       <label class="cr-field wide">Eslogan<input id="csSlogan" value="${esc(settings.slogan||'')}"></label>
       <label class="cr-field">WhatsApp<input id="csWhatsapp" value="${esc(settings.whatsapp||'')}"></label>
       <label class="cr-field">Puntos por compra<input id="csPoints" type="number" value="${settings.pointsPerConfirmedPurchase??10}"></label>

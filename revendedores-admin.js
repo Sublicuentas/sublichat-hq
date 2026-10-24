@@ -15,7 +15,7 @@ const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,cliente
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
-const money=v=>v==null?'—':`Lps. ${Number(v).toLocaleString('es-HN')}`;
+const money=v=>v==null?'—':`L${Number(v).toLocaleString('es-HN')}`;
 
 const fmtDate=v=>{if(!v)return'Sin vencimiento';const d=new Date(v);return Number.isNaN(d.getTime())?'Sin vencimiento':d.toLocaleString('es-HN',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})};
 function promoTextLines(v){const raw=String(v||'').replace(/\r/g,'\n').trim();if(!raw)return[];const byLine=raw.split(/\n+/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean);if(byLine.length>1)return byLine.slice(0,5);return raw.replace(/\s+/g,' ').split(/(?:\.\s+|!\s+|\?\s+|;\s+)/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean).slice(0,5)}
@@ -315,7 +315,7 @@ function promoPreviewText(m){
   const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
   const vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'';
   const lines=[`🔥 ${titulo}`,`🎯 Plataforma: ${plataforma}`,'','💎 Datos de la oferta'];
-  if(normal)lines.push(`• 🧾 Precio normal: L ${normal}`);if(promo)lines.push(`• 💰 Precio socio: L ${promo}`);if(cupos)lines.push(`• 📦 Cupos disponibles: ${cupos}`);if(vigencia)lines.push(`• ⏳ Vigencia: ${vigencia}`);
+  if(normal)lines.push(`• 🧾 Precio normal: L${normal}`);if(promo)lines.push(`• 💰 Precio socio: L${promo}`);if(cupos)lines.push(`• 📦 Cupos disponibles: ${cupos}`);if(vigencia)lines.push(`• ⏳ Vigencia: ${vigencia}`);
   const details=promoTextLines(m.querySelector('#prTexto')?.value||'');if(details.length){lines.push('','✨ Detalles');details.forEach(x=>lines.push(`• ${x}`));}
   lines.push('','📲 Cómo solicitar','• Solicítela desde su Panel de Socios.','• Si necesita apoyo, escriba a Sublicuentas.');
   return lines.join('\n');
@@ -542,7 +542,7 @@ function precioCard(p){
       <label class="cr-field">Nombre<input id="pxNombre-${esc(id)}" value="${esc(p.nombre||'')}"></label>
       <label class="cr-field">Variante<input id="pxVariante-${esc(id)}" value="${esc(p.variante||'')}" placeholder="Ej. 3 dispositivos"></label>
       <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
-      <label class="cr-field">Precio (Lps.)<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Vacío = Por comisión"></label>
+      <label class="cr-field">Precio (L)<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Vacío = Por comisión"></label>
       <label class="cr-field">Datos para procesar<select id="pxEntregaTipo-${esc(id)}">${selectOptions(ENTREGA_TIPOS,p.entregaTipo||'')}</select><small class="price-helper">Evita que el Panel de Socios tenga que adivinar si debe pedir perfil, correo, serial, etc.</small></label>
       <label class="cr-field">Flujo de entrega<select id="pxEntregaCanal-${esc(id)}">${selectOptions(ENTREGA_CANALES,canal)}</select><small class="price-helper">Este dato viaja a Panel de Socios y Bot TG. No envía credenciales automáticamente todavía.</small></label>
       <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('pxDetalle-'+id)}</div><textarea id="pxDetalle-${esc(id)}" rows="4">${esc(p.detalle||'')}</textarea><small class="price-helper">Use una línea por dato. Los iconos quedan visibles en el catálogo del socio.</small></label>
@@ -589,7 +589,7 @@ function nuevoPrecio(){
       <label class="cr-field wide">Categoría<input id="npCategoria" placeholder="Ej. 📺 Streaming"></label>
       <label class="cr-field wide">Nombre<input id="npNombre" placeholder="Ej. Netflix"></label>
       <label class="cr-field wide">Variante (opcional)<input id="npVariante" placeholder="Ej. 3 dispositivos"></label>
-      <label class="cr-field wide">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
+      <label class="cr-field wide">Precio (L) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
       <label class="cr-field wide">Datos para procesar<select id="npEntregaTipo">${selectOptions(ENTREGA_TIPOS,'')}</select></label>
       <label class="cr-field wide">Flujo de entrega<select id="npEntregaCanal">${selectOptions(ENTREGA_CANALES,'manual')}</select></label>
       <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('npDetalle')}</div><textarea id="npDetalle" rows="4"></textarea></label>
@@ -627,14 +627,73 @@ async function loadVendedores(force){
   try{
     const d=await api('GET','revendedores');
     state.vendedores=Array.isArray(d)?d:(d.revendedores||[]);
+    if(force&&typeof window.sublichatSincronizarVendedores==='function') window.sublichatSincronizarVendedores(true); // número/nombre nuevo de un socio → listas y fichas
     render();
   }catch(e){ if(b) b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`; }
 }
+/* ═══════════ EQUIPO DE VENTAS (registro único · Oct-2026) ═══════════
+   Vendedores del equipo (Relojes, Sublicuentas, Yami…): sin acceso al Panel de Socios.
+   Lo que se guarde aquí (o en el Bot) sale en Web, APK, Bot, cobros, renovación, fichas y portal del cliente.
+   Si cambia el número, las fichas que tenían el número viejo muestran el nuevo. */
+async function regApi(body){
+  const r=await fetch('/api/mobile-core',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'vendedores',...body})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false) throw new Error(d.error||`HTTP ${r.status}`);
+  return d;
+}
+async function loadEquipo(force){
+  if(state.equipo&&!force) return;
+  try{ const d=await regApi({op:'listar'}); state.equipo=(d.sellersDetail||[]).filter(v=>v.tipo==='equipo'); }
+  catch(e){ state.equipo=[]; state.equipoError=e.message; }
+  if(typeof window.sublichatSincronizarVendedores==='function') window.sublichatSincronizarVendedores(true);
+}
+function equipoHtml(){
+  const lista=state.equipo||[];
+  return `<section class="cr-card" style="margin-bottom:14px;background:#fff">
+    <div class="cr-row"><h3>🧑‍💼 Equipo de ventas</h3><button class="cr-btn red" id="regAdd">＋ Vendedor del equipo</button></div>
+    <small>Se usan en Web, APK y Bot (cobros, renovación, fichas y portal del cliente). Los socios con acceso al Panel están abajo.</small>
+    ${state.equipoError?`<div class="cr-empty">${esc(state.equipoError)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${lista.map(v=>`<div class="cr-row" style="border-top:1px solid #edf1f6;padding-top:6px">
+      <span><b>${esc(v.nombre)}</b> · 📱 ${esc(v.telefono||'sin número')}</span>
+      <span style="display:flex;gap:6px"><button class="cr-btn ghost" data-reg-edit="${esc(v.nombre)}" data-tel="${esc(v.telefono||'')}">Editar</button><button class="cr-btn danger" data-reg-del="${esc(v.nombre)}">Eliminar</button></span>
+    </div>`).join('')||'<div class="cr-empty">Sin vendedores del equipo.</div>'}</div>
+  </section>`;
+}
+function editarEquipo(nombre='',telefono=''){
+  const nuevo=!nombre;
+  const m=modal(`<h2>${nuevo?'Nuevo vendedor del equipo':'Editar '+esc(nombre)}</h2>
+    <div class="cr-form">
+      <label class="cr-field wide">Nombre<input id="regNombre" value="${esc(nombre)}" placeholder="Ej. Sublicuentas 1"></label>
+      <label class="cr-field wide">WhatsApp<input id="regTel" inputmode="tel" value="${esc(telefono)}" placeholder="Honduras: 2255-4675 · Otro país: +52 55 1234 5678"></label>
+      <small>Honduras: 8 dígitos. Otro país: escriba el código (+52, +1, +34…). Vacío = sin número.</small>
+    </div>
+    <div class="cr-actions"><button class="cr-btn ghost" id="regCancel">Cancelar</button><button class="cr-btn red" id="regOk">Guardar</button></div>`);
+  $('#regCancel').onclick=()=>m.remove();
+  $('#regOk').onclick=async()=>{
+    const btn=$('#regOk'); btn.disabled=true;
+    try{
+      await regApi({op:'guardar',nombre:$('#regNombre').value.trim(),telefono:$('#regTel').value.trim(),nombreAnterior:nombre});
+      m.remove(); status('✅ Vendedor guardado. Ya se ve en Web, APK y Bot.','good');
+      await loadEquipo(true); render();
+    }catch(e){ alert(e.message); btn.disabled=false; }
+  };
+}
+async function eliminarEquipo(nombre){
+  if(!confirm(`¿Eliminar a ${nombre}? Deja de salir en Web, APK y Bot. Sus clientes NO se borran.`)) return;
+  try{ await regApi({op:'eliminar',nombre}); status('🗑️ Vendedor eliminado.','good'); await loadEquipo(true); render(); }
+  catch(e){ alert(e.message); }
+}
+
 function renderVendedores(){
   const b=$('#revBody'); if(!state.vendedores) return loadVendedores();
+  if(!state.equipo){ loadEquipo().then(()=>render()); }
   b.innerHTML=`
-    <div class="cr-tools"><span></span><button class="cr-btn red" id="revAddVendedor">＋ Vendedor</button></div>
+    ${equipoHtml()}
+    <div class="cr-tools"><span><b>🤝 Socios (Panel de Socios)</b></span><button class="cr-btn red" id="revAddVendedor">＋ Socio</button></div>
     <div class="cr-grid">${state.vendedores.map(vendedorCard).join('')||'<div class="cr-empty">No hay vendedores.</div>'}</div>`;
+  $('#regAdd').onclick=()=>editarEquipo();
+  b.querySelectorAll('[data-reg-edit]').forEach(x=>x.onclick=()=>editarEquipo(x.dataset.regEdit,x.dataset.tel));
+  b.querySelectorAll('[data-reg-del]').forEach(x=>x.onclick=()=>eliminarEquipo(x.dataset.regDel));
   $('#revAddVendedor').onclick=nuevoVendedor;
   b.querySelectorAll('[data-edit-vend]').forEach(x=>x.onclick=()=>editarVendedor(x.dataset.editVend));
   b.querySelectorAll('[data-pin-vend]').forEach(x=>x.onclick=()=>resetPinVendedor(x.dataset.pinVend));
@@ -689,7 +748,7 @@ function nuevoVendedor(){
   const m=modal(`<h2>Nuevo vendedor</h2>
     <div class="cr-form">
       <label class="cr-field wide">Nombre<input id="nvNombre" placeholder="Ej. Juan Pérez"></label>
-      <label class="cr-field wide">WhatsApp<input id="nvTelefono" inputmode="tel" placeholder="Ej. 8946-4328"></label>
+      <label class="cr-field wide">WhatsApp<input id="nvTelefono" inputmode="tel" placeholder="Honduras: 8946-4328 · Otro país: +52 55 1234 5678"></label>
       <label class="cr-field wide">ID de Telegram (opcional)<input id="nvTelegram" placeholder="Ej. 123456789"></label>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="nvCancel">Cancelar</button><button class="cr-btn red" id="nvOk">Crear</button></div>`);
@@ -701,7 +760,7 @@ function nuevoVendedor(){
       const d=await api('POST','revendedores',{nombre,telegramId,telefono});
       m.remove();
       pinModal(d.nombre,d.pin,`Usuario de acceso: ${d.nombre_norm}`);
-      await loadVendedores(true);
+      await loadVendedores(true); loadEquipo(true);
     }catch(e){ alert(e.message); }
   };
 }
@@ -1100,10 +1159,10 @@ async function pubGenerarImagen(){
       y+=34;
       c.productos.forEach((p,i)=>{
         const top=y;if(i){x.fillStyle='#ECEEF1';x.fillRect(PAD,top,W-PAD*2,2);}
-        const precio=p.precio==null?'Consultar':`L ${Number(p.precio).toLocaleString('es-HN')}`;
+        const precio=p.precio==null?'Consultar':`L${Number(p.precio).toLocaleString('es-HN')}`;
         x.font=`800 44px ${F}`;const pw=x.measureText(precio).width;
         x.fillStyle=p.disponible?'#0B0B0C':'#8A919C';x.textAlign='right';x.fillText(precio,W-PAD,top+66);x.textAlign='left';
-        const sugTxt=p.precioSugerido!=null?`Venta sugerida L ${Number(p.precioSugerido).toLocaleString('es-HN')}${p.gananciaSugerida!=null?` · gana L ${Number(p.gananciaSugerida).toLocaleString('es-HN')}`:''}`:'';
+        const sugTxt=p.precioSugerido!=null?`Venta sugerida L${Number(p.precioSugerido).toLocaleString('es-HN')}${p.gananciaSugerida!=null?` · gana L${Number(p.gananciaSugerida).toLocaleString('es-HN')}`:''}`:'';
         x.font=`600 24px ${F}`;const sw=sugTxt?x.measureText(sugTxt).width:0;
         const maxN=W-PAD*2-Math.max(pw,sw)-40;
         x.fillStyle='#0B0B0C';x.font=`700 36px ${F}`;x.fillText(corta(p.nombre,maxN),PAD,top+50);

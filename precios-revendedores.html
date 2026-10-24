@@ -294,13 +294,13 @@
   }
   function tarjeta(p){
     const link=enlaceConsulta(p);
-    const rev=p.precio==null?`<strong class="consultar">Consultar</strong>`:`<strong>L ${esc(L(p.precio))}</strong>`;
+    const rev=p.precio==null?`<strong class="consultar">Consultar</strong>`:`<strong>L${esc(L(p.precio))}</strong>`;
     const sug=p.precioSugerido!=null;
     const head=`${logoHtml(p.nombre)}<span class="t"><b>${esc(p.nombre)}</b>${p.texto?`<small>${esc(p.texto)}</small>`:""}</span>${link&&p.disponible?`<svg class="ico chev"><use href="#i-chev"/></svg>`:""}`;
     return `<article class="card${p.disponible?"":" agotado"}">
       ${link&&p.disponible?`<a class="card-h" href="${esc(link)}" target="_blank" rel="noopener" aria-label="Consultar ${esc(p.nombre)}">${head}</a>`:`<div class="card-h">${head}</div>`}
-      <div class="precios${sug?"":" uno"}"><div class="pz pz-rev"><span>Precio revendedor</span>${rev}</div>${sug?`<div class="pz pz-sug"><span>Precio sugerido de venta</span><strong>L ${esc(L(p.precioSugerido))}</strong></div>`:""}</div>
-      ${p.gananciaSugerida!=null&&p.disponible?`<div class="gan"><svg class="ico"><use href="#i-trend"/></svg>Ganancia sugerida: L ${esc(L(p.gananciaSugerida))}</div>`:""}
+      <div class="precios${sug?"":" uno"}"><div class="pz pz-rev"><span>Precio revendedor</span>${rev}</div>${sug?`<div class="pz pz-sug"><span>Precio sugerido de venta</span><strong>L${esc(L(p.precioSugerido))}</strong></div>`:""}</div>
+      ${p.gananciaSugerida!=null&&p.disponible?`<div class="gan"><svg class="ico"><use href="#i-trend"/></svg>Ganancia sugerida: L${esc(L(p.gananciaSugerida))}</div>`:""}
       ${p.disponible?"":`<span class="tag">No disponible por ahora</span>`}
     </article>`;
   }

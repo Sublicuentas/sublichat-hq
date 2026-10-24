@@ -255,8 +255,8 @@ function sublichatAuditPayload(rawUrl, method, init){
   if(body.nuevoTelefono!=null&&String(body.nuevoTelefono).trim())changes.push(`teléfono → ${String(body.nuevoTelefono).trim()}`);
   if(body.fechaRenovacion!=null&&String(body.fechaRenovacion).trim())changes.push(`renovación → ${String(body.fechaRenovacion).trim()}`);
   if(nestedService?.fechaRenovacion)changes.push(`renovación → ${String(nestedService.fechaRenovacion).trim()}`);
-  if(body.precio!=null&&String(body.precio).trim())changes.push(`precio → L ${String(body.precio).trim()}`);
-  if(nestedService?.precio!=null&&String(nestedService.precio).trim())changes.push(`precio → L ${String(nestedService.precio).trim()}`);
+  if(body.precio!=null&&String(body.precio).trim())changes.push(`precio → L${String(body.precio).trim()}`);
+  if(nestedService?.precio!=null&&String(nestedService.precio).trim())changes.push(`precio → L${String(nestedService.precio).trim()}`);
   if(body.vendedor!=null&&String(body.vendedor).trim())changes.push(`vendedor → ${String(body.vendedor).trim()}`);
   if(changes.length)det.cambio=changes.slice(0,4).join(' · ');
 
@@ -364,7 +364,7 @@ let CONTROL_SESSION_VERSION=0, CONTROL_DATA_ERROR="", controlLiveFallback=null;
 const controlSharedRequests=new Map();
 function bumpControlDataVersion(){ CONTROL_DATA_VERSION=(CONTROL_DATA_VERSION+1)%1000000000; return CONTROL_DATA_VERSION; }
 let clientesLiveUnsubscribe=null, clientesLiveStarted=false;
-const fmt = n => "Lps " + Number(n||0).toLocaleString("es-HN");
+const fmt = n => "L" + Number(n||0).toLocaleString("es-HN");
 const daysTo = d => Math.round((d - today)/86400000);
 function parseDate(v){
   if(!v) return null;
@@ -446,7 +446,7 @@ function flattenCliente(doc, clienteId=""){
   return servs.map((s,srvIndex)=>{
     let vendedor=canonicalVendedorNombre(s.vendedor||vendedorCliente||"—");
     const vendedorNorm=canonicalVendedorNorm(s.vendedor_norm||vendedor);
-    const vendedorTelefono=String(s.vendedorTelefono||(vendedorNorm===clienteSearchNorm(doc.vendedor_norm||vendedorCliente)?vendedorTelefonoCliente:"")||"").trim();
+    const vendedorTelefono=telVendedorVigente(vendedor,String(s.vendedorTelefono||(vendedorNorm===clienteSearchNorm(doc.vendedor_norm||vendedorCliente)?vendedorTelefonoCliente:"")||"").trim());
     const perfiles=perfilesDeCompra(s,nombre);
     const principal=perfiles[0]||{};
     const rawClave=principal.clave||s.clave||s.contrasena||s.password||"";
@@ -878,7 +878,7 @@ function renderCharts(byP){
     const g=ctxT.getContext("2d").createLinearGradient(0,0,0,240);
     g.addColorStop(0,"rgba(232,49,63,.35)"); g.addColorStop(1,"rgba(232,49,63,0)");
     _trendChart=new Chart(ctxT,{type:"line",data:{labels,datasets:[{data:vals,borderColor:accent,backgroundColor:g,fill:true,tension:.4,borderWidth:3,pointBackgroundColor:accent,pointRadius:4,pointHoverRadius:6}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>"Lps "+c.parsed.y.toLocaleString("es-HN")}}},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>"L"+c.parsed.y.toLocaleString("es-HN")}}},
         scales:{y:{beginAtZero:true,grid:{color:line},ticks:{callback:v=>"L"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}}});
   }
 
@@ -892,7 +892,7 @@ function renderCharts(byP){
   if(ctxD){
     if(_donutChart)_donutChart.destroy();
     _donutChart=new Chart(ctxD,{type:"doughnut",data:{labels:dl,datasets:[{data:dv,backgroundColor:palette,borderColor:css.getPropertyValue("--card").trim()||"#111",borderWidth:2}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:12,usePointStyle:true,pointStyle:"circle",font:{size:11}}},tooltip:{callbacks:{label:c=>c.label+": Lps "+c.parsed.toLocaleString("es-HN")}}}}});
+      options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:12,usePointStyle:true,pointStyle:"circle",font:{size:11}}},tooltip:{callbacks:{label:c=>c.label+": L"+c.parsed.toLocaleString("es-HN")}}}}});
   }
 }
 
@@ -900,6 +900,19 @@ function renderCharts(byP){
 // llevan su código completo (+52, +1, +34…). Para WhatsApp solo a los de 8 dígitos se les pone 504.
 function telWhatsApp(v){let d=String(v||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.length===8)d="504"+d;return d.length>=10&&d.length<=15?d:"";}
 function telClave(v){let d=String(v||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.length===11&&d.startsWith("504"))d=d.slice(3);return d;}
+// Oct-2026 · Número vigente del vendedor (registro único: api/_vendedores.js, el mismo de APK y Bot).
+// Si la ficha guardó un número que fue de un vendedor (actual o anterior) → número actual de ESTE vendedor.
+// Si guardó otro número (soporte escrito a mano) → se respeta.
+window.SUBLI_VENDEDORES=window.SUBLI_VENDEDORES||{tels:{},known:[],alias:{}};
+function vendClave(v){const k=String(v||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();return k==="geissel"?"geisell":k;}
+function telVendedorVigente(vendedor,guardado){
+  const R=window.SUBLI_VENDEDORES||{};let k=vendClave(vendedor);if(R.alias&&R.alias[k])k=R.alias[k];
+  const actual=(R.tels&&R.tels[k])||(typeof VENDEDORES_SERVICIO_TEL==="object"&&VENDEDORES_SERVICIO_TEL[k])||"";
+  const g=telClave(guardado);
+  if(!g)return actual;
+  const conocidos=new Set([...(R.known||[]),...Object.values(typeof VENDEDORES_SERVICIO_TEL==="object"?VENDEDORES_SERVICIO_TEL:{})].map(telClave));
+  return actual&&conocidos.has(g)?actual:String(guardado||"").trim();
+}
 function clienteEsc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 function clienteIniciales(nombre){return String(nombre||"C").trim().split(/\s+/).slice(0,2).map(x=>x.charAt(0)).join("").toUpperCase()||"C";}
 function abrirWhatsAppCliente(g){
@@ -1629,7 +1642,7 @@ async function finCorregirMovimientoR128(id){
   const nombre=pagoOpEsc(raw.clienteNombre||raw.detalle||raw.motivo||raw.plataforma||"Movimiento");
   back.innerHTML=`<div style="width:min(420px,100%);background:#fff;border-radius:18px;padding:18px;color:#0f172a;font-family:inherit;box-shadow:0 18px 50px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">✏️ Corregir · ${nombre}</b><button data-x style="border:0;background:#f1f5f9;border-radius:999px;width:32px;height:32px;cursor:pointer">✕</button></div>
-    <p style="color:#64748b;font-size:12.5px;margin:6px 0 10px">Actual: Lps ${pagoOpEsc(raw.monto)} · ${pagoOpEsc(raw.banco||"Sin banco")}</p>
+    <p style="color:#64748b;font-size:12.5px;margin:6px 0 10px">Actual: L${pagoOpEsc(raw.monto)} · ${pagoOpEsc(raw.banco||"Sin banco")}</p>
     <label style="display:block;font-size:13px;font-weight:700">Monto correcto<input data-monto type="number" inputmode="decimal" min="0" style="${inp}" value="${pagoOpEsc(raw.monto)}"></label>
     <label style="display:block;font-size:13px;font-weight:700;margin-top:10px">Banco correcto<select data-banco style="${inp}">${metodos.map(b=>`<option value="${pagoOpEsc(b.id)}" ${b.id===raw.bancoId?"selected":""}>${pagoOpEsc(b.nombre)}</option>`).join("")}</select></label>
     <label style="display:block;font-size:13px;font-weight:700;margin-top:10px">Motivo<input data-motivo maxlength="200" placeholder="Ej. no es Ficohsa, es Tigo Money" style="${inp}"></label>
@@ -1675,18 +1688,18 @@ function finRenderCharts(){
   if(ie)_finCharts.push(new Chart(ie,{type:"bar",data:{labels,datasets:[
     {label:"Ingresos",data:ingArr,backgroundColor:"#69db7c"},
     {label:"Egresos",data:egrArr,backgroundColor:"#ff6b78"}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle"}},tooltip:{callbacks:{label:c=>c.dataset.label+": Lps "+c.parsed.y.toLocaleString("es-HN")}}},scales:{y:{grid:{color:line},ticks:{callback:v=>"L"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}}}));
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle"}},tooltip:{callbacks:{label:c=>c.dataset.label+": L"+c.parsed.y.toLocaleString("es-HN")}}},scales:{y:{grid:{color:line},ticks:{callback:v=>"L"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}}}));
   const net=document.getElementById("finChartNet");
   if(net){const g=net.getContext("2d").createLinearGradient(0,0,0,240);g.addColorStop(0,"rgba(77,171,247,.35)");g.addColorStop(1,"rgba(77,171,247,0)");
     _finCharts.push(new Chart(net,{type:"line",data:{labels,datasets:[{data:netArr,borderColor:"#4dabf7",backgroundColor:g,fill:true,tension:.4,borderWidth:3,pointRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>"Lps "+c.parsed.y.toLocaleString("es-HN")}}},scales:{y:{grid:{color:line},ticks:{callback:v=>"L"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}}}));}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>"L"+c.parsed.y.toLocaleString("es-HN")}}},scales:{y:{grid:{color:line},ticks:{callback:v=>"L"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}}}));}
   // por banco (dona, ingresos)
   const byBank={}; movs.filter(m=>m.tipo==="ingreso").forEach(m=>byBank[m.banco]=(byBank[m.banco]||0)+m.monto);
   const bl=Object.keys(byBank), bv=Object.values(byBank);
   const pal=["#e8313f","#69db7c","#4dabf7","#ffa94d","#9775fa","#ffd43b","#ff6b78"];
   const bk=document.getElementById("finChartBank");
   if(bk&&bl.length)_finCharts.push(new Chart(bk,{type:"doughnut",data:{labels:bl,datasets:[{data:bv,backgroundColor:pal,borderColor:css.getPropertyValue("--card").trim()||"#111",borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:"60%",plugins:{legend:{position:"bottom",labels:{padding:12,usePointStyle:true,pointStyle:"circle",font:{size:11}}},tooltip:{callbacks:{label:c=>c.label+": Lps "+c.parsed.toLocaleString("es-HN")}}}}}));
+    options:{responsive:true,maintainAspectRatio:false,cutout:"60%",plugins:{legend:{position:"bottom",labels:{padding:12,usePointStyle:true,pointStyle:"circle",font:{size:11}}},tooltip:{callbacks:{label:c=>c.label+": L"+c.parsed.toLocaleString("es-HN")}}}}}));
 }
 const finOpenBtn=document.getElementById("finOpenBtn"), finScreen=document.getElementById("finScreen");
 if(finOpenBtn)finOpenBtn.addEventListener("click",()=>{ finScreen.classList.add("show"); renderFinanzas(); finRenderCharts(); });
@@ -1722,7 +1735,7 @@ function finXlsTitleRow(ws,text,cols){
   cell.alignment={vertical:"middle",horizontal:"left",indent:1};
   ws.getRow(1).height=30;
 }
-const finXlsMoneyFmt='"Lps" #,##0';
+const finXlsMoneyFmt='"L"#,##0';
 const finXlsBtn=document.getElementById("finXls");
 if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
   if(typeof ExcelJS==="undefined"){ mostrarToast("Cargando Excel… probá de nuevo en 2s."); return; }
@@ -3274,7 +3287,7 @@ async function pagoOpSociosSinFicha(){
   if(!j.ok)throw new Error(j.error||"No se pudieron leer las compras de socios.");
   return Array.isArray(j.pagos)?j.pagos:[];
 }
-function pagoOpSocioTexto(p,u){const f=String(p.fecha||"");return [p.socio,u.servicio,u.perfil||p.clienteNombre,`Lps. ${p.monto}`,p.banco,f?`${f.slice(8,10)}/${f.slice(5,7)}`:""].filter(Boolean).join(" · ");}
+function pagoOpSocioTexto(p,u){const f=String(p.fecha||"");return [p.socio,u.servicio,u.perfil||p.clienteNombre,`L${p.monto}`,p.banco,f?`${f.slice(8,10)}/${f.slice(5,7)}`:""].filter(Boolean).join(" · ");}
 async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitirAjuste=false,permitirSocio=false}={}){
   let metodos=[];
   try{metodos=await pagoOpMetodos();}catch(e){alert("⚠️ "+(e.message||"Sin métodos de pago"));return null;}
@@ -3301,9 +3314,9 @@ async function pedirPagoOperacion({tipo="renovacion",cliente="",rows=[],permitir
     const fila=(key)=>{const f=(st.filas[key]=st.filas[key]||{});if(!f.estadoCobro)f.estadoCobro="pagado";return f;};
     const totales=()=>{let total=0,recibido=0,saldo=0;for(const r of rows){const e=pagoOpFilaEstado(fila(r.key));total+=e.total;recibido+=e.recibido;saldo+=e.saldo;}return {total,recibido,saldo};};
     const fieldHtml=(r)=>{const f=fila(r.key),e=pagoOpFilaEstado(f);const chip=(mode,label)=>`<button data-estado="${mode}" data-key="${pagoOpEsc(r.key)}" style="${btn(e.modo===mode)}">${label}</button>`;let campos="";
-      if(e.modo==="pendiente")campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`;
-      else campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pagado<input data-pagado="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pagado??f.recibidoParcial??"")}"></label><button data-toggle-pendiente="${pagoOpEsc(r.key)}" style="${btn(Boolean(f.tienePendiente))};margin-top:8px">${f.tienePendiente?"✓ Quedó saldo pendiente":"＋ Agregar saldo pendiente"}</button>${f.tienePendiente?`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Saldo pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="Lps." style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`:""}`;
-      const estado=e.modo==="pendiente"?(e.saldo>0?`🕒 Pendiente Lps. ${e.saldo}`:"Escriba cuánto queda pendiente"):(e.recibido>0?(e.saldo>0?`◐ Pagó Lps. ${e.recibido} · pendiente Lps. ${e.saldo}`:`✅ Pagado Lps. ${e.recibido}`):"Escriba cuánto pagó");
+      if(e.modo==="pendiente")campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="L" style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`;
+      else campos=`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Monto pagado<input data-pagado="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="L" style="${inp}" value="${pagoOpEsc(f.pagado??f.recibidoParcial??"")}"></label><button data-toggle-pendiente="${pagoOpEsc(r.key)}" style="${btn(Boolean(f.tienePendiente))};margin-top:8px">${f.tienePendiente?"✓ Quedó saldo pendiente":"＋ Agregar saldo pendiente"}</button>${f.tienePendiente?`<label style="display:block;font-size:12.5px;font-weight:700;margin-top:8px">Saldo pendiente<input data-pendiente="${pagoOpEsc(r.key)}" type="number" inputmode="decimal" min="0" placeholder="L" style="${inp}" value="${pagoOpEsc(f.pendiente??"")}"></label>`:""}`;
+      const estado=e.modo==="pendiente"?(e.saldo>0?`🕒 Pendiente L${e.saldo}`:"Escriba cuánto queda pendiente"):(e.recibido>0?(e.saldo>0?`◐ Pagó L${e.recibido} · pendiente L${e.saldo}`:`✅ Pagado L${e.recibido}`):"Escriba cuánto pagó");
       return `<div style="border:1px solid #e5eaf2;border-radius:12px;padding:10px;margin-top:10px"><b style="font-size:13.5px">${pagoOpEsc(r.label)}</b><p style="font-size:12.5px;font-weight:700;margin:8px 0 5px">Estado del cobro</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${chip("pagado","✅ Pagó")}${chip("pendiente","🕒 Pendiente")}</div>${campos}<small data-fila-estado="${pagoOpEsc(r.key)}" style="display:block;color:#64748b;margin-top:7px">${estado}</small></div>`;
     };
     function pintar(){
@@ -3450,20 +3463,9 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
     hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
   }
 }
-// Oct-2026 · Duraciones: 15 días, 1, 2, 3, 4, 6, 7, 9 y 12 meses + personalizado. El servidor calcula la fecha
-// (vigente → desde el vencimiento; vencido → desde hoy; o la base elegida) y la guarda para auditoría.
-const cobroBaseRenov=()=>($cobro("cobroBaseRenov")?.value)||"auto";
-document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:cobroBaseRenov()})));
-const rPersonal=$cobro("cobroRPersonal");
-if(rPersonal)rPersonal.addEventListener("click",()=>{
-  const raw=prompt("Duración personalizada:\n• días: 15d, 40d…\n• meses: 5m, 10m…","1m");
-  if(raw==null)return;
-  const m=String(raw).trim().toLowerCase().match(/^\+?(\d{1,3})\s*(d|dias|días|m|mes|meses)$/);
-  if(!m){mostrarToast("⚠️ Escriba por ejemplo 15d o 5m.");return;}
-  const unidad=m[2].startsWith("d")?"dias":"meses", cantidad=Number(m[1]);
-  if(cantidad<1||(unidad==="meses"&&cantidad>24)||(unidad==="dias"&&cantidad>730)){mostrarToast("⚠️ Duración fuera de rango (máx. 24 meses o 730 días).");return;}
-  renovarServicio(null,null,{unidad,cantidad,base:cobroBaseRenov()});
-});
+// Oct-2026 · Renovar: +31 días, 1, 2, 3, 6 y 12 meses + Personalizado (fecha). Iguales en Web, APK y Bot.
+// El servidor calcula la fecha: vigente → desde el vencimiento; vencido → desde hoy.
+document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:"auto"})));
 
 // Botón que despliega/oculta las opciones de renovación
 const renovarBtn=$cobro("cobroRenovarBtn"), renovarBox=$cobro("cobroRenovar");
@@ -3473,7 +3475,7 @@ if(renovarBtn)renovarBtn.addEventListener("click",()=>{
   renovarBtn.textContent=vis?"🔁 Renovar suscripción":"🔁 Ocultar opciones";
 });
 
-// Elegir fecha en calendario (abre el datepicker nativo del teléfono)
+// Personalizado: elegir la fecha exacta (abre el selector de fecha del teléfono)
 const rManual=$cobro("cobroRManual"), fechaInput=$cobro("cobroFecha");
 if(rManual && fechaInput){
   rManual.addEventListener("click",()=>{
@@ -5890,7 +5892,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       }).join("\n\n");
       const datosIptv=fichaEsIptv(plat)?`\n📲 Lista: *${iptvlista}*\n🧾 URL: *${iptvurl}*${fichaMaxPlayerTexto(plat)}\n📺 Plan: *${iptvpantallas}*\n🗓️ Vigencia contratada: *${planmeses}*\n`:"";
       const reglas=aplicarVariables(fichaReglasFor(plat));
-      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *Lps ${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
+      return `*${fichaPlatformEmoji(plat)} ${fichaPlatformLabel(plat)} · ${perfiles.length} PERFILES*\nTitular: *${nombre||"Cliente"}*\n\n${detalle}${datosIptv}\n📅 Renovación conjunta: *${renovTexto}*\n💰 Precio total de la compra: *L${precio||"—"}*\n\n${reglas}\n\n🚀 Sublicuentas`;
     }
     // Individual o multiperfil: el respaldo no cambia por dispositivo. Incluye
     // los campos de entrega de cada plataforma; Apple TV entrega solo el PIN.
@@ -5933,7 +5935,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     return "🌟";
   }
   function fichaVendedorTel(v){
-    return FICHA_VENDEDOR_TELS[fichaNorm(v)] || "";
+    return telVendedorVigente(v,"") || FICHA_VENDEDOR_TELS[fichaNorm(v)] || "";
   }
   function fichaVendedorTelefonoActual(){
     return fichaGetVal("fichaVendedorTelefono")||fichaVendedorTel(fichaVendedorActual());
@@ -6264,7 +6266,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
             if(j.pagoOperacion&&j.pagoOperacion.pagoSocio)fichaToast(`🤝 Ya pagado por Socios (${j.pagoOperacion.socio||pagoOp.socio}) · no se registró otro ingreso`);
             else{const m="⚠️ La ficha se guardó, pero no quedó amarrada al pago del socio. Actualice api/_finanzas-operacion.js en Vercel.";fichaStatus(m,"err");fichaToast(m);}
           }else
-          try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:pagoOp.operationId});fichaToast(`💵 Pago de la compra: ${String(rp.estado||"").toUpperCase()}${rp.saldo>0?` · pendiente Lps. ${rp.saldo}`:""}`);}
+          try{const rp=j.pagoOperacion||await registrarPagoOperacionWeb({tipoOrigen:"compra",pago:pagoOp,key:"0",clienteId:j.clienteId||fichaClienteIdActual||"",clienteNombre:payload.cliente.nombrePerfil||"",compraId:fichaCompraIdActual||"",plataforma:payload.servicio.plataforma||"",operationId:pagoOp.operationId});fichaToast(`💵 Pago de la compra: ${String(rp.estado||"").toUpperCase()}${rp.saldo>0?` · pendiente L${rp.saldo}`:""}`);}
           catch(e){const m=`⚠️ La compra se guardó, pero el pago NO se registró (${e.message}). Regístrelo en Finanzas → Pendientes/Ingresos.`;fichaStatus(m,"err");fichaToast(m);}
         }
         const nombres=listaConfirmada.map(p=>p.nombre).filter(Boolean).join(" + ");
@@ -6475,7 +6477,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
     fichaQ("fichaTelefono").value=(g&&g.telefono)||"";
     const vendedorFicha=s.vendedor||fichaVendedorSesion()||(g&&Array.isArray(g.vendedores)&&g.vendedores.length===1?g.vendedores[0]:(g&&g.vendedor)||"");
     fichaSetVendedor(vendedorFicha);
-    fichaQ("fichaVendedorTelefono").value=s.vendedorTelefono||((g&&g.vendedor===vendedorFicha)?g.vendedorTelefono:"")||fichaVendedorTel(vendedorFicha);
+    fichaQ("fichaVendedorTelefono").value=telVendedorVigente(vendedorFicha,s.vendedorTelefono||((g&&g.vendedor===vendedorFicha)?g.vendedorTelefono:""))||fichaVendedorTel(vendedorFicha);
     const beneficiarioTipo=String(s.beneficiarioTipo||"").toLowerCase()==="tercero"?"tercero":"titular";
     fichaQ("fichaBeneficiarioTipo").value=beneficiarioTipo;
     fichaQ("fichaBeneficiarioNombre").value=beneficiarioTipo==="tercero"?String(s.beneficiarioNombre||s.beneficiario||""):"";
@@ -6831,7 +6833,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
             <small id="fichaVisibilidadMaxPlayerNota" style="display:none;margin-top:6px;font-size:12px;color:var(--muted)">📱 Con Max Player, la ficha URL muestra <b>solo el usuario y la clave de Max Player</b>. La ficha de WhatsApp sigue llevando todos los datos.</small>
           </div>
           <div class="ficha-field" id="fichaAvisoDispositivoBox" style="display:none;grid-column:1/-1;background:var(--surface2,#1f232c);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#9a9fac);"></div>
-          <label class="ficha-field"><span>Precio Lps.</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
+          <label class="ficha-field"><span>Precio (L)</span><input class="ficha-input" id="fichaPrecio" inputmode="numeric" placeholder="130"></label>
           <label class="ficha-field"><span>Fecha renovación</span><input class="ficha-input" id="fichaFecha" type="date"></label>
           <label class="ficha-field"><span>Día de cada mes</span><input class="ficha-input" id="fichaDia" inputmode="numeric" placeholder="04"></label>
           <label class="ficha-field" id="fichaCorreoBox"><span id="fichaCorreoLabel">Perfil 1 · Correo / usuario</span><input class="ficha-input" id="fichaCorreo" placeholder="correo, usuario o acceso"><button type="button" class="ficha-cuenta-pick" id="fichaElegirCuenta" style="margin-top:6px;font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--line2,#d6dbe4);background:transparent;color:inherit;cursor:pointer">📦 Elegir cuenta de Bodega</button><div id="fichaCuentasLista" style="display:none;margin-top:6px;max-height:220px;overflow:auto;border:1px solid var(--line2,#d6dbe4);border-radius:10px"></div></label>
@@ -7084,13 +7086,21 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       const cfg=j&&j.config;if(!cfg)return;
       const lista=Array.isArray(cfg.sellers)?cfg.sellers.map(v=>String(v||"").replace(/\s+/g," ").trim()).filter(Boolean):[];
       const tels=cfg.sellerPhones&&typeof cfg.sellerPhones==="object"?cfg.sellerPhones:{};
-      Object.entries(tels).forEach(([k,v])=>{const tel=telClave(v);if(tel.length>=8&&tel.length<=15){FICHA_VENDEDOR_TELS[fichaNorm(k)]=tel;if(typeof VENDEDORES_SERVICIO_TEL==="object")VENDEDORES_SERVICIO_TEL[String(k).toLowerCase().trim()]=tel;}});
-      lista.forEach(v=>{
-        if(!FICHA_VENDEDORES.some(x=>fichaNorm(x)===fichaNorm(v)))FICHA_VENDEDORES.push(v);
-        if(Array.isArray(VENDEDORES_SERVICIO)&&!VENDEDORES_SERVICIO.some(x=>fichaNorm(x)===fichaNorm(v)))VENDEDORES_SERVICIO.push(v);
-      });
+      // Oct-2026 · el registro manda: se REEMPLAZAN listas y números (antes solo se sumaban y un eliminado seguía saliendo).
+      window.SUBLI_VENDEDORES={tels:{},known:Array.isArray(cfg.sellerPhonesKnown)?cfg.sellerPhonesKnown:[],alias:cfg.sellerAliases&&typeof cfg.sellerAliases==="object"?cfg.sellerAliases:{}};
+      if(lista.length){
+        Object.keys(FICHA_VENDEDOR_TELS).forEach(k=>delete FICHA_VENDEDOR_TELS[k]);
+        if(typeof VENDEDORES_SERVICIO_TEL==="object")Object.keys(VENDEDORES_SERVICIO_TEL).forEach(k=>delete VENDEDORES_SERVICIO_TEL[k]);
+      }
+      Object.entries(tels).forEach(([k,v])=>{const tel=telClave(v);if(tel.length>=8&&tel.length<=15){window.SUBLI_VENDEDORES.tels[vendClave(k)]=tel;FICHA_VENDEDOR_TELS[fichaNorm(k)]=tel;if(typeof VENDEDORES_SERVICIO_TEL==="object")VENDEDORES_SERVICIO_TEL[String(k).toLowerCase().trim()]=tel;}});
+      if(lista.length){
+        FICHA_VENDEDORES.splice(0,FICHA_VENDEDORES.length,...lista);
+        if(Array.isArray(VENDEDORES_SERVICIO))VENDEDORES_SERVICIO.splice(0,VENDEDORES_SERVICIO.length,...lista);
+      }
       const sel=document.getElementById("fichaVendedor");
       if(sel){
+        // Quitar del selector los vendedores eliminados (se conserva el que está elegido en la ficha abierta).
+        [...sel.options].forEach(o=>{if(o.value&&o.value!=="__nuevo__"&&o.value!==sel.value&&!FICHA_VENDEDORES.includes(o.value))o.remove();});
         const nuevo=sel.querySelector('option[value="__nuevo__"]');
         FICHA_VENDEDORES.forEach(v=>{
           if([...sel.options].some(o=>o.value===v))return;
@@ -7635,7 +7645,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   function renderEgresos(){
     const el=document.getElementById('rbac-egresos'); if(!el)return;
     const eg=FINANZAS.filter(m=>norm(m.tipo||m.movimiento||'').includes('egreso')).slice().sort((a,b)=>{const va=parseDate(a.fecha||a.fechaPago||a.createdAt||a.created_at||a.timestamp);const vb=parseDate(b.fecha||b.fechaPago||b.createdAt||b.created_at||b.timestamp);return ((vb&&!isNaN(vb))?vb.getTime():0)-((va&&!isNaN(va))?va.getTime():0);}).slice(0,20);
-    el.innerHTML=`<div class="rbac-form"><label class="rbac-field"><span>Motivo</span><input class="rbac-input" id="egMotivo" placeholder="Compra, banco, soporte…"></label><label class="rbac-field"><span>Monto Lps.</span><input class="rbac-input" id="egMonto" type="number" inputmode="numeric" placeholder="0"></label><label class="rbac-field"><span>Banco / billetera</span><input class="rbac-input" id="egBanco" placeholder="BAC, Ficohsa, efectivo…"></label><label class="rbac-field"><span>Fecha</span><input class="rbac-input" id="egFecha" type="date" value="${dateISO(new Date())}"></label><div class="rbac-wide"><button class="rbac-btn red" id="egGuardar" style="width:100%">💾 Guardar egreso</button></div></div><div class="count" style="margin-top:14px">Últimos egresos</div><div class="rbac-list">${eg.length?eg.map(m=>`<div class="rbac-row"><div><h3>${esc(m.motivo||m.descripcion||'Egreso')}</h3><p>${fmt(m.monto)} · ${esc(m.banco||'—')}</p><small>${esc(m.fecha||m.createdAt||'')}</small></div><span class="rbac-badge">${esc(m.registradoPor||'')}</span></div>`).join(''):'<div class="empty">Aún no hay egresos cargados.</div>'}</div>`;
+    el.innerHTML=`<div class="rbac-form"><label class="rbac-field"><span>Motivo</span><input class="rbac-input" id="egMotivo" placeholder="Compra, banco, soporte…"></label><label class="rbac-field"><span>Monto (L)</span><input class="rbac-input" id="egMonto" type="number" inputmode="numeric" placeholder="0"></label><label class="rbac-field"><span>Banco / billetera</span><input class="rbac-input" id="egBanco" placeholder="BAC, Ficohsa, efectivo…"></label><label class="rbac-field"><span>Fecha</span><input class="rbac-input" id="egFecha" type="date" value="${dateISO(new Date())}"></label><div class="rbac-wide"><button class="rbac-btn red" id="egGuardar" style="width:100%">💾 Guardar egreso</button></div></div><div class="count" style="margin-top:14px">Últimos egresos</div><div class="rbac-list">${eg.length?eg.map(m=>`<div class="rbac-row"><div><h3>${esc(m.motivo||m.descripcion||'Egreso')}</h3><p>${fmt(m.monto)} · ${esc(m.banco||'—')}</p><small>${esc(m.fecha||m.createdAt||'')}</small></div><span class="rbac-badge">${esc(m.registradoPor||'')}</span></div>`).join(''):'<div class="empty">Aún no hay egresos cargados.</div>'}</div>`;
     const btn=document.getElementById('egGuardar'); if(btn)btn.onclick=async()=>{
       const motivo=document.getElementById('egMotivo').value.trim(), monto=Number(document.getElementById('egMonto').value||0), banco=document.getElementById('egBanco').value.trim(), fecha=document.getElementById('egFecha').value;
       if(!motivo||!monto){mostrarToast('Ponga motivo y monto.');return;}
@@ -7763,10 +7773,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       <div class="rbac-list" style="margin-bottom:14px">${rankVend.length?rankVend.map(([v,monto])=>`<div class="rbac-row"><div><h3>${esc(v)}</h3><p>${fmt(monto)} vendidos esta semana</p></div><span class="rbac-badge">${metas.semanal>0?Math.round((monto/metas.semanal)*100):0}% de la meta</span></div>`).join(''):'<div class="empty">Aún no hay cobros registrados esta semana.</div>'}</div>
       ${metas.premio?`<div class="rbac-card"><b>🏆 Premio / incentivo activo</b><span>${esc(metas.premio)}</span></div>`:''}
       <div class="rbac-card"><b>Editar metas</b><div class="rbac-form">
-        <label class="rbac-field"><span>Meta diaria Lps.</span><input class="rbac-input" id="objMetaDia" type="number" inputmode="numeric" value="${metas.diaria}"></label>
-        <label class="rbac-field"><span>Meta semanal Lps.</span><input class="rbac-input" id="objMetaSem" type="number" inputmode="numeric" value="${metas.semanal}"></label>
-        <label class="rbac-field"><span>Meta mensual Lps.</span><input class="rbac-input" id="objMetaMes" type="number" inputmode="numeric" value="${metas.mensual}"></label>
-        <label class="rbac-field wide"><span>Premio / incentivo (opcional)</span><input class="rbac-input" id="objPremio" placeholder="Ej: Bono de Lps 500 al cumplir la meta semanal" value="${esc(metas.premio)}"></label>
+        <label class="rbac-field"><span>Meta diaria (L)</span><input class="rbac-input" id="objMetaDia" type="number" inputmode="numeric" value="${metas.diaria}"></label>
+        <label class="rbac-field"><span>Meta semanal (L)</span><input class="rbac-input" id="objMetaSem" type="number" inputmode="numeric" value="${metas.semanal}"></label>
+        <label class="rbac-field"><span>Meta mensual (L)</span><input class="rbac-input" id="objMetaMes" type="number" inputmode="numeric" value="${metas.mensual}"></label>
+        <label class="rbac-field wide"><span>Premio / incentivo (opcional)</span><input class="rbac-input" id="objPremio" placeholder="Ej: Bono de L500 al cumplir la meta semanal" value="${esc(metas.premio)}"></label>
       </div><div class="rbac-actions" style="justify-content:flex-start;margin-top:10px"><button class="rbac-btn good" id="objGuardarMetas">💾 Guardar metas</button></div></div>
       <div class="ficha-note" style="margin-top:10px">Propuesta nueva: las metas se guardan en este navegador y el "vendido" se calcula de los cobros registrados en Finanzas. Si querés que las metas se compartan entre todos los usuarios y dispositivos, se puede mover a Firebase.</div>`;
     const btn=document.getElementById('objGuardarMetas');
@@ -8335,7 +8345,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 // ============================================================================================================
 (function(){
   const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const L=(n)=>`Lps ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:0,maximumFractionDigits:2})}`;
+  const L=(n)=>`L${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:0,maximumFractionDigits:2})}`;
   const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:String(v||"");};
   let datos=null;
   async function pedir(mes){
@@ -8379,7 +8389,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   async function excel(ef){
     if(typeof ExcelJS==="undefined"){mostrarToast("Cargando Excel… probá de nuevo en 2s.");return;}
     const wb=new ExcelJS.Workbook();wb.creator="Sublichat";
-    const MON='"Lps " #,##0.00;-"Lps " #,##0.00';
+    const MON='"L"#,##0.00;-"L"#,##0.00';
     const hoja=(nombre,titulo,headers,widths,rows,money)=>{const ws=wb.addWorksheet(nombre);ws.columns=widths.map(w=>({width:w}));ws.addRow([`${titulo} · ${ef.nombre}`]);ws.mergeCells(1,1,1,headers.length);const t=ws.getCell(1,1);t.font={bold:true,size:14,color:{argb:"FFFFFFFF"}};t.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE2231A"}};t.alignment={horizontal:"center"};ws.getRow(1).height=26;
       const h=ws.addRow(headers);h.eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0A0A1A"}};c.alignment={horizontal:"center"};});
       rows.forEach(v=>{const r=ws.addRow(v);money.forEach(k=>{r.getCell(k).numFmt=MON;});});ws.views=[{state:"frozen",ySplit:2}];return ws;};
@@ -8423,7 +8433,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 // ============================================================================================================
 (function(){
   const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const L=(n)=>`L ${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const L=(n)=>`L${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const U=(n)=>`${Number(n||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:6})} USDT`;
   const dmy=(v)=>{const [y,m,d]=String(v||"").split("-");return d?`${d}/${m}/${y}`:"—";};
   const nuevoId=()=>(typeof pagoOpNuevoId==="function"?pagoOpNuevoId():(crypto.randomUUID?crypto.randomUUID():`w${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`));
@@ -8470,8 +8480,8 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       <div style="color:#64748b;font-size:12.5px;font-weight:700">SALDO BINANCE</div>
       <div style="font-size:28px;font-weight:900;margin-top:2px">${U(b.saldo)}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;font-size:13.5px">
-        <div>Valor en libros<br><b>${L(b.valorHnl)}</b></div><div>Costo promedio<br><b>${b.costoPromedio?`L ${Number(b.costoPromedio).toFixed(4)} / USDT`:"—"}</b></div>
-        <div>Última tasa<br><b>${b.ultimaTasa?`L ${Number(b.ultimaTasa).toFixed(4)}`:"—"}</b></div><div>Recargas<br><b>${b.recargas||0}</b></div></div>
+        <div>Valor en libros<br><b>${L(b.valorHnl)}</b></div><div>Costo promedio<br><b>${b.costoPromedio?`L${Number(b.costoPromedio).toFixed(4)} / USDT`:"—"}</b></div>
+        <div>Última tasa<br><b>${b.ultimaTasa?`L${Number(b.ultimaTasa).toFixed(4)}`:"—"}</b></div><div>Recargas<br><b>${b.recargas||0}</b></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${btn("＋ Recargar desde banco","data-bin-rec",true)}${btn("Ajustar saldo","data-bin-aj")}</div>
       <div style="color:#64748b;font-size:12px;margin-top:8px">Recargar Binance no es gasto: el banco baja y Binance sube. Cada compra con USDT usa el costo promedio del momento; una recarga nueva no cambia compras viejas.</div></div>
       <div style="${card}"><b>Movimientos de Binance</b>${movs}</div>`;
@@ -8487,7 +8497,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       {k:"fecha",label:"Fecha",type:"date",value:E.hoy},
       {k:"referencia",label:"Referencia (opcional)",ph:"Orden P2P, comprobante…"},
     ],async(v)=>{const r=await api("fin_binance_recargar",{...v,hnl:Number(v.hnl),usdt:Number(v.usdt),operationId:opId});toast(r.duplicado?"ℹ️ Esa recarga ya estaba registrada.":`✅ Binance +${Number(v.usdt)} USDT · tasa L${r.tasa}`);await cargar();},
-    {nota:"No es gasto: es una transferencia del banco a Binance.",textoBoton:"Registrar recarga",alCambiar:(v)=>{const h=Number(v.hnl),u=Number(v.usdt);return h>0&&u>0?`Tasa efectiva: L ${(h/u).toFixed(4)} por USDT`:"";}});
+    {nota:"No es gasto: es una transferencia del banco a Binance.",textoBoton:"Registrar recarga",alCambiar:(v)=>{const h=Number(v.hnl),u=Number(v.usdt);return h>0&&u>0?`Tasa efectiva: L${(h/u).toFixed(4)} por USDT`:"";}});
   }
   function ajustar(){
     const opId=nuevoId(),b=E.billetera||{};
@@ -8605,7 +8615,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
       },{nota:"No es gasto: baja la cuenta con que pagó y sube el inventario. El costo en Lempiras de este lote queda fijo.",textoBoton:"Registrar compra",alCambiar:(v)=>{
         const p=prods.find(x=>x.id===v.productoId)||{},n=Number(v.cantidad),t=Number(v.costoTotal);if(!(n>0&&t>0))return "";
         let hnl=0,como="";
-        if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L ${Number(b.costoPromedio||0).toFixed(4)})`;}
+        if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L${Number(b.costoPromedio||0).toFixed(4)})`;}
         else if(v.moneda==="HNL"){hnl=t;}
         else if(Number(v.cargoHnl)>0){hnl=Number(v.cargoHnl);como="con el cargo real";}
         else if((v.pago==="inicial"||v.pago==="credito")&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
@@ -8734,7 +8744,7 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
   }
   async function excelDireccion(){
     if(typeof ExcelJS==="undefined"){toast("Cargando Excel… probá de nuevo en 2s.");return;}
-    const wb=new ExcelJS.Workbook();wb.creator="Sublichat";const MON='"Lps " #,##0.00;-"Lps " #,##0.00';
+    const wb=new ExcelJS.Workbook();wb.creator="Sublichat";const MON='"L"#,##0.00;-"L"#,##0.00';
     const hoja=(nombre,titulo,headers,widths,rows,money)=>{const ws=wb.addWorksheet(nombre);ws.columns=widths.map(w=>({width:w}));ws.addRow([`${titulo} · ${T.nombreMes}`]);ws.mergeCells(1,1,1,headers.length);const t=ws.getCell(1,1);t.font={bold:true,size:14,color:{argb:"FFFFFFFF"}};t.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE2231A"}};t.alignment={horizontal:"center"};
       const h=ws.addRow(headers);h.eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0A0A1A"}};});rows.forEach(v=>{const r=ws.addRow(v);money.forEach(k=>{r.getCell(k).numFmt=MON;});});ws.views=[{state:"frozen",ySplit:2}];};
     const r=T.resultados,b=T.balance,u=T.repartible;
