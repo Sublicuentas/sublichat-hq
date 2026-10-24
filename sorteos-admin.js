@@ -72,7 +72,7 @@
   function prizeLabel(prize){
     const type=TIPO_PREMIO[prize?.tipo]||TIPO_PREMIO.personalizado;
     if(prize?.tipo==='descuento_porcentaje'&&prize.valor)return `${prize.valor}% de descuento`;
-    if(prize?.tipo==='descuento_fijo'&&prize.valor)return `L ${Number(prize.valor).toLocaleString('es-HN')} de descuento`;
+    if(prize?.tipo==='descuento_fijo'&&prize.valor)return `L${Number(prize.valor).toLocaleString('es-HN')} de descuento`;
     if(prize?.tipo==='dias_extra'&&prize.valor)return `${prize.valor} días extra`;
     if(prize?.tipo==='perfil'&&prize.valor)return `${prize.valor} mes${Number(prize.valor)===1?'':'es'} de ${prize.plataforma||'streaming'}`;
     return type[1];
@@ -323,10 +323,11 @@
       <div class="sr-winner-list">${draws.map(draw=>{
         const winner=draw.ganador||{},delivery=deliveryFor(draw);
         const stateLabel=!delivery?'Esperando elección':(delivery.estado==='entregado'?'Entregado':delivery.estado==='listo'?'Código listo':'Preparar entrega');
-        return `<article class="sr-winner-row"><span class="sr-winner-crown">🏆</span><div class="sr-winner-person"><small>${esc(draw.titulo)}</small><b>${esc(winner.clienteNombre||'Cliente')}</b><span>${esc(winner.telefono||'Sin teléfono')} · ${esc(winner.codigo||'')}</span></div><div class="sr-winner-choice"><small>PREMIO ELEGIDO</small><b>${esc(delivery?.premioNombre||'Aún no ha elegido')}</b><span class="sr-delivery-state ${esc(delivery?.estado||'espera')}">${esc(stateLabel)}</span></div>${delivery&&delivery.estado!=='entregado'?`<button type="button" class="sr-btn primary" data-sr-deliver="${esc(delivery.id)}">Marcar entregado</button>`:''}</article>`;
+        return `<article class="sr-winner-row"><span class="sr-winner-crown">🏆</span><div class="sr-winner-person"><small>${esc(draw.titulo)}</small><b>${esc(winner.clienteNombre||'Cliente')}</b><span>${esc(winner.telefono||'Sin teléfono')} · ${esc(winner.codigo||'')}</span></div><div class="sr-winner-choice"><small>PREMIO ELEGIDO</small><b>${esc(delivery?.premioNombre||'Aún no ha elegido')}</b><span class="sr-delivery-state ${esc(delivery?.estado||'espera')}">${esc(stateLabel)}</span></div>${delivery&&delivery.estado!=='entregado'?`<button type="button" class="sr-btn primary" data-sr-deliver="${esc(delivery.id)}">Marcar entregado</button><button type="button" class="sr-btn ghost" data-sr-undo-choice="${esc(draw.id)}" title="Si el premio se confirmó por error, el cliente podrá reclamarlo de nuevo">↩ Deshacer elección</button>`:''}</article>`;
       }).join('')||'<div class="sr-empty"><b>Aún no hay ganadores.</b><br>Cuando gire una ruleta, el resultado aparecerá aquí.</div>'}</div>`;
     byId('srRefresh')?.addEventListener('click',()=>load(true));
     body.querySelectorAll('[data-sr-deliver]').forEach(button=>button.addEventListener('click',()=>markDelivered(button.dataset.srDeliver)));
+    body.querySelectorAll('[data-sr-undo-choice]').forEach(button=>button.addEventListener('click',()=>undoChoice(button.dataset.srUndoChoice)));
   }
 
   function typeOptions(selected){return Object.entries(TIPO_PREMIO).map(([value,item])=>`<option value="${value}" ${value===selected?'selected':''}>${item[0]} ${esc(item[1])}</option>`).join('');}
@@ -341,7 +342,7 @@
         <label class="sr-field">Tipo<select id="srPrizeType">${typeOptions(prize.tipo)}</select></label>
         ${state.permisos.alcance==='todos'?`<label class="sr-field">Lo administra<select id="srPrizeOwner"><option value="sublicuentas" ${prize.ownerVendor!=='relojes'?'selected':''}>Sublicuentas</option><option value="relojes" ${prize.ownerVendor==='relojes'?'selected':''}>Relojes</option></select></label>`:''}
         <label class="sr-field">Valor<input id="srPrizeValue" type="number" min="0" step="1" value="${Number(prize.valor)||0}"></label>
-        <label class="sr-field">Unidad<input id="srPrizeUnit" maxlength="40" value="${esc(prize.unidad||'')}" placeholder="mes, %, Lps., días"></label>
+        <label class="sr-field">Unidad<input id="srPrizeUnit" maxlength="40" value="${esc(prize.unidad||'')}" placeholder="mes, %, L, días"></label>
         <label class="sr-field wide">Plataforma o proveedor<input id="srPrizePlatform" maxlength="100" value="${esc(prize.plataforma||'')}" placeholder="Netflix, Cinemark, Tigo…"></label>
         <label class="sr-field wide">Descripción<textarea id="srPrizeDesc" maxlength="500" placeholder="Qué recibirá el ganador">${esc(prize.descripcion||'')}</textarea></label>
         <label class="sr-field">Forma de entrega<select id="srPrizeDelivery"><option value="manual" ${prize.entregaModo==='manual'?'selected':''}>Preparación manual</option><option value="codigo" ${prize.entregaModo==='codigo'?'selected':''}>Código / QR digital</option><option value="cupon" ${prize.entregaModo==='cupon'?'selected':''}>Cupón automático</option></select></label>
@@ -353,7 +354,7 @@
       </div><div class="sr-modal-actions"><button type="button" class="sr-btn ghost" id="srPrizeCancel">Cancelar</button><button type="submit" class="sr-btn primary">Guardar premio</button></div></form>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srPrizeCancel').onclick=closeModal;
     byId('srPrizeType').addEventListener('change',event=>{
-      const presets={perfil:['1','mes','manual'],descuento_porcentaje:['10','%','cupon'],descuento_fijo:['50','Lps.','cupon'],cine:['1','boleto','codigo'],recarga:['100','Lps.','manual'],dias_extra:['7','días','manual'],personalizado:['1','','manual']};
+      const presets={perfil:['1','mes','manual'],descuento_porcentaje:['10','%','cupon'],descuento_fijo:['50','L','cupon'],cine:['1','boleto','codigo'],recarga:['100','L','manual'],dias_extra:['7','días','manual'],personalizado:['1','','manual']};
       const item=presets[event.target.value];if(!item)return;
       byId('srPrizeValue').value=item[0];byId('srPrizeUnit').value=item[1];byId('srPrizeDelivery').value=item[2];
     });
@@ -545,6 +546,12 @@
       <div class="sr-ticket-list">${tickets.map(ticket=>`<article><b>${esc(ticket.codigo)}</b><span>${esc(ticket.clienteNombre||'Cliente')}</span><small>${esc(ticket.tipo==='renovacion'?'Renovación':ticket.tipo==='oro'?'Bono Oro':'Compra nueva')}</small></article>`).join('')||'<div class="sr-empty">No hay boletos emitidos todavía.</div>'}</div>
       ${Number(draw.totalBoletos)>tickets.length?`<p class="sr-list-note">Mostrando los boletos recientes disponibles en esta vista. Total registrado: ${Number(draw.totalBoletos)}.</p>`:''}<div class="sr-modal-actions"><button type="button" class="sr-btn primary" id="srTicketClose">Cerrar</button></div></div>`;
     modal.querySelector('.sr-close').onclick=closeModal;byId('srTicketClose').onclick=closeModal;
+  }
+  async function undoChoice(sorteoId){
+    if(!confirm('¿Deshacer la elección de premio? El premio vuelve a quedar disponible y el ganador podrá reclamarlo otra vez desde su URL (72 h desde ahora).'))return;
+    status('Deshaciendo elección…');
+    try{await api({accion:'deshacer_eleccion',sorteoId});await load(true);state.tab='ganadores';render();status('Elección deshecha. El cliente puede reclamar su premio de nuevo.','good');}
+    catch(error){status(error.message,'bad');}
   }
   async function markDelivered(id){
     if(!confirm('¿Confirma que el premio ya fue entregado al cliente?'))return;

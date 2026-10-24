@@ -11,11 +11,11 @@
 
 const API='/api/revendedores-admin';
 const TARIFA_ESPECIAL='propietarios_2026';
-const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,promociones:null,pedidos:null,pedidoFiltro:'todos',clienteQ:'',clienteSel:null,loading:false};
+const state={tab:'precios',tarifa:'general',precios:null,vendedores:null,clientes:null,recompensas:null,promociones:null,pedidos:null,pedidoFiltro:'todos',clienteQ:'',clienteSel:null,precioQ:'',loading:false};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const host=()=>document.getElementById('rbac-revendedores');
-const money=v=>v==null?'—':`Lps. ${Number(v).toLocaleString('es-HN')}`;
+const money=v=>v==null?'—':`L${Number(v).toLocaleString('es-HN')}`;
 
 const fmtDate=v=>{if(!v)return'Sin vencimiento';const d=new Date(v);return Number.isNaN(d.getTime())?'Sin vencimiento':d.toLocaleString('es-HN',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})};
 function promoTextLines(v){const raw=String(v||'').replace(/\r/g,'\n').trim();if(!raw)return[];const byLine=raw.split(/\n+/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean);if(byLine.length>1)return byLine.slice(0,5);return raw.replace(/\s+/g,' ').split(/(?:\.\s+|!\s+|\?\s+|;\s+)/).map(x=>x.replace(/^[-•*\s]+/,'').trim()).filter(Boolean).slice(0,5)}
@@ -70,11 +70,26 @@ function shell(){
       #rbac-revendedores .order-status-tools{display:grid;grid-template-columns:minmax(150px,210px) minmax(180px,1fr) auto;gap:8px;align-items:end}
       #rbac-revendedores .perm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;padding:10px;border:1px solid #e4e7ec;border-radius:12px;background:#f9fafb}
       #rbac-revendedores .stock-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      #rbac-revendedores .price-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+      #rbac-revendedores .price-search{flex:1;min-width:240px;display:flex;align-items:center;gap:8px;border:1px solid #dce4ee;background:#fff;border-radius:14px;padding:0 12px}
+      #rbac-revendedores .price-search input{width:100%;border:0;outline:0;background:transparent;padding:11px 0;font:inherit;color:#15264a}
+      #rbac-revendedores .price-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+      #rbac-revendedores .price-compact-card{background:#fff;border:1px solid #dfe7f1;border-radius:18px;padding:14px;box-shadow:0 5px 14px rgba(15,35,70,.07);min-width:0}
+      #rbac-revendedores .price-summary{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:11px;align-items:center}
+      #rbac-revendedores .price-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#f3f7fb;font-size:22px;border:1px solid #e2eaf3}
+      #rbac-revendedores .price-title{min-width:0}#rbac-revendedores .price-title h3{margin:0!important;font-size:15px!important;line-height:1.15;color:#16345f}#rbac-revendedores .price-title small{display:block;margin-top:4px;color:#71839a;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      #rbac-revendedores .price-amount{font-weight:950;color:#15915a;background:#edfbf4;border-radius:12px;padding:8px 10px;white-space:nowrap;font-size:13px}
+      #rbac-revendedores .price-tags{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0 8px}.price-tags span{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border-radius:999px;background:#f5f8fc;border:1px solid #e6edf5;color:#52677f;font-size:10.5px;font-weight:850}.price-tags span.on{background:#eefbf4;color:#148557;border-color:#d7f3e4}.price-tags span.off{background:#fff4f3;color:#c3362d;border-color:#f3d3cf}
+      #rbac-revendedores .price-detail-preview{display:flex;gap:6px;flex-wrap:wrap;min-height:29px}.price-detail-preview span{display:inline-flex;align-items:center;max-width:100%;padding:6px 8px;border-radius:9px;background:#f8fafc;color:#4f647b;font-size:10.5px;font-weight:750;line-height:1.25}
+      #rbac-revendedores .price-card-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:11px;padding-top:10px;border-top:1px solid #edf1f6}
+      #rbac-revendedores .price-editor{display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5ebf3}#rbac-revendedores .price-editor.open{display:block}#rbac-revendedores .price-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#rbac-revendedores .price-editor-grid .wide{grid-column:1/-1}
+      #rbac-revendedores .detail-preset-row{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.detail-preset-row button{border:1px solid #dbe5ef;background:#fff;border-radius:999px;padding:6px 9px;font:inherit;font-size:10px;font-weight:850;color:#425a73;cursor:pointer}.detail-preset-row button:hover{border-color:#e2231a;color:#c82018;background:#fff6f5}
+      #rbac-revendedores .price-helper{display:block;color:#8493a6;font-size:10px;line-height:1.35;margin-top:4px}
       @media(max-width:600px){
         #rbac-revendedores .promo-grid{grid-template-columns:1fr}
         #rbac-revendedores .promo-summary{grid-template-columns:88px minmax(0,1fr)}
         #rbac-revendedores .promo-thumb{width:88px;height:88px}
-        #rbac-revendedores .order-metrics,#rbac-revendedores .stock-row,#rbac-revendedores .perm-grid{grid-template-columns:1fr}
+        #rbac-revendedores .order-metrics,#rbac-revendedores .stock-row,#rbac-revendedores .perm-grid,#rbac-revendedores .price-catalog-grid,#rbac-revendedores .price-editor-grid{grid-template-columns:1fr}
         #rbac-revendedores .order-status-tools{grid-template-columns:1fr}
       }
       /* Editor de promociones: el modal vive fuera de #rbac-revendedores, por eso
@@ -167,6 +182,7 @@ function shell(){
         <button class="cr-tab" data-rtab="pedidos">🛒 Pedidos</button>
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
+        <button class="cr-tab" data-rtab="publico">🏷️ Precios para Revendedores</button>
       </div>
       <div id="revBody"></div>
     </div>`;
@@ -183,7 +199,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas,publico:renderPublico}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
@@ -198,9 +214,10 @@ function pedidoFecha(v){if(!v)return'—';const d=new Date(typeof v==='number'?v
 function pedidoCard(p){
   const estado=pedidoEstado(p.estado),costo=Number(p.monto)||0;
   const productos=Array.isArray(p.productos)&&p.productos.length?p.productos.map(x=>x.servicio||x.nombre).filter(Boolean).join(' + '):(p.servicio||'Pedido');
+  const flujo=entregaCanalLabel(p.entregaCanal||(Array.isArray(p.productos)&&p.productos[0]?.entregaCanal)||'manual');
   return `<article class="cr-card order-card" data-status="${esc(estado)}">
     <div class="cr-row"><h3>🛒 ${esc(productos)}</h3><span class="cr-badge ${estado==='entregado'?'':estado==='cancelado'?'paused':''}">${esc(estado)}</span></div>
-    <small>Socio: <b>${esc(p.socio||p.socio_norm||'—')}</b> · ${esc(p.destinoLabel||p.destino||'')} · ${esc(pedidoFecha(p.ts||p.createdAt))} · Ref ${esc(String(p.id||'').slice(-6))}</small>
+    <small>Socio: <b>${esc(p.socio||p.socio_norm||'—')}</b> · ${esc(p.destinoLabel||p.destino||'')} · 🚚 ${esc(flujo)} · ${esc(pedidoFecha(p.ts||p.createdAt))} · Ref ${esc(String(p.id||'').slice(-6))}</small>
     <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div></div>
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
     <div class="order-status-tools">
@@ -298,7 +315,7 @@ function promoPreviewText(m){
   const normal=Number(m.querySelector('#prNormal')?.value)||0,promo=Number(m.querySelector('#prPromo')?.value)||0,cupos=Number(m.querySelector('#prCupos')?.value)||0;
   const vigencia=m.querySelector('#prVigencia')?.value?fmtDate(new Date(m.querySelector('#prVigencia').value).toISOString()):'';
   const lines=[`🔥 ${titulo}`,`🎯 Plataforma: ${plataforma}`,'','💎 Datos de la oferta'];
-  if(normal)lines.push(`• 🧾 Precio normal: L ${normal}`);if(promo)lines.push(`• 💰 Precio socio: L ${promo}`);if(cupos)lines.push(`• 📦 Cupos disponibles: ${cupos}`);if(vigencia)lines.push(`• ⏳ Vigencia: ${vigencia}`);
+  if(normal)lines.push(`• 🧾 Precio normal: L${normal}`);if(promo)lines.push(`• 💰 Precio socio: L${promo}`);if(cupos)lines.push(`• 📦 Cupos disponibles: ${cupos}`);if(vigencia)lines.push(`• ⏳ Vigencia: ${vigencia}`);
   const details=promoTextLines(m.querySelector('#prTexto')?.value||'');if(details.length){lines.push('','✨ Detalles');details.forEach(x=>lines.push(`• ${x}`));}
   lines.push('','📲 Cómo solicitar','• Solicítela desde su Panel de Socios.','• Si necesita apoyo, escriba a Sublicuentas.');
   return lines.join('\n');
@@ -403,7 +420,7 @@ async function abrirPromocion(p){
       try{
         const sent=await api('POST',`promociones/${promoId}/enviar`,{});
         closePromo();await loadPromociones(true);
-        alert(`${editing?'Promoción actualizada y reenviada':'Promoción publicada'}.\nTelegram enviados: ${sent.enviados||0}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
+        alert(`${editing?'Promoción actualizada y reenviada':'Promoción publicada'}.\nTelegram enviados: ${sent.enviados||0}${sent.encolados?`\nPor bot principal: ${sent.encolados}`:''}\nPendientes/fallidos: ${sent.fallidos||0}${sent.fallbackTexto?`\nEnvíos recuperados como texto: ${sent.fallbackTexto}`:''}${sent.sinTelegram?.length?'\nSin Telegram: '+sent.sinTelegram.join(', '):''}${Array.isArray(sent.erroresTelegram)&&sent.erroresTelegram.length?'\n\nDetalle Telegram:\n'+sent.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);
       }catch(sendError){
         closePromo();await loadPromociones(true);
         alert(`✅ Los cambios sí quedaron guardados.\n⚠️ No se pudo completar el envío por Telegram: ${sendError.message}\nPuede usar “Reenviar Telegram” para reintentarlo.`);
@@ -413,7 +430,7 @@ async function abrirPromocion(p){
     }
   };
 }
-async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}${Array.isArray(d.erroresTelegram)&&d.erroresTelegram.length?'\n\nDetalle Telegram:\n'+d.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
+async function enviarPromocion(id,button){if(!confirm('¿Publicar esta promoción en el panel y enviarla por Telegram?'))return;button.disabled=true;try{const d=await api('POST',`promociones/${id}/enviar`,{});alert(`Enviados: ${d.enviados||0}${d.encolados?`\nPor bot principal: ${d.encolados}`:''}\nPendientes/fallidos: ${d.fallidos||0}${d.sinTelegram?.length?'\nSin Telegram: '+d.sinTelegram.join(', '):''}${Array.isArray(d.erroresTelegram)&&d.erroresTelegram.length?'\n\nDetalle Telegram:\n'+d.erroresTelegram.map(e=>`${e.nombre||'Socio'} (${e.telegramId||'sin ID'}): ${e.motivo||'Error'}\n${e.diagnostico||''}`).join('\n\n'):''}`);await loadPromociones(true)}catch(e){alert(e.message);button.disabled=false}}
 async function eliminarPromocion(id){if(!confirm('¿Eliminar esta promoción? Dejará de aparecer en el Panel de Socios.'))return;try{await api('DELETE',`promociones/${id}`);await loadPromociones(true)}catch(e){alert(e.message)}}
 
 /* ═══════════ PRECIOS ═══════════ */
@@ -422,6 +439,12 @@ async function loadPrecios(force){
   const b=$('#revBody'); if(b) b.innerHTML='<div class="cr-empty">Cargando precios…</div>';
   try{ const d=await api('GET','precios',undefined,{tarifa:state.tarifa}); state.precios=d.precios||[]; render(); }
   catch(e){ if(b) b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`; }
+}
+function precioSearchText(p){return [p.nombre,p.variante,p.categoria,p.detalle,p.entregaTipo,p.entregaCanal].filter(Boolean).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+function filterPrecioCards(value){
+  state.precioQ=String(value||'');const q=state.precioQ.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  document.querySelectorAll('#revBody [data-price-card]').forEach(card=>{card.style.display=!q||String(card.dataset.search||'').includes(q)?'':'none'});
+  document.querySelectorAll('#revBody [data-price-group]').forEach(group=>{const visible=[...group.querySelectorAll('[data-price-card]')].some(x=>x.style.display!=='none');group.style.display=visible?'':'none'});
 }
 function renderPrecios(){
   const b=$('#revBody'); if(!state.precios) return loadPrecios();
@@ -441,22 +464,23 @@ function renderPrecios(){
       </div>
       <button class="cr-btn red" id="revAddPrecio">＋ Ítem nuevo</button>
     </div>
+    <div class="price-toolbar"><label class="price-search">🔎 <input id="revPrecioSearch" value="${esc(state.precioQ||'')}" placeholder="Buscar Netflix, Stella, IPTV, Canva…"></label><small>Vista compacta · abra solo el producto que desea editar.</small></div>
     ${state.tarifa===TARIFA_ESPECIAL?`<div class="cr-card" style="margin-bottom:12px"><h3>Actualización de precios y vendedores</h3><small>Corrige Geissel → Geisell, actualiza sus clientes, asigna esta tarifa y crea Sublicuentas 2 con el teléfono 8946-4328.</small><div class="cr-row" style="margin-top:10px"><button class="cr-btn ghost" id="revPreviewActualizacion">Revisar cambios</button><button class="cr-btn red" id="revAplicarActualizacion">Aplicar actualización</button></div></div>`:''}
     ${vacio?`<div class="cr-empty">Catálogo vacío.<br><br>
       <button class="cr-btn red" id="revImportarInicial">📥 ${state.tarifa==='general'?'Importar catálogo inicial':'Cargar tarifa especial'}</button><br><br>
       <small>${state.tarifa==='general'?'Trae el catálogo general del Panel de Socios.':'Carga los 28 precios definidos para Sublicuentas, Relojes y Geisell.'}</small>
     </div>`:''}
-    ${orden.map(cat=>`
-      <div class="cr-section">${esc(cat)}</div>
-      <div class="cr-grid">${grupos[cat].map(precioCard).join('')}</div>
-    `).join('')}`;
+    ${orden.map(cat=>`<section data-price-group><div class="cr-section">${esc(cat)} · ${grupos[cat].length}</div><div class="price-catalog-grid">${grupos[cat].map(precioCard).join('')}</div></section>`).join('')}`;
   $('#revAddPrecio').onclick=nuevoPrecio;
   if(vacio) $('#revImportarInicial').onclick=importarPreciosIniciales;
-  b.querySelectorAll('[data-tarifa]').forEach(x=>x.onclick=()=>{state.tarifa=x.dataset.tarifa;state.precios=null;loadPrecios(true)});
+  b.querySelectorAll('[data-tarifa]').forEach(x=>x.onclick=()=>{state.tarifa=x.dataset.tarifa;state.precios=null;state.precioQ='';loadPrecios(true)});
   if($('#revPreviewActualizacion'))$('#revPreviewActualizacion').onclick=previsualizarActualizacion;
   if($('#revAplicarActualizacion'))$('#revAplicarActualizacion').onclick=aplicarActualizacion;
   b.querySelectorAll('[data-save-precio]').forEach(x=>x.onclick=()=>guardarPrecio(x.dataset.savePrecio));
   b.querySelectorAll('[data-del-precio]').forEach(x=>x.onclick=()=>eliminarPrecio(x.dataset.delPrecio));
+  b.querySelectorAll('[data-toggle-precio]').forEach(x=>x.onclick=()=>togglePrecioEditor(x.dataset.togglePrecio));
+  b.querySelectorAll('[data-detail-preset]').forEach(x=>x.onclick=()=>addDetallePreset(x.dataset.detailTarget,x.dataset.detailPreset));
+  const q=$('#revPrecioSearch');if(q){q.oninput=()=>filterPrecioCards(q.value);filterPrecioCards(state.precioQ)}
 }
 async function importarPreciosIniciales(){
   const btn=$('#revImportarInicial'); if(btn){ btn.disabled=true; btn.textContent='Importando…'; }
@@ -488,26 +512,45 @@ async function aplicarActualizacion(){
     if(d.sublicuentas2Pin)pinModal('Sublicuentas 2',d.sublicuentas2Pin,'Usuario: sublicuentas 2 · WhatsApp: 8946-4328');
   }catch(e){status(e.message,'bad');if(btn){btn.disabled=false;btn.textContent='Aplicar actualización'}}
 }
+const PRICE_DETAIL_PRESETS=[
+  ['👤','Perfil'],['📱','Dispositivo'],['🤖','Bot TG / código'],['🛡️','Garantía'],['📧','Correo y clave'],['🔐','PIN'],['✉️','Invitación correo'],['📡','IPTV'],['🔑','Serial / key'],['⚡','Entrega']
+];
+const ENTREGA_TIPOS=[['','Automático según producto'],['perfil','Perfil / nombre del cliente'],['correo','Correo del cliente'],['acceso','Usuario / acceso'],['serial','Serial / licencia'],['serial_key','Key / serial'],['detalle','Detalle manual']];
+const ENTREGA_CANALES=[['manual','Manual'],['bot_tg','Bot Telegram / código'],['inventario','Inventario Sublichat'],['invitacion','Invitación al correo'],['iptv','TV Digital / IPTV']];
+function adminProductIcon(p){const t=(String(p.nombre||'')+' '+String(p.categoria||'')).toLowerCase();if(t.includes('netflix'))return'🍿';if(t.includes('disney'))return'🏰';if(t.includes('max')||t.includes('hbo'))return'🎬';if(t.includes('prime'))return'📦';if(t.includes('crunchy'))return'🍥';if(t.includes('iptv')||t.includes('oleada')||t.includes('stella')||t.includes('nanotech')||t.includes('lion')||t.includes('latin'))return'📡';if(t.includes('spotify')||t.includes('deezer'))return'🎵';if(t.includes('canva'))return'🎨';if(t.includes('gemini')||t.includes('chatgpt'))return'🤖';if(t.includes('office'))return'💼';if(t.includes('antivirus')||t.includes('eset')||t.includes('mcafee'))return'🛡️';return'🧩'}
+function detalleLineas(raw){return String(raw||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
+function detalleIconLine(line){const x=String(line||'').trim();if(!x)return'';if(/^[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x))return x;const t=x.toLowerCase();let i='ℹ️';if(/perfil/.test(t))i='👤';else if(/dispositivo|pantalla|reproduce/.test(t))i='📱';else if(/bot|c[oó]digo/.test(t))i='🤖';else if(/garant|ca[ií]da/.test(t))i='🛡️';else if(/invitaci[oó]n/.test(t))i='✉️';else if(/correo/.test(t))i='📧';else if(/pin/.test(t))i='🔐';else if(/iptv|tv digital|usuario/.test(t))i='📡';else if(/serial|key|licencia/.test(t))i='🔑';else if(/acceso/.test(t))i='🔐';return `${i} ${x}`}
+function detallePreview(raw){const ls=detalleLineas(raw);return ls.length?ls.slice(0,4).map(x=>`<span>${esc(detalleIconLine(x))}</span>`).join(''):'<span>➕ Sin detalles configurados</span>'}
+function entregaTipoLabel(v){return ({perfil:'Perfil',correo:'Correo',acceso:'Acceso',serial:'Serial',serial_key:'Key / serial',detalle:'Detalle'})[v]||'Según producto'}
+function entregaCanalLabel(v){return ({manual:'Manual',bot_tg:'Bot TG',inventario:'Inventario',invitacion:'Invitación',iptv:'TV Digital'})[v]||'Manual'}
+function selectOptions(rows,value){return rows.map(([v,l])=>`<option value="${esc(v)}" ${String(value||'')===v?'selected':''}>${esc(l)}</option>`).join('')}
+function detailPresetButtons(target){return PRICE_DETAIL_PRESETS.map(([ico,label])=>`<button type="button" data-detail-target="${esc(target)}" data-detail-preset="${esc(ico+' '+label+': ')}">${ico} ${esc(label)}</button>`).join('')}
+function addDetallePreset(target,text){const ta=document.getElementById(target);if(!ta)return;const current=ta.value.trimEnd();ta.value=(current?current+'\n':'')+String(text||'');ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+function togglePrecioEditor(id,force){const el=document.getElementById('pxEditor-'+id);if(!el)return;const open=force==null?!el.classList.contains('open'):!!force;el.classList.toggle('open',open);const btn=document.querySelector(`[data-toggle-precio="${CSS.escape(id)}"]`);if(btn)btn.textContent=open?'Cerrar':'✏️ Editar'}
 function precioCard(p){
   const id=p.id;
   const titulo=p.nombre+(p.variante?' · '+p.variante:'');
-  return `<article class="cr-card">
-    <div class="cr-row"><h3>${esc(titulo)}</h3><span class="cr-badge ${p.precio!=null?'':'paused'}">${p.precio!=null?'Con precio':'Por comisión'}</span></div>
-    <label class="cr-field">Nombre<input id="pxNombre-${esc(id)}" value="${esc(p.nombre||'')}"></label>
-    <label class="cr-field">Variante (opcional)<input id="pxVariante-${esc(id)}" value="${esc(p.variante||'')}" placeholder="Ej. 3 dispositivos"></label>
-    <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
-    <label class="cr-field">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Ej. 130"></label>
-    <label class="cr-field">Detalle (se muestra al socio)<textarea id="pxDetalle-${esc(id)}" rows="3">${esc(p.detalle||'')}</textarea></label>
-    <div class="stock-row">
+  const stock=p.stockModo==='manual'?(p.stockCantidad!=null?`📦 ${Number(p.stockCantidad)} manual`:'📦 Manual'):'🏬 Bodega';
+  const activo=p.activo!==false;
+  const canal=p.entregaCanal||'manual';
+  return `<article class="price-compact-card" data-price-card data-search="${esc(precioSearchText(p))}">
+    <div class="price-summary"><span class="price-icon">${adminProductIcon(p)}</span><div class="price-title"><h3>${esc(p.nombre||'Producto')}</h3><small>${esc(p.variante||p.categoria||'Sin variante')}</small></div><div class="price-amount">${p.precio==null?'Comisión':money(p.precio)}</div></div>
+    <div class="price-tags"><span class="${activo?'on':'off'}">${activo?'👁 Visible':'🙈 Oculto'}</span><span>${stock}</span><span>🚚 ${esc(entregaCanalLabel(canal))}</span></div>
+    <div class="price-detail-preview">${detallePreview(p.detalle)}</div>
+    <div class="price-card-actions"><button class="cr-btn ghost" data-toggle-precio="${esc(id)}">✏️ Editar</button><button class="cr-btn danger" data-del-precio="${esc(id)}">Eliminar</button></div>
+    <div class="price-editor" id="pxEditor-${esc(id)}"><div class="price-editor-grid">
+      <label class="cr-field">Nombre<input id="pxNombre-${esc(id)}" value="${esc(p.nombre||'')}"></label>
+      <label class="cr-field">Variante<input id="pxVariante-${esc(id)}" value="${esc(p.variante||'')}" placeholder="Ej. 3 dispositivos"></label>
+      <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
+      <label class="cr-field">Precio (L)<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Vacío = Por comisión"></label>
+      <label class="cr-field">Datos para procesar<select id="pxEntregaTipo-${esc(id)}">${selectOptions(ENTREGA_TIPOS,p.entregaTipo||'')}</select><small class="price-helper">Evita que el Panel de Socios tenga que adivinar si debe pedir perfil, correo, serial, etc.</small></label>
+      <label class="cr-field">Flujo de entrega<select id="pxEntregaCanal-${esc(id)}">${selectOptions(ENTREGA_CANALES,canal)}</select><small class="price-helper">Este dato viaja a Panel de Socios y Bot TG. No envía credenciales automáticamente todavía.</small></label>
+      <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('pxDetalle-'+id)}</div><textarea id="pxDetalle-${esc(id)}" rows="4">${esc(p.detalle||'')}</textarea><small class="price-helper">Use una línea por dato. Los iconos quedan visibles en el catálogo del socio.</small></label>
       <label class="cr-field">Inventario<select id="pxStockModo-${esc(id)}"><option value="auto" ${String(p.stockModo||'auto')==='auto'?'selected':''}>Automático · Bodega</option><option value="manual" ${String(p.stockModo||'auto')==='manual'?'selected':''}>Manual</option></select></label>
       <label class="cr-field">Estado manual<select id="pxStockEstado-${esc(id)}"><option value="" ${!p.stockEstado?'selected':''}>Según cantidad / consultar</option><option value="disponible" ${p.stockEstado==='disponible'?'selected':''}>Disponible</option><option value="bajo" ${p.stockEstado==='bajo'?'selected':''}>Poco inventario</option><option value="agotado" ${p.stockEstado==='agotado'?'selected':''}>Agotado</option><option value="consultar" ${p.stockEstado==='consultar'?'selected':''}>Consultar</option></select></label>
-    </div>
-    <label class="cr-field">Cantidad manual (opcional)<input type="number" min="0" step="1" id="pxStockCantidad-${esc(id)}" value="${p.stockCantidad??''}" placeholder="Ej. 4"></label>
-    <label class="cr-check"><input type="checkbox" id="pxActivo-${esc(id)}" ${p.activo!==false?'checked':''}> Visible para los socios</label>
-    <div class="cr-row">
-      <button class="cr-btn danger" data-del-precio="${esc(id)}">Eliminar</button>
-      <button class="cr-btn red" data-save-precio="${esc(id)}">💾 Guardar</button>
-    </div>
+      <label class="cr-field">Cantidad manual<input type="number" min="0" step="1" id="pxStockCantidad-${esc(id)}" value="${p.stockCantidad??''}" placeholder="Opcional"></label>
+      <label class="cr-check" style="align-self:end"><input type="checkbox" id="pxActivo-${esc(id)}" ${activo?'checked':''}> Visible para los socios</label>
+    </div><div class="cr-row" style="justify-content:flex-end;margin-top:10px"><button class="cr-btn ghost" type="button" onclick="togglePrecioEditor('${esc(id)}',false)">Cancelar</button><button class="cr-btn red" data-save-precio="${esc(id)}">💾 Guardar cambios</button></div></div>
   </article>`;
 }
 function leerFormPrecio(id){
@@ -518,6 +561,8 @@ function leerFormPrecio(id){
     categoria:$('#pxCategoria-'+id)?.value.trim()||'',
     detalle:$('#pxDetalle-'+id)?.value.trim()||'',
     precio:precioRaw===''||precioRaw==null?null:Number(precioRaw),
+    entregaTipo:$('#pxEntregaTipo-'+id)?.value||'',
+    entregaCanal:$('#pxEntregaCanal-'+id)?.value||'manual',
     stockModo:$('#pxStockModo-'+id)?.value||'auto',
     stockEstado:$('#pxStockEstado-'+id)?.value||'',
     stockCantidad:($('#pxStockCantidad-'+id)?.value??'')===''?null:Number($('#pxStockCantidad-'+id)?.value),
@@ -544,13 +589,16 @@ function nuevoPrecio(){
       <label class="cr-field wide">Categoría<input id="npCategoria" placeholder="Ej. 📺 Streaming"></label>
       <label class="cr-field wide">Nombre<input id="npNombre" placeholder="Ej. Netflix"></label>
       <label class="cr-field wide">Variante (opcional)<input id="npVariante" placeholder="Ej. 3 dispositivos"></label>
-      <label class="cr-field wide">Precio (Lps.) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
-      <label class="cr-field wide">Detalle (se muestra al socio)<textarea id="npDetalle" rows="3"></textarea></label>
+      <label class="cr-field wide">Precio (L) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
+      <label class="cr-field wide">Datos para procesar<select id="npEntregaTipo">${selectOptions(ENTREGA_TIPOS,'')}</select></label>
+      <label class="cr-field wide">Flujo de entrega<select id="npEntregaCanal">${selectOptions(ENTREGA_CANALES,'manual')}</select></label>
+      <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('npDetalle')}</div><textarea id="npDetalle" rows="4"></textarea></label>
       <label class="cr-field wide">Inventario<select id="npStockModo"><option value="auto">Automático · Bodega</option><option value="manual">Manual</option></select></label>
       <label class="cr-field wide">Estado manual<select id="npStockEstado"><option value="">Según cantidad / consultar</option><option value="disponible">Disponible</option><option value="bajo">Poco inventario</option><option value="agotado">Agotado</option><option value="consultar">Consultar</option></select></label>
       <label class="cr-field wide">Cantidad manual (opcional)<input type="number" min="0" id="npStockCantidad"></label>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="npCancel">Cancelar</button><button class="cr-btn red" id="npOk">Crear</button></div>`);
+  m.querySelectorAll('[data-detail-preset]').forEach(x=>x.onclick=()=>addDetallePreset(x.dataset.detailTarget,x.dataset.detailPreset));
   $('#npCancel').onclick=()=>m.remove();
   $('#npOk').onclick=async()=>{
     const categoria=$('#npCategoria').value.trim(), nombre=$('#npNombre').value.trim();
@@ -562,6 +610,7 @@ function nuevoPrecio(){
         variante:$('#npVariante').value.trim(),
         detalle:$('#npDetalle').value.trim(),
         precio:precioRaw===''?null:Number(precioRaw),
+        entregaTipo:$('#npEntregaTipo').value||'',entregaCanal:$('#npEntregaCanal').value||'manual',
         stockModo:$('#npStockModo').value||'auto',stockEstado:$('#npStockEstado').value||'',
         stockCantidad:$('#npStockCantidad').value===''?null:Number($('#npStockCantidad').value),
         activo:true,tarifaId:state.tarifa,
@@ -578,14 +627,73 @@ async function loadVendedores(force){
   try{
     const d=await api('GET','revendedores');
     state.vendedores=Array.isArray(d)?d:(d.revendedores||[]);
+    if(force&&typeof window.sublichatSincronizarVendedores==='function') window.sublichatSincronizarVendedores(true); // número/nombre nuevo de un socio → listas y fichas
     render();
   }catch(e){ if(b) b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`; }
 }
+/* ═══════════ EQUIPO DE VENTAS (registro único · Oct-2026) ═══════════
+   Vendedores del equipo (Relojes, Sublicuentas, Yami…): sin acceso al Panel de Socios.
+   Lo que se guarde aquí (o en el Bot) sale en Web, APK, Bot, cobros, renovación, fichas y portal del cliente.
+   Si cambia el número, las fichas que tenían el número viejo muestran el nuevo. */
+async function regApi(body){
+  const r=await fetch('/api/mobile-core',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'vendedores',...body})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false) throw new Error(d.error||`HTTP ${r.status}`);
+  return d;
+}
+async function loadEquipo(force){
+  if(state.equipo&&!force) return;
+  try{ const d=await regApi({op:'listar'}); state.equipo=(d.sellersDetail||[]).filter(v=>v.tipo==='equipo'); }
+  catch(e){ state.equipo=[]; state.equipoError=e.message; }
+  if(typeof window.sublichatSincronizarVendedores==='function') window.sublichatSincronizarVendedores(true);
+}
+function equipoHtml(){
+  const lista=state.equipo||[];
+  return `<section class="cr-card" style="margin-bottom:14px;background:#fff">
+    <div class="cr-row"><h3>🧑‍💼 Equipo de ventas</h3><button class="cr-btn red" id="regAdd">＋ Vendedor del equipo</button></div>
+    <small>Se usan en Web, APK y Bot (cobros, renovación, fichas y portal del cliente). Los socios con acceso al Panel están abajo.</small>
+    ${state.equipoError?`<div class="cr-empty">${esc(state.equipoError)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${lista.map(v=>`<div class="cr-row" style="border-top:1px solid #edf1f6;padding-top:6px">
+      <span><b>${esc(v.nombre)}</b> · 📱 ${esc(v.telefono||'sin número')}</span>
+      <span style="display:flex;gap:6px"><button class="cr-btn ghost" data-reg-edit="${esc(v.nombre)}" data-tel="${esc(v.telefono||'')}">Editar</button><button class="cr-btn danger" data-reg-del="${esc(v.nombre)}">Eliminar</button></span>
+    </div>`).join('')||'<div class="cr-empty">Sin vendedores del equipo.</div>'}</div>
+  </section>`;
+}
+function editarEquipo(nombre='',telefono=''){
+  const nuevo=!nombre;
+  const m=modal(`<h2>${nuevo?'Nuevo vendedor del equipo':'Editar '+esc(nombre)}</h2>
+    <div class="cr-form">
+      <label class="cr-field wide">Nombre<input id="regNombre" value="${esc(nombre)}" placeholder="Ej. Sublicuentas 1"></label>
+      <label class="cr-field wide">WhatsApp<input id="regTel" inputmode="tel" value="${esc(telefono)}" placeholder="Honduras: 2255-4675 · Otro país: +52 55 1234 5678"></label>
+      <small>Honduras: 8 dígitos. Otro país: escriba el código (+52, +1, +34…). Vacío = sin número.</small>
+    </div>
+    <div class="cr-actions"><button class="cr-btn ghost" id="regCancel">Cancelar</button><button class="cr-btn red" id="regOk">Guardar</button></div>`);
+  $('#regCancel').onclick=()=>m.remove();
+  $('#regOk').onclick=async()=>{
+    const btn=$('#regOk'); btn.disabled=true;
+    try{
+      await regApi({op:'guardar',nombre:$('#regNombre').value.trim(),telefono:$('#regTel').value.trim(),nombreAnterior:nombre});
+      m.remove(); status('✅ Vendedor guardado. Ya se ve en Web, APK y Bot.','good');
+      await loadEquipo(true); render();
+    }catch(e){ alert(e.message); btn.disabled=false; }
+  };
+}
+async function eliminarEquipo(nombre){
+  if(!confirm(`¿Eliminar a ${nombre}? Deja de salir en Web, APK y Bot. Sus clientes NO se borran.`)) return;
+  try{ await regApi({op:'eliminar',nombre}); status('🗑️ Vendedor eliminado.','good'); await loadEquipo(true); render(); }
+  catch(e){ alert(e.message); }
+}
+
 function renderVendedores(){
   const b=$('#revBody'); if(!state.vendedores) return loadVendedores();
+  if(!state.equipo){ loadEquipo().then(()=>render()); }
   b.innerHTML=`
-    <div class="cr-tools"><span></span><button class="cr-btn red" id="revAddVendedor">＋ Vendedor</button></div>
+    ${equipoHtml()}
+    <div class="cr-tools"><span><b>🤝 Socios (Panel de Socios)</b></span><button class="cr-btn red" id="revAddVendedor">＋ Socio</button></div>
     <div class="cr-grid">${state.vendedores.map(vendedorCard).join('')||'<div class="cr-empty">No hay vendedores.</div>'}</div>`;
+  $('#regAdd').onclick=()=>editarEquipo();
+  b.querySelectorAll('[data-reg-edit]').forEach(x=>x.onclick=()=>editarEquipo(x.dataset.regEdit,x.dataset.tel));
+  b.querySelectorAll('[data-reg-del]').forEach(x=>x.onclick=()=>eliminarEquipo(x.dataset.regDel));
   $('#revAddVendedor').onclick=nuevoVendedor;
   b.querySelectorAll('[data-edit-vend]').forEach(x=>x.onclick=()=>editarVendedor(x.dataset.editVend));
   b.querySelectorAll('[data-pin-vend]').forEach(x=>x.onclick=()=>resetPinVendedor(x.dataset.pinVend));
@@ -618,10 +726,15 @@ async function probarTelegramVendedor(id,button){
   const original=button.textContent;button.disabled=true;button.textContent='Probando…';
   try{
     const d=await api('POST',`revendedores/${id}/testtelegram`,{});
-    alert(`✅ Telegram correcto para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}${d.telegramNombre?`\nCuenta: ${d.telegramNombre}`:''}${d.username?` (@${d.username})`:''}\n\n${d.diagnostico||'Puede recibir mensajes del bot.'}`);
+    if(d.queued){
+      alert(`📨 Prueba enviada al bot principal para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}\n\n${d.diagnostico||'La prueba quedó en cola y debe llegar en segundos.'}`);
+    }else{
+      alert(`✅ Telegram correcto para ${d.nombre||r.nombre}.\nID: ${d.telegramId||r.telegramId}${d.telegramNombre?`\nCuenta: ${d.telegramNombre}`:''}${d.username?` (@${d.username})`:''}\n\n${d.diagnostico||'Puede recibir mensajes del bot.'}`);
+    }
   }catch(e){
     const d=e.data||{};
-    alert(`❌ Telegram de ${r.nombre} falló.\nID guardado: ${d.telegramId||r.telegramId}\n${d.error||e.message}${d.diagnostico?`\n\n${d.diagnostico}`:''}\n\nPídale escribir /id al MISMO bot de Sublicuentas y compare el número con el que aparece aquí.`);
+    const authFail=Number(d.codigo||0)===401||/unauthorized|token/i.test(String(d.error||e.message||''));
+    alert(`❌ Telegram de ${r.nombre} falló.\nID guardado: ${d.telegramId||r.telegramId}\n${d.error||e.message}${d.diagnostico?`\n\n${d.diagnostico}`:''}${authFail?'\n\n⚠️ Este error es del BOT_TOKEN, no del ID del vendedor.':'\n\nPídale escribir /id al MISMO bot de Sublicuentas y compare el número con el que aparece aquí.'}`);
   }finally{button.disabled=false;button.textContent=original;}
 }
 
@@ -635,7 +748,7 @@ function nuevoVendedor(){
   const m=modal(`<h2>Nuevo vendedor</h2>
     <div class="cr-form">
       <label class="cr-field wide">Nombre<input id="nvNombre" placeholder="Ej. Juan Pérez"></label>
-      <label class="cr-field wide">WhatsApp<input id="nvTelefono" inputmode="tel" placeholder="Ej. 8946-4328"></label>
+      <label class="cr-field wide">WhatsApp<input id="nvTelefono" inputmode="tel" placeholder="Honduras: 8946-4328 · Otro país: +52 55 1234 5678"></label>
       <label class="cr-field wide">ID de Telegram (opcional)<input id="nvTelegram" placeholder="Ej. 123456789"></label>
     </div>
     <div class="cr-actions"><button class="cr-btn ghost" id="nvCancel">Cancelar</button><button class="cr-btn red" id="nvOk">Crear</button></div>`);
@@ -647,7 +760,7 @@ function nuevoVendedor(){
       const d=await api('POST','revendedores',{nombre,telegramId,telefono});
       m.remove();
       pinModal(d.nombre,d.pin,`Usuario de acceso: ${d.nombre_norm}`);
-      await loadVendedores(true);
+      await loadVendedores(true); loadEquipo(true);
     }catch(e){ alert(e.message); }
   };
 }
@@ -851,6 +964,237 @@ function renderRecompensas(){
 }
 async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+id,{estado});await loadRecompensas(true)}catch(e){alert(e.message)}}
 
+/* ═══════════ R145 · PRECIOS PARA REVENDEDORES (página pública) ═══════════
+   El precio sale de la colección "precios" (tarifa general) del Panel de Socios.
+   Aquí solo se decide qué se muestra al público y cómo. Los cambios quedan en
+   BORRADOR hasta tocar "Publicar"; el precio socio se edita en su fuente real. */
+const PUB_CATS=['Streaming','TV Digital','Música','Herramientas','Inteligencia Artificial','Recargas de juegos'];
+const pubUrl=()=>location.origin+'/precios-mayoristas';
+const pubItem=id=>{const b=state.pub.borrador;b.items=b.items||{};if(!b.items[id])b.items[id]={publico:false,categoria:'',orden:null,texto:'',disponible:true,usarPrecioSocio:true,precioMostrado:null,precioSugerido:null};return b.items[id];};
+const pubFecha=ms=>ms?new Date(ms).toLocaleString('es-HN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):'nunca';
+async function loadPublico(force){
+  if(state.pub&&!force)return renderPublico();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando precios para revendedores…</div>';
+  try{state.pub=await api('GET','publico');state.pub.q=state.pub.q||'';renderPublico();}
+  catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`;}
+}
+let pubTimer=null;
+function pubGuardarLuego(){
+  clearTimeout(pubTimer);const st=$('#pubEstado');if(st)st.textContent='Guardando borrador…';
+  pubTimer=setTimeout(async()=>{try{const r=await api('PUT','publico',{borrador:state.pub.borrador});state.pub.pendiente=r.pendiente;state.pub.version=r.version;pubPintarEstado();if(r.version!=='r149'){const s3=$('#pubEstado');if(s3)s3.innerHTML='<b style="color:#b42318">⚠️ No se guardó la venta sugerida: el servidor de Vercel está desactualizado.</b>';}}catch(e){const s2=$('#pubEstado');if(s2)s2.textContent='⚠️ '+e.message;}},700);
+}
+function pubPintarEstado(){
+  const st=$('#pubEstado');if(!st)return;
+  const n=Object.values(state.pub.borrador.items||{}).filter(x=>x.publico).length;
+  st.innerHTML=`${n} producto${n===1?'':'s'} en la lista · publicada: <b>${esc(pubFecha(state.pub.publicadoEn))}</b>${state.pub.pendiente?' · <b style="color:#e2231a">hay cambios sin publicar</b>':' · al día'}`;
+}
+function pubFila(p){
+  const it=pubItem(p.id),busca=[p.nombre,p.variante,p.categoriaSocios].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return `<div class="pub-row" data-pub-row="${esc(p.id)}" data-search="${esc(busca)}">
+    <div class="pub-main">
+      <div class="pub-name"><b>${esc(p.nombre)}</b>${p.variante?`<small>${esc(p.variante)}</small>`:''}${p.activoSocios?'':'<small style="color:#b42318">Apagado en el Panel de Socios: no sale en la lista</small>'}</div>
+      <label class="pub-price">Precio socio<span>L <input type="number" min="0" step="1" inputmode="decimal" data-pub-socio="${esc(p.id)}" value="${p.precioSocio??''}" placeholder="—"></span></label>
+      <label class="pub-price">Venta sugerida<span>L <input type="number" min="0" step="1" inputmode="decimal" data-pub-k="precioSugerido" data-id="${esc(p.id)}" value="${it.precioSugerido??''}" placeholder="—"></span></label>
+      <label class="pub-sw"><input type="checkbox" data-pub-k="publico" data-id="${esc(p.id)}" ${it.publico?'checked':''}><i></i><span>${it.publico?'ON':'OFF'}</span></label>
+      <button class="cr-btn ghost pub-more" data-pub-more="${esc(p.id)}" type="button">Opciones</button>
+    </div>
+    <div class="pub-opts" hidden>
+      <label class="cr-field">Categoría en la lista<input list="pubCats" data-pub-k="categoria" data-id="${esc(p.id)}" value="${esc(it.categoria)}" placeholder="${esc(p.categoriaSugerida)}"></label>
+      <label class="cr-field">Orden de aparición<input type="number" data-pub-k="orden" data-id="${esc(p.id)}" value="${it.orden??''}" placeholder="Automático"></label>
+      <label class="cr-field wide">Texto secundario (opcional)<input maxlength="90" data-pub-k="texto" data-id="${esc(p.id)}" value="${esc(it.texto)}" placeholder="${esc([p.variante,p.categoriaSub].filter(Boolean).join(' · ')||'Ej. 1 perfil · 1 mes')}"></label>
+      <label class="pub-check"><input type="checkbox" data-pub-k="disponible" data-id="${esc(p.id)}" ${it.disponible?'checked':''}> Disponible</label>
+      <label class="pub-check"><input type="checkbox" data-pub-k="usarPrecioSocio" data-id="${esc(p.id)}" ${it.usarPrecioSocio?'checked':''}> Usar precio socio actual</label>
+      <label class="cr-field">Precio mostrado en página pública<input type="number" min="0" data-pub-k="precioMostrado" data-id="${esc(p.id)}" value="${it.precioMostrado??''}" ${it.usarPrecioSocio?'disabled':''} placeholder="Ej. 140"><small>No cambia el precio real de los socios.</small></label>
+    </div>
+  </div>`;
+}
+function renderPublico(){
+  const b=$('#revBody');if(!state.pub)return loadPublico();
+  const grupos=[];state.pub.productos.forEach(p=>{let g=grupos.find(x=>x.k===p.categoriaSocios);if(!g){g={k:p.categoriaSocios,items:[]};grupos.push(g);}g.items.push(p);});
+  const c=state.pub.borrador.contacto||{};
+  const cond=state.pub.borrador.condiciones||{minimoMensual:5,mostrar:true,texto:'',puntos:[]};
+  b.innerHTML=`<style>
+    #rbac-revendedores .pub-top{display:grid;gap:10px;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin-bottom:12px}
+    #rbac-revendedores .pub-actions{display:flex;flex-wrap:wrap;gap:8px}
+    #rbac-revendedores .pub-contact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px}
+    #rbac-revendedores .pub-group{margin:16px 0 6px;font-size:12px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:#475467}
+    #rbac-revendedores .pub-list{background:#fff;border:1px solid #e4e7ec;border-radius:14px;overflow:hidden}
+    #rbac-revendedores .pub-row{border-top:1px solid #f0f2f5;padding:10px 12px}
+    #rbac-revendedores .pub-row:first-child{border-top:0}
+    #rbac-revendedores .pub-main{display:grid;grid-template-columns:minmax(0,1fr) 104px 104px 74px auto;gap:10px;align-items:center}
+    #rbac-revendedores .pub-name b{display:block;font-size:14.5px;color:#101828}
+    #rbac-revendedores .pub-name small{display:block;font-size:12px;color:#667085;margin-top:2px}
+    #rbac-revendedores .pub-price{font-size:10.5px;font-weight:800;color:#667085;display:grid;gap:3px}
+    #rbac-revendedores .pub-price span{display:flex;align-items:center;gap:4px;border:1px solid #d9e0e9;border-radius:10px;padding:0 8px;font-size:14px;font-weight:800;color:#101828}
+    #rbac-revendedores .pub-price input{width:100%;border:0;outline:0;padding:8px 0;font:inherit;background:transparent}
+    #rbac-revendedores .pub-sw{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:900;color:#475467}
+    #rbac-revendedores .pub-sw input{display:none}
+    #rbac-revendedores .pub-sw i{width:38px;height:22px;border-radius:22px;background:#d0d5dd;position:relative;transition:.15s;flex:0 0 auto}
+    #rbac-revendedores .pub-sw i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+    #rbac-revendedores .pub-sw input:checked+i{background:#12b76a}
+    #rbac-revendedores .pub-sw input:checked+i::after{left:19px}
+    #rbac-revendedores .pub-more{padding:7px 10px;font-size:12px}
+    #rbac-revendedores .pub-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;margin-top:10px;padding:10px;border-radius:12px;background:#f9fafb}
+    #rbac-revendedores .pub-opts[hidden]{display:none}
+    #rbac-revendedores .pub-top input,#rbac-revendedores .pub-opts input{box-sizing:border-box;width:100%;min-width:0}
+    #rbac-revendedores .pub-top input[type=checkbox],#rbac-revendedores .pub-opts input[type=checkbox]{width:auto;flex:0 0 auto}
+    #rbac-revendedores .pub-check{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#344054}
+    @media(max-width:640px){#rbac-revendedores .pub-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}#rbac-revendedores .pub-main .pub-name{grid-column:1/-1}#rbac-revendedores .pub-contact,#rbac-revendedores .pub-opts{grid-template-columns:1fr}}
+  </style>
+  <div class="pub-top">
+    <div><b style="font-size:16px">Lista pública de precios</b><div style="color:#667085;font-size:13px;margin-top:3px">Página sin login para prospectos: <a href="${esc(pubUrl())}" target="_blank" rel="noopener">${esc(pubUrl().replace(/^https?:\/\//,''))}</a>. No da acceso al Panel de Socios.</div></div>
+    <div id="pubEstado" style="font-size:13px;color:#475467"></div>
+    <div class="pub-actions">
+      <button class="cr-btn ghost" id="pubPreview">👁️ Vista previa</button>
+      <button class="cr-btn red" id="pubPublicar">Publicar cambios</button>
+      <button class="cr-btn ghost" id="pubImagen">🖼️ Generar imagen de precios</button>
+      <button class="cr-btn ghost" id="pubCopiar">🔗 Copiar enlace</button>
+      <button class="cr-btn ghost" id="pubWa" type="button">💬 Compartir por WhatsApp</button>
+    </div>
+    <div class="pub-contact">
+      <label class="cr-field">Botón "Quiero ser revendedor" → WhatsApp o enlace<input id="pubDestino" value="${esc(c.destino||'')}" placeholder="9999-9999 o https://…"></label>
+      <label class="cr-field">Mensaje que llega por WhatsApp<input id="pubMensaje" maxlength="300" value="${esc(c.mensaje||'Hola, quiero ser revendedor de Sublicuentas.')}"></label>
+    </div>
+    <div style="border-top:1px solid #eef1f4;padding-top:10px"><b style="font-size:14px">Configuración comercial</b><div style="color:#667085;font-size:12.5px;margin-top:2px">Condición para aplicar a precios de revendedor. Es mensual: no obliga a comprar esa cantidad en cada pedido.</div></div>
+    <div class="pub-contact">
+      <label class="cr-field">Compra mínima mensual (perfiles)<input id="pubMinimo" type="number" min="1" step="1" inputmode="numeric" value="${cond.minimoMensual??''}" placeholder="Ej. 5"></label>
+      <label class="pub-check" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="pubCondMostrar" ${cond.mostrar!==false?'checked':''}> Mostrar condición en la página pública</label>
+      <label class="cr-field wide" style="grid-column:1/-1">Puntos de la tarjeta de condiciones (uno por línea)<textarea id="pubCondPuntos" rows="4" maxlength="1200" style="box-sizing:border-box;width:100%;border:1px solid #d9e0e9;border-radius:12px;padding:10px 11px;font:inherit;resize:vertical">${esc((cond.puntos||[]).join('\n'))}</textarea><small>La compra mínima mensual se agrega sola como primer punto.</small></label>
+      <label class="cr-field wide" style="grid-column:1/-1">Texto adicional de condiciones (opcional)<input id="pubCondTexto" maxlength="400" value="${esc(cond.texto||'')}" placeholder="Ej. Los pedidos se pagan por adelantado."></label>
+    </div>
+  </div>
+  <div class="price-toolbar"><label class="price-search">🔎 <input id="pubBuscar" value="${esc(state.pub.q||'')}" placeholder="Buscar producto…"></label><small>ON = aparece en la lista pública. El precio socio es el mismo del Panel de Socios.</small></div>
+  <datalist id="pubCats">${PUB_CATS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  ${state.pub.productos.length?grupos.map(g=>`<div data-pub-group><div class="pub-group">${esc(g.k||'Sin categoría')}</div><div class="pub-list">${g.items.map(pubFila).join('')}</div></div>`).join(''):'<div class="cr-empty">El catálogo del Panel de Socios está vacío. Cárguelo en la pestaña Precios.</div>'}`;
+  pubPintarEstado();
+  if(state.pub.version!=='r149')b.querySelector('.pub-top').insertAdjacentHTML('afterbegin','<div class="cr-status" style="background:#fef3f2;color:#b42318;border:1px solid #fecdca;border-radius:12px;padding:10px 12px;font-weight:700">⚠️ Vercel todavía no tiene la actualización del servidor (api/). La venta sugerida y la compra mínima NO se van a guardar. Revise en Vercel → Deployments que el último despliegue esté en “Ready”.</div>');
+  const filtrar=()=>{const q=String(state.pub.q||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();b.querySelectorAll('[data-pub-row]').forEach(r=>{r.style.display=!q||r.dataset.search.includes(q)?'':'none'});b.querySelectorAll('[data-pub-group]').forEach(g=>{g.style.display=[...g.querySelectorAll('[data-pub-row]')].some(r=>r.style.display!=='none')?'':'none'});};
+  $('#pubBuscar').oninput=e=>{state.pub.q=e.target.value;filtrar();};filtrar();
+  b.querySelectorAll('[data-pub-more]').forEach(x=>x.onclick=()=>{const o=x.closest('[data-pub-row]').querySelector('.pub-opts');o.hidden=!o.hidden;});
+  b.querySelectorAll('[data-pub-k]').forEach(el=>el.addEventListener(el.type==='checkbox'?'change':'input',()=>{
+    const it=pubItem(el.dataset.id),k=el.dataset.pubK;
+    if(el.type==='checkbox')it[k]=el.checked;else if(k==='orden'||k==='precioMostrado'||k==='precioSugerido')it[k]=el.value===''?null:Number(el.value);else it[k]=el.value;
+    if(k==='publico'){const sp=el.parentElement.querySelector('span');if(sp)sp.textContent=el.checked?'ON':'OFF';}
+    if(k==='usarPrecioSocio'){const pm=el.closest('.pub-opts').querySelector('[data-pub-k="precioMostrado"]');pm.disabled=el.checked;}
+    pubGuardarLuego();
+  }));
+  const contacto=()=>{state.pub.borrador.contacto={destino:$('#pubDestino').value.trim(),mensaje:$('#pubMensaje').value.trim()};pubGuardarLuego();};
+  $('#pubDestino').oninput=contacto;$('#pubMensaje').oninput=contacto;
+  // R147: compra mínima mensual editable (sin tocar código).
+  const condiciones=()=>{const v=$('#pubMinimo').value;state.pub.borrador.condiciones={minimoMensual:v===''?null:Math.max(1,Math.round(Number(v))||1),mostrar:$('#pubCondMostrar').checked,texto:$('#pubCondTexto').value.trim(),puntos:$('#pubCondPuntos').value.split('\n').map(x=>x.trim()).filter(Boolean)};pubGuardarLuego();};
+  $('#pubMinimo').oninput=condiciones;$('#pubCondMostrar').onchange=condiciones;$('#pubCondTexto').oninput=condiciones;$('#pubCondPuntos').oninput=condiciones;
+  // Precio socio: se guarda en su FUENTE (Panel de Socios) — se refleja en socios y en la página pública.
+  b.querySelectorAll('[data-pub-socio]').forEach(el=>el.addEventListener('change',async()=>{
+    const p=state.pub.productos.find(x=>x.id===el.dataset.pubSocio);if(!p)return;
+    const nuevo=el.value===''?null:Number(el.value);
+    if(nuevo===p.precioSocio)return;
+    if(!confirm(`¿Cambiar el precio socio de ${p.nombre}${p.variante?' · '+p.variante:''} de ${money(p.precioSocio)} a ${money(nuevo)}?\n\nEs el precio REAL del Panel de Socios: lo verán todos los socios y la página pública.`)){el.value=p.precioSocio??'';return;}
+    el.disabled=true;
+    try{await api('PUT','precios/'+p.id,{precio:nuevo},{tarifa:'general'});p.precioSocio=nuevo;state.precios=null;status('✅ Precio socio actualizado en el Panel de Socios y en la lista pública.','ok');}
+    catch(e){el.value=p.precioSocio??'';alert(e.message);}
+    finally{el.disabled=false;}
+  }));
+  $('#pubCopiar').onclick=async()=>{try{await navigator.clipboard.writeText(pubUrl());status('🔗 Enlace copiado.','ok');}catch(_){prompt('Copie el enlace:',pubUrl());}};
+  $('#pubWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent('Precios para revendedores de Sublicuentas: '+pubUrl()),'_blank','noopener');
+  $('#pubPreview').onclick=pubVistaPrevia;
+  $('#pubImagen').onclick=pubGenerarImagen;
+  $('#pubPublicar').onclick=async()=>{
+    const btn=$('#pubPublicar');btn.disabled=true;clearTimeout(pubTimer);
+    try{const r=await api('POST','publico/publicar',{borrador:state.pub.borrador});await loadPublico(true);status(r.cambio?'✅ Lista publicada. Ya se ve en la página pública (puede tardar ~1 minuto).':'La lista ya estaba al día: no había cambios que publicar.','ok');}
+    catch(e){alert(e.message);}finally{const b2=$('#pubPublicar');if(b2)b2.disabled=false;}
+  };
+}
+async function pubVistaPrevia(){
+  clearTimeout(pubTimer);
+  let datos;
+  try{await api('PUT','publico',{borrador:state.pub.borrador});const d=await api('GET','publico');Object.assign(state.pub,d);datos=d.vistaPrevia;pubPintarEstado();}
+  catch(e){return alert(e.message);}
+  const m=modal(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><b>👁️ Vista previa (sin publicar)</b><button class="cr-btn ghost" data-x>Cerrar</button></div>
+    <iframe title="Vista previa" src="/precios-revendedores.html?preview=1" style="width:100%;height:70vh;border:1px solid #e4e7ec;border-radius:14px;background:#fff"></iframe>`,{wide:true});
+  m.querySelector('.cr-sheet').style.maxWidth='460px';
+  m.querySelector('[data-x]').onclick=()=>m._modalClose();
+  const fr=m.querySelector('iframe');
+  const enviar=()=>{try{fr.contentWindow.postMessage({tipo:'precios-preview',datos},location.origin);}catch(_){}};
+  const onMsg=e=>{if(e.origin===location.origin&&e.data&&e.data.tipo==='precios-preview-listo')enviar();};
+  window.addEventListener('message',onMsg);fr.addEventListener('load',enviar);
+  m._modalCleanup=()=>window.removeEventListener('message',onMsg);
+}
+function pubCargarScript(src,global){return new Promise((ok,no)=>{if(window[global])return ok(window[global]);const s=document.createElement('script');s.src=src;s.onload=()=>ok(window[global]);s.onerror=()=>no(new Error('No se pudo cargar '+global));document.head.appendChild(s);});}
+function pubCargarImg(src){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('No se pudo cargar el logo'));i.src=src;});}
+async function pubGenerarImagen(){
+  const btn=$('#pubImagen');btn.disabled=true;
+  try{
+    const d=await api('GET','publico');Object.assign(state.pub,d);const lista=d.publicada;
+    if(!lista||!lista.total)throw new Error('Primero publique la lista: la imagen usa solo los productos ya publicados.');
+    if(d.pendiente&&!confirm('Hay cambios SIN publicar. La imagen usará la lista ya publicada. ¿Continuar?'))return;
+    if(!document.querySelector('link[data-inter]')){const l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap';l.dataset.inter='1';document.head.appendChild(l);}
+    try{await Promise.race([Promise.all(['500 30px Inter','700 30px Inter','800 30px Inter','900 30px Inter'].map(f=>document.fonts.load(f))),new Promise(r=>setTimeout(r,2500))]);}catch(_){}
+    const [logo,qrLib]=await Promise.all([pubCargarImg('/assets/sublicuentas-logo-claro.png'),pubCargarScript('/assets/qrcode-generator.js','qrcode')]);
+    const F='Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',W=1080,PAD=72;
+    const filas=lista.categorias.reduce((n,c)=>n+c.productos.length,0);
+    const conSug=lista.categorias.some(c=>c.productos.some(p=>p.precioSugerido!=null)),FILA=conSug?128:104,minimo=lista.condiciones&&lista.condiciones.minimoMensual;
+    const H=Math.max(1920,(minimo?610:560)+lista.categorias.length*96+filas*FILA+470);
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+    const rr=(X,Y,w,h,r)=>{x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath();};
+    const corta=(t,max)=>{t=String(t||'');if(x.measureText(t).width<=max)return t;while(t.length>1&&x.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…';};
+    x.fillStyle='#fff';x.fillRect(0,0,W,H);
+    // Marca
+    const lh=78,lw=logo.width*lh/logo.height;x.drawImage(logo,PAD-6,72,lw,lh); // R149: logo para fondo blanco
+    x.fillStyle='#0B0B0C';x.font=`900 76px ${F}`;x.fillText('PRECIOS PARA',PAD,268);
+    x.fillStyle='#E2231A';x.fillText('REVENDEDORES',PAD,350);
+    x.fillStyle='#5B6270';x.font=`500 32px ${F}`;x.fillText('Precios especiales para socios · en Lempiras',PAD,408);
+    const f=lista.actualizadoEn?new Intl.DateTimeFormat('es-HN',{timeZone:'America/Tegucigalpa',day:'numeric',month:'long',year:'numeric'}).format(new Date(lista.actualizadoEn)):'';
+    x.fillStyle='#00A9C7';x.beginPath();x.arc(PAD+8,452,8,0,Math.PI*2);x.fill();
+    x.fillStyle='#0B0B0C';x.font=`700 28px ${F}`;x.fillText(`Actualizado: ${f}`,PAD+28,462);
+    let y=540;
+    if(minimo){ // R147: la condición sale de la configuración, no de la plantilla
+      rr(PAD,492,W-PAD*2,64,14);x.fillStyle='#F6F7F8';x.fill();
+      x.fillStyle='#0B0B0C';x.font=`700 28px ${F}`;x.fillText(`Compra mínima mensual: ${minimo} perfil${minimo===1?'':'es'}`,PAD+24,534);
+      y=610;
+    }
+    for(const c of lista.categorias){
+      x.fillStyle='#E2231A';x.fillRect(PAD,y-12,28,6);
+      x.fillStyle='#0B0B0C';x.font=`800 28px ${F}`;x.fillText(String(c.nombre).toUpperCase(),PAD+42,y);
+      x.fillStyle='#8A919C';x.font=`700 20px ${F}`;x.textAlign='right';x.fillText('PRECIO REVENDEDOR',W-PAD,y);x.textAlign='left';
+      y+=34;
+      c.productos.forEach((p,i)=>{
+        const top=y;if(i){x.fillStyle='#ECEEF1';x.fillRect(PAD,top,W-PAD*2,2);}
+        const precio=p.precio==null?'Consultar':`L${Number(p.precio).toLocaleString('es-HN')}`;
+        x.font=`800 44px ${F}`;const pw=x.measureText(precio).width;
+        x.fillStyle=p.disponible?'#0B0B0C':'#8A919C';x.textAlign='right';x.fillText(precio,W-PAD,top+66);x.textAlign='left';
+        const sugTxt=p.precioSugerido!=null?`Venta sugerida L${Number(p.precioSugerido).toLocaleString('es-HN')}${p.gananciaSugerida!=null?` · gana L${Number(p.gananciaSugerida).toLocaleString('es-HN')}`:''}`:'';
+        x.font=`600 24px ${F}`;const sw=sugTxt?x.measureText(sugTxt).width:0;
+        const maxN=W-PAD*2-Math.max(pw,sw)-40;
+        x.fillStyle='#0B0B0C';x.font=`700 36px ${F}`;x.fillText(corta(p.nombre,maxN),PAD,top+50);
+        x.fillStyle='#5B6270';x.font=`500 26px ${F}`;x.fillText(corta(p.disponible?p.texto:`${p.texto?p.texto+' · ':''}No disponible por ahora`,maxN),PAD,top+86);
+        if(sugTxt){x.textAlign='right';x.font=`600 24px ${F}`;x.fillStyle='#007A90';x.fillText(sugTxt,W-PAD,top+104);x.textAlign='left';}
+        y+=FILA;
+      });
+      y+=62;
+    }
+    // Pie: QR + CTA
+    const yQ=Math.max(y+10,H-430);
+    x.fillStyle='#ECEEF1';x.fillRect(PAD,yQ-30,W-PAD*2,2);
+    const q=qrLib(0,'M');q.addData(pubUrl());q.make();const n=q.getModuleCount(),qs=260,cel=qs/n;
+    x.fillStyle='#fff';x.fillRect(PAD,yQ,qs,qs);x.fillStyle='#0B0B0C';
+    for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))x.fillRect(Math.floor(PAD+k*cel),Math.floor(yQ+r*cel),Math.ceil(cel),Math.ceil(cel));
+    const tx=PAD+qs+40;
+    x.fillStyle='#0B0B0C';x.font=`800 34px ${F}`;x.fillText('Lista siempre actualizada',tx,yQ+56);
+    x.fillStyle='#5B6270';x.font=`500 27px ${F}`;x.fillText('Escanee el código o entre a:',tx,yQ+100);
+    x.fillStyle='#0B0B0C';x.font=`700 27px ${F}`;x.fillText(corta(pubUrl().replace(/^https?:\/\//,''),W-PAD-tx),tx,yQ+140);
+    rr(tx,yQ+176,W-PAD-tx,84,16);x.fillStyle='#E2231A';x.fill();
+    x.fillStyle='#fff';x.font=`900 30px ${F}`;x.textAlign='center';x.fillText('QUIERO SER REVENDEDOR',tx+(W-PAD-tx)/2,yQ+229);x.textAlign='left';
+    const url=cv.toDataURL('image/png');
+    const m=modal(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><b>🖼️ Imagen de precios</b><button class="cr-btn ghost" data-x>Cerrar</button></div>
+      <img src="${url}" alt="Precios para revendedores" style="width:100%;border:1px solid #e4e7ec;border-radius:12px">
+      <div style="display:flex;gap:8px;margin-top:12px"><a class="cr-btn red" style="flex:1;text-align:center" download="sublicuentas-precios-revendedores.png" href="${url}">Descargar imagen</a><button class="cr-btn ghost" data-share style="flex:1">Compartir</button></div>
+      <small style="display:block;margin-top:8px;color:#667085">Para WhatsApp/Facebook. La referencia de precios vigentes es siempre la página web.</small>`);
+    m.querySelector('[data-x]').onclick=()=>m._modalClose();
+    m.querySelector('[data-share]').onclick=async()=>{try{const blob=await (await fetch(url)).blob();const file=new File([blob],'sublicuentas-precios-revendedores.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],text:'Precios para revendedores: '+pubUrl()});else alert('Su navegador no permite compartir imágenes directo. Use "Descargar imagen".');}catch(_){}};
+  }catch(e){alert(e.message);}
+  finally{const b2=$('#pubImagen');if(b2)b2.disabled=false;}
+}
+
 /* ═══════════ util modal ═══════════ */
 function modal(innerHtml,opts={}){
   const overlay=document.createElement('div');
@@ -873,7 +1217,7 @@ function init(){
   const screen=document.getElementById('screen-revendedores');
   if(screen?.classList.contains('active')) loadPrecios();
 }
-window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; render(); }};
+window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; state.pub=null; render(); }};
 document.addEventListener('DOMContentLoaded',init);
 new MutationObserver(()=>{
   const s=document.getElementById('screen-revendedores');
