@@ -79,8 +79,8 @@ test("Caso D: banco insuficiente bloquea", () => {
 
 test("Caso E: distribución incompleta / de más", () => {
   const { bancos } = bankBalances([], libro, methods);
-  assert.match(validatePlanilla({ montoTotal: 2000, asignaciones: [{ bancoId: "bac-credomatic", monto: 1700 }], bancos }).errors.join(" "), /Faltan Lps\. 300 por asignar/);
-  assert.match(validatePlanilla({ montoTotal: 2000, asignaciones: [{ bancoId: "bac-credomatic", monto: 2500 }], bancos }).errors.join(" "), /Ha asignado Lps\. 500 de más/);
+  assert.match(validatePlanilla({ montoTotal: 2000, asignaciones: [{ bancoId: "bac-credomatic", monto: 1700 }], bancos }).errors.join(" "), /Faltan L300 por asignar/);
+  assert.match(validatePlanilla({ montoTotal: 2000, asignaciones: [{ bancoId: "bac-credomatic", monto: 2500 }], bancos }).errors.join(" "), /Ha asignado L500 de más/);
 });
 
 test("no se puede pagar más que el disponible del ciclo", () => {

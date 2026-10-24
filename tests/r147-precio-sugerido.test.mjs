@@ -25,5 +25,5 @@ test('R149: puntos de condiciones editables y sin precios fijos en la página', 
   assert.deepEqual(l.condiciones.puntos, ['Pago adelantado.']);
   assert.equal(l.condiciones.minimoMensual, 7);
   const page = fs.readFileSync(new URL('../precios-revendedores.html', import.meta.url), 'utf8');
-  assert.doesNotMatch(page, /L 130|L 150|5 perfiles/);
+  assert.doesNotMatch(page, /L ?130|L ?150|5 perfiles/);
 });

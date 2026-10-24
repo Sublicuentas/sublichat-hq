@@ -92,7 +92,7 @@ test("Caso A + doble toque: renovación L220 en BAC con el mismo operationId cre
 test("Caso B/D/E + idempotencia: planilla multi-banco", async () => {
   // E: faltan 300 → no escribe nada
   const inc = await call({ accion: "confirmar_pago_planilla", beneficiario: "Naara", concepto: "pago_planilla", montoTotal: 2000, asignaciones: [{ bancoId: "bac-credomatic", monto: 1700 }], operationId: "op-planilla-incompleta" });
-  assert.equal(inc.ok, false); assert.match(inc.error, /Faltan Lps\. 300/);
+  assert.equal(inc.ok, false); assert.match(inc.error, /Faltan L300/);
   // D: banco insuficiente
   const ins = await call({ accion: "confirmar_pago_planilla", beneficiario: "Naara", concepto: "pago_planilla", montoTotal: 1200, asignaciones: [{ bancoId: "ficohsa", monto: 1200 }], operationId: "op-planilla-insuf" });
   assert.equal(ins.ok, false); assert.match(ins.error, /Saldo insuficiente en Ficohsa/);
