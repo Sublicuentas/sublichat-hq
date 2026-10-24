@@ -5,6 +5,7 @@
 
 import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
+import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -627,6 +628,14 @@ export default async function handler(req, res) {
         ...(update.capacidad != null ? {capacidadAnterior:Number(current.capacidad)||0,capacidadNueva:update.capacidad} : {}),
         ...(update.url != null ? {urlAnterior:String(current.url||""),urlNueva:update.url} : {}),
         claveCambiada: clave != null,serviciosActualizados:sync.updated,usuario:usuarioAccion,createdAt:new Date().toISOString()});
+      const cambioCorreo = update.correo && normEmail(update.correo) !== normEmail(current.correo);
+      if (clave != null || cambioCorreo) {
+        // Fase 2 · el resto del equipo se entera de que la ficha cambió (el aviso NO trae correo ni clave).
+        await push.avisar(db, admin, { todos: true, excluir: usuarioAccion,
+          titulo: `🔑 Cuenta ${String(current.plataforma || "").toUpperCase()} actualizada`,
+          cuerpo: `${cambioCorreo && clave != null ? "Cambió correo y clave" : cambioCorreo ? "Cambió el correo" : "Cambió la clave"} · ${sync.updated} ficha(s) ya actualizadas.`,
+          data: { tipo: "cuenta", ir: "clientes" } });
+      }
       return res.status(200).json({ ok: true, serviciosActualizados: sync.updated, documentosActualizados: sync.documents });
     }
 

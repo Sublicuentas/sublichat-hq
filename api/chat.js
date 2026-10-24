@@ -72,7 +72,7 @@ function fechaLargaHN(iso) {
   const d = new Date(iso + "T12:00:00Z");
   return new Intl.DateTimeFormat("es-HN", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(d);
 }
-const fmtLps = n => "Lps. " + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtLps = n => "L" + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function diasEntre(hoyISO, iso) {
   const a = Date.parse(hoyISO + "T12:00:00Z"), b = Date.parse(String(iso || "").slice(0, 10) + "T12:00:00Z");
   return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
@@ -333,7 +333,7 @@ REGLAS OBLIGATORIAS:
 - Nunca agregue cuentas bancarias, transferencias, depósitos, tarjetas, comprobantes, instrucciones ni métodos de pago.
 - Devuelva únicamente el mensaje, sin título, explicación, lista ni saludo adicional.` : `Eres "Subli", el asistente de operaciones de Sublicuentas, un negocio hondureño
 de reventa de suscripciones (Netflix, Disney+, HBO Max, Prime Video, etc.).
-Hablas en español de Honduras, claro y directo, usando "usted". La moneda es Lempiras (Lps).
+Hablas en español de Honduras, claro y directo, usando "usted". La moneda es Lempiras: se escribe L pegado al número, sin espacio ni punto (L300, L1,050.00). Nunca escriba "Lps" ni "L.".
 Hoy es ${fechaLargaHN(hoyISO)} (${hoyISO}).
 
 REGLAS IMPORTANTES:
@@ -345,15 +345,15 @@ REGLAS IMPORTANTES:
 - Para listados, ordénalos (por fecha de renovación y luego por nombre).
 
 FORMATO DE RESPUESTA (obligatorio; se lee en un teléfono, debe verse profesional y ordenado):
-1. Primera línea: el resultado clave en **negrita** (ej.: **8 cuentas vencen hoy** · total **Lps. 1,050.00**).
+1. Primera línea: el resultado clave en **negrita** (ej.: **8 cuentas vencen hoy** · total **L1,050.00**).
 2. Después una lista con viñetas "- ". Si conviene, agrupe con encabezados "### " (por día, plataforma o vendedor) indicando cuántas cuentas y cuánto suman.
-3. Cada cuenta en UNA sola viñeta corta: **Nombre** · 8798-9267 · Netflix Premium VIP · Lps. 110.00. Nada de asteriscos sueltos ni texto repetido.
+3. Cada cuenta en UNA sola viñeta corta: **Nombre** · 8798-9267 · Netflix Premium VIP · L110.00. Nada de asteriscos sueltos ni texto repetido.
 4. Máximo 15 viñetas por lista. Si hay más, muestre las 15 primeras y cierre con "… y N más. ¿Desea el detalle por vendedor o por día?".
 5. Sin tablas, sin bloques de código, sin repetir la pregunta y sin disculpas. Breve: máximo ~150 palabras salvo que pidan detalle.
 6. Si la pregunta es ambigua (por ejemplo "esta semana" sin fechas), asuma los próximos 7 días desde hoy, dígalo en una frase y responda igual.
 
 Cada cliente trae: nombre, tel (teléfono), vendedor (socio a cargo), y cuentas[] donde cada cuenta tiene:
-plataforma, precio (Lps), renueva (fecha de renovación AAAA-MM-DD), estado, correo, clave y pinPerfil.
+plataforma, precio (L), renueva (fecha de renovación AAAA-MM-DD), estado, correo, clave y pinPerfil.
 - clave = contraseña/acceso de la cuenta.
 - pinPerfil = PIN del perfil cuando aplique.
 

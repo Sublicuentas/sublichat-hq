@@ -7,6 +7,7 @@
 
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const push = require('./_push.js'); // Fase 2 · push a la APK (sin datos sensibles)
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -710,6 +711,14 @@ async function createTicket(db, body) {
   try { await saveTelegramMessageLinks(db, ref.id, telegram); }
   catch (e) { console.error('TICKET_LINK_SAVE_ERROR', e && e.message || e); }
 
+  // Fase 2 · push a los teléfonos de los destinatarios (nunca bloquea el ticket).
+  await push.avisar(db, admin, {
+    usuarios: destinos, excluir: creadoRol,
+    titulo: tipo === 'aviso' ? '📢 Nuevo aviso' : `🎫 Nuevo ticket #${numero}`,
+    cuerpo: `${roleLabel(creadoRol) || item.creadoPor}: ${titulo}`,
+    data: { tipo: tipo === 'aviso' ? 'aviso' : 'ticket', ir: 'tickets', tab: tipo === 'aviso' ? 'avisos' : 'tickets', id: ref.id },
+  });
+
   const telegramInfo = safeTelegramInfo(telegram);
   try {
     await ref.set({ id: ref.id, telegramOk: !!telegram.ok, telegramInfo, updatedAt: now }, { merge: true });
@@ -885,6 +894,13 @@ async function responderTicket(db, body) {
     updatedAt: now
   };
   await ref.set(update, { merge: true });
+  // Fase 2 · push a quienes participan en el ticket/aviso.
+  await push.avisar(db, admin, {
+    usuarios: paraRoles, excluir: destinationKey(body.rol || ''),
+    titulo: `💬 Respuesta: ${clean(old.titulo || 'ticket', 50)}`,
+    cuerpo: `${roleLabel(body.rol) || entry.por}: ${entry.texto}`,
+    data: { tipo: 'respuesta', ir: 'tickets', tab: String(old.tipo || '').toLowerCase() === 'aviso' || old.seccion === 'avisos' ? 'avisos' : 'tickets', id },
+  });
   const msg = [
     `💬 <b>${String(old.tipo||'').toLowerCase()==='aviso'||old.seccion==='avisos'?'Respuesta al aviso':`Ticket #${old.numero || id.slice(-4)} · ${telegramHTML(estadoLabel(update.estado))}`}</b>`, // R102: el aviso no lleva estado
     `<b>${telegramHTML(old.titulo || 'Sin título')}</b>`,

@@ -72,7 +72,7 @@ function normalizeCatalog(raw={}){
       brand:clean(settings.brand||settings.brandName||'Sublicuentas',100),
       slogan:clean(settings.slogan||settings.tagline||'',180),
       currency:clean(settings.currency||'HNL',10),
-      currencyLabel:clean(settings.currencyLabel||'Lps.',20),
+      currencyLabel:clean(settings.currencyLabel||'L',20),
       locale:clean(settings.locale||'es-HN',20),
       whatsapp:clean(settings.whatsapp||'',30).replace(/\D/g,''),
       pointsPerConfirmedPurchase:price(settings.pointsPerConfirmedPurchase)??10,

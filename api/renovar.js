@@ -1844,7 +1844,7 @@ async function handlerCore(req, res) {
         if (!plataforma && servicioIndex == null && !compraIdBody) throw crmUserError("Faltan datos (plataforma o fecha).");
         if (!dias && !fechaExacta && !(body.duracion && typeof body.duracion === "object")) throw crmUserError("Faltan datos (plataforma o fecha).");
         // R104 · Ajuste administrativo (garantía, cortesía, corrección): mueve la fecha SIN crear ingreso,
-        // pero exige motivo y queda auditado. Nunca se registra un ingreso ficticio de Lps. 0.
+        // pero exige motivo y queda auditado. Nunca se registra un ingreso ficticio de L0.
         const ajusteAdministrativo = body.ajusteAdministrativo === true;
         const motivoAjuste = String(body.motivoAjuste || body.motivo || "").trim().slice(0, 200);
         if (ajusteAdministrativo && motivoAjuste.length < 4) throw crmUserError("El ajuste de fecha sin pago necesita un motivo.");

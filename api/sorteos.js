@@ -1099,9 +1099,9 @@ async function savePrize(db, editor, body) {
 async function prepareClubVip(db, editor) {
   const ownerVendor = editor.kind === "relojes" ? "relojes" : "sublicuentas";
   const presets = [
-    { suffix:"combo50", nombre:"L50 de descuento en su próximo combo", tipo:"descuento_fijo", valor:50, unidad:"Lps.", entregaModo:"cupon", stock:9999, descripcion:"Descuento aplicable en la contratación o renovación conjunta de dos o más plataformas.", instrucciones:"Válido para un combo de 2 o más plataformas. No acumulable con otras promociones." },
+    { suffix:"combo50", nombre:"L50 de descuento en su próximo combo", tipo:"descuento_fijo", valor:50, unidad:"L", entregaModo:"cupon", stock:9999, descripcion:"Descuento aplicable en la contratación o renovación conjunta de dos o más plataformas.", instrucciones:"Válido para un combo de 2 o más plataformas. No acumulable con otras promociones." },
     { suffix:"renovacion20", nombre:"20% de descuento en la próxima renovación", tipo:"descuento_porcentaje", valor:20, unidad:"%", entregaModo:"cupon", stock:9999, descripcion:"Descuento del 20% en la próxima renovación, con un máximo de L100.", instrucciones:"Descuento máximo L100. No acumulable con otras promociones." },
-    { suffix:"renovacion_gratis", nombre:"Renovación gratis de una plataforma", tipo:"perfil", valor:130, unidad:"Lps. máximo", entregaModo:"manual", stock:20, descripcion:"Renovación completa de una plataforma hasta el precio máximo configurado.", instrucciones:"Precio máximo L130. Si la plataforma cuesta más, el cliente paga la diferencia." }
+    { suffix:"renovacion_gratis", nombre:"Renovación gratis de una plataforma", tipo:"perfil", valor:130, unidad:"L máximo", entregaModo:"manual", stock:20, descripcion:"Renovación completa de una plataforma hasta el precio máximo configurado.", instrucciones:"Precio máximo L130. Si la plataforma cuesta más, el cliente paga la diferencia." }
   ];
   const now = admin.firestore.FieldValue.serverTimestamp(), ids = [];
   for (const preset of presets) {

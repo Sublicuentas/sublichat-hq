@@ -216,7 +216,7 @@ function movimientoView(m, methods) {
   };
 }
 // R114 · Un cliente paga UNA vez: los cobros del mismo cliente, banco, usuario y día registrados juntos
-// (renovar varios servicios) se muestran como UN solo pago (L 150, no 75 + 75). Aplica a todo el historial.
+// (renovar varios servicios) se muestran como UN solo pago (L150, no 75 + 75). Aplica a todo el historial.
 // R130 · "grp:a,b,c" → ["a","b","c"] (ids válidos, sin repetir, máx. 30).
 function idsDeGrupoR130(v = "") { return [...new Set(String(v || "").replace(/^grp:/, "").split(",").map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{1,160}$/.test(x)))].slice(0, 30); }
 function agruparPagos(rows = []) {
@@ -555,7 +555,7 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
       if (ya.exists) return { duplicado: true, movimientoId: ref.id };
       if (!cs.exists) throw userErr("Esa cuenta por cobrar no existe.");
       const c = cs.data() || {};
-      if (monto > money(c.saldoPendiente) + 0.001) throw userErr(`El abono (Lps. ${monto}) es mayor que el saldo pendiente (Lps. ${money(c.saldoPendiente)}).`);
+      if (monto > money(c.saldoPendiente) + 0.001) throw userErr(`El abono (L${monto}) es mayor que el saldo pendiente (L${money(c.saldoPendiente)}).`);
       const { libro } = await estadoLibro(db, tx);
       const saldo = money(c.saldoPendiente - monto);
       tx.set(ref, { ...baseMov(identity, authUser, body), movimientoId: ref.id, tipo: "ingreso", subtipo: c.deudorTipo === "vendedor" ? "cobro_pendiente_vendedor" : "cobro_pendiente_cliente", monto, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: identity.usuario, cuentaId: cxcRef.id, clienteId: c.clienteId || "", clienteNombre: c.clienteNombre || "", compraId: c.compraId || "", plataforma: c.plataforma || "", tipoOrigen: c.tipoOrigen || "", operacionId: c.operacionId || "", deudorTipo: c.deudorTipo, deudorNombre: c.deudorNombre || "", cicloId: libro.cicloId, cicloOrigen: c.cicloOrigen || "", deCicloAnterior: !!(c.cicloOrigen && c.cicloOrigen !== libro.cicloId), operationId: cleanText(body.operationId), ...canonicalFinanceDate(fechaPagoR110, hoy) });
@@ -578,7 +578,7 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
       const { saldos } = await estadoLibro(db, tx);
       const bo = saldos.bancos.find((b) => b.id === o.id), bd = saldos.bancos.find((b) => b.id === d.id);
       if (!bo?.activado || !bd?.activado) throw userErr("Los dos bancos necesitan saldo inicial.");
-      if (monto > bo.saldo + 0.001) throw userErr(`Saldo insuficiente en ${o.nombre} (Lps. ${bo.saldo}).`);
+      if (monto > bo.saldo + 0.001) throw userErr(`Saldo insuficiente en ${o.nombre} (L${bo.saldo}).`);
       const comun = { ...baseMov(identity, authUser, body), tipo: "transferencia", subtipo: "transferencia_interna", monto, transferenciaId: ref.id, nota: cleanText(body.nota).slice(0, 160), operationId: cleanText(body.operationId), ...canonicalFinanceDate(hoy, hoy) };
       tx.set(ref, { ...comun, movimientoId: ref.id, direccion: "salida", bancoId: o.id, banco: o.nombre, contraparteId: d.id, saldoAntes: bo.saldo, saldoDespues: money(bo.saldo - monto) });
       tx.set(refIn, { ...comun, movimientoId: refIn.id, direccion: "entrada", bancoId: d.id, banco: d.nombre, contraparteId: o.id, saldoAntes: bd.saldo, saldoDespues: money(bd.saldo + monto) });

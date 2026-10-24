@@ -10,8 +10,9 @@
 
 import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
+import vendedoresReg from "./_vendedores.js"; // Oct-2026 · número del vendedor siempre el vigente
 // URLs vigentes de TV Digital (editables desde Bodega). Se cargan al inicio de cada solicitud (caché 60 s).
-let TV_URLS_VIGENTES = null, TV_URLS_CUENTAS = null;
+let TV_URLS_VIGENTES = null, TV_URLS_CUENTAS = null, VENDEDORES_REG = null;
 
 const accessUsage = new Map();
 
@@ -143,10 +144,9 @@ function celularSoloCodigo(plataforma) {
   return p.includes("disney") || p.includes("hbo") || p === "max" || p.includes("vix") || p.includes("universal") || p.includes("netflix");
 }
 
-const VENDEDOR_TELS = { relojes: "32126332", sublicuentas: "89464277", sublicuentas2: "89464328", yami: "96877246", jimena: "88501036", heber: "32174922", abner: "94306551", manuel: "87989267" };
+// Número del vendedor: registro único (api/_vendedores.js). Antes estaba fijo aquí y no cambiaba.
 function vendedorTel(v) {
-  const n = normPlat(v);
-  return VENDEDOR_TELS[n] || "";
+  return VENDEDORES_REG ? vendedoresReg.telefonoVigente(VENDEDORES_REG, v, "") : "";
 }
 
 // Condiciones que se muestran en la URL pública. Los avisos operativos internos
@@ -566,9 +566,9 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
   const mismoVendedor = ["geissel", "geisell"].includes(vendedorNorm)
     ? ["geissel", "geisell"].includes(clienteVendedorNorm)
     : vendedorNorm === clienteVendedorNorm;
+  const telGuardado = String(servicio.vendedorTelefono || (mismoVendedor ? cliente.vendedorTelefono : "") || "").trim();
   const vendedorTelefono = String(
-    servicio.vendedorTelefono ||
-    (mismoVendedor ? cliente.vendedorTelefono : "") ||
+    (VENDEDORES_REG ? vendedoresReg.telefonoVigente(VENDEDORES_REG, vendedor, telGuardado) : telGuardado) ||
     vendedorTel(vendedor) || ""
   ).trim();
 
@@ -635,6 +635,7 @@ export default async function handler(req, res) {
   try {
     const db = getApp().firestore();
     try { TV_URLS_VIGENTES = await tvDigital.leerUrlsTv(db); TV_URLS_CUENTAS = await tvDigital.leerUrlsCuentas(db); } catch (_) {}
+    try { VENDEDORES_REG = await vendedoresReg.leerRegistro(db); } catch (_) { VENDEDORES_REG = null; }
 
     const puntero = await db.collection("enlaces").doc(token).get();
     if (!puntero.exists || puntero.data().activo === false) {

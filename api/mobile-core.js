@@ -3,6 +3,8 @@
 const admin = require('firebase-admin');
 const loginHandler = require('./login');
 const tvDigital = require('./_tv-digital.js');
+const vendedoresReg = require('./_vendedores.js'); // Oct-2026 · registro único de vendedores/socios
+const push = require('./_push.js'); // Fase 2 · notificaciones push
 
 const ALLOWED_ORIGINS = new Set([
   'https://localhost',
@@ -191,15 +193,18 @@ function fechaDMYMovil(v) {
   return s;
 }
 
-function prepareClientForMobile(client = {}, tv = null) {
+function prepareClientForMobile(client = {}, tv = null, reg = null) {
   const out = { ...(client || {}) };
   const telefono = String(out.telefono || '').trim();
   const clientSeller = String(out.vendedor || '').trim();
+  // Número del vendedor siempre el vigente (si Relojes cambia de número, todas sus fichas muestran el nuevo).
+  if (reg && clientSeller) out.vendedorTelefono = vendedoresReg.telefonoVigente(reg, clientSeller, out.vendedorTelefono);
   if (!Array.isArray(out.servicios)) return out;
 
   out.servicios = out.servicios.map(service => {
     if (!service || typeof service !== 'object') return service;
     const copy = { ...service };
+    if (reg && (copy.vendedor || clientSeller)) copy.vendedorTelefono = vendedoresReg.telefonoVigente(reg, copy.vendedor || clientSeller, copy.vendedorTelefono);
     if (copy.fechaRenovacion != null && copy.fechaRenovacion !== '') copy.fechaRenovacion = fechaDMYMovil(copy.fechaRenovacion);
     const urlTv = tv ? tvDigital.urlTvServicio(copy, tv.urls, tv.cuentas) : '';
     if (urlTv) copy.urlServidorTv = urlTv;
@@ -235,6 +240,7 @@ async function listResource(req, res) {
   }
   const snap = await query.get();
   const tv = resource === 'clientes' ? { urls: await tvDigital.leerUrlsTv(db), cuentas: await tvDigital.leerUrlsCuentas(db) } : null;
+  const reg = resource === 'clientes' ? await vendedoresReg.leerRegistro(db).catch(() => null) : null;
   // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
   // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
   // usando el último documento leído, así la paginación no se altera.
@@ -242,7 +248,7 @@ async function listResource(req, res) {
     .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
     .map(doc => {
       const item = { ...(doc.data() || {}), id:doc.id };
-      return resource === 'clientes' ? prepareClientForMobile(item, tv) : item;
+      return resource === 'clientes' ? prepareClientForMobile(item, tv, reg) : item;
     });
   if (resource === 'inventario' && items.length) {
     // La APK instalada ya usa esta lectura al sincronizar. Se conserva el
@@ -265,31 +271,57 @@ const CONFIG_DEFAULTS = Object.freeze({
 });
 const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
 // tvDigitalUrls no es un secreto (la URL la ve el cliente final); se agrega aparte de CONFIG_ALLOWED.
-const VENDEDORES_EQUIPO = Object.freeze(['Relojes','Sublicuentas','Sublicuentas 2','Geisell','Yami','Manuel','Heber','Abner','Jimena','Elizabeth','Lucy','WolfTeam']);
-function vendedorClave(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
-async function vendedoresParaApp(db, basePhones) {
-  const phones = { ...(basePhones && typeof basePhones === 'object' ? basePhones : {}) };
-  const sellers = [...VENDEDORES_EQUIPO];
-  const vistos = new Set(sellers.map(vendedorClave));
-  vistos.add('geissel'); vistos.add('sublicuentas2');
-  const snap = await db.collection('revendedores').get();
-  const extra = [];
-  snap.forEach((doc) => {
-    const d = doc.data() || {};
-    if (d.activo === false) return;
-    const nombre = String(d.nombre || d.usuario || doc.id || '').replace(/\s+/g, ' ').trim().slice(0, 60);
-    const clave = vendedorClave(nombre);
-    if (!clave) return;
-    let tel = String(d.telefono || d.whatsapp || '').replace(/\D/g, '').replace(/^00/, '');
-    if (tel.length === 11 && tel.startsWith('504')) tel = tel.slice(3); // Honduras sin código; otros países completos
-    if (tel.length < 8 || tel.length > 15) tel = '';
-    if (tel && !phones[clave]) phones[clave] = tel;
-    if (vistos.has(clave) || vistos.has(clave.replace(/\s+/g, ''))) return;
-    vistos.add(clave);
-    extra.push(nombre);
-  });
-  extra.sort((x, y) => x.localeCompare(y, 'es'));
-  return { sellers: sellers.concat(extra), phones };
+// Fase 2 · Push: el teléfono registra su token después del login; baja al cerrar sesión; "probar" se manda a sí mismo.
+async function pushAccion(req, res) {
+  const user = await requireFirebaseUser(req, res);
+  if (!user) return;
+  const acc = accessFor(user);
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const op = String(body.op || '').trim();
+  const db = getApp().firestore();
+  const grupo = acc.sublicuentas ? 'sublicuentas' : acc.relojes ? 'relojes' : acc.geisell ? 'geisell' : acc.usuario;
+  try {
+    if (op === 'registrar') return res.status(200).json(await push.registrarToken(db, { token: body.token, usuario: acc.usuario || grupo, role: acc.role, grupo, appBuild: body.appBuild }));
+    if (op === 'baja') return res.status(200).json(await push.bajaToken(db, { token: body.token, usuario: acc.usuario || grupo }));
+    if (op === 'probar') {
+      const r = await push.enviarPush(db, admin, { usuarios: [acc.usuario || grupo], titulo: '✅ Prueba de Sublichat', cuerpo: 'Las notificaciones push funcionan en este teléfono.', data: { tipo: 'prueba', ir: 'inicio' } });
+      return res.status(200).json({ ok: true, ...r });
+    }
+    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 200) });
+  }
+}
+
+// Vendedores: registro único (api/_vendedores.js), el mismo que usan la Web y el Bot.
+// Lo guardado manda sobre la lista base; eliminados no vuelven; números viejos → número vigente.
+async function vendedoresParaApp(db) {
+  return vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db));
+}
+// Añadir / editar / eliminar vendedor o socio desde Sublichat Web (y la APK si algún día se habilita).
+async function vendedoresAccion(req, res) {
+  const user = await requireFirebaseUser(req, res);
+  if (!user) return;
+  const acc = accessFor(user);
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const op = String(body.op || 'listar').trim();
+  const db = getApp().firestore();
+  try {
+    if (op === 'listar') return res.status(200).json({ ok: true, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db, { fresco: true })) });
+    if (!acc.sublicuentas && !acc.relojes) return res.status(403).json({ ok: false, error: 'Solo Sublicuentas o Relojes pueden cambiar vendedores.' });
+    const usuario = acc.usuario || acc.role || '';
+    if (op === 'guardar') {
+      const v = await vendedoresReg.guardarVendedor(db, { nombre: body.nombre, telefono: body.telefono, nombreAnterior: body.nombreAnterior || '', usuario });
+      return res.status(200).json({ ok: true, vendedor: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
+    }
+    if (op === 'eliminar') {
+      const v = await vendedoresReg.eliminarVendedor(db, { nombre: body.nombre, usuario });
+      return res.status(200).json({ ok: true, eliminado: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
+    }
+    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 300) });
+  }
 }
 async function getConfig(req, res) {
   const user = await requireFirebaseUser(req, res);
@@ -311,9 +343,13 @@ async function getConfig(req, res) {
   // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
   // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
   try {
-    const vend = await vendedoresParaApp(getApp().firestore(), config.sellerPhones);
+    const vend = await vendedoresParaApp(getApp().firestore());
     config.sellers = vend.sellers;
-    config.sellerPhones = vend.phones;
+    // El registro manda sobre configuracion_app/android (antes ese número fijo ganaba y no cambiaba nunca).
+    config.sellerPhones = vend.sellerPhones;
+    config.sellerPhonesKnown = vend.sellerPhonesKnown;
+    config.sellerAliases = vend.sellerAliases;
+    config.sellersDetail = vend.sellersDetail;
   } catch (e) { console.error('APP_SELLERS_ERROR', e && e.message || e); }
   if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
   return res.status(200).json({ ok: true, config });
@@ -340,6 +376,8 @@ module.exports = async function mobileCore(req, res) {
   }
   if (action === 'list') return listResource(req, res);
   if (action === 'config') return getConfig(req, res);
+  if (action === 'vendedores') return vendedoresAccion(req, res);
+  if (action === 'push') return pushAccion(req, res);
   return res.status(400).json({ ok:false, error:'Acción no válida.' });
 };
-module.exports.__pruebas = { refrescarFichaTextoMovil }; // R143
+module.exports.__pruebas = { refrescarFichaTextoMovil, prepareClientForMobile }; // R143
