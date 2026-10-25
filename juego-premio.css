@@ -1,0 +1,70 @@
+/* Atrapa tu Premio · portal del cliente (Oct-2026). Fondo claro, rojo Sublicuentas, negro estructura, cian acento. */
+.jp-root,.jp-reveal,.jp-confeti{--jp-red:#E2231A;--jp-red-d:#B71914;--jp-ink:#111827;--jp-muted:#5B6B7F;--jp-cyan:#12AEE6;--jp-line:#E5EAF0;font-family:inherit}
+.jp-fab{position:fixed;right:14px;bottom:16px;z-index:900;display:flex;align-items:center;gap:9px;border:0;border-radius:999px;padding:11px 16px 11px 12px;background:var(--jp-red);color:#fff;font:inherit;font-weight:900;font-size:14px;box-shadow:0 10px 26px rgba(226,35,26,.32);cursor:pointer}
+.jp-fab b{display:grid;place-items:center;min-width:24px;height:24px;border-radius:999px;background:#fff;color:var(--jp-red);font-size:13px}
+.jp-fab.jp-sin-fichas{background:#fff;color:var(--jp-ink);border:1px solid var(--jp-line);box-shadow:0 8px 20px rgba(17,24,39,.10)}
+.jp-overlay{position:fixed;inset:0;z-index:1000;background:#fff;display:flex;flex-direction:column;overflow:auto;-webkit-overflow-scrolling:touch}
+.jp-overlay[hidden]{display:none}
+.jp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--jp-line);position:sticky;top:0;background:#fff;z-index:3}
+.jp-head h2{margin:0;font-size:17px;font-weight:900;color:var(--jp-ink);letter-spacing:.01em}
+.jp-head h2 span{color:var(--jp-red)}
+.jp-head-actions{display:flex;gap:8px}
+.jp-icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--jp-line);background:#fff;font-size:18px;cursor:pointer;display:grid;place-items:center}
+.jp-tabs{display:flex;gap:6px;padding:10px 16px 0;max-width:560px;width:100%;margin:0 auto;box-sizing:border-box}
+.jp-tabs button{flex:1;border:1px solid var(--jp-line);background:#fff;border-radius:12px;padding:10px;font:inherit;font-weight:800;font-size:13px;color:var(--jp-muted);cursor:pointer}
+.jp-tabs button[aria-selected="true"]{background:var(--jp-ink);color:#fff;border-color:var(--jp-ink)}
+.jp-body{flex:1;display:flex;flex-direction:column;align-items:center;padding:12px 16px 24px;gap:12px;max-width:560px;width:100%;margin:0 auto;box-sizing:border-box}
+.jp-stage{position:relative;width:100%;aspect-ratio:3/4;max-height:62vh;border-radius:22px;overflow:hidden;background:#F5F7FA;border:1px solid var(--jp-line)}
+.jp-stage canvas{display:block;width:100%!important;height:100%!important;touch-action:none}
+.jp-status{min-height:20px;font-size:13px;font-weight:800;color:var(--jp-muted);text-align:center}
+.jp-status.err{color:#C92C27}
+.jp-fichas{display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;font-size:13.5px;font-weight:800;color:var(--jp-ink)}
+.jp-coin{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;background:var(--jp-red);color:#fff;font-size:12px;font-weight:900;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
+.jp-coin.usada{background:#E5E7EB;color:#9CA3AF;box-shadow:none}
+.jp-play{width:min(320px,100%);min-height:58px;border:0;border-radius:18px;background:var(--jp-red);color:#fff;font:inherit;font-size:20px;font-weight:900;letter-spacing:.06em;cursor:pointer;box-shadow:0 6px 0 var(--jp-red-d)}
+.jp-play:active{transform:translateY(3px);box-shadow:0 3px 0 var(--jp-red-d)}
+.jp-play:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:0 6px 0 #9CA3AF;background:#9CA3AF}
+.jp-nota{font-size:11.5px;color:var(--jp-muted);text-align:center;line-height:1.4}
+/* Revelación */
+.jp-reveal{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;background:rgba(255,255,255,.86);padding:16px}
+.jp-reveal[hidden]{display:none}
+.jp-card{width:min(360px,100%);background:#fff;border:1px solid var(--jp-line);border-radius:24px;padding:22px 18px;text-align:center;box-shadow:0 18px 40px rgba(17,24,39,.16);animation:jpPop .45s cubic-bezier(.2,1.4,.4,1)}
+.jp-card small{display:block;color:var(--jp-red);font-weight:900;letter-spacing:.14em;font-size:12px}
+.jp-card h3{margin:6px 0 2px;font-size:30px;font-weight:900;color:var(--jp-ink)}
+.jp-card .jp-ball-big{width:96px;height:96px;margin:12px auto;border-radius:50%;background:#fff center/62% no-repeat;border:4px solid var(--jp-red);box-shadow:inset 0 -8px 0 rgba(0,0,0,.06),0 8px 18px rgba(17,24,39,.14);display:grid;place-items:center;font-weight:900;font-size:22px;color:var(--jp-red)}
+.jp-card p{margin:6px 0;color:var(--jp-muted);font-size:13.5px;line-height:1.45}
+.jp-card .jp-premio{font-size:19px;font-weight:900;color:var(--jp-ink);margin:2px 0 4px}
+.jp-card .jp-tag{display:inline-block;margin-top:2px;padding:5px 10px;border-radius:999px;background:#FDECEC;color:var(--jp-red);font-weight:900;font-size:12px}
+.jp-card .jp-btn{display:block;width:100%;margin-top:12px;min-height:48px;border-radius:14px;border:0;background:var(--jp-ink);color:#fff;font:inherit;font-weight:900;font-size:15px;cursor:pointer}
+.jp-card .jp-btn.sec{background:#fff;color:var(--jp-ink);border:1px solid var(--jp-line);margin-top:8px}
+@keyframes jpPop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+.jp-confeti{position:fixed;inset:0;pointer-events:none;z-index:1101;overflow:hidden}
+.jp-confeti i{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;animation:jpCae 1.6s ease-in forwards}
+@keyframes jpCae{to{transform:translateY(105vh) rotate(540deg);opacity:.9}}
+/* Tus premios */
+.jp-lista{width:100%;display:flex;flex-direction:column;gap:8px}
+.jp-item{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--jp-line);border-radius:16px;background:#fff}
+.jp-item .jp-mini{width:44px;height:44px;border-radius:50%;border:3px solid var(--jp-red);background:#fff center/62% no-repeat;display:grid;place-items:center;font-weight:900;font-size:12px;color:var(--jp-red)}
+.jp-item b{display:block;font-size:14px;color:var(--jp-ink)}
+.jp-item small{display:block;font-size:12px;color:var(--jp-muted);margin-top:2px;line-height:1.35}
+.jp-estado{font-size:11px;font-weight:900;padding:5px 9px;border-radius:999px;white-space:nowrap;background:#EEF2F6;color:#334155}
+.jp-estado.entregado{background:#E7F7EF;color:#12784E}
+.jp-estado.reservado,.jp-estado.pendiente_entrega,.jp-estado.ganado{background:#FFF4E5;color:#A15C00}
+.jp-estado.vencido{background:#F3F4F6;color:#9CA3AF}
+.jp-vacio{padding:26px 10px;text-align:center;color:var(--jp-muted);font-size:13.5px}
+/* Respaldo 2.5D (teléfonos lentos o "reducir movimiento") */
+.jp-25{position:absolute;inset:0;perspective:700px;background:#F5F7FA}
+.jp-25-box{position:absolute;left:8%;right:8%;top:12%;bottom:14%;border:6px solid var(--jp-ink);border-top-width:28px;border-radius:16px;background:rgba(230,246,253,.55);box-shadow:inset 0 0 0 2px rgba(18,174,230,.35),0 14px 30px rgba(17,24,39,.18);transform:rotateX(6deg);transform-origin:bottom}
+.jp-25-box::before{content:"ATRAPA TU PREMIO";position:absolute;top:-24px;left:0;right:0;text-align:center;color:#fff;font-weight:900;font-size:12px;letter-spacing:.14em;background:var(--jp-red);border-radius:8px 8px 0 0;padding:4px 0}
+.jp-25-rail{position:absolute;left:10%;right:10%;top:15%;height:6px;border-radius:3px;background:#374151}
+.jp-25-claw{position:absolute;top:15%;left:50%;width:44px;margin-left:-22px;transition:left .9s ease-in-out}
+.jp-25-cable{width:3px;height:30px;margin:0 auto;background:#374151;transition:height .8s ease-in-out}
+.jp-25-head{width:44px;height:30px;position:relative}
+.jp-25-head::before,.jp-25-head::after{content:"";position:absolute;top:4px;width:6px;height:26px;background:#111827;border-radius:3px;transition:transform .3s}
+.jp-25-head::before{left:8px;transform:rotate(18deg);transform-origin:top}
+.jp-25-head::after{right:8px;transform:rotate(-18deg);transform-origin:top}
+.jp-25-claw.cerrada .jp-25-head::before{transform:rotate(-4deg)}
+.jp-25-claw.cerrada .jp-25-head::after{transform:rotate(4deg)}
+.jp-25-ball{position:absolute;width:11%;aspect-ratio:1;border-radius:50%;background:#fff center/64% no-repeat;border:3px solid var(--jp-red);box-shadow:inset 0 -5px 0 rgba(0,0,0,.07),0 4px 8px rgba(17,24,39,.15);display:grid;place-items:center;font-weight:900;font-size:11px;color:var(--jp-red);transition:left .9s ease-in-out,top .8s ease-in-out}
+.jp-25-chute{position:absolute;left:10%;bottom:14%;width:22%;height:12%;border:4px solid var(--jp-ink);border-top:0;border-radius:0 0 10px 10px;background:#fff}
+@media (prefers-reduced-motion:reduce){.jp-25-claw,.jp-25-cable,.jp-25-ball{transition:none}.jp-card{animation:none}.jp-confeti{display:none}}

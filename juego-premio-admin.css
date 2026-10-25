@@ -1,0 +1,53 @@
+/* SUBLICHAT HQ · Atrapa tu Premio — administración. Usa los tokens del módulo Sorteos (--sr-*). Sin degradados. */
+.jpa{display:grid;gap:12px;grid-template-columns:minmax(0,1fr);min-width:0}
+.jpa>*{min-width:0}
+.jpa-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.jpa-kpis article{background:var(--sr-card);border:1px solid var(--sr-line);border-radius:16px;padding:12px 14px}
+.jpa-kpis b{display:block;font-size:22px;font-weight:900;color:var(--sr-text)}
+.jpa-kpis small{font-size:11px;font-weight:700;color:var(--sr-text-2)}
+.jpa-kpis article.warn b{color:var(--sr-warn)}
+.jpa-card{background:var(--sr-card);border:1px solid var(--sr-line);border-radius:18px;padding:14px}
+.jpa-card h4{margin:0 0 10px;font-size:14px;display:flex;gap:8px;align-items:center;color:var(--sr-text)}
+.jpa-card h4 span{font-size:11px;background:var(--sr-accent-soft);color:var(--sr-accent);border-radius:999px;padding:2px 8px}
+.jpa-card h4 em{font-style:normal;font-size:11px;color:var(--sr-text-2);font-weight:700}
+.jpa-list{display:grid;gap:8px}
+.jpa-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--sr-line);border-radius:14px;background:var(--sr-surface)}
+.jpa-row b{font-size:13px;color:var(--sr-text)}
+.jpa-row small{display:block;font-size:11px;color:var(--sr-text-2);margin-top:2px;line-height:1.35}
+.jpa-acciones{display:flex;gap:6px;flex-wrap:wrap}
+.jpa-estado{font-size:10.5px;font-weight:900;padding:4px 9px;border-radius:999px;white-space:nowrap;background:var(--sr-warn-soft);color:var(--sr-warn)}
+.jpa-estado.entregado{background:var(--sr-good-soft);color:var(--sr-good)}
+.jpa-fichas{font-weight:900;font-size:13px;color:var(--sr-text)}
+.jpa-reglas{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.jpa-reglas label{display:grid;gap:4px;font-size:11px;font-weight:800;color:var(--sr-text-2)}
+.jpa-reglas input{width:130px}
+.jpa input[type=number],.jpa select,.jpa-dar input,.jpa-dar select{border:1px solid var(--sr-line);border-radius:10px;padding:8px 9px;background:var(--sr-surface);color:var(--sr-text);font:inherit;font-size:12.5px;box-sizing:border-box}
+.jpa-tabla-wrap{overflow-x:auto}
+.jpa-tabla{width:100%;border-collapse:collapse;font-size:12.5px;min-width:720px}
+.jpa-tabla th{text-align:left;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--sr-text-2);padding:6px 6px;border-bottom:1px solid var(--sr-line)}
+.jpa-tabla td{padding:7px 6px;border-bottom:1px solid var(--sr-line);vertical-align:middle;color:var(--sr-text)}
+.jpa-tabla td small{display:block;font-size:10.5px;color:var(--sr-text-2)}
+.jpa-tabla input[type=number]{width:74px}
+.jpa-tier{font-size:10.5px;font-weight:900;padding:3px 8px;border-radius:999px;background:var(--sr-line);color:var(--sr-text)}
+.jpa-tier.medio{background:var(--sr-accent-soft);color:var(--sr-accent)}
+.jpa-tier.premium{background:#FDECEC;color:#C92C27}
+.jpa-nota{font-size:11px;color:var(--sr-text-2);margin:8px 0 0;line-height:1.45}
+.jpa-switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--sr-text);cursor:pointer}
+.jpa-switch input{position:absolute;opacity:0;pointer-events:none}
+.jpa-switch span{width:38px;height:22px;border-radius:999px;background:var(--sr-line);position:relative;transition:background .2s}
+.jpa-switch span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.jpa-switch.on span{background:var(--sr-good)}
+.jpa-switch.on span::after{left:19px}
+.jpa-ren{display:grid;gap:3px;padding:10px 12px;border-radius:14px;background:var(--sr-accent-soft);margin-bottom:10px}
+.jpa-ren b{font-size:14px;color:var(--sr-text)}.jpa-ren span{font-size:12px;color:var(--sr-text-2)}
+.jpa-num{display:flex;gap:8px;margin-top:4px}
+.jpa-num button{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--sr-line);background:var(--sr-surface);color:var(--sr-text);font-weight:900;font-size:16px;cursor:pointer}
+.jpa-num button.on{background:var(--sr-accent);border-color:var(--sr-accent);color:var(--sr-on-accent)}
+.jpa-resultados{display:grid;gap:6px;max-height:220px;overflow:auto;margin:6px 0 4px}
+.jpa-resultados button{text-align:left;border:1px solid var(--sr-line);background:var(--sr-surface);border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--sr-text)}
+.jpa-resultados button.on{border-color:var(--sr-accent);box-shadow:0 0 0 2px var(--sr-accent-soft)}
+.jpa-resultados b{display:block;font-size:13px}.jpa-resultados small{font-size:11px;color:var(--sr-text-2)}
+.jpa-dar .sr-field{display:grid;gap:4px;margin-bottom:10px;font-size:12px;font-weight:800;color:var(--sr-text-2)}
+.jpa-dar .sr-field small{font-weight:600}
+.jpa-msg{margin-right:auto;font-size:11.5px;font-weight:800;color:#C92C27}
+@media (max-width:720px){.jpa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.jpa-row{grid-template-columns:minmax(0,1fr) auto}.jpa-acciones{grid-column:1/-1}}

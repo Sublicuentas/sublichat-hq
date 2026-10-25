@@ -123,6 +123,7 @@
               <button type="button" class="sr-tab on" data-sr-tab="sorteos">🎟️ Sorteos</button>
               <button type="button" class="sr-tab" data-sr-tab="premios">🎁 Premios digitales</button>
               <button type="button" class="sr-tab" data-sr-tab="ganadores">🏆 Ganadores</button>
+              <button type="button" class="sr-tab" data-sr-tab="juego">🎮 Atrapa tu Premio</button>
             </nav>
             <section id="srBody"><div class="sr-empty">Cargando sorteos…</div></section>
             <div class="sr-status" id="srStatus" aria-live="polite"></div>
@@ -187,6 +188,10 @@
     renderQuickSpin();
     if(state.tab==='premios')renderPrizes();
     else if(state.tab==='ganadores')renderWinners();
+    else if(state.tab==='juego'){ // Oct-2026 · minijuego del portal (juego-premio-admin.js)
+      if(window.SublichatJuegoAdmin)window.SublichatJuegoAdmin.render(byId('srBody'),{status});
+      else{const body=byId('srBody');if(body)body.innerHTML='<div class="sr-empty">Falta cargar juego-premio-admin.js.</div>';}
+    }
     else renderDraws();
   }
 

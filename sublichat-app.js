@@ -3452,6 +3452,10 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
     await load({forceServer:true});
     confirmadas.forEach(x=>aplicarRenovacionLocal(g,x.servicio,x.resultado));
     render();
+    // Oct-2026 · Atrapa tu Premio: con pago confirmado se ofrece dar fichas (sugeridas por meses; 1 renovación = 1 lote).
+    if(pagoOp?.modo==="pago"&&["sublicuentas","naara","relojes","libni"].includes(pagoOpUsuario())&&window.SublichatJuegoAdmin){
+      try{window.SublichatJuegoAdmin.ofrecerTrasRenovar({g,confirmadas,duracion,pagoOperacionId:pagoOpId});}catch(e){console.warn("Atrapa tu Premio:",e);}
+    }
   }else if(ok&&fail){
     hint.textContent=`⚠️ Renovó ${ok} pero falló ${fail}: ${errores.join(" · ")}`;
     mostrarToast(`⚠️ ${g.nombre}: ${ok} renovado, ${fail} falló — revise el detalle`);
