@@ -62,6 +62,7 @@ async function preparar(page, db, { kind = 'admin', actor = 'sublicuentas' } = {
       if (b.accion === 'juego_guardar_config') { soloAdmin(); return ok({ config: await J.guardarConfig(db, b.config, { actor }) }); }
       if (b.accion === 'juego_guardar_premio') { soloAdmin(); return ok({ premio: await J.guardarPremio(db, b.premio, { actor }) }); }
       if (b.accion === 'juego_dar_fichas') return ok({ lote: await J.otorgarFichas(db, { ...b, actor }) });
+      if (b.accion === 'juego_anular') { soloAdmin(); return ok(await J.anularLote(db, b.loteId, { actor, motivo: b.motivo })); }
       if (b.accion === 'juego_entregar') return ok({ ganado: b.modo === 'reintentar' ? await J.entregarAutomatico(db, b.id, { actor }) : await J.marcarEntregado(db, b.id, { actor, nota: b.nota }) });
       return r.fulfill({ status: 400, json: { ok: false, error: 'acción' } });
     } catch (e) { return r.fulfill({ status: e.status || 400, json: { ok: false, error: e.message } }); }
@@ -170,6 +171,27 @@ await caso('Después de renovar con pago: modal con fichas sugeridas por meses; 
     confirmadas: [{ servicio: { compraId: 'm1' }, resultado: { compraId: 'm1', fechaAnterior: '10/11/2026', fechaNueva: '11/12/2026' } }] }));
   assert.equal(await page.textContent('#jpaNum .on'), '1 ★');
   await page.click('#jpaNo'); await page.close();
+});
+
+await caso('Anular lote de prueba: botón Anular (solo Sublicuentas) → desaparece del portal y queda auditado', async () => {
+  const db = nuevaDb(); await J.sembrarPremios(db);
+  const { loteId } = await J.otorgarFichas(db, { clienteId: 'c1', fichas: 2, origen: 'promocion', requestId: 'prueba', motivo: 'prueba', actor: 'sublicuentas' });
+  await J.jugar(db, { clienteId: 'c1', fichaId: `${loteId}_1` });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+  page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? 'prueba del dueño' : undefined));
+  await preparar(page, db);
+  await page.goto(BASE); await page.waitForSelector('[data-jpa-anular]');
+  await page.click('[data-jpa-anular]');
+  await page.waitForSelector('.jpa-estado.anulado');
+  await page.screenshot({ path: `${OUT}/14-admin-anulado.png`, fullPage: true });
+  const est = await J.estadoCliente(db, { clienteId: 'c1' });
+  assert.equal(est.historial.length, 0); assert.equal(est.disponibles, 0);
+  assert.equal((await db.collection('juego_lotes').doc(loteId).get()).data().motivoAnulacion, 'prueba del dueño');
+  await page.close();
+  const p2 = await browser.newPage(); await preparar(p2, db, { kind: 'relojes', actor: 'relojes' });
+  await J.otorgarFichas(db, { clienteId: 'c2', fichas: 1, origen: 'promocion', requestId: 'r2', motivo: 'promo', actor: 'relojes' });
+  await p2.goto(BASE); await p2.waitForSelector('.jpa-tabla'); assert.equal(await p2.$('[data-jpa-anular]'), null, 'Relojes no anula');
+  await p2.close();
 });
 
 await browser.close(); server.close();
