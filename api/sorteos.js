@@ -5,6 +5,7 @@ import {
   sorteoVendorElegible, sorteoVendorGroup
 } from "./_sorteos-lib.js";
 import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
+import * as juego from "./_juego-premios.js"; // Oct-2026 · "Atrapa tu Premio" (minijuego separado del sorteo mensual)
 
 const PREMIOS_COLLECTION = "premios_digitales";
 const SORTEOS_COLLECTION = "sorteos";
@@ -1466,6 +1467,59 @@ async function markDelivered(db, editor, body) {
   return { ok: true, id: entregaId, estado: "entregado" };
 }
 
+/* ===== Oct-2026 · Atrapa tu Premio =====
+   Público (enlace /c/… del cliente): juego_estado, juego_jugar.
+   Admin (Sublicuentas/Relojes): juego_cargar, juego_dar_fichas, juego_entregar; config y premios solo Sublicuentas.
+   Las fichas NO tocan sorteo_boletos (boleto mensual). */
+function juegoBeneficiario(cliente = {}, enlace = {}) {
+  const saved = sorteoClean(enlace.beneficiarioKey || "", 160);
+  if (saved) return saved;
+  if (enlace.tipo === "beneficiario") return "titular";
+  const servicios = publicPointerServices(cliente, enlace);
+  return servicios.length === 1 ? serviceBeneficiaryKey(servicios[0]) : "titular";
+}
+const juegoIntentos = new Map();
+function juegoRateLimit(key, max = 12, ventanaMs = 60000) {
+  const now = Date.now(), lista = (juegoIntentos.get(key) || []).filter(t => now - t < ventanaMs);
+  if (lista.length >= max) throw Object.assign(new Error("Demasiados intentos. Espere un momento."), { status: 429 });
+  lista.push(now); juegoIntentos.set(key, lista);
+}
+function clientIp(req) { return sorteoClean(String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0], 60); }
+async function juegoPublico(db, req, action, body) {
+  const { token, clientId, cliente, enlace } = await resolvePublicClient(db, body.token);
+  const beneficiarioKey = juegoBeneficiario(cliente, enlace);
+  if (action === "juego_estado") return { ok: true, ...(await juego.estadoCliente(db, { clienteId: clientId, beneficiarioKey })) };
+  juegoRateLimit(`${token}|${clientIp(req)}`);
+  await juego.sembrarPremios(db);
+  const r = await juego.jugar(db, { clienteId: clientId, beneficiarioKey, fichaId: body.fichaId, ip: clientIp(req) });
+  const g = r.ganado || {};
+  // Solo lo que el navegador necesita para animar y mostrar (sin costo, pesos ni IP).
+  const estado = await juego.estadoCliente(db, { clienteId: clientId, beneficiarioKey });
+  return { ok: true, repetido: r.repetido, ganado: g.id ? { id: g.id, premio: g.premio, estado: g.estado, expiraAt: g.expiraAt || "", entrega: g.entrega ? { fechaNueva: g.entrega.fechaNueva || "", plataforma: g.entrega.plataforma || "", dias: g.entrega.dias || 0 } : null } : null, disponibles: estado.disponibles, fichas: estado.fichas, historial: estado.historial };
+}
+async function juegoAdmin(db, editor, action, body) {
+  const actor = editor.actor || editor.kind;
+  const soloAdmin = () => { if (editor.kind !== "admin") throw Object.assign(new Error("Solo Sublicuentas puede cambiar la configuración del juego."), { status: 403 }); };
+  if (action === "juego_cargar") { await juego.sembrarPremios(db); return { ok: true, ...(await juego.cargarAdmin(db)), permisos: { config: editor.kind === "admin" } }; }
+  if (action === "juego_guardar_config") { soloAdmin(); return { ok: true, config: await juego.guardarConfig(db, body.config || {}, { actor }) }; }
+  if (action === "juego_guardar_premio") { soloAdmin(); return { ok: true, premio: await juego.guardarPremio(db, body.premio || {}, { actor }) }; }
+  if (action === "juego_dar_fichas") {
+    const lote = await juego.otorgarFichas(db, {
+      clienteId: body.clienteId, beneficiarioKey: body.beneficiarioKey || "titular", fichas: body.fichas, origen: body.origen,
+      motivo: body.motivo, renovacion: body.renovacion || null, requestId: body.requestId, actor,
+      permisoEspecial: editor.kind === "admin" && body.permisoEspecial === true,
+    });
+    return { ok: true, lote };
+  }
+  if (action === "juego_entregar") {
+    const ganado = body.modo === "reintentar"
+      ? await juego.entregarAutomatico(db, sorteoClean(body.id, 160), { actor })
+      : await juego.marcarEntregado(db, body.id, { actor, nota: body.nota });
+    return { ok: true, ganado };
+  }
+  throw Object.assign(new Error("Acción no válida."), { status: 400 });
+}
+
 export default async function handler(req, res) {
   setHeaders(res);
   if (req.method === "OPTIONS") return res.status(200).json({ ok: true });
@@ -1475,12 +1529,14 @@ export default async function handler(req, res) {
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido." });
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const action = sorteoNorm(body.accion || "cargar");
+    if (action === "juego_estado" || action === "juego_jugar") return res.status(200).json(await juegoPublico(db, req, action, body));
     if (action === "elegir_premio") {
       const result = await choosePrize(db, body);
       return res.status(200).json({ ok: true, eleccion: result });
     }
     const editor = await requireEditor(req, res);
     if (!editor) return;
+    if (action.startsWith("juego_")) return res.status(200).json(await juegoAdmin(db, editor, action, body));
     if (action === "cargar") return res.status(200).json(await adminLoad(db, editor));
     if (action === "guardar_premio") return res.status(200).json(await savePrize(db, editor, body));
     if (action === "preparar_club_vip") return res.status(200).json(await prepareClubVip(db, editor));
