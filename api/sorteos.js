@@ -1511,6 +1511,7 @@ async function juegoAdmin(db, editor, action, body) {
     });
     return { ok: true, lote };
   }
+  if (action === "juego_anular") { soloAdmin(); return { ok: true, ...(await juego.anularLote(db, body.loteId, { actor, motivo: body.motivo })) }; }
   if (action === "juego_entregar") {
     const ganado = body.modo === "reintentar"
       ? await juego.entregarAutomatico(db, sorteoClean(body.id, 160), { actor })

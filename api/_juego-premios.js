@@ -21,7 +21,7 @@ export const TIERS = Object.freeze(["comun", "medio", "premium"]);
 export const TIPOS = Object.freeze(["saldo", "descuento", "dias", "mes_gratis"]);
 export const MODOS_INVENTARIO = Object.freeze(["ilimitado", "stock", "bodega"]);
 export const ORIGENES = Object.freeze(["renovacion", "fidelidad", "promocion", "compensacion"]);
-export const ESTADOS = Object.freeze(["ganado", "reservado", "pendiente_entrega", "entregado", "vencido"]);
+export const ESTADOS = Object.freeze(["ganado", "reservado", "pendiente_entrega", "entregado", "vencido", "anulado"]);
 
 // Valores iniciales del PDF (sección 6). Son editables desde administración; no son constantes fijas.
 export const PREMIOS_INICIALES = Object.freeze([
@@ -284,6 +284,7 @@ export async function jugar(db, { clienteId, beneficiarioKey = "titular", fichaI
     if (!fichaSnap.exists) throw ERR("Esa ficha no existe.", 404);
     const ficha = fichaSnap.data() || {};
     if (ficha.clienteId !== clienteId || (ficha.beneficiarioKey || "titular") !== (beneficiarioKey || "titular")) throw ERR("Esa ficha no es suya.", 403);
+    if (ficha.estado === "anulada") throw ERR("Esa ficha fue anulada.", 409);
     if (ficha.estado !== "disponible") {                                                            // 3 ya usada → mismo resultado
       const g = await tx.get(ganadoRef);
       salida = { repetido: true, ganado: g.exists ? { id: g.id, ...(g.data() || {}) } : null };
@@ -415,6 +416,56 @@ export async function vencerPremios(db, { ahora = new Date() } = {}) {
   return vencidos;
 }
 
+// Admin (solo Sublicuentas): ANULAR un lote dado por error o de prueba. No borra nada (queda auditado):
+// fichas → "anulada", premios → "anulado" (desaparecen del portal), libera cupo de Bodega y devuelve stock.
+// Si un premio automático ya sumó días a un servicio, NO se resta solo: se avisa para corregir la fecha a mano.
+export async function anularLote(db, loteId, { actor = "", motivo = "", ahora = new Date() } = {}) {
+  const lid = clean(loteId, 160);
+  if (!lid) throw ERR("Falta el lote.");
+  if (clean(motivo, 300).length < 4) throw ERR("Escriba el motivo de la anulación.");
+  const loteRef = db.collection(COL.lotes).doc(lid);
+  let out;
+  await db.runTransaction(async (tx) => {
+    const lSnap = await tx.get(loteRef);
+    if (!lSnap.exists) throw ERR("Lote no encontrado.", 404);
+    const lote = lSnap.data() || {};
+    if (lote.estado === "anulado") { out = { loteId: lid, yaAnulado: true, avisos: [] }; return; }
+    const n = Math.max(0, Math.floor(num(lote.fichas)));
+    const fRefs = [], gRefs = [];
+    for (let i = 1; i <= n; i++) { fRefs.push(db.collection(COL.fichas).doc(`${lid}_${i}`)); gRefs.push(db.collection(COL.ganados).doc(`${lid}_${i}`)); }
+    const fSnaps = []; for (const r of fRefs) fSnaps.push(await tx.get(r));
+    const gSnaps = []; for (const r of gRefs) gSnaps.push(await tx.get(r));
+    // Lecturas extra (reservas y stock) antes de cualquier escritura
+    const reservas = {}, stock = {};
+    for (const g of gSnaps) {
+      if (!g.exists) continue; const x = g.data() || {};
+      if (["entregado", "anulado", "vencido"].includes(x.estado)) continue;
+      if (x.reservaBodega && !(x.reservaBodega in reservas)) { const r = await tx.get(db.collection(COL.reservas).doc(x.reservaBodega)); reservas[x.reservaBodega] = num(r.exists ? (r.data() || {}).reservados : 0); }
+      if (x.premioId && !(x.premioId in stock)) { const p = await tx.get(db.collection(COL.premios).doc(x.premioId)); stock[x.premioId] = p.exists ? (p.data() || {}) : null; }
+    }
+    const avisos = [], cuando = ahora.toISOString(), quien = clean(actor, 60), porque = clean(motivo, 300);
+    gSnaps.forEach((g) => {
+      if (!g.exists) return; const x = g.data() || {};
+      if (x.estado === "anulado") return;
+      if (x.estado === "entregado" && x.entregaModo === "automatica" && x.entrega?.fechaNueva)
+        avisos.push(`${x.premio?.nombre || x.premioId}: ya se sumó a ${x.entrega.plataforma || "su servicio"} (quedó en ${x.entrega.fechaNueva}). Corrija esa fecha a mano si no corresponde.`);
+      else if (x.estado === "entregado") avisos.push(`${x.premio?.nombre || x.premioId}: ya estaba marcado como entregado.`);
+      if (!["entregado", "vencido"].includes(x.estado)) {
+        if (x.reservaBodega) reservas[x.reservaBodega] = Math.max(0, reservas[x.reservaBodega] - 1);
+        const pr = stock[x.premioId]; if (pr && pr.inventarioModo === "stock") pr.stock = num(pr.stock) + 1;
+      }
+      tx.update(g.ref || db.collection(COL.ganados).doc(g.id), { estado: "anulado", estadoAnterior: x.estado, anuladoAt: cuando, anuladoPor: quien, motivoAnulacion: porque, reservaBodega: "" });
+    });
+    for (const [plat, val] of Object.entries(reservas)) tx.set(db.collection(COL.reservas).doc(plat), { plataforma: plat, reservados: val, updatedAt: cuando });
+    for (const [pid, pr] of Object.entries(stock)) if (pr && pr.inventarioModo === "stock") tx.set(db.collection(COL.premios).doc(pid), pr);
+    fSnaps.forEach((f) => { if (f.exists && (f.data() || {}).estado !== "anulada") tx.update(f.ref || db.collection(COL.fichas).doc(f.id), { estado: "anulada", estadoAnterior: (f.data() || {}).estado, anuladaAt: cuando }); });
+    tx.update(loteRef, { estado: "anulado", anuladoAt: cuando, anuladoPor: quien, motivoAnulacion: porque });
+    tx.set(db.collection("auditoria_eventos").doc(), { tipo: "juego_lote_anulado", modulo: "juego", loteId: lid, clienteId: lote.clienteId, motivo: porque, avisos, usuario: quien, createdAt: cuando });
+    out = { loteId: lid, yaAnulado: false, avisos };
+  });
+  return out;
+}
+
 // Vista del cliente (portal): fichas, premios visibles en la máquina e historial. Sin datos internos.
 export async function estadoCliente(db, { clienteId, beneficiarioKey = "titular" } = {}) {
   const config = await leerConfig(db);
@@ -424,8 +475,8 @@ export async function estadoCliente(db, { clienteId, beneficiarioKey = "titular"
     leerPremios(db),
   ]);
   const bk = beneficiarioKey || "titular";
-  const fichas = []; fichasSnap.forEach((d) => { const x = d.data() || {}; if ((x.beneficiarioKey || "titular") === bk) fichas.push({ id: d.id, estado: x.estado, n: x.n, loteId: x.loteId, createdAt: x.createdAt || "" }); });
-  const historial = []; ganadosSnap.forEach((d) => { const x = d.data() || {}; if ((x.beneficiarioKey || "titular") !== bk) return;
+  const fichas = []; fichasSnap.forEach((d) => { const x = d.data() || {}; if ((x.beneficiarioKey || "titular") === bk && x.estado !== "anulada") fichas.push({ id: d.id, estado: x.estado, n: x.n, loteId: x.loteId, createdAt: x.createdAt || "" }); });
+  const historial = []; ganadosSnap.forEach((d) => { const x = d.data() || {}; if ((x.beneficiarioKey || "titular") !== bk || x.estado === "anulado") return;
     const vencido = ["reservado", "pendiente_entrega"].includes(x.estado) && x.expiraAt && Date.parse(x.expiraAt) < Date.now();
     historial.push({ id: d.id, premio: x.premio, estado: vencido ? "vencido" : x.estado, ganadoAt: x.ganadoAt, expiraAt: x.expiraAt || "", entregadoAt: x.entregadoAt || "",
       entrega: x.entrega ? { fechaNueva: x.entrega.fechaNueva || "", plataforma: x.entrega.plataforma || "", dias: x.entrega.dias || 0 } : null }); });
@@ -458,7 +509,7 @@ export async function cargarAdmin(db, { ahora = new Date() } = {}) {
       fichasActivas,
       pendientes: ganados.filter((g) => ["ganado", "reservado", "pendiente_entrega"].includes(g.estado)).length,
       premiumEntregadosMes: delMes.filter((g) => g.tier === "premium" && g.estado === "entregado").length,
-      costoMes: delMes.filter((g) => g.estado !== "vencido").reduce((t, g) => t + num(g.costoHnl), 0),
+      costoMes: delMes.filter((g) => g.estado !== "vencido" && g.estado !== "anulado").reduce((t, g) => t + num(g.costoHnl), 0),
     },
     lotes: lotes.slice(0, 80), ganados: ganados.slice(0, 150),
   };
