@@ -162,3 +162,30 @@ test('API: acciones públicas por enlace y de administración conectadas en api/
   assert.match(s, /if \(action\.startsWith\("juego_"\)\) return res\.status\(200\)\.json\(await juegoAdmin/);
   assert.ok(s.indexOf('juego_jugar') < s.indexOf('const editor = await requireEditor'), 'jugar no exige sesión de Sublichat (usa el enlace del cliente)');
 });
+
+test('anular lote de prueba: desaparece del portal, libera cupo y stock, avisa días ya sumados, queda auditado', async () => {
+  const db = base();
+  await J.sembrarPremios(db);
+  // Solo Max (bodega, nuevo → reservado) y +5 días (automático) activos
+  for (const p of J.PREMIOS_INICIALES) if (!['max', 'dias5', 'canva'].includes(p.id)) await J.guardarPremio(db, { ...p, activo: false });
+  const { loteId } = await J.otorgarFichas(db, { clienteId: 'c1', fichas: 3, origen: 'promocion', requestId: 'prueba-1', motivo: 'prueba', actor: 'sublicuentas' });
+  for (let i = 1; i <= 2; i++) await J.jugar(db, { clienteId: 'c1', fichaId: `${loteId}_${i}` });
+  const antes = await J.estadoCliente(db, { clienteId: 'c1' });
+  assert.equal(antes.historial.length, 2); assert.equal(antes.disponibles, 1);
+  const stockAntes = (await db.collection('juego_premios').doc('canva').get()).data().stock;
+  const ganados = (await db.collection('juego_ganados').get()).docs.map((d) => d.data());
+  await assert.rejects(J.anularLote(db, loteId, { actor: 'sublicuentas', motivo: '' }), /motivo/);
+  const r = await J.anularLote(db, loteId, { actor: 'sublicuentas', motivo: 'prueba del dueño' });
+  const despues = await J.estadoCliente(db, { clienteId: 'c1' });
+  assert.equal(despues.historial.length, 0); assert.equal(despues.disponibles, 0); assert.equal(despues.fichas.length, 0);
+  if (ganados.some((g) => g.premioId === 'max')) assert.equal((await db.collection('juego_reservas').doc('hbomax').get()).data().reservados, 0);
+  if (ganados.some((g) => g.premioId === 'canva' && g.estado !== 'entregado')) assert.equal((await db.collection('juego_premios').doc('canva').get()).data().stock, stockAntes + 1);
+  if (ganados.some((g) => g.premioId === 'dias5')) assert.match(r.avisos.join(' '), /Corrija esa fecha/);
+  const lote = (await db.collection('juego_lotes').doc(loteId).get()).data();
+  assert.equal(lote.estado, 'anulado'); assert.equal(lote.anuladoPor, 'sublicuentas');
+  const audit = (await db.collection('auditoria_eventos').get()).docs.map((d) => d.data()).filter((x) => x.tipo === 'juego_lote_anulado');
+  assert.equal(audit.length, 1);
+  assert.equal((await J.anularLote(db, loteId, { actor: 'x', motivo: 'otra vez' })).yaAnulado, true);
+  await assert.rejects(J.jugar(db, { clienteId: 'c1', fichaId: `${loteId}_3` }));
+  assert.equal((await db.collection('sorteo_boletos').doc('b1').get()).data().activo, true, 'boleto mensual intacto');
+});
