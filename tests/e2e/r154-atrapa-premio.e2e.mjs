@@ -1,6 +1,6 @@
 // R154 · e2e "Atrapa tu Premio" en el portal del cliente (Playwright, Chromium).
 // Sirve acceso.html localmente y responde /api/sorteos con el MOTOR REAL (api/_juego-premios.js) sobre Firestore simulado.
-// Uso: node tests/e2e/r154-atrapa-premio.e2e.mjs   (THREE_MODULE=/ruta/three.module.js para no depender del CDN)
+// Uso: node tests/e2e/r154-atrapa-premio.e2e.mjs   (three.js se sirve desde /vendor del repo)
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -14,7 +14,6 @@ const { chromium } = createRequire(import.meta.url)('playwright'); // instalado 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = process.env.E2E_OUT || path.join(root, 'tests/e2e/capturas');
 fs.mkdirSync(OUT, { recursive: true });
-const THREE = process.env.THREE_MODULE || '';
 const HOY = J.hoyDMY();
 
 function nuevaDb() {
@@ -41,7 +40,7 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 
 async function preparar(page, db, { fallaJugar = false, demora = 0 } = {}) {
   const llamadas = [];
-  if (THREE) await page.route('**/three@0.160.0/build/three.module.js', (r) => r.fulfill({ path: THREE, contentType: 'text/javascript' }));
+  await page.route('**/cdn.jsdelivr.net/**', (r) => r.abort()); // debe cargar three.js local (/vendor), no del CDN
   await page.route('**/api/portal-cliente**', (r) => r.fulfill({ json: { ok: false } }));
   await page.route('**/api/sorteos**', async (r) => {
     if (r.request().method() !== 'POST') return r.fulfill({ json: { ok: true, habilitado: false } });
@@ -89,8 +88,20 @@ await caso('Móvil 3D (jp3d=1 fuerza 3D; el contenedor de pruebas tiene 2 CPU): 
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}/02-movil-maquina-${motor}.png` });
   await page.evaluate(() => { const b = document.querySelector('.jp-play'); b.click(); b.click(); b.click(); }); // triple toque
-  await page.waitForTimeout(2600);
-  await page.screenshot({ path: `${OUT}/03-movil-animando.png` });
+  // Palanca: arrastrar a la derecha y arriba; la garra se mueve y marca una cápsula
+  await page.waitForSelector('.jp-mando:not([hidden])');
+  const x0 = await page.evaluate(() => window.__atrapaTuPremio.estado().motor && 1);
+  const caja = await page.locator('.jp-palanca').boundingBox();
+  const cx = caja.x + caja.width / 2, cy = caja.y + caja.height / 2;
+  await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx + 40, cy - 30, { steps: 5 });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${OUT}/03-movil-palanca.png` });
+  await page.mouse.up(); assert.ok(x0);
+  await page.click('.jp-soltar');
+  await page.waitForTimeout(2400);
+  await page.screenshot({ path: `${OUT}/03b-movil-agarrando.png` });
+  await page.waitForTimeout(2300);
+  await page.screenshot({ path: `${OUT}/03c-movil-capsula-abierta.png` });
   await page.waitForSelector('.jp-reveal', { timeout: 15000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/04-movil-revelacion.png` });
