@@ -20,11 +20,14 @@ const PAGINA = `<!doctype html><html><head><meta charset="utf-8"><meta name="vie
 <style>body{margin:0;background:#F4F6F9;font-family:Inter,Arial,sans-serif}.sr-admin{padding:14px}</style></head>
 <body><div class="sr-admin"><section id="srBody"></section><div class="sr-status" id="srStatus"></div></div>
 <script>
-let DATA=[
+// Igual que sublichat-app.js (módulo): DATA no es global; se lee por window.__sublichatClientes
+const __D=[
  {clienteId:'c1',nombre:'Ana López',telefono:'+504 9999-1111',plataforma:'Spotify',beneficiarioKey:'titular',beneficiarioTipo:'titular',compraId:'k1'},
  {clienteId:'c1',nombre:'Ana López',telefono:'+504 9999-1111',plataforma:'LatinTV',beneficiarioKey:'titular',beneficiarioTipo:'titular',compraId:'k2'},
- {clienteId:'c2',nombre:'Carlos Mejía',telefono:'+1 305 555 0101',plataforma:'Max',beneficiarioKey:'titular',beneficiarioTipo:'titular',compraId:'m1'}];
-window.toasts=[];function mostrarToast(t){window.toasts.push(t);}
+ {clienteId:'c2',nombre:'Carlos Mejía',telefono:'+1 305 555 0101',plataforma:'Max',beneficiarioKey:'titular',beneficiarioTipo:'titular',compraId:'m1'},
+ {clienteId:'c2',nombre:'Carlos Mejía',telefono:'+1 305 555 0101',plataforma:'Spotify',beneficiarioKey:'tercero-heber',beneficiarioTipo:'tercero',beneficiarioNombre:'Héber Díaz',compraId:'m2'}];
+Object.defineProperty(window,'__sublichatClientes',{get:()=>__D});
+window.toasts=[];window.mostrarToast=t=>window.toasts.push(t);
 </script><script src="/juego-premio-admin.js"></script>
 <script>const st=(m,t)=>{const e=document.getElementById('srStatus');e.textContent=m;e.className='sr-status '+(t||'');};
 window.SublichatJuegoAdmin.render(document.getElementById('srBody'),{status:st});</script></body></html>`;
@@ -81,7 +84,10 @@ await caso('Admin web: KPIs, tabla de premios, dar fichas manuales (motivo oblig
   assert.equal(await page.locator('.jpa-tabla tbody tr').count(), 11);
   assert.doesNotMatch(await page.textContent('.jpa-tabla'), /netflix/i);
   await page.screenshot({ path: `${OUT}/10-admin-web.png`, fullPage: true });
-  await page.click('#jpaDar'); await page.fill('#jpaBuscar', 'ana');
+  await page.click('#jpaDar'); await page.fill('#jpaBuscar', 'heber');
+  assert.match(await page.textContent('#jpaRes'), /Héber Díaz \(de Carlos Mejía\)/, 'busca beneficiario sin tilde');
+  await page.fill('#jpaBuscar', '9999'); assert.match(await page.textContent('#jpaRes'), /Ana López/, 'busca por teléfono');
+  await page.fill('#jpaBuscar', 'ana');
   await page.click('#jpaRes [data-i="0"]'); await page.click('#jpaNum [data-n="3"]');
   await page.click('#jpaSi'); assert.match(await page.textContent('#jpaMsg'), /motivo/);
   await page.selectOption('#jpaOrigen', 'compensacion'); await page.fill('#jpaMotivo', 'Error en entrega del 20/10');
