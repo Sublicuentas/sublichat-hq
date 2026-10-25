@@ -87,7 +87,9 @@
         ${(d.lotes||[]).length?`<div class="jpa-list">${d.lotes.slice(0,30).map(l=>`<article class="jpa-row">
           <div><b>${esc(l.clienteNombre||l.clienteId)}</b><small>${esc(ORIGEN[l.origen]||l.origen)} · ${esc(l.motivo||'')}${l.renovacion?.meses?` · ${l.renovacion.meses} mes(es) → sugerido ${l.fichasSugeridas}`:''}</small>
           <small>Dio: ${esc(l.otorgadoPor||'—')} · ${fecha(l.otorgadoAt)} · ${(l.premiosGanados||[]).length?`ganó: ${esc((l.premiosGanados||[]).join(', '))} · ${L(l.costoTotal)}`:'sin jugar'}</small></div>
-          <span class="jpa-fichas">${Number(l.fichasUsadas)||0}/${Number(l.fichas)||0}</span></article>`).join('')}</div>`:'<div class="sr-empty">Todavía no se han dado fichas.</div>'}
+          ${l.estado==='anulado'?`<small>❌ Anulado por ${esc(l.anuladoPor||'—')} · ${fecha(l.anuladoAt)} · ${esc(l.motivoAnulacion||'')}</small>`:''}</div>
+          <span class="jpa-fichas">${l.estado==='anulado'?'<span class="jpa-estado anulado">Anulado</span>':`${Number(l.fichasUsadas)||0}/${Number(l.fichas)||0}`}</span>
+          ${admin&&l.estado!=='anulado'?`<div class="jpa-acciones"><button type="button" class="sr-btn danger" data-jpa-anular="${esc(l.id)}" title="Para fichas de prueba o dadas por error">Anular</button></div>`:''}</article>`).join('')}</div>`:'<div class="sr-empty">Todavía no se han dado fichas.</div>'}
       </section></div>`;
     const q=s=>body.querySelector(s);
     q('#jpaRef').onclick=async()=>{S.data=null;await render(body,{status:S.status});};
@@ -100,6 +102,7 @@
     q('#jpaGuardarCfg')?.addEventListener('click',()=>guardarCfg({...cfg,maxPremiumPorLote:Number(q('#jpaMaxPrem').value),topeCostoLote:Number(q('#jpaTope').value),diasReclamo:Number(q('#jpaDias').value)}));
     body.querySelectorAll('[data-jpa-premio] [data-f="inventarioModo"]').forEach(sel=>sel.addEventListener('change',()=>{const st=sel.closest('tr').querySelector('[data-f="stock"]');st.disabled=sel.value!=='stock';}));
     body.querySelectorAll('[data-jpa-gp]').forEach(b=>b.addEventListener('click',()=>guardarPremio(b.dataset.jpaGp,b)));
+    body.querySelectorAll('[data-jpa-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.jpaAnular,b)));
     body.querySelectorAll('[data-jpa-ent]').forEach(b=>b.addEventListener('click',()=>entregar(b.dataset.jpaEnt,'marcar',b)));
     body.querySelectorAll('[data-jpa-reint]').forEach(b=>b.addEventListener('click',()=>entregar(b.dataset.jpaReint,'reintentar',b)));
   }
@@ -122,6 +125,19 @@
     btn.disabled=true;
     try{await api({accion:'juego_entregar',id,modo,nota});await refrescar(modo==='reintentar'?'Premio aplicado.':'Premio marcado como entregado.');}
     catch(e){S.status(e.message,'bad');btn.disabled=false;}
+  }
+
+  async function anular(loteId,btn){
+    const l=(S.data?.lotes||[]).find(x=>x.id===loteId);if(!l)return;
+    const motivo=prompt(`Anular las fichas y premios de ${l.clienteNombre||'este cliente'}.\nDesaparecen de su enlace y queda registrado quién y por qué.\n\nMotivo (ej. "prueba", "dado por error"):`,'prueba');
+    if(motivo===null)return;
+    if(motivo.trim().length<4){S.status('Escriba un motivo de al menos 4 letras.','bad');return;}
+    btn.disabled=true;
+    try{
+      const r=await api({accion:'juego_anular',loteId,motivo:motivo.trim()});
+      await refrescar(r.yaAnulado?'Ese lote ya estaba anulado.':'Lote anulado. Ya no aparece en el enlace del cliente.');
+      if(r.avisos?.length){alert('Revise a mano:\n\n'+r.avisos.join('\n'));S.status('Lote anulado. ⚠️ '+r.avisos.join(' '),'bad');}
+    }catch(e){S.status(e.message,'bad');btn.disabled=false;}
   }
 
   /* ---------- Modal Dar fichas (manual o después de renovar) ---------- */
