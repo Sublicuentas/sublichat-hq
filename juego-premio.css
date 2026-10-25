@@ -92,3 +92,23 @@
 .jp-play[hidden]{display:none}
 @media (max-width:380px){.jp-palanca{width:116px;height:116px}.jp-soltar{width:98px;height:98px;font-size:15px}}
 @media (prefers-reduced-motion:reduce){.jp-cargando span{animation:none}}
+/* Entrada dentro de "Sorteos y premios" (portal) · sin degradados */
+.portal-juego-slot:empty{display:none}
+.portal-juego-slot{margin:4px 0 14px}
+.jp-entrada{display:grid;grid-template-columns:58px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 12px 12px 12px;border:2px solid #E2231A;border-radius:20px;background:#fff;cursor:pointer;box-shadow:0 8px 20px rgba(226,35,26,.12)}
+.jp-entrada.sin-fichas{border-color:#E5EAF0;box-shadow:none}
+.jp-entrada-icono{width:58px;height:58px;border-radius:16px;background:#E2231A;position:relative;overflow:hidden}
+.jp-entrada.sin-fichas .jp-entrada-icono{background:#111827}
+.jp-mini-garra{position:absolute;left:50%;top:0;width:3px;height:18px;background:#fff;transform:translateX(-50%);animation:jpBaja 2.4s ease-in-out infinite}
+.jp-mini-garra::before{content:"";position:absolute;left:50%;bottom:-6px;width:18px;height:7px;border-radius:4px 4px 0 0;background:#fff;transform:translateX(-50%)}
+.jp-mini-garra::after{content:"";position:absolute;left:50%;bottom:-17px;width:20px;height:12px;border:3px solid #fff;border-top:0;border-radius:0 0 10px 10px;transform:translateX(-50%);box-sizing:border-box}
+.jp-entrada-icono::after{content:"";position:absolute;left:50%;bottom:7px;width:18px;height:18px;border-radius:50%;background:#FFD43B;transform:translateX(-50%);box-shadow:inset 0 -4px 0 rgba(0,0,0,.15)}
+@keyframes jpBaja{0%,100%{height:12px}50%{height:22px}}
+.jp-entrada-txt b{display:block;font-size:16px;font-weight:900;color:#111827;line-height:1.15}
+.jp-entrada-txt small{display:block;font-size:12.5px;color:#5B6B7F;margin-top:3px;line-height:1.3}
+.jp-entrada-txt strong{color:#E2231A}
+.jp-entrada-btn{border:0;border-radius:14px;padding:12px 16px;background:#E2231A;color:#fff;font:inherit;font-weight:900;font-size:14px;letter-spacing:.04em;cursor:pointer;box-shadow:0 4px 0 #B71914;white-space:nowrap}
+.jp-entrada.sin-fichas .jp-entrada-btn{background:#fff;color:#111827;border:1px solid #E5EAF0;box-shadow:none;letter-spacing:0}
+[data-portal-panel="sorteos"]{position:relative}
+.jp-badge{position:absolute;top:6px;right:6px;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:#E2231A;color:#fff;font-size:13px;font-weight:900;display:grid;place-items:center;box-shadow:0 0 0 3px #fff;box-sizing:border-box;z-index:2}
+@media (prefers-reduced-motion:reduce){.jp-mini-garra{animation:none}}

@@ -298,10 +298,36 @@
   }
 
   /* ---------- Interfaz ---------- */
+  /* Entrada al juego: tarjeta dentro de "Sorteos y premios" del portal + numerito en esa categoría.
+     Si la página no tiene ese apartado (portal viejo), se usa el botón flotante de respaldo. */
+  let esperaSlot=null;
+  function entrada(){
+    const n=S.estado?.disponibles||0,h=(S.estado?.historial||[]).length;
+    const visible=!!S.estado&&(n>0||h>0); // en pausa igual se ve: sus fichas siguen guardadas
+    window.__jpVisible=visible;window.dispatchEvent(new CustomEvent('jp:estado',{detail:{visible,fichas:n,premios:h}}));
+    // numerito en la categoría
+    const cat=document.querySelector('[data-portal-panel="sorteos"]');
+    if(cat){let b=cat.querySelector('.jp-badge');if(n>0){if(!b){b=el('span','jp-badge');cat.append(b);}b.textContent=n;b.setAttribute('aria-label',`${n} ficha${n===1?'':'s'} para jugar`);}else b?.remove();}
+    const slot=document.getElementById('portal-juego-slot');
+    if(slot){
+      document.querySelector('.jp-fab')?.remove();clearTimeout(esperaSlot);
+      if(!visible){slot.innerHTML='';return;}
+      slot.innerHTML=`<article class="jp-entrada${n?'':' sin-fichas'}">
+        <div class="jp-entrada-icono" aria-hidden="true"><span class="jp-mini-garra"></span></div>
+        <div class="jp-entrada-txt"><b>Atrapa tu Premio</b><small>${n?`Tiene <strong>${n}</strong> ficha${n===1?'':'s'} · cada ficha = 1 premio seguro`:`${h} premio${h===1?'':'s'} ganado${h===1?'':'s'}`}</small></div>
+        <button type="button" class="jp-entrada-btn">${n?'JUGAR':'Ver premios'}</button></article>`;
+      slot.querySelector('.jp-entrada').addEventListener('click',abrir);
+      return;
+    }
+    // Respaldo: el portal todavía no armó sus categorías → esperar un momento antes de usar el flotante
+    if(!visible){document.querySelector('.jp-fab')?.remove();return;}
+    clearTimeout(esperaSlot);esperaSlot=setTimeout(()=>{if(!document.getElementById('portal-juego-slot'))fab();},4000);
+  }
+  window.addEventListener('portal:sorteos-listo',()=>{if(S.estado)entrada();});
   function fab(){
     let b=document.querySelector('.jp-fab');
     const n=S.estado?.disponibles||0;
-    if(!S.estado||(!n&&!(S.estado.historial||[]).length)){b?.remove();return;} // en pausa igual se ve: sus fichas siguen guardadas
+    if(!S.estado||(!n&&!(S.estado.historial||[]).length)){b?.remove();return;}
     if(!b){b=el('button','jp-fab');b.type='button';b.addEventListener('click',abrir);S.root.append(b);}
     b.classList.toggle('jp-sin-fichas',!n);
     b.innerHTML=n?`🎮 Atrapa tu premio <b>${n}</b>`:'🎁 Tus premios';
@@ -329,7 +355,7 @@
     const o=S.root.querySelector('.jp-overlay');if(!o||o.hidden)return;
     o.hidden=true;document.documentElement.style.overflow='';
     if(S.motor){S.motor.destruir();S.motor=null;}
-    motorOff();fab();
+    motorOff();entrada();
   }
   window.addEventListener('popstate',()=>{const o=S.root?.querySelector('.jp-overlay');if(!o||o.hidden)return;if(S.ocupado){try{history.pushState({jp:1},'')}catch(_){}return;}cerrar();});
 
@@ -376,7 +402,7 @@
     estado('');
     try{await motor.atrapar(g.premio);}catch(e){console.warn(e);/* la animación puede fallar; el premio ya está guardado */}
     S.ocupado=false;
-    revelar(g);pintar();fab();
+    revelar(g);pintar();entrada();
   }
 
   /* Palanca + SOLTAR. Funciona con el dedo (teléfono), mouse y teclado (flechas/WASD + espacio). */
@@ -468,7 +494,7 @@
     S.token=token();if(!S.token)return;cargarVistos();
     S.root=el('div','jp-root');document.body.append(S.root);
     try{S.estado=await api({accion:'juego_estado'});}catch(_){return;}
-    fab();
+    entrada();
     if((S.estado.disponibles||0)>0&&!reduceMotion){ // adelanta la descarga del 3D mientras el cliente ve su portal
       const pre=()=>{if(document.querySelector('link[data-jp-three]'))return;const l=document.createElement('link');l.rel='modulepreload';l.href=THREE_LOCAL;l.dataset.jpThree='1';document.head.append(l);};
       (window.requestIdleCallback||((f)=>setTimeout(f,1500)))(pre);

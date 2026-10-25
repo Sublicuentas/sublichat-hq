@@ -82,8 +82,13 @@
     return state.paymentAllowed&&state.data?.secciones?.pagos!==false;
   }
 
-  function rafflesVisible(){
+  function sorteosHabilitados(){
     return state.rafflesAllowed&&state.data?.secciones?.sorteos!==false;
+  }
+  // Oct-2026 · "Sorteos y premios" también se muestra si el cliente tiene fichas o premios de Atrapa tu Premio
+  // (juego-premio.js marca window.__jpVisible y avisa con el evento "jp:estado").
+  function rafflesVisible(){
+    return sorteosHabilitados()||window.__jpVisible===true;
   }
 
   function syncCategoryVisibility(){
@@ -614,6 +619,7 @@
   function renderRaffles(){
     const panel=document.getElementById('portal-panel-sorteos');if(!panel)return;
     panel.querySelectorAll('.portal-raffle-summary,.portal-raffle-list,.portal-empty').forEach(node=>node.remove());
+    if(!sorteosHabilitados())return; // solo Atrapa tu Premio (sin sorteo mensual para este cliente)
     if(!state.sorteosData){
       panel.append(emptyState(state.sorteosError?'Sorteos no disponibles':'Cargando sus boletos…',state.sorteosError?' Intente nuevamente más tarde.':' Estamos buscando sus números.'));
       return;
@@ -697,9 +703,7 @@
       categoryButton('cuentas',PORTAL_ICONS.cuentas,'Mis cuentas','Administre sus accesos aquí'),
       categoryButton('promociones',PORTAL_ICONS.promociones,'Promociones','Descubra nuestras ofertas exclusivas')
     );
-    if(state.rafflesAllowed){
-      nav.append(categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Consulte sus boletos y premios'));
-    }
+    nav.append(categoryButton('sorteos',PORTAL_ICONS.sorteos,'Sorteos y premios','Consulte sus boletos y premios')); // se oculta en syncCategoryVisibility si no aplica
     if(state.paymentAllowed){
       nav.append(categoryButton('pagos',PORTAL_ICONS.pagos,'Métodos de pago','Copie la forma de pago que prefiera'));
     }
@@ -712,15 +716,17 @@
     const promos=element('section','portal-panel');promos.id='portal-panel-promociones';promos.dataset.panel='promociones';promos.role='tabpanel';promos.hidden=true;
     promos.append(panelTitle(PORTAL_ICONS.promociones,'Promociones exclusivas'),element('p','portal-panel-sub','Ofertas seleccionadas especialmente para usted.'));
     const raffles=element('section','portal-panel');raffles.id='portal-panel-sorteos';raffles.dataset.panel='sorteos';raffles.role='tabpanel';raffles.hidden=true;
-    raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Cada compra o renovación puede darle nuevas oportunidades de ganar.'));
+    const juegoSlot=element('div','portal-juego-slot');juegoSlot.id='portal-juego-slot'; // aquí entra "Atrapa tu Premio"
+    raffles.append(panelTitle(PORTAL_ICONS.sorteos,'Sorteos y premios'),element('p','portal-panel-sub','Cada compra o renovación puede darle nuevas oportunidades de ganar.'),juegoSlot);
     const payments=element('section','portal-panel');payments.id='portal-panel-pagos';payments.dataset.panel='pagos';payments.role='tabpanel';payments.hidden=true;
     payments.append(panelTitle(PORTAL_ICONS.pagos,'Métodos de pago'),element('p','portal-panel-sub','Toque el botón de copiar para usar el número exacto.'));
     panels.append(accounts,promos);
-    if(state.rafflesAllowed)panels.append(raffles);
+    panels.append(raffles);
     if(state.paymentAllowed)panels.append(payments);
 
     stage.replaceChildren(brand,intro,nav,panels);
     state.enhanced=true;syncCategoryVisibility();renderPromotions();renderPayments();renderRaffles();selectPanel('cuentas',false);
+    window.dispatchEvent(new CustomEvent('portal:sorteos-listo'));
     if(state.rafflesAllowed&&!state.sorteosData&&!state.sorteosLoading)loadRaffles();
   }
 
@@ -743,7 +749,7 @@
   }
 
   async function loadRaffles(force=false){
-    if(!rafflesVisible())return;
+    if(!sorteosHabilitados())return;
     if(state.sorteosLoading)return;
     const token=tokenFromLocation();
     if(!token){state.sorteosError=true;renderRaffles();return;}
@@ -759,6 +765,7 @@
     finally{state.sorteosLoading=false;renderRaffles();}
   }
 
+  window.addEventListener('jp:estado',()=>{if(state.enhanced){syncCategoryVisibility();}});
   const stage=document.getElementById('stage');
   if(stage){
     const observer=new MutationObserver(()=>{
