@@ -358,6 +358,8 @@ const DEMO = [
 ];
 
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
+// Oct-2026 · sublichat-app.js es módulo: DATA no es global. Lectura para Atrapa tu Premio (buscar cliente al dar fichas).
+Object.defineProperty(window,"__sublichatClientes",{configurable:true,get:()=>DATA});
 let CONTROL_DATA_VERSION=0; // cambia cada vez que Clientes/Bodega reciben una lectura nueva
 let CONTROL_DATA_READY=false; // evita dibujar Control Maestro con datos parciales antes de completar Clientes + Bodega
 let CONTROL_SESSION_VERSION=0, CONTROL_DATA_ERROR="", controlLiveFallback=null;

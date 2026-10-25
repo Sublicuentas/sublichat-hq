@@ -127,10 +127,11 @@
   /* ---------- Modal Dar fichas (manual o después de renovar) ---------- */
   function clientes(){
     // DATA es la lista global de Sublichat (una fila por servicio). Se agrupa por cliente + beneficiario.
-    const rows=(typeof DATA!=='undefined'&&Array.isArray(DATA))?DATA:[];const m=new Map();
+    const fuente=Array.isArray(window.__sublichatClientes)?window.__sublichatClientes:((typeof DATA!=='undefined'&&Array.isArray(DATA))?DATA:[]);
+    const rows=fuente;const m=new Map();
     for(const r of rows){if(!r.clienteId)continue;const key=`${r.clienteId}|${r.beneficiarioKey||'titular'}`;
       const x=m.get(key)||{clienteId:r.clienteId,beneficiarioKey:r.beneficiarioKey||'titular',nombre:r.beneficiarioTipo==='tercero'?`${r.beneficiarioNombre} (de ${r.nombre})`:r.nombre,telefono:r.telefono||'',plats:new Set()};
-      x.plats.add(r.plataforma);m.set(key,x);}
+      x.plats.add(r.plataforma);x.buscar=`${r.nombre||''} ${r.beneficiarioNombre||''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');m.set(key,x);}
     return [...m.values()];
   }
   function modal(){
@@ -159,7 +160,7 @@
     if(buscar){
       const lista=clientes();
       const pintarRes=()=>{const t=buscar.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');const dig=t.replace(/\D/g,'');
-        const res=t.length<2?[]:lista.filter(c=>c.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(t)||(dig.length>=4&&String(c.telefono).replace(/\D/g,'').includes(dig))).slice(0,8);
+        const res=t.length<2?[]:lista.filter(c=>c.buscar.includes(t)||(dig.length>=4&&String(c.telefono).replace(/\D/g,'').includes(dig))).slice(0,8);
         el.querySelector('#jpaRes').innerHTML=res.map((c,i)=>`<button type="button" data-i="${i}" class="${elegido&&elegido.clienteId===c.clienteId&&elegido.beneficiarioKey===c.beneficiarioKey?'on':''}"><b>${esc(c.nombre)}</b><small>${esc(c.telefono)} · ${esc([...c.plats].join(', '))}</small></button>`).join('')||(t.length>=2?'<small>Sin resultados.</small>':'');
         el.querySelectorAll('#jpaRes [data-i]').forEach(b=>b.onclick=()=>{elegido=res[Number(b.dataset.i)];buscar.value=elegido.nombre;pintarRes();});};
       buscar.addEventListener('input',()=>{elegido=null;pintarRes();});buscar.focus();
@@ -176,7 +177,7 @@
         const lote=r.lote||{};
         cerrarModal();
         const txt=lote.duplicado?`Esta renovación ya tenía ${lote.fichas} ficha(s); no se duplicaron.`:`✅ ${fichas} ficha${fichas>1?'s':''} para ${elegido.nombre}. Las ve en su enlace del portal.`;
-        if(typeof mostrarToast==='function')mostrarToast(txt);S.status(txt,'good');
+        if(typeof window.mostrarToast==='function')window.mostrarToast(txt);else if(typeof mostrarToast==='function')mostrarToast(txt);S.status(txt,'good');
         if(S.body&&document.body.contains(S.body))await refrescar();
         opts.alTerminar?.(lote);
       }catch(err){msg.textContent=err.message;btn.disabled=false;}
