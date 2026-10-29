@@ -4740,9 +4740,10 @@ Aquí tiene los datos para disfrutar de su contenido:
 *📧 Correo: {correo}*{claveLine}{pinLine}
 *📅 Renovación: {renovTexto}*
 
+*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
+_No se puede usar en dos dispositivos al mismo tiempo._
+
 🚨 Condiciones del servicio:
-📌 Acceso solo para un dispositivo
-📌 Uso solo en Honduras
 📌 No usar vpn
 📌 Garantía vigente
 
@@ -5094,9 +5095,10 @@ Es posible que en 15 días o más el sistema solicite un código temporal. Cuand
 📌 Compras y rentas de películas no disponibles.
 📌 Acceso exclusivo al catálogo oficial de Prime Video.`,
     crunchyroll:
-`🚨 Condiciones del servicio:
-📌 Acceso solo para un dispositivo por perfil.
-📌 Uso solo en Honduras.
+`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
+_No se puede usar en dos dispositivos al mismo tiempo._
+
+🚨 Condiciones del servicio:
 📌 No usar VPN.
 📌 Garantía vigente.`,
     universal:

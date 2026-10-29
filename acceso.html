@@ -128,6 +128,7 @@
   .terms{ background:var(--bg); border-radius:16px; padding:13px 16px; margin-top:6px; }
   .terms ul{ display:grid; gap:7px; margin:0; padding:0; list-style:none; }
   .terms li{ display:flex; align-items:flex-start; gap:9px; font-size:12px; color:#4a453b; line-height:1.4; }
+  .terms li.term-destacado{ background:#FDECEC; border:1.5px solid #E2231A; border-radius:12px; padding:9px 11px; color:#B71914; font-size:13px; font-weight:800; }
   .term-icon{ width:18px; flex:0 0 18px; display:inline-flex; justify-content:center; font-size:14px; line-height:1.25; }
   .netflix-code-alert{ margin-top:12px; border:1.5px solid #efb04a; border-left:5px solid #e58a00; border-radius:16px; padding:13px 15px; background:#fff5d9; color:#5f3b00; font-size:12.5px; line-height:1.55; }
   .netflix-code-alert b{ display:block; margin-bottom:4px; color:#9a5100; font-size:13px; }
@@ -539,7 +540,9 @@
     if(estado.kind==="expired"){
       return `<div class="expired-note"><b>Acceso temporalmente desactivado</b>Las credenciales están protegidas. Al renovar, volverán a mostrarse en este mismo enlace.</div>`;
     }
-    const termsHtml=(d.terminos||[]).map((t,i)=>`<li><span class="term-icon" aria-hidden="true">${iconoCondicion(t,i)}</span><span>${esc(t)}</span></li>`).join("");
+    // "!" al inicio = condición destacada (ej. Crunchyroll: solo 1 dispositivo)
+    const termsHtml=(d.terminos||[]).map((t,i)=>{const dest=String(t).startsWith("!"),txt=dest?String(t).slice(1):t;
+      return dest?`<li class="term-destacado"><span class="term-icon" aria-hidden="true">⚠️</span><span>${esc(txt)}</span></li>`:`<li><span class="term-icon" aria-hidden="true">${iconoCondicion(txt,i)}</span><span>${esc(txt)}</span></li>`;}).join("");
     const perfiles=perfilesDelServicio(d);
     const avisoCodigoNetflix=platKey(d.plataforma)==="netflix"
       ? `<div class="netflix-code-alert" role="note"><b>⚠️ Aviso importante de Netflix</b>Es posible que en aproximadamente 15 días Netflix solicite un código temporal. Cuando le aparezca, comuníquese con su vendedor para recibirlo al instante.</div>`
