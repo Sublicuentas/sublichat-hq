@@ -159,7 +159,8 @@ const TERMS = {
   disneys: ["No se modifica perfil", "Acceso solo para un dispositivo", "Uso solo en Honduras", "No usar vpn", "Garantía vigente"],
   hbomax: ["Acceso solo para un dispositivo.", "No se modifica perfil.", "Conexión válida únicamente para Honduras.", "Garantía vigente durante todo el periodo adquirido."],
   primevideo: ["No modificar perfil", "Acceso solo para un dispositivo", "Uso solo en Honduras", "Garantía vigente", "Compras y rentas de películas no disponible.", "Acceso exclusivo al catálogo oficial de Prime Video."],
-  crunchyroll: ["Acceso solo para un dispositivo", "Uso solo en Honduras", "No usar vpn", "Garantía vigente"],
+  // "!" al inicio = condición destacada en la URL (recuadro rojo). Crunchyroll: sin restricción de país (oct-2026).
+  crunchyroll: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No usar vpn", "Garantía vigente"],
   universal: ["Válido para 1 dispositivo.", "No se modifica el perfil.", "Conexión válida únicamente para Honduras.", "Garantía vigente durante todo el periodo adquirido."],
   vix: ["Acceso solo para un dispositivo.", "Acceso a Pelis, Series y Novelas.", "Deportes: Liga Española.", "Compatible con TV, Celular, Tablet y Web.", "Garantía vigente durante todo el periodo adquirido."],
   spotify: ["Reproduce música sin anuncios ni interrupciones.", "Descargas y reproducción sin conexión.", "Creación de playlists incluida.", "Un dispositivo a la vez por acceso."],
