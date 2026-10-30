@@ -180,6 +180,8 @@ function shell(){
         <button class="cr-tab" data-rtab="vendedores">Vendedores</button>
         <button class="cr-tab" data-rtab="clientes">Clientes</button>
         <button class="cr-tab" data-rtab="pedidos">🛒 Pedidos</button>
+        <button class="cr-tab" data-rtab="buzon">💬 Buzón socios</button>
+        <button class="cr-tab" data-rtab="historial">🗂️ Entregas antiguas</button>
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
         <button class="cr-tab" data-rtab="publico">🏷️ Precios para Revendedores</button>
@@ -199,7 +201,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,promociones:renderPromociones,recompensas:renderRecompensas,publico:renderPublico}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,buzon:renderBuzon,historial:renderHistorial,promociones:renderPromociones,recompensas:renderRecompensas,publico:renderPublico}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
@@ -221,10 +223,12 @@ function pedidoCard(p){
     <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div>${p.clientePrincipal?`<div class="order-metric">Cliente principal<b>${esc(`${p.clientePrincipal.nombre||''} ${p.clientePrincipal.apellido||''}`.trim())}</b></div>`:''}</div>
     ${Array.isArray(p.productos)&&p.productos.some(x=>x.clienteNombre||x.dispositivo||x.correo||x.notas||x.detalleServicio)?`<ol class="order-lines" style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.45">${p.productos.map(x=>`<li><b>${esc(x.servicio||'')}</b>${(x.cantidad||1)>1?` ×${x.cantidad}`:''} — para ${esc(x.clienteNombre||x.perfil||'—')}${x.destinatario?.tipo==='otro'?' (otro cliente)':''}${[x.perfil&&x.perfil!==x.clienteNombre?`perfil ${x.perfil}`:'',x.dispositivo,x.marcaTv,x.correo,x.detalleServicio?`${x.datoRequerido||'detalle'}: ${x.detalleServicio}`:'',x.notas?`nota: ${x.notas}`:''].filter(Boolean).map(v=>' · '+esc(v)).join('')}</li>`).join('')}</ol>`:''}
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
+    ${p.pagoRevision?`<div class="cr-status bad" style="margin:0 0 10px">⚠️ Posible comprobante repetido (igual al pedido #${esc(p.pagoRevision.pedidoRelacionadoRef||'')}). Revise antes de aprobar.</div>`:''}${p.historicoAnterior?`<div class="cr-status" style="margin:0 0 10px">Histórico anterior: este pedido mezclaba clientes (se conserva tal cual).</div>`:''}
     <div class="order-status-tools">
       <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
       <label class="cr-field">Mensaje al socio<input id="pedidoDetalle-${esc(p.id)}" maxlength="300" value="${esc(p.detalleEstado||'')}" placeholder="Ej. Listo, revise su correo"></label>
       <button class="cr-btn red" data-pedido-save="${esc(p.id)}">Actualizar</button>
+      <button class="cr-btn" data-pedido-entregas="${esc(p.id)}">📦 Entregas${p.entregaResumen&&p.entregaResumen.publicados?` · ${p.entregaResumen.publicados}/${p.entregaResumen.requeridos}`:''}</button>
     </div>
   </article>`;
 }
@@ -239,6 +243,7 @@ function renderPedidos(){
   $('#pedidoReload').onclick=()=>loadPedidos(true);
   b.querySelectorAll('[data-pedido-filter]').forEach(x=>x.onclick=()=>{state.pedidoFiltro=x.dataset.pedidoFilter;renderPedidos()});
   b.querySelectorAll('[data-pedido-save]').forEach(x=>x.onclick=()=>guardarEstadoPedido(x.dataset.pedidoSave,x));
+  b.querySelectorAll('[data-pedido-entregas]').forEach(x=>x.onclick=()=>abrirEntregas(x.dataset.pedidoEntregas));
 }
 async function guardarEstadoPedido(id,btn){
   const estado=$('#pedidoEstado-'+id)?.value||'pendiente',detalle=$('#pedidoDetalle-'+id)?.value.trim()||'';
@@ -1205,6 +1210,165 @@ async function pubGenerarImagen(){
   finally{const b2=$('#pubImagen');if(b2)b2.disabled=false;}
 }
 
+
+/* ═══════════ ENTREGAS POR RENGLÓN · BUZÓN · HISTORIAL (brief 30/10/2026) ═══════════
+   Preparar → Vincular → Completar → Revisar → Publicar → Informar. Una sola publicación por renglón:
+   doble toque no duplica (opId estable por formulario). El aviso de Telegram es aparte de la entrega. */
+const opNuevo=()=>(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)).replace(/[^A-Za-z0-9_-]/g,'');
+const AVISO_TXT={pendiente:'Aviso pendiente',procesando:'Enviando aviso…',aceptado:'Aceptado por Telegram',fallido:'Falló el aviso',incierto:'Resultado incierto (revise antes de reenviar)',sin_vinculo:'Socio sin Telegram vinculado',desconocido:'—'};
+const ENT_TXT={borrador:'Borrador (no publicado)',publicada:'Publicada',revocada:'Acceso revocado'};
+const fms=v=>v?new Date(v).toLocaleString('es-HN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+let entCtx=null;
+async function abrirEntregas(compraId){
+  if(!document.getElementById('crEntCss')){const st=document.createElement('style');st.id='crEntCss';st.textContent='.cr-sheet [data-rid] .cr-field{display:grid;gap:6px;min-width:0}.cr-sheet [data-rid] input:not([type=checkbox]),.cr-sheet [data-rid] textarea,.cr-sheet [data-rid] select{box-sizing:border-box;width:100%;max-width:100%}.cr-sheet [data-rid] label{line-height:1.4}';document.head.appendChild(st)}
+  const m=modal('<div class="cr-empty">Cargando entregas…</div>',{wide:true});
+  entCtx={compraId,m,forms:{}};
+  await pintarEntregas();
+}
+async function pintarEntregas(){
+  const {compraId,m}=entCtx;const sheet=m.querySelector('.cr-sheet');
+  let d;try{d=await api('GET','entregas',undefined,{compraId})}catch(e){sheet.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`;return}
+  entCtx.d=d;
+  sheet.innerHTML=`<div class="cr-row" style="align-items:flex-start"><div><h3 style="margin:0">📦 Entregas · Pedido #${esc(d.ref)}</h3>
+      <small>Socio <b>${esc(d.socio)}</b>${d.socioVerificado?'':' ⚠️ no verificado'} · Cliente <b>${esc(d.cliente||'—')}</b> · Telegram: <b>${d.telegram==='vinculado'?'vinculado':'sin vincular'}</b></small><br>
+      <small>Pago: ${money(d.pago.monto)}${d.pago.banco?' · '+esc(d.pago.banco):''} · ${d.pago.comprobante?'comprobante adjunto':'sin comprobante'}${d.pago.revision?` · <b style="color:#b45309">⚠️ posible comprobante repetido (#${esc(d.pago.revision.pedidoRelacionadoRef||'')})</b>`:''}</small></div>
+      <div style="text-align:right"><span class="cr-badge">${esc(d.resumen.texto)}</span><br><button class="cr-btn ghost" data-ent="cerrar" style="margin-top:6px">Cerrar</button></div></div>
+    <p style="font-size:13px;color:#475467;margin:8px 0 14px">Marcar “entregado” no ocurre al aprobar el pago ni al enviar un mensaje: solo cuando la entrega se publica y queda accesible al socio. Cada servicio se entrega por separado.</p>
+    <div style="display:grid;gap:12px">${d.renglones.map(renglonEntregaHtml).join('')}</div>`;
+  sheet.onclick=onEntregaClick;sheet.oninput=onEntregaInput;
+}
+function renglonEntregaHtml(r){
+  const e=r.entrega,f=entCtx.forms[r.renglonId];
+  const datos=[r.datos.dispositivo,r.datos.correo,r.datos.detalle,r.datos.notas?'Nota: '+r.datos.notas:''].filter(Boolean).join(' · ');
+  return `<article class="cr-card" data-rid="${esc(r.renglonId)}" style="padding:14px">
+    <div class="cr-row"><div><b>${esc(r.servicio)}</b><br><small>Para ${esc(r.clienteNombre||'—')}${datos?' · '+esc(datos):''}</small></div>
+      <span class="cr-badge ${e?.estado==='publicada'?'':'paused'}">${e?esc(ENT_TXT[e.estado]||e.estado)+(e.version?` · v${e.version}`:''):'Sin entrega'}</span></div>
+    ${e?`<small style="display:block;margin-top:6px;color:#475467">${e.publicadaAt?`Publicada ${fms(e.publicadaAt)}`:''}${e.actualizadaAt&&e.actualizadaAt!==e.publicadaAt?` · Actualizada ${fms(e.actualizadaAt)}`:''}${e.fichaResumen?` · Ficha: ${esc(e.fichaResumen.cliente)} / ${esc(e.fichaResumen.plataforma)}${e.fichaResumen.vence?' · vence '+esc(e.fichaResumen.vence):''}`:' · Sin ficha vinculada'} · ${e.visto?`Visto por el socio (v${e.visto.version}) ${fms(e.visto.at)}`:'Sin abrir por el socio'}${e.revocadaAt?` · Revocada: ${esc(e.motivoRevocacion)}`:''}</small>
+      ${e.avisos?.length?`<div style="margin-top:6px;font-size:12.5px">${e.avisos.map(a=>`<span class="cr-badge ${a.estado==='aceptado'?'':'paused'}" style="margin:2px 4px 0 0">v${a.version}${a.reenvio?' reenvío '+a.reenvio:''}: ${esc(AVISO_TXT[a.estado]||a.estado)}${a.error?' · '+esc(a.error):''}</span>`).join('')}</div>`:''}`:''}
+    <div class="cr-row" style="margin-top:10px;justify-content:flex-start;gap:8px;flex-wrap:wrap">
+      ${!f?(e?.estado==='publicada'?`<button class="cr-btn" data-ent="form" data-modo="actualizar">Actualizar entrega</button><button class="cr-btn ghost" data-ent="reenviar">Reenviar aviso de Telegram</button><button class="cr-btn ghost" data-ent="revocar" style="color:#b42318">Revocar acceso a esta entrega</button>`
+        :`<button class="cr-btn red" data-ent="form" data-modo="publicar">${e?.estado==='borrador'?'Continuar borrador':e?.estado==='revocada'?'Volver a publicar':'Preparar entrega'}</button>`):''}
+    </div>${f?formEntregaHtml(r,f):''}</article>`;
+}
+function formEntregaHtml(r,f){
+  const e=r.entrega;
+  return `<div style="border-top:1px solid #e4e7ec;margin-top:12px;padding-top:12px;display:grid;gap:10px">
+    <label class="cr-field">1. Vincular ficha de Sublichat (solo servicios de este socio)<input data-ef="q" value="${esc(f.q||'')}" placeholder="Buscar cliente por nombre o teléfono"></label>
+    <div data-ef-res>${fichasHtml(f)}</div>
+    ${f.ficha?`<div class="cr-status good">Ficha elegida: <b>${esc(f.fichaTxt||'')}</b> <button class="cr-btn ghost" data-ent="sin-ficha">Quitar</button></div>`:'<small>Sin ficha: el socio verá la entrega sin portal.</small>'}
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ef="portalAutorizado" ${f.portalAutorizado?'checked':''} ${f.ficha?'':'disabled'}> Mostrar “Abrir portal del cliente” al socio (solo esta persona/servicio)</label>
+    <label class="cr-field">Código del portal o de activación (opcional · se guarda cifrado)<input type="password" autocomplete="off" data-ef="codigo" value="${esc(f.codigo||'')}" placeholder="${e?.codigoGuardado?'Código guardado · escriba solo para cambiarlo':'Solo si un admin lo registra'}"></label>
+    ${e?.codigoGuardado?`<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ef="quitarCodigo" ${f.quitarCodigo?'checked':''}> Quitar el código guardado</label>`:''}
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ef="codigoAutorizado" ${f.codigoAutorizado?'checked':''}> Autorizar que el socio vea/copie el código</label>
+    <label class="cr-field">Nota para el socio<textarea data-ef="notaSocio" maxlength="600" rows="2">${esc(f.notaSocio||'')}</textarea></label>
+    <label class="cr-field">Mensaje para el cliente (el socio lo copia)<textarea data-ef="mensajeCliente" maxlength="1500" rows="3">${esc(f.mensajeCliente||'')}</textarea></label>
+    ${f.modo==='actualizar'?`<label class="cr-field">Motivo de la actualización *<input data-ef="motivo" maxlength="300" value="${esc(f.motivo||'')}" placeholder="Ej. Cambio de clave"></label><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ef="avisar" ${f.avisar!==false?'checked':''}> Avisar del cambio por Telegram (el aviso no lleva códigos)</label>`:''}
+    ${f.preview?previewHtml(f.preview):''}
+    <div class="cr-row" style="justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="cr-btn ghost" data-ent="cancelar">Cancelar</button>
+      ${f.modo!=='actualizar'?'<button class="cr-btn ghost" data-ent="borrador">Guardar borrador</button>':''}
+      <button class="cr-btn ghost" data-ent="revisar">Revisar</button>
+      <button class="cr-btn red" data-ent="publicar" ${f.preview?'':'disabled title="Revise primero la vista previa"'}>${f.modo==='actualizar'?'Actualizar entrega':'Publicar entrega al socio'}</button>
+    </div><div data-ef-msg></div></div>`;
+}
+function fichasHtml(f){
+  if(!f.resultados)return'';
+  if(!f.resultados.length)return'<small>Sin fichas de este socio con ese nombre.</small>';
+  return `<div style="display:grid;gap:6px;max-height:220px;overflow:auto">${f.resultados.map(c=>c.servicios.map(s=>`<button class="cr-btn ghost" style="text-align:left;justify-content:flex-start" data-ent="elegir-ficha" data-cid="${esc(c.clienteId)}" data-sid="${esc(s.compraId)}" data-ix="${s.index}" data-txt="${esc(`${c.nombre} · ${s.plataforma}${s.vence?' · vence '+s.vence:''}`)}">${esc(c.nombre)} <small>${esc(c.telefono)}</small> · <b>${esc(s.plataforma)}</b>${s.vence?' · vence '+esc(s.vence):''}${s.beneficiario!=='titular'?' · '+esc(s.beneficiario):''}</button>`).join('')).join('')}</div>`;
+}
+function previewHtml(p){
+  return `<div style="border:1px solid #d0d5dd;border-radius:12px;padding:12px;background:#f9fafb;font-size:13px;line-height:1.5">
+    <b>Vista previa · lo que verá ${esc(p.socio.nombre)}</b><br>Pedido ${esc(p.verSocio.pedido)} · ${esc(p.verSocio.cliente)} · ${esc(p.verSocio.servicio)}${p.verSocio.vence?' · vence '+esc(p.verSocio.vence):''}<br>
+    Portal: ${esc(p.verSocio.portal)}<br>Código: ${esc(p.verSocio.codigo)}${p.verSocio.nota?`<br>Nota: ${esc(p.verSocio.nota)}`:''}${p.verSocio.mensajeCliente?`<br>Mensaje al cliente: ${esc(p.verSocio.mensajeCliente)}`:''}
+    <br><b>Telegram:</b> ${p.telegram?`<span style="white-space:pre-wrap;display:block;background:#1f2937;color:#fff;border-radius:10px;padding:8px;margin-top:4px">${esc(p.telegram.replace(/<[^>]+>/g,''))}\n[Ver entrega en mi panel]</span>`:'sin Telegram vinculado: la entrega queda solo en el panel.'}</div>`;
+}
+function formPayload(rid,accion){
+  const f=entCtx.forms[rid];
+  return {accion,compraId:entCtx.compraId,renglonId:rid,opId:f.opId,ficha:f.ficha||null,portalAutorizado:!!f.portalAutorizado,codigo:f.codigo||'',quitarCodigo:!!f.quitarCodigo,codigoAutorizado:!!f.codigoAutorizado,notaSocio:f.notaSocio||'',mensajeCliente:f.mensajeCliente||'',motivo:f.motivo||'',avisar:f.avisar!==false};
+}
+let fichaTimer=null;
+function onEntregaInput(ev){
+  const art=ev.target.closest('[data-rid]'),k=ev.target.dataset.ef;if(!art||!k)return;
+  const rid=art.dataset.rid,f=entCtx.forms[rid];if(!f)return;
+  f[k]=ev.target.type==='checkbox'?ev.target.checked:ev.target.value;
+  if(k!=='q'&&f.preview){f.preview=null;const b=art.querySelector('[data-ent="publicar"]');if(b){b.disabled=true;b.title='Revise primero la vista previa'}}
+  if(k==='q'){clearTimeout(fichaTimer);fichaTimer=setTimeout(async()=>{try{const d=await api('GET','entregas/fichas',undefined,{q:f.q,socio:entCtx.d.socio});f.resultados=d.items||[]}catch(e){f.resultados=[]}const box=art.querySelector('[data-ef-res]');if(box)box.innerHTML=fichasHtml(f)},350)}
+}
+async function onEntregaClick(ev){
+  const b=ev.target.closest('[data-ent]');if(!b)return;
+  const a=b.dataset.ent,art=b.closest('[data-rid]'),rid=art?.dataset.rid,r=entCtx.d?.renglones.find(x=>x.renglonId===rid);
+  const msg=t=>{const el=art?.querySelector('[data-ef-msg]');if(el)el.innerHTML=t};
+  if(a==='cerrar'){entCtx.m._modalClose();loadPedidos(true);return}
+  if(a==='form'){const e=r.entrega;entCtx.forms[rid]={modo:b.dataset.modo,opId:opNuevo(),ficha:e?.ficha?{clienteId:e.ficha.clienteId,servicioCompraId:e.ficha.servicioCompraId,servicioIndex:e.ficha.servicioIndex}:null,fichaTxt:e?.fichaResumen?`${e.fichaResumen.cliente} · ${e.fichaResumen.plataforma}`:'',portalAutorizado:!!e?.portalAutorizado,codigoAutorizado:!!e?.codigoAutorizado,notaSocio:e?.notaSocio||'',mensajeCliente:e?.mensajeCliente||'',q:''};return rePintarRenglon(rid)}
+  if(a==='cancelar'){delete entCtx.forms[rid];return rePintarRenglon(rid)}
+  if(a==='elegir-ficha'){Object.assign(entCtx.forms[rid],{ficha:{clienteId:b.dataset.cid,servicioCompraId:b.dataset.sid,servicioIndex:Number(b.dataset.ix)},fichaTxt:b.dataset.txt,resultados:null,preview:null});return rePintarRenglon(rid)}
+  if(a==='sin-ficha'){Object.assign(entCtx.forms[rid],{ficha:null,fichaTxt:'',portalAutorizado:false,preview:null});return rePintarRenglon(rid)}
+  if(a==='revisar'){b.disabled=true;try{const f=entCtx.forms[rid];f.preview=await api('POST','entregas/vista-previa',formPayload(rid,f.modo));rePintarRenglon(rid)}catch(e){b.disabled=false;msg(`<div class="cr-status bad">${esc(e.message)}</div>`)}return}
+  if(a==='borrador'||a==='publicar'){
+    const f=entCtx.forms[rid],accion=a==='borrador'?'borrador':f.modo;
+    if(accion==='actualizar'&&!String(f.motivo||'').trim()){msg('<div class="cr-status bad">Escriba el motivo de la actualización.</div>');return}
+    b.disabled=true;const old=b.textContent;b.textContent=a==='borrador'?'Guardando…':'Publicando…';
+    try{const r2=await api('POST','entregas/guardar',formPayload(rid,accion));delete entCtx.forms[rid];await pintarEntregas();status(a==='borrador'?'Borrador guardado: no se publicó ni avisó.':`✅ Entrega ${accion==='actualizar'?'actualizada':'publicada'} (v${r2.version}).${r2.aviso==='sin_vinculo'?' El socio no tiene Telegram: la verá en su panel.':' Aviso de Telegram en cola.'}`,'good')}
+    catch(e){b.disabled=false;b.textContent=old;msg(`<div class="cr-status bad">${esc(({ya_publicada_use_actualizar:'Ya está publicada: use “Actualizar entrega”.',ficha_de_otro_socio:'Esa ficha no es de este socio.',cifrado_no_configurado:'Falta ENTREGAS_CODIGOS_KEY en Render: no se puede guardar códigos.',pedido_cancelado:'El pedido está cancelado.'})[e.data?.error]||e.message)}</div>`)}
+    return}
+  if(a==='reenviar'){if(!confirm('¿Reenviar el aviso de Telegram? No crea otra compra ni cambia la fecha original.'))return;b.disabled=true;try{await api('POST',`entregas/${r.entrega.id}/reenviar`,{opId:opNuevo()});await pintarEntregas()}catch(e){b.disabled=false;alert(({socio_sin_telegram:'El socio no tiene Telegram vinculado.'})[e.data?.error]||e.message)}return}
+  if(a==='revocar'){const motivo=prompt('Motivo para revocar el acceso (queda en el historial). No cancela el servicio real y no borra mensajes ya enviados:');if(!motivo||!motivo.trim())return;try{await api('POST',`entregas/${r.entrega.id}/revocar`,{motivo});await pintarEntregas()}catch(e){alert(e.message)}}
+}
+function rePintarRenglon(rid){const art=entCtx.m.querySelector(`[data-rid="${CSS.escape(rid)}"]`);const r=entCtx.d.renglones.find(x=>x.renglonId===rid);if(art&&r){const t=document.createElement('div');t.innerHTML=renglonEntregaHtml(r);art.replaceWith(t.firstElementChild)}}
+
+/* ── Buzón (consultas de socios, dos vías con Telegram) ── */
+async function loadBuzon(force){
+  if(state.buzon&&!force)return renderBuzon();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando consultas…</div>';
+  try{const d=await api('GET','consultas',undefined,{limit:150});state.buzon=d.items||[];renderBuzon()}catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+const CONS_EST=[['todas','Todas'],['abierta','Abiertas'],['en_atencion','En atención'],['esperando_socio','Esperando al socio'],['resuelta','Resueltas']];
+function renderBuzon(){
+  const b=$('#revBody');if(!state.buzon)return loadBuzon();
+  const fil=state.buzonFiltro||'todas',list=state.buzon.filter(c=>fil==='todas'||c.estado===fil),sel=state.buzon.find(c=>c.id===state.buzonSel);
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap"><div><b>Buzón de socios</b><br><small>Mismo hilo en web y Telegram. Las notas internas nunca se envían al socio.</small></div><button class="cr-btn ghost" id="bzReload">Actualizar</button></div>
+    <div class="cr-tabs" style="margin-bottom:12px;overflow:auto">${CONS_EST.map(([k,l])=>`<button class="cr-tab ${fil===k?'on':''}" data-bzf="${k}">${l}</button>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px">
+      <div style="display:grid;gap:8px;align-content:start">${list.map(c=>`<button class="cr-card" data-bzsel="${esc(c.id)}" style="text-align:left;cursor:pointer;${c.id===state.buzonSel?'outline:2px solid #E2231A':''}"><b>#${esc(c.numero)} · ${esc(c.asunto)}</b>${c.noLeidasEquipo?` <span class="cr-badge">${c.noLeidasEquipo} nuevo(s)</span>`:''}<br><small>${esc(c.socio)} · ${esc(c.estadoLabel)}${c.pedidoRef?' · Pedido #'+esc(c.pedidoRef):''} · ${fms(c.updatedAt)}</small></button>`).join('')||'<div class="cr-empty">Sin consultas.</div>'}</div>
+      <div>${sel?hiloAdminHtml(sel):'<div class="cr-empty">Elija una consulta.</div>'}</div></div>`;
+  $('#bzReload').onclick=()=>loadBuzon(true);
+  b.querySelectorAll('[data-bzf]').forEach(x=>x.onclick=()=>{state.buzonFiltro=x.dataset.bzf;renderBuzon()});
+  b.querySelectorAll('[data-bzsel]').forEach(x=>x.onclick=()=>{state.buzonSel=x.dataset.bzsel;state.bzOp=opNuevo();renderBuzon()});
+  const send=$('#bzSend');if(send)send.onclick=async()=>{const t=$('#bzTxt').value.trim();if(!t)return;send.disabled=true;try{const r=await api('POST',`consultas/${sel.id}/mensajes`,{texto:t,interna:$('#bzInt').checked,opId:state.bzOp});state.bzOp=opNuevo();status(r.telegram==='sin_vinculo'&&!$('#bzInt').checked?'Respuesta guardada. El socio no tiene Telegram: la verá en su panel.':'Respuesta guardada.','good');await loadBuzon(true)}catch(e){send.disabled=false;alert(e.message)}};
+  b.querySelectorAll('[data-ver-pedido]').forEach(x=>x.onclick=()=>abrirEntregas(x.dataset.verPedido));
+  const est=$('#bzEstado');if(est)est.onchange=async()=>{try{await api('PATCH',`consultas/${sel.id}/estado`,{estado:est.value});await loadBuzon(true)}catch(e){alert(e.message)}};
+}
+function hiloAdminHtml(c){
+  return `<article class="cr-card"><div class="cr-row"><div><b>#${esc(c.numero)} · ${esc(c.asunto)}</b><br><small>${esc(c.socio)} → ${esc(c.destino)}${c.pedidoRef?` · Pedido #${esc(c.pedidoRef)} <button class="cr-btn ghost" data-ver-pedido="${esc(c.pedidoId)}">Ver entregas</button>`:''}</small></div>
+    <label class="cr-field" style="min-width:180px">Estado<select id="bzEstado">${CONS_EST.slice(1).map(([k,l])=>`<option value="${k}" ${c.estado===k?'selected':''}>${l}</option>`).join('')}</select></label></div>
+    <div style="display:grid;gap:8px;margin:12px 0;max-height:46vh;overflow:auto">${c.mensajes.map(m=>`<div style="padding:10px 12px;border-radius:12px;${m.interna?'background:#fffbeb;border:1px dashed #f59e0b':m.autor==='equipo'?'background:#f1f5f9;margin-left:24px':'background:#fff;border:1px solid #e4e7ec;margin-right:24px'}"><small><b>${m.interna?'🔒 Nota interna · ':''}${esc(m.nombre||(m.autor==='equipo'?'Equipo':'Socio'))}</b> · ${m.origen==='telegram'?'Telegram':'Web'} · ${fms(Date.parse(m.at))}</small><div style="white-space:pre-wrap;margin-top:4px">${esc(m.texto)}</div></div>`).join('')}</div>
+    <label class="cr-field">Responder<textarea id="bzTxt" rows="3" maxlength="3000"></textarea></label>
+    <div class="cr-row"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="bzInt"> Nota interna (no se envía al socio)</label><button class="cr-btn red" id="bzSend">Enviar</button></div></article>`;
+}
+
+/* ── Historial anterior: simular → importar en silencio → validar muestra → habilitar / revertir ── */
+async function renderHistorial(){
+  const b=$('#revBody');
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap"><div><b>Entregas antiguas</b><br><small>Primero simule. La importación no avisa a nadie, no cambia fechas originales y no suma ventas ni ingresos. Queda oculta hasta que la habilite.</small></div><button class="cr-btn red" id="hsSim">Simular</button></div><div id="hsOut"></div><h4 style="margin:18px 0 8px">Lotes importados</h4><div id="hsLotes"><div class="cr-empty">Cargando…</div></div>`;
+  $('#hsSim').onclick=simularHistorial;
+  try{const d=await api('GET','entregas/historico/lotes');$('#hsLotes').innerHTML=(d.items||[]).map(l=>`<div class="cr-card" style="margin-bottom:8px"><div class="cr-row"><div><b>${esc(l.loteId)}</b> · ${l.total} registro(s) · ${l.socios.length?'Socios: '+esc(l.socios.join(', ')):'Todos los socios'}<br><small>${esc(l.creadoPor||'')} · ${fms(l.createdAt)} · ${l.revertido?'Revertido':l.habilitado?'Visible para los socios':'Oculto (validar muestra)'}</small></div><div>${!l.revertido&&!l.habilitado?`<button class="cr-btn" data-hs="habilitar" data-lote="${esc(l.loteId)}">Habilitar</button>`:''}${!l.revertido?`<button class="cr-btn ghost" data-hs="revertir" data-lote="${esc(l.loteId)}">Revertir</button>`:''}</div></div></div>`).join('')||'<div class="cr-empty">Sin lotes.</div>';
+    b.querySelectorAll('[data-hs]').forEach(x=>x.onclick=async()=>{if(!confirm(x.dataset.hs==='revertir'?'¿Revertir? Se borran solo los registros importados por este lote; la fuente original no se toca.':'¿Mostrar este lote a los socios? No envía avisos.'))return;try{await api('POST',`entregas/historico/${x.dataset.lote}/${x.dataset.hs}`,{});renderHistorial()}catch(e){alert(e.message)}})}
+  catch(e){$('#hsLotes').innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+async function simularHistorial(){
+  const out=$('#hsOut');out.innerHTML='<div class="cr-empty">Simulando…</div>';
+  try{const d=await api('GET','entregas/historico/simular');
+    const fila=(t,n)=>`<div class="order-metric">${t}<b>${n}</b></div>`;
+    const muestra=(arr)=>arr.length?`<ol style="font-size:13px;padding-left:18px">${arr.map(x=>`<li>#${esc(x.ref)} · ${esc(x.socio)} · ${esc(x.cliente||'—')} · ${esc(x.servicios.join(' + '))} · ${esc(x.fecha)}${x.motivo?' · '+esc(x.motivo):''}${x.historicoAnterior?' · Histórico anterior (mezclaba clientes)':''}</li>`).join('')}</ol>`:'<small>—</small>';
+    out.innerHTML=`<div class="order-metrics" style="flex-wrap:wrap">${fila('Encontradas',d.encontradas)}${fila('Vinculables',d.vinculables)}${fila('Ya importadas',d.duplicadas)}${fila('Incompletas',d.incompletas)}${fila('Sin socio verificable',d.sinSocio)}${fila('Cliente ambiguo',d.ambiguas)}${fila('Sin fecha confirmada',d.sinFecha)}</div>
+      <p><b>Muestra vinculable</b></p>${muestra(d.muestras.vinculables)}<p><b>Incompletas</b> (se importan como “Histórico incompleto”)</p>${muestra(d.muestras.incompletas)}<p><b>Quedan en revisión administrativa</b> (no se muestran a ningún socio)</p>${muestra(d.muestras.revision)}
+      <div class="cr-row" style="gap:8px;flex-wrap:wrap;justify-content:flex-start"><label class="cr-field">Importar muestra de un socio<select id="hsSocio">${Object.entries(d.porSocio).map(([s,n])=>`<option value="${esc(s)}">${esc(s)} · ${n}</option>`).join('')}</select></label><button class="cr-btn" id="hsUno">Importar ese socio</button><button class="cr-btn ghost" id="hsTodo">Importar todo</button></div>`;
+    const imp=async(socios)=>{if(!confirm('Importar en silencio (oculto hasta habilitar). ¿Continuar?'))return;try{const r=await api('POST','entregas/historico/importar',{confirmar:true,socios});status(`Lote ${r.loteId}: ${r.importadas} registro(s) importados y ocultos. Revise y habilite.`,'good');renderHistorial()}catch(e){alert(e.message)}};
+    $('#hsUno').onclick=()=>imp([$('#hsSocio').value]);$('#hsTodo').onclick=()=>imp([]);
+  }catch(e){out.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+window.__subliAbrirEntregas=(id)=>{if(id)abrirEntregas(id)};
+
 /* ═══════════ util modal ═══════════ */
 function modal(innerHtml,opts={}){
   const overlay=document.createElement('div');
@@ -1227,7 +1391,7 @@ function init(){
   const screen=document.getElementById('screen-revendedores');
   if(screen?.classList.contains('active')) loadPrecios();
 }
-window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; state.pub=null; render(); }};
+window.SublichatRevendedores={open:()=>{ shell(); loadPrecios(); },reload:()=>{ state.precios=null; state.vendedores=null; state.clientes=null; state.recompensas=null; state.promociones=null; state.pedidos=null; state.pub=null; state.buzon=null; render(); }};
 document.addEventListener('DOMContentLoaded',init);
 new MutationObserver(()=>{
   const s=document.getElementById('screen-revendedores');
