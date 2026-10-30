@@ -121,7 +121,19 @@ export default async function handler(req, res) {
       return await manejarPublico(req, res, user);
     }
 
-    const rutaCruda = String(req.query.ruta || "").replace(/^\/+/, "").trim();
+    // Oct-2026 · APK: su cliente HTTP solo hace POST. Sobre {apk:true, ruta, metodo, params, datos} se traduce a la
+    // misma llamada (misma lista de recursos, mismo usuario y mismo candado). No abre rutas nuevas.
+    let Q = req.query || {}, M = req.method || "GET", BODY = req.body;
+    if (M === "POST" && !Q.ruta && BODY && BODY.apk === true) {
+      const env = req.body, metodo = String(env.metodo || "GET").toUpperCase();
+      if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(metodo)) return res.status(400).json({ ok: false, error: "Método inválido." });
+      Q = { ...(env.params && typeof env.params === "object" ? Object.fromEntries(Object.entries(env.params).map(([k, v]) => [k, String(v)])) : {}), ruta: String(env.ruta || "") };
+      M = metodo;
+      const datos = env.datos && typeof env.datos === "object" ? { ...env.datos } : {};
+      if (!datos.opId && env.operationId) datos.opId = String(env.operationId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80); // reintento de la APK = mismo opId
+      BODY = datos;
+    }
+    const rutaCruda = String(Q.ruta || "").replace(/^\/+/, "").trim();
     const pathSegments = rutaCruda.split("/").filter(Boolean);
     const primerSegmento = pathSegments[0] || "";
     if (!rutaCruda || !RECURSOS_VALIDOS.has(primerSegmento) || rutaCruda.length > 300 || /[?#]|\.\.|:\/\//.test(rutaCruda)) {
@@ -130,8 +142,8 @@ export default async function handler(req, res) {
 
     // Filtros de querystring (ej. clientes?q=... o clientes?vendedor=...) se
     // reenvían tal cual, aparte del propio "ruta".
-    const extras = Object.entries(req.query || {}).filter(([k]) => k !== "ruta");
-    const method = req.method || "GET";
+    const extras = Object.entries(Q || {}).filter(([k]) => k !== "ruta");
+    const method = M;
 
     let token;
     try { token = await getRevAdminToken(); }
@@ -139,12 +151,12 @@ export default async function handler(req, res) {
 
     // Auditoría: quién lo hizo en Sublichat (el token del Panel es compartido por el puente).
     const actor = String(user.usuario || user.email || user.uid || "").replace(/[^\w@.\- ]/g, "").slice(0, 80);
-    let { status, data } = await reenviar(pathSegments, extras, method, req.body, token, actor);
+    let { status, data } = await reenviar(pathSegments, extras, method, BODY, token, actor);
 
     // Si el token del panel venció, reintenta UNA vez con uno nuevo.
     if (status === 401) {
       token = await getRevAdminToken(true);
-      ({ status, data } = await reenviar(pathSegments, extras, method, req.body, token, actor));
+      ({ status, data } = await reenviar(pathSegments, extras, method, BODY, token, actor));
     }
 
     // En toda mutación de precios, comprobar contra Render que el dato ya es
