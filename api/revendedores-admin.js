@@ -80,16 +80,16 @@ async function getRevAdminToken(force = false) {
 
 // Solo estos recursos existen bajo /rev/admin/ — evita que esto se use
 // como proxy abierto hacia cualquier URL.
-const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas", "actualizaciones", "promociones", "compras"]);
+const RECURSOS_VALIDOS = new Set(["precios", "revendedores", "clientes", "recompensas", "actualizaciones", "promociones", "compras", "entregas", "consultas"]); // oct-2026: entregas por renglón + buzón
 
-async function reenviar(pathSegments, queryParams, method, body, token) {
+async function reenviar(pathSegments, queryParams, method, body, token, actor = "") {
   const target = pathSegments.map(encodeURIComponent).join("/");
   const url = new URL(`${REV_API_BASE}/rev/admin/${target}`);
   for (const [k, v] of queryParams) url.searchParams.set(k, String(v));
 
   const opts = {
     method,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(actor ? { "X-Sublichat-Actor": actor } : {}) },
   };
   if (method !== "GET" && method !== "DELETE" && body !== undefined) {
     opts.body = JSON.stringify(body);
@@ -137,12 +137,14 @@ export default async function handler(req, res) {
     try { token = await getRevAdminToken(); }
     catch (e) { return res.status(502).json({ ok: false, error: e.message }); }
 
-    let { status, data } = await reenviar(pathSegments, extras, method, req.body, token);
+    // Auditoría: quién lo hizo en Sublichat (el token del Panel es compartido por el puente).
+    const actor = String(user.usuario || user.email || user.uid || "").replace(/[^\w@.\- ]/g, "").slice(0, 80);
+    let { status, data } = await reenviar(pathSegments, extras, method, req.body, token, actor);
 
     // Si el token del panel venció, reintenta UNA vez con uno nuevo.
     if (status === 401) {
       token = await getRevAdminToken(true);
-      ({ status, data } = await reenviar(pathSegments, extras, method, req.body, token));
+      ({ status, data } = await reenviar(pathSegments, extras, method, req.body, token, actor));
     }
 
     // En toda mutación de precios, comprobar contra Render que el dato ya es
