@@ -218,7 +218,8 @@ function pedidoCard(p){
   return `<article class="cr-card order-card" data-status="${esc(estado)}">
     <div class="cr-row"><h3>🛒 ${esc(productos)}</h3><span class="cr-badge ${estado==='entregado'?'':estado==='cancelado'?'paused':''}">${esc(estado)}</span></div>
     <small>Socio: <b>${esc(p.socio||p.socio_norm||'—')}</b> · ${esc(p.destinoLabel||p.destino||'')} · 🚚 ${esc(flujo)} · ${esc(pedidoFecha(p.ts||p.createdAt))} · Ref ${esc(String(p.id||'').slice(-6))}</small>
-    <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div></div>
+    <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div>${p.clientePrincipal?`<div class="order-metric">Cliente principal<b>${esc(`${p.clientePrincipal.nombre||''} ${p.clientePrincipal.apellido||''}`.trim())}</b></div>`:''}</div>
+    ${Array.isArray(p.productos)&&p.productos.some(x=>x.clienteNombre||x.dispositivo||x.correo||x.notas||x.detalleServicio)?`<ol class="order-lines" style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.45">${p.productos.map(x=>`<li><b>${esc(x.servicio||'')}</b>${(x.cantidad||1)>1?` ×${x.cantidad}`:''} — para ${esc(x.clienteNombre||x.perfil||'—')}${x.destinatario?.tipo==='otro'?' (otro cliente)':''}${[x.perfil&&x.perfil!==x.clienteNombre?`perfil ${x.perfil}`:'',x.dispositivo,x.marcaTv,x.correo,x.detalleServicio?`${x.datoRequerido||'detalle'}: ${x.detalleServicio}`:'',x.notas?`nota: ${x.notas}`:''].filter(Boolean).map(v=>' · '+esc(v)).join('')}</li>`).join('')}</ol>`:''}
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
     <div class="order-status-tools">
       <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
@@ -515,13 +516,15 @@ async function aplicarActualizacion(){
 const PRICE_DETAIL_PRESETS=[
   ['👤','Perfil'],['📱','Dispositivo'],['🤖','Bot TG / código'],['🛡️','Garantía'],['📧','Correo y clave'],['🔐','PIN'],['✉️','Invitación correo'],['📡','IPTV'],['🔑','Serial / key'],['⚡','Entrega']
 ];
-const ENTREGA_TIPOS=[['','Automático según producto'],['perfil','Perfil / nombre del cliente'],['correo','Correo del cliente'],['acceso','Usuario / acceso'],['serial','Serial / licencia'],['serial_key','Key / serial'],['detalle','Detalle manual']];
+// Oct-2026 · Rediseño Panel de Socios: la modalidad la define el catálogo (no el nombre del producto).
+const ENTREGA_TIPOS=[['','Sin definir (el panel la adivina por el nombre)'],['perfil','Perfil (nombre del cliente)'],['correo','Invitación por correo'],['cuenta_completa','Cuenta completa'],['tv_digital','TV digital / IPTV'],['serial','Licencia / serial'],['serial_key','Licencia / KEY'],['detalle','Recarga / detalle'],['acceso','Acceso entregado por el equipo']];
+const PIDE_DISPOSITIVO=[['auto','Automático (perfil y TV digital sí)'],['si','Sí, pedir dispositivo'],['no','No pedir dispositivo']];
 const ENTREGA_CANALES=[['manual','Manual'],['bot_tg','Bot Telegram / código'],['inventario','Inventario Sublichat'],['invitacion','Invitación al correo'],['iptv','TV Digital / IPTV']];
 function adminProductIcon(p){const t=(String(p.nombre||'')+' '+String(p.categoria||'')).toLowerCase();if(t.includes('netflix'))return'🍿';if(t.includes('disney'))return'🏰';if(t.includes('max')||t.includes('hbo'))return'🎬';if(t.includes('prime'))return'📦';if(t.includes('crunchy'))return'🍥';if(t.includes('iptv')||t.includes('oleada')||t.includes('stella')||t.includes('nanotech')||t.includes('lion')||t.includes('latin'))return'📡';if(t.includes('spotify')||t.includes('deezer'))return'🎵';if(t.includes('canva'))return'🎨';if(t.includes('gemini')||t.includes('chatgpt'))return'🤖';if(t.includes('office'))return'💼';if(t.includes('antivirus')||t.includes('eset')||t.includes('mcafee'))return'🛡️';return'🧩'}
 function detalleLineas(raw){return String(raw||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
 function detalleIconLine(line){const x=String(line||'').trim();if(!x)return'';if(/^[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x))return x;const t=x.toLowerCase();let i='ℹ️';if(/perfil/.test(t))i='👤';else if(/dispositivo|pantalla|reproduce/.test(t))i='📱';else if(/bot|c[oó]digo/.test(t))i='🤖';else if(/garant|ca[ií]da/.test(t))i='🛡️';else if(/invitaci[oó]n/.test(t))i='✉️';else if(/correo/.test(t))i='📧';else if(/pin/.test(t))i='🔐';else if(/iptv|tv digital|usuario/.test(t))i='📡';else if(/serial|key|licencia/.test(t))i='🔑';else if(/acceso/.test(t))i='🔐';return `${i} ${x}`}
 function detallePreview(raw){const ls=detalleLineas(raw);return ls.length?ls.slice(0,4).map(x=>`<span>${esc(detalleIconLine(x))}</span>`).join(''):'<span>➕ Sin detalles configurados</span>'}
-function entregaTipoLabel(v){return ({perfil:'Perfil',correo:'Correo',acceso:'Acceso',serial:'Serial',serial_key:'Key / serial',detalle:'Detalle'})[v]||'Según producto'}
+function entregaTipoLabel(v){return ({perfil:'Perfil',correo:'Invitación',cuenta_completa:'Cuenta completa',tv_digital:'TV digital',acceso:'Acceso',serial:'Licencia',serial_key:'Licencia / KEY',detalle:'Recarga / detalle'})[v]||'Según producto'}
 function entregaCanalLabel(v){return ({manual:'Manual',bot_tg:'Bot TG',inventario:'Inventario',invitacion:'Invitación',iptv:'TV Digital'})[v]||'Manual'}
 function selectOptions(rows,value){return rows.map(([v,l])=>`<option value="${esc(v)}" ${String(value||'')===v?'selected':''}>${esc(l)}</option>`).join('')}
 function detailPresetButtons(target){return PRICE_DETAIL_PRESETS.map(([ico,label])=>`<button type="button" data-detail-target="${esc(target)}" data-detail-preset="${esc(ico+' '+label+': ')}">${ico} ${esc(label)}</button>`).join('')}
@@ -535,7 +538,7 @@ function precioCard(p){
   const canal=p.entregaCanal||'manual';
   return `<article class="price-compact-card" data-price-card data-search="${esc(precioSearchText(p))}">
     <div class="price-summary"><span class="price-icon">${adminProductIcon(p)}</span><div class="price-title"><h3>${esc(p.nombre||'Producto')}</h3><small>${esc(p.variante||p.categoria||'Sin variante')}</small></div><div class="price-amount">${p.precio==null?'Comisión':money(p.precio)}</div></div>
-    <div class="price-tags"><span class="${activo?'on':'off'}">${activo?'👁 Visible':'🙈 Oculto'}</span><span>${stock}</span><span>🚚 ${esc(entregaCanalLabel(canal))}</span></div>
+    <div class="price-tags"><span class="${activo?'on':'off'}">${activo?'👁 Visible':'🙈 Oculto'}</span><span>${stock}</span><span>🚚 ${esc(entregaCanalLabel(canal))}</span>${p.entregaTipo?`<span>📋 ${esc(entregaTipoLabel(p.entregaTipo))}</span>`:'<span class="off" title="El Panel de Socios adivina los datos por el nombre. Elija la modalidad en Editar.">⚠️ Falta modalidad</span>'}</div>
     <div class="price-detail-preview">${detallePreview(p.detalle)}</div>
     <div class="price-card-actions"><button class="cr-btn ghost" data-toggle-precio="${esc(id)}">✏️ Editar</button><button class="cr-btn danger" data-del-precio="${esc(id)}">Eliminar</button></div>
     <div class="price-editor" id="pxEditor-${esc(id)}"><div class="price-editor-grid">
@@ -544,6 +547,8 @@ function precioCard(p){
       <label class="cr-field">Categoría<input id="pxCategoria-${esc(id)}" value="${esc(p.categoria||'')}" placeholder="Ej. 📺 Streaming"></label>
       <label class="cr-field">Precio (L)<input type="number" min="0" step="1" id="pxPrecio-${esc(id)}" value="${p.precio??''}" placeholder="Vacío = Por comisión"></label>
       <label class="cr-field">Datos para procesar<select id="pxEntregaTipo-${esc(id)}">${selectOptions(ENTREGA_TIPOS,p.entregaTipo||'')}</select><small class="price-helper">Evita que el Panel de Socios tenga que adivinar si debe pedir perfil, correo, serial, etc.</small></label>
+      <label class="cr-field">Pedir dispositivo<select id="pxPideDispositivo-${esc(id)}">${selectOptions(PIDE_DISPOSITIVO,p.pideDispositivo||'auto')}</select></label>
+      <label class="cr-field">Dato que se pide (recargas)<input id="pxDatoRequerido-${esc(id)}" maxlength="60" value="${esc(p.datoRequerido||'')}" placeholder="Ej. ID de jugador"></label>
       <label class="cr-field">Flujo de entrega<select id="pxEntregaCanal-${esc(id)}">${selectOptions(ENTREGA_CANALES,canal)}</select><small class="price-helper">Este dato viaja a Panel de Socios y Bot TG. No envía credenciales automáticamente todavía.</small></label>
       <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('pxDetalle-'+id)}</div><textarea id="pxDetalle-${esc(id)}" rows="4">${esc(p.detalle||'')}</textarea><small class="price-helper">Use una línea por dato. Los iconos quedan visibles en el catálogo del socio.</small></label>
       <label class="cr-field">Inventario<select id="pxStockModo-${esc(id)}"><option value="auto" ${String(p.stockModo||'auto')==='auto'?'selected':''}>Automático · Bodega</option><option value="manual" ${String(p.stockModo||'auto')==='manual'?'selected':''}>Manual</option></select></label>
@@ -563,6 +568,8 @@ function leerFormPrecio(id){
     precio:precioRaw===''||precioRaw==null?null:Number(precioRaw),
     entregaTipo:$('#pxEntregaTipo-'+id)?.value||'',
     entregaCanal:$('#pxEntregaCanal-'+id)?.value||'manual',
+    pideDispositivo:$('#pxPideDispositivo-'+id)?.value||'auto',
+    datoRequerido:$('#pxDatoRequerido-'+id)?.value.trim()||'',
     stockModo:$('#pxStockModo-'+id)?.value||'auto',
     stockEstado:$('#pxStockEstado-'+id)?.value||'',
     stockCantidad:($('#pxStockCantidad-'+id)?.value??'')===''?null:Number($('#pxStockCantidad-'+id)?.value),
@@ -591,6 +598,8 @@ function nuevoPrecio(){
       <label class="cr-field wide">Variante (opcional)<input id="npVariante" placeholder="Ej. 3 dispositivos"></label>
       <label class="cr-field wide">Precio (L) — vacío = "Por comisión"<input type="number" min="0" id="npPrecio"></label>
       <label class="cr-field wide">Datos para procesar<select id="npEntregaTipo">${selectOptions(ENTREGA_TIPOS,'')}</select></label>
+      <label class="cr-field wide">Pedir dispositivo<select id="npPideDispositivo">${selectOptions(PIDE_DISPOSITIVO,'auto')}</select></label>
+      <label class="cr-field wide">Dato que se pide (recargas)<input id="npDatoRequerido" maxlength="60" placeholder="Ej. ID de jugador"></label>
       <label class="cr-field wide">Flujo de entrega<select id="npEntregaCanal">${selectOptions(ENTREGA_CANALES,'manual')}</select></label>
       <label class="cr-field wide">Detalles que verá el socio<div class="detail-preset-row">${detailPresetButtons('npDetalle')}</div><textarea id="npDetalle" rows="4"></textarea></label>
       <label class="cr-field wide">Inventario<select id="npStockModo"><option value="auto">Automático · Bodega</option><option value="manual">Manual</option></select></label>
@@ -611,6 +620,7 @@ function nuevoPrecio(){
         detalle:$('#npDetalle').value.trim(),
         precio:precioRaw===''?null:Number(precioRaw),
         entregaTipo:$('#npEntregaTipo').value||'',entregaCanal:$('#npEntregaCanal').value||'manual',
+        pideDispositivo:$('#npPideDispositivo').value||'auto',datoRequerido:$('#npDatoRequerido').value.trim(),
         stockModo:$('#npStockModo').value||'auto',stockEstado:$('#npStockEstado').value||'',
         stockCantidad:$('#npStockCantidad').value===''?null:Number($('#npStockCantidad').value),
         activo:true,tarifaId:state.tarifa,
