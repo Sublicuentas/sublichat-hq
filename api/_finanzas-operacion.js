@@ -2,7 +2,7 @@
 // renovar.js lo usa así: preparar (fuera de la transacción) → leer (al inicio de la transacción) → escribir
 // (junto con el cambio de la ficha). Si algo falla, Firestore no guarda NADA: ni la fecha sin pago, ni el pago sin fecha.
 // Mismos documentos y campos que /api/finanzas · registrar_operacion_pago (mismo operationId ⇒ nunca se duplica).
-import { estadoPago, publicMethods, money } from "./_finanzas-libro.js";
+import { estadoPago, publicMethods, money, repartoPagos } from "./_finanzas-libro.js";
 import { financeMetadata } from "./_finance-schema.js";
 import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js";
 // R112: la venta lleva su categoría y tipo GUARDADOS (no se adivinan en Finanzas por el nombre).
@@ -76,8 +76,11 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   if (ep.recibido < 0 || ep.recibido > ep.total) throw errorUsuario("Lo recibido no puede ser negativo ni mayor que el total.");
   const cfg = await db.collection("portal_cliente").doc("configuracion").get();
   const methods = publicMethods(cfg.exists ? (cfg.data() || {}).metodos : []);
-  const banco = methods.find((m) => m.id === clean(pago.bancoId));
-  if (ep.recibido > 0 && !banco) throw errorUsuario("Elija el método/banco donde entró el dinero.");
+  // Oct-2026 · pago dividido en varios bancos/métodos (pago.pagos = [{bancoId, monto}]); sin lista = un solo banco.
+  const reparto = repartoPagos(pago.pagos, ep.recibido, methods, clean(pago.bancoId));
+  if (!reparto.ok) throw errorUsuario(reparto.error);
+  const pagos = reparto.pagos;
+  const banco = pagos.length ? methods.find((m) => m.id === pagos[0].bancoId) : null;
   const deudorTipo = clean(pago.responsable) === "vendedor" ? "vendedor" : "cliente";
   const vendedorNombre = clean(pago.vendedorNombre || pago.vendedor, 60);
   if (ep.saldo > 0 && deudorTipo === "vendedor" && vendedorNombre.length < 2) throw errorUsuario("Escriba el vendedor responsable del pendiente.");
@@ -87,7 +90,7 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   const opId = `oper_op_${uid}_${op}`; // mismo esquema que registrar_operacion_pago
   // R111: un solo pago para varios servicios del cliente (renovación múltiple de la APK) conserva la lista completa.
   const grupo = { compraIds: Array.isArray(pago.compraIds) ? pago.compraIds.map((x) => clean(x)).filter(Boolean).slice(0, 30) : [], servicios: Array.isArray(pago.servicios) ? pago.servicios.slice(0, 30).map((x) => ({ compraId: clean(x?.compraId), plataforma: clean(x?.plataforma, 40), fechaAnterior: clean(x?.fechaAnterior), fechaNueva: clean(x?.fechaNueva) })) : [], plataforma: clean(pago.plataforma, 200) };
-  return { categoria: clean(pago.categoria, 40), tipoVenta: clean(pago.tipoVenta, 40), grupo, ep, banco, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  return { categoria: clean(pago.categoria, 40), tipoVenta: clean(pago.tipoVenta, 40), grupo, ep, banco, pagos, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
 }
 
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
@@ -132,16 +135,19 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   }
   if (!prep || !lectura || lectura.yaExiste) return lectura?.yaExiste ? { duplicado: true, ...prep.ep } : null;
   const { ep, banco, deudorTipo, vendedorNombre, opId, tipoOrigen } = prep;
+  const pagos = Array.isArray(prep.pagos) && prep.pagos.length ? prep.pagos : (banco && ep.recibido > 0 ? [{ bancoId: banco.id, banco: banco.nombre, monto: ep.recibido }] : []);
   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
   const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}) };
   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);
-  transaction.set(ventaRef, { ...base, movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...r });
-  if (ep.recibido > 0) transaction.set(ingRef, { ...base, movimientoId: ingRef.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: ep.recibido, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: prep.usuario, ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...r });
+  const dividido = pagos.length > 1;
+  transaction.set(ventaRef, { ...base, movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...(dividido ? { pagosDetalle: pagos, pagoDividido: true } : {}), ...r });
+  // Oct-2026 · un ingreso por banco: _cobro (1.º), _cobro_2, _cobro_3… → cada banco suma solo lo suyo.
+  pagos.forEach((pg, i) => { const ref = i ? db.collection("finanzas_movimientos").doc(`${opId}_cobro_${i + 1}`) : ingRef; transaction.set(ref, { ...base, movimientoId: ref.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: pg.monto, bancoId: pg.bancoId, banco: pg.banco, metodoPago: pg.banco, cobradoPor: prep.usuario, ...(dividido ? { pagoDividido: true, parte: i + 1, partes: pagos.length } : {}), ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...r }); });
   if (ep.saldo > 0) transaction.set(cxcRef, { cuentaId: cxcRef.id, deudorTipo, deudorId: deudorTipo === "cliente" ? r.clienteId : vendedorNombre, deudorNombre: deudorTipo === "cliente" ? r.clienteNombre : vendedorNombre, ...r, montoTotalOperacion: ep.total, montoRecibidoInicial: ep.recibido, montoOriginalPendiente: ep.saldo, montoRecibidoPosterior: 0, saldoPendiente: ep.saldo, estado: ep.recibido > 0 ? "parcial" : "pendiente", cicloOrigen: lectura.cicloId, abonos: [], creadoPor: prep.usuario, createdAt: now, updatedAt: now });
-  transaction.set(db.collection("auditoria_eventos").doc(), { actorUsuario: prep.usuario, rol: prep.rol, origen: prep.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: r.clienteId, compraId: r.compraId, operationId: prep.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: banco?.nombre || "", responsable: ep.saldo > 0 ? deudorTipo : "" }, detalle: `${r.clienteNombre} · ${r.plataforma} · total ${ep.total} · recibido ${ep.recibido}${banco ? ` en ${banco.nombre}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""} · guardado junto con la ${tipoOrigen}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [], resultado: "ok", tipo: `finanzas_${tipoOrigen}_pago`, createdAt: now });
+  transaction.set(db.collection("auditoria_eventos").doc(), { actorUsuario: prep.usuario, rol: prep.rol, origen: prep.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: r.clienteId, compraId: r.compraId, operationId: prep.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: pagos.map((x) => x.banco).join(" + "), pagos, responsable: ep.saldo > 0 ? deudorTipo : "" }, detalle: `${r.clienteNombre} · ${r.plataforma} · total ${ep.total} · recibido ${ep.recibido}${pagos.length ? ` en ${pagos.map((x) => `${x.banco} ${x.monto}`).join(" + ")}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""} · guardado junto con la ${tipoOrigen}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [], resultado: "ok", tipo: `finanzas_${tipoOrigen}_pago`, createdAt: now });
   return { duplicado: false, ...ep, cuentaId: ep.saldo > 0 ? cxcRef.id : "", operacionId: opId };
 }
 export { money };

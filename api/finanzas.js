@@ -13,7 +13,8 @@ import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida dobl
 import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
-  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa
+  movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
+  repartoPagos,
 } from "./_finanzas-libro.js";
 
 function getApp() {
@@ -485,7 +486,9 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
     const ep = estadoPago(body.montoTotal, body.recibido);
     if (!(ep.total > 0)) return res.status(200).json({ ok: false, error: "Escriba el monto total de la operación." });
     if (ep.recibido < 0 || ep.recibido > ep.total) return res.status(200).json({ ok: false, error: "Lo recibido no puede ser negativo ni mayor que el total." });
-    if (ep.recibido > 0 && !bancoDe(body.bancoId)) return res.status(200).json({ ok: false, error: "Elija el método/banco donde entró el dinero." });
+    const reparto = repartoPagos(body.pagos, ep.recibido, methods, cleanText(body.bancoId)); // Oct-2026 · pago en 2+ bancos
+    if (!reparto.ok) return res.status(200).json({ ok: false, error: reparto.error });
+    const pagosR = reparto.pagos;
     const deudorTipo = cleanText(body.responsable) === "vendedor" ? "vendedor" : "cliente";
     if (ep.saldo > 0 && deudorTipo === "vendedor" && !cleanText(body.vendedorNombre || body.vendedorId)) return res.status(200).json({ ok: false, error: "Elija el vendedor responsable del pendiente." });
     const opId = libroOpDocId("oper", body, authUser.uid);
@@ -494,15 +497,16 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
     const r = await run(async (tx) => {
       if ((await tx.get(ventaRef)).exists) return { duplicado: true, operacionId: opId };
       const { libro } = await estadoLibro(db, tx);
-      const banco = bancoDe(body.bancoId);
+      const banco = pagosR.length ? bancoDe(pagosR[0].bancoId) : null, dividido = pagosR.length > 1;
       const compraIds = Array.isArray(body.compraIds) ? [...new Set(body.compraIds.map((x) => cleanText(x)).filter(Boolean))].slice(0, 30) : [];
       const servicios = Array.isArray(body.servicios) ? body.servicios.slice(0, 30).map((x) => ({ compraId: cleanText(x?.compraId).slice(0, 120), plataforma: cleanText(x?.plataforma).slice(0, 60), fechaAnterior: cleanText(x?.fechaAnterior).slice(0, 20), fechaNueva: cleanText(x?.fechaNueva).slice(0, 20) })) : [];
       const clsR112 = clasificarServicio({ plataforma: body.plataforma, categoria: body.categoria, tipoVenta: body.tipoVenta }); // R112
       const rel = { categoria: clsR112.categoria, tipoVenta: clsR112.tipoVenta, categoriaLabel: CATEGORIAS[clsR112.categoria]?.finanzas || "", clienteId: cleanText(body.clienteId), clienteNombre: cleanText(body.clienteNombre).slice(0, 80), compraId: cleanText(body.compraId), compraIds, servicios, plataforma: cleanText(body.plataforma).slice(0, 160), tipoOrigen, operacionId: opId, cicloId: libro.cicloId, operationId: cleanText(body.operationId), fechaNueva: cleanText(body.fechaNueva), fechaAnterior: cleanText(body.fechaAnterior), vendedor: cleanText(body.vendedorNombre).slice(0, 60) };
-      tx.set(ventaRef, { ...baseMov(identity, authUser, body), movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...rel, ...canonicalFinanceDate(fechaPagoR110, hoy) });
-      if (ep.recibido > 0) tx.set(ingRef, { ...baseMov(identity, authUser, body), movimientoId: ingRef.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: ep.recibido, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: identity.usuario, ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...rel, ...canonicalFinanceDate(fechaPagoR110, hoy) });
+      tx.set(ventaRef, { ...baseMov(identity, authUser, body), movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...(dividido ? { pagosDetalle: pagosR, pagoDividido: true } : {}), ...rel, ...canonicalFinanceDate(fechaPagoR110, hoy) });
+      // Oct-2026 · un ingreso por banco: _cobro, _cobro_2, _cobro_3… (cada banco suma solo lo suyo).
+      pagosR.forEach((pg, i) => { const ref = i ? fmov(`${opId}_cobro_${i + 1}`) : ingRef; tx.set(ref, { ...baseMov(identity, authUser, body), movimientoId: ref.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: pg.monto, bancoId: pg.bancoId, banco: pg.banco, metodoPago: pg.banco, cobradoPor: identity.usuario, ...(dividido ? { pagoDividido: true, parte: i + 1, partes: pagosR.length } : {}), ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...rel, ...canonicalFinanceDate(fechaPagoR110, hoy) }); });
       if (ep.saldo > 0) tx.set(cxcRef, { cuentaId: cxcRef.id, deudorTipo, deudorId: deudorTipo === "cliente" ? rel.clienteId : cleanText(body.vendedorId || body.vendedorNombre), deudorNombre: deudorTipo === "cliente" ? rel.clienteNombre : cleanText(body.vendedorNombre || body.vendedorId), ...rel, montoTotalOperacion: ep.total, montoRecibidoInicial: ep.recibido, montoOriginalPendiente: ep.saldo, montoRecibidoPosterior: 0, saldoPendiente: ep.saldo, estado: ep.recibido > 0 ? "parcial" : "pendiente", cicloOrigen: libro.cicloId, abonos: [], creadoPor: identity.usuario, createdAt: isoNow(), updatedAt: isoNow() });
-      auditar(tx, db, identity, { origen: body.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: rel.clienteId, compraId: rel.compraId, operationId: rel.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: banco?.nombre || "", responsable: ep.saldo > 0 ? deudorTipo : "", compraIds: rel.compraIds || [], servicios: rel.servicios || [] }, detalle: `${rel.clienteNombre} · ${rel.plataforma} · total ${ep.total} · recibido ${ep.recibido}${banco ? ` en ${banco.nombre}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [] });
+      auditar(tx, db, identity, { origen: body.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: rel.clienteId, compraId: rel.compraId, operationId: rel.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: pagosR.map((x) => x.banco).join(" + "), pagos: pagosR, responsable: ep.saldo > 0 ? deudorTipo : "", compraIds: rel.compraIds || [], servicios: rel.servicios || [] }, detalle: `${rel.clienteNombre} · ${rel.plataforma} · total ${ep.total} · recibido ${ep.recibido}${pagosR.length ? ` en ${pagosR.map((x) => `${x.banco} ${x.monto}`).join(" + ")}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""}`, bancos: pagosR.map((x) => ({ bancoId: x.bancoId, monto: x.monto, direccion: "entrada" })) });
       return { duplicado: false, operacionId: opId, ...ep, cuentaId: ep.saldo > 0 ? cxcRef.id : "" };
     });
     return reply(r);
