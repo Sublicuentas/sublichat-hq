@@ -188,6 +188,15 @@ function libroFrom(data = {}) {
 function movementsQuery(db, desde) {
   return db.collection("finanzas_movimientos").where("fechaTS", ">=", ymdStartTs(desde));
 }
+// R160 · Rango cerrado y lo MÁS RECIENTE primero. Antes la lista leía "desde el inicio del ciclo" con un tope de
+// 1 500 documentos en orden ascendente: al pasar ese número (cada venta guarda varios documentos: venta, cobro,
+// costo…) se cortaban los días más nuevos y "hoy" no aparecía en Movimientos.
+function siguienteYmd(ymd) { return new Date(Date.parse(`${ymd}T12:00:00Z`) + 86400000).toISOString().slice(0, 10); }
+function movementsRangoQuery(db, desde, hasta = "") {
+  let q = db.collection("finanzas_movimientos").where("fechaTS", ">=", ymdStartTs(desde));
+  if (hasta) q = q.where("fechaTS", "<", ymdStartTs(siguienteYmd(hasta)));
+  return q.orderBy("fechaTS", "desc");
+}
 function rowsOf(snap) { return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })); }
 
 async function estadoLibro(db, tx = null) {
@@ -280,7 +289,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     const hoyR = hoyYmdHN();
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : "2026-10-01";
     const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : hoyR;
-    const all = rowsOf(await movementsQuery(db, desde).limit(6000).get()).filter((m) => { const f = movementYmd(m); return f && f >= desde && f <= hasta; });
+    const all = rowsOf(await movementsRangoQuery(db, desde, hasta).limit(20000).get()).filter((m) => { const f = movementYmd(m); return f && f >= desde && f <= hasta; });
     const views = all.map((m) => ({ ...movimientoView(m, methods), socio: m.socioNombre || "", productos: m.productosSocio || m.serviciosSocio || null, descuento: money(m.descuento || 0), categoriaLabel: m.categoriaLabel || "", operacion: m.operationId || "", pedido: m.pedidoId || m.compraId || "", motivoAnulacion: m.motivoAnulacion || m.motivoCorreccion || "", anuladoPor: m.anuladoPor || "", anuladoAt: m.anuladoAt || "" }));
     // R123: anulados/corregidos y sus reversas van APARTE (hoja "Anulados") y no suman en Ingresos, Egresos ni Resumen:
     // el período muestra solo lo que de verdad entró/salió. Mismo criterio que el Excel del bot.
@@ -305,7 +314,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
     const libro = libroFrom(libroSnap.exists ? libroSnap.data() : {});
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : libro.cicloInicio;
     const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : "";
-    const snap = await movementsQuery(db, desde).limit(1500).get();
+    const snap = await movementsRangoQuery(db, desde, hasta).limit(6000).get();
     // "venta" es el valor comercial acordado, NO dinero real. Se conserva en Firestore
     // para Ventas generadas / Auditoría, pero jamás debe mezclarse con el listado de
     // movimientos monetarios (ingresos, egresos, planilla, ajustes, etc.).
