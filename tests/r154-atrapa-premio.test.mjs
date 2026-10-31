@@ -62,23 +62,23 @@ test('4 fichas = 4 premios distintos, nunca más de 1 Premium y respeta el tope 
   }
 });
 
-test('inventario: stock 0 y Bodega sin cupos quedan fuera; si ya tiene el servicio, el mes gratis es +30 días reales', async () => {
+test('inventario: stock 0 y Bodega sin cupos quedan fuera; si ya tiene el servicio, el mes gratis NO se aplica solo (queda para el administrador)', async () => {
   const P = J.PREMIOS_INICIALES.map((p) => ({ ...p, activo: true }));
   const lista = J.candidatos({ premios: P.map((p) => (p.id === 'canva' ? { ...p, stock: 0 } : p)), lote: {}, disponibilidadBodega: { hbomax: 2, primevideo: 0, crunchyroll: 0, spotify: 0 }, clienteTiene: (pl) => pl === 'spotify' });
   const ids = lista.map((p) => p.id);
   assert.ok(!ids.includes('canva'), 'stock 0'); assert.ok(!ids.includes('prime'), 'Bodega sin cupos'); assert.ok(!ids.includes('crunchy'));
-  assert.ok(ids.includes('max'), 'Bodega con cupos'); assert.ok(ids.includes('spotify'), 'ya tiene Spotify: se extiende, no gasta Bodega');
-  // Spotify forzado → entrega automática +30 días a SU servicio
+  assert.ok(ids.includes('max'), 'Bodega con cupos'); assert.ok(ids.includes('spotify'), 'ya tiene Spotify: no gasta Bodega');
   const db = base();
   const { loteId } = await J.otorgarFichas(db, { clienteId: 'c1', fichas: 1, origen: 'fidelidad', requestId: 'f1', motivo: 'cliente fiel' });
   const spot = J.PREMIOS_INICIALES.find((p) => p.id === 'spotify');
   await db.collection('juego_premios').doc('spotify').set({ ...spot, activo: true });
   const r = await J.jugar(db, { clienteId: 'c1', fichaId: `${loteId}_1`, rnd: () => 0 });
-  assert.equal(r.ganado.premioId, 'spotify'); assert.equal(r.ganado.estado, 'entregado');
-  assert.equal(r.ganado.entrega.fechaAnterior, en(10)); assert.equal(r.ganado.entrega.fechaNueva, en(40));
+  assert.equal(r.ganado.premioId, 'spotify'); assert.equal(r.ganado.estado, 'pendiente_entrega'); assert.equal(r.ganado.entregaModo, 'admin');
   const c = (await db.collection('clientes').doc('c1').get()).data();
-  assert.equal(c.servicios.find((s) => s.compraId === 'k2').fechaRenovacion, en(40));
-  assert.equal(c.servicios.filter((s) => J.familiaPlataforma(s.plataforma) === 'spotify').length, 1, 'no crea segunda suscripción');
+  assert.equal(c.servicios.find((s) => s.compraId === 'k2').fechaRenovacion, en(10), 'la fecha NO cambia sola');
+  assert.equal(((await db.collection('juego_reservas').doc('spotify').get()).data() || {}).reservados || 0, 0, 'no reserva Bodega');
+  const e = await J.marcarEntregado(db, r.ganado.id, { actor: 'admin', nota: 'aplicado a mano' });
+  assert.equal(e.estado, 'entregado');
 });
 
 test('mes gratis de un servicio que NO tiene: reserva cupo de Bodega, queda pendiente; entregar o vencer libera la reserva', async () => {
