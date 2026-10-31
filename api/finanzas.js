@@ -11,6 +11,7 @@ import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanza
 import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-categorias.js"; // R112 · R137
 import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
 import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
+import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
@@ -816,6 +817,18 @@ export default async function handler(req, res) {
     if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
+    }
+    // R158 · Excel de finanzas (con RESUMEN_PLATAFORMAS). Lo genera el ÚNICO exportador central (backend del bot, el mismo
+    // de "📤 Excel por rango" en Telegram); aquí solo se valida el permiso y se reenvía el archivo. No se recalcula nada.
+    if (accion === "exportar_excel_finanzas") {
+      if (!canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas es exclusivo de Sublicuentas y Relojes." });
+      const re = /^\d{4}-\d{2}-\d{2}$/;
+      const desde = cleanText(body.desde), hasta = cleanText(body.hasta);
+      if (!re.test(desde) || !re.test(hasta) || desde > hasta) return res.status(200).json({ ok: false, error: "Elija un período válido." });
+      const { status, data } = await revAdminGet("finanzas/excel", { desde, hasta }, identity.usuario);
+      if (status !== 200 || !data?.ok || !data.base64) return res.status(200).json({ ok: false, error: data?.error === "rango_muy_largo" ? "El período máximo es de 2 años." : "No se pudo generar el Excel. Intente de nuevo." });
+      await db.collection("auditoria_eventos").add({ actorUsuario: identity.usuario, rol: identity.role, origen: cleanText(body.origen || "web").slice(0, 20), modulo: "finanzas", accion: "exportar_excel_finanzas", tipo: "finanzas_exportar_excel_finanzas", detalle: `${desde} a ${hasta} · ${data.version}`, resultado: "ok", createdAt: isoNow() }).catch(() => {});
+      return res.status(200).json({ ok: true, accion, filename: data.filename, version: data.version, base64: data.base64 });
     }
     if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
