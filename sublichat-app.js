@@ -1739,7 +1739,55 @@ function finXlsTitleRow(ws,text,cols){
 }
 const finXlsMoneyFmt='"L"#,##0';
 const finXlsBtn=document.getElementById("finXls");
-if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
+// R158 · El botón 📊 Excel descarga el archivo del ÚNICO exportador central (backend; el mismo de "📤 Excel por rango"
+// del Bot TG) con RESUMEN_PLATAFORMAS como primera hoja. La web ya no arma el Excel por su cuenta.
+function finExcelHoyHN(){ return new Date(Date.now()-6*3600000).toISOString().slice(0,10); }
+function finExcelRango(preset,desde,hasta){
+  const hoy=finExcelHoyHN(), ym=hoy.slice(0,7), fin=(m)=>{const [y,mm]=m.split("-").map(Number);return `${m}-${String(new Date(Date.UTC(y,mm,0)).getUTCDate()).padStart(2,"0")}`;};
+  if(preset==="hoy")return {desde:hoy,hasta:hoy};
+  if(preset==="mes")return {desde:`${ym}-01`,hasta:hoy};
+  if(preset==="mes_anterior"){const [y,m]=ym.split("-").map(Number);const d=new Date(Date.UTC(y,m-2,1));const p=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;return {desde:`${p}-01`,hasta:fin(p)};}
+  return {desde,hasta};
+}
+function finExcelCentral(){
+  let ov=document.getElementById("finExcelOv");
+  if(!ov){
+    ov=document.createElement("div");ov.id="finExcelOv";ov.className="cobro-overlay";
+    ov.innerHTML=`<div class="cobro-sheet" role="dialog" aria-modal="true" aria-labelledby="finExcelT"><div class="cobro-head"><div><div class="cobro-title" id="finExcelT">📊 Excel de finanzas</div><div class="cobro-sub">Resumen por plataforma, planes, ventas, mes a mes y el reporte completo</div></div><button class="cobro-x" type="button" id="finExcelX" aria-label="Cerrar">✕</button></div>
+      <label style="display:block;margin:10px 0 6px;font-weight:700">Período</label>
+      <select id="finExcelPreset" style="width:100%;min-height:46px;border-radius:12px;padding:0 10px"><option value="mes">Este mes</option><option value="hoy">Hoy</option><option value="mes_anterior">Mes anterior</option><option value="rango">Rango personalizado</option></select>
+      <div id="finExcelFechas" style="display:none;gap:10px;margin-top:10px;grid-template-columns:1fr 1fr"><label>Desde<input type="date" id="finExcelDesde" style="width:100%;min-height:44px"></label><label>Hasta<input type="date" id="finExcelHasta" style="width:100%;min-height:44px"></label></div>
+      <p id="finExcelMsg" style="min-height:20px;margin:10px 0;color:#b91c1c;font-weight:600"></p>
+      <button type="button" id="finExcelGo" class="fin-xls" style="width:100%;min-height:48px">Descargar Excel</button></div>`;
+    document.body.appendChild(ov);
+    const preset=ov.querySelector("#finExcelPreset"),fechas=ov.querySelector("#finExcelFechas");
+    preset.addEventListener("change",()=>{fechas.style.display=preset.value==="rango"?"grid":"none";});
+    ov.querySelector("#finExcelX").addEventListener("click",()=>ov.classList.remove("show"));
+    ov.addEventListener("click",(e)=>{if(e.target===ov)ov.classList.remove("show");});
+    ov.querySelector("#finExcelGo").addEventListener("click",async()=>{
+      const btn=ov.querySelector("#finExcelGo"),msg=ov.querySelector("#finExcelMsg");
+      const r=finExcelRango(preset.value,ov.querySelector("#finExcelDesde").value,ov.querySelector("#finExcelHasta").value);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(r.desde||"")||!/^\d{4}-\d{2}-\d{2}$/.test(r.hasta||"")||r.desde>r.hasta){msg.textContent="Elija las dos fechas (desde ≤ hasta).";return;}
+      msg.textContent="";btn.disabled=true;btn.textContent="Generando…";
+      try{
+        const resp=await fetch("/api/finanzas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"exportar_excel_finanzas",desde:r.desde,hasta:r.hasta,origen:"web"})});
+        const j=await resp.json().catch(()=>({}));
+        if(!j.ok||!j.base64)throw new Error(j.error||"No se pudo generar el Excel.");
+        const bin=atob(j.base64),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+        const url=URL.createObjectURL(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+        const a=document.createElement("a");a.href=url;a.download=j.filename||`Sublicuentas_Finanzas_${r.desde}_a_${r.hasta}.xlsx`;document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),4000);
+        ov.classList.remove("show");mostrarToast("📊 Excel descargado");
+      }catch(e){msg.textContent=e.message||String(e);}
+      finally{btn.disabled=false;btn.textContent="Descargar Excel";}
+    });
+  }
+  ov.classList.add("show");
+  ov.querySelector("#finExcelPreset")?.focus();
+}
+if(finXlsBtn)finXlsBtn.addEventListener("click",()=>finExcelCentral());
+// Exportador anterior hecho en el navegador: queda sin botón (el Excel sale del backend central).
+const finXlsLegacy=async()=>{
   if(typeof ExcelJS==="undefined"){ mostrarToast("Cargando Excel… probá de nuevo en 2s."); return; }
   const movs=(window._finMovs||[]).slice().sort((a,b)=>a.fecha-b.fecha);
   if(!movs.length){ mostrarToast("No hay movimientos para exportar."); return; }
@@ -1897,7 +1945,7 @@ if(finXlsBtn)finXlsBtn.addEventListener("click",async()=>{
   }finally{
     finXlsBtn.disabled=false; finXlsBtn.textContent=oldTxt;
   }
-});
+};
 
 /* ===================== JUEGOS ===================== */
 const GAMES=[
