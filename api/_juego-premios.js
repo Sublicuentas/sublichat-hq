@@ -4,8 +4,9 @@
    - Cada ficha = 1 jugada = 1 premio. Sin repetidos en el lote. Máximo 1 Premium por lote. Tope de costo por lote.
    - El SERVIDOR decide el premio (generador seguro, crypto) y lo guarda ANTES de que el navegador anime.
    - Ficha usada nunca se vuelve a sortear (transacción + id del premio = id de la ficha).
-   - Premio "1 mes gratis": si ya tiene el servicio activo → +30 días reales a ese servicio; si no → acceso nuevo
-     (reserva cupo y queda pendiente de entrega). Netflix NUNCA es premio de 1 mes gratis.
+   - Premio "1 mes gratis": NUNCA se aplica solo (30/10/2026, decisión del dueño). Si ya tiene el servicio activo →
+     queda "pendiente_entrega" para que un administrador lo entregue; si no → acceso nuevo (reserva cupo y queda
+     pendiente de entrega). Solo los "+N días" se suman automáticamente. Netflix NUNCA es premio de 1 mes gratis.
    - Las fichas NO crean, consumen ni modifican el boleto del sorteo mensual.
    - Al cliente nunca se le mandan costos, pesos ni datos internos. */
 import { randomInt, createHash } from "node:crypto";
@@ -310,7 +311,7 @@ export async function jugar(db, { clienteId, beneficiarioKey = "titular", fichaI
     const plat = familiaPlataforma(premio.plataforma);
     const esNuevo = premio.tipo === "mes_gratis" && !tiene(plat);
     let estado = "ganado";
-    if (premio.tipo === "saldo" || premio.tipo === "descuento") estado = "pendiente_entrega";
+    if (premio.tipo === "saldo" || premio.tipo === "descuento" || premio.tipo === "mes_gratis") estado = "pendiente_entrega";
     if (esNuevo) estado = "reservado";
     const expira = new Date(ahora.getTime() + num(config.diasReclamo, 7) * 86400000).toISOString();
     if (premio.inventarioModo === "stock") tx.set(db.collection(COL.premios).doc(premio.id), { ...premio, stock: num(premio.stock) - 1 }); // 10 reservar inventario
@@ -318,7 +319,7 @@ export async function jugar(db, { clienteId, beneficiarioKey = "titular", fichaI
     const ganado = {
       fichaId: fid, loteId: ficha.loteId, clienteId, clienteNombre: lote.clienteNombre || "", beneficiarioKey: beneficiarioKey || "titular",
       premioId: premio.id, premio: premioPublico({ ...premio, plataforma: plat }), tier: premio.tier, costoHnl: num(premio.costoHnl),
-      estado, entregaModo: premio.tipo === "dias" || (premio.tipo === "mes_gratis" && !esNuevo) ? "automatica" : "admin",
+      estado, entregaModo: premio.tipo === "dias" ? "automatica" : "admin",
       reservaBodega: esNuevo && premio.inventarioModo === "bodega" ? plat : "",
       ganadoAt: ahora.toISOString(), expiraAt: estado === "entregado" ? "" : expira, ip: clean(ip, 60),
     };
@@ -338,7 +339,8 @@ export async function jugar(db, { clienteId, beneficiarioKey = "titular", fichaI
   return salida;
 }
 
-// +N días reales al servicio (los "+3/+5 días" o el "1 mes gratis" de un servicio que ya tiene).
+// +N días reales al servicio. Automático solo para "+3/+5 días". El "1 mes gratis" de un servicio que ya tiene
+// únicamente llega aquí si un administrador lo pide (acción "reintentar"/aplicar desde administración).
 export async function entregarAutomatico(db, ganadoId, { ahora = new Date(), actor = "sistema" } = {}) {
   const gRef = db.collection(COL.ganados).doc(ganadoId);
   let out;
