@@ -118,9 +118,11 @@ test('R82 si el hosting no contesta, responde 504 con mensaje (la app no se qued
   assert.equal(res.code, 504); assert.match(res.body.error, /tardó demasiado/);
 });
 
-test('R82 búsqueda IMAP: primero los correos dirigidos a la cuenta y con tiempo límite', async () => {
+test('R82/R159 búsqueda IMAP: lector rápido (conexión reutilizada, primero los dirigidos a la cuenta, lote y tiempo límite)', async () => {
   const fs = await import('node:fs');
   const src = fs.readFileSync(new URL('../api/_codigos-imap.js', import.meta.url), 'utf8');
-  assert.match(src, /headers: HDRS/); assert.match(src, /const orden = directos\.length \? directos : candidatos;/);
-  assert.match(src, /if \(Date\.now\(\) > deadline\)/);
+  assert.match(src, /require\('\.\/_imap-rapido\.js'\)\.crearLector/);
+  const lib = fs.readFileSync(new URL('../api/_imap-rapido.js', import.meta.url), 'utf8');
+  assert.match(lib, /headers: HDRS/); assert.match(lib, /const lista = directos\.length \? directos : todos;/);
+  assert.match(lib, /if \(Date\.now\(\) > deadline\)/);
 });
