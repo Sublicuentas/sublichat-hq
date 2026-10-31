@@ -445,6 +445,7 @@
     if(g.estado==='entregado'&&g.entrega?.fechaNueva)return `Ya se aplicó: su servicio ahora vence el ${g.entrega.fechaNueva}.`;
     if(g.estado==='entregado')return 'Premio entregado.';
     if(g.estado==='reservado')return `Le reservamos ${etiquetaPremio(p)} por 30 días. Su vendedor se lo entrega${hasta?`; reclámelo antes del ${hasta}`:''}.`;
+    if(g.estado==='pendiente_entrega'&&p.tipo==='mes_gratis')return `Su vendedor le entregará ${etiquetaPremio(p)}${hasta?`; reclámelo antes del ${hasta}`:''}.`;
     if(g.estado==='pendiente_entrega')return `Se aplica en su próximo pago${hasta?`, válido hasta el ${hasta}`:''}. No es canjeable por efectivo.`;
     if(g.estado==='vencido')return 'La fecha para reclamarlo ya pasó.';
     return 'Su premio quedó guardado; su vendedor lo aplicará.';
