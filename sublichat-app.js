@@ -854,6 +854,15 @@ function render(){
     }else{ ab.style.display="none"; }
   })();
   renderTable();
+  // R162 · Datos de solo lectura para el diseño nuevo (ui-v2.js). Sin correos, claves ni PIN.
+  try{
+    window.SublichatDatos={
+      version:Date.now(),
+      servicios:DATA.map(c=>({clave:clienteClaveCanonica(c),clienteId:c.clienteId||'',nombre:c.nombre||'',plataforma:c.plataforma||'',precio:Number(c.precio)||0,fecha:c.fecha instanceof Date&&!isNaN(c.fecha)?c.fecha:null,vendedor:c.vendedor||'',perfiles:Number(c.cantidadPerfiles)||1})),
+      resumen:carteraVigente,hoy:new Date(today),fmt
+    };
+    window.dispatchEvent(new CustomEvent('sublichat:datos'));
+  }catch(_){}
 }
 
 let _trendChart=null, _donutChart=null;
