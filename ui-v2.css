@@ -267,3 +267,56 @@ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) .wrap .screen button:is(.on,.active,.se
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) .wrap .screen :is(.fob-arrow,.v1-go){background:#FDEBEA!important;background-image:none!important;color:#E2231A!important}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) .wrap .screen a:not([class]){color:#C51E17!important}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) .wrap .screen #runCarteraAudit{background:#FFFFFF!important;color:#162031!important;border:1px solid #E7EAF0!important;font-weight:600!important}
+
+/* =====================================================================================================
+   r162c · Menú como la maqueta (íconos más grandes y oscuros, texto 15px) + pantallas a todo el ancho
+   ===================================================================================================== */
+#v2Shell .v2-menu{padding:16px 12px 10px}
+#v2Shell .v2-grupo{margin:0 0 16px}
+#v2Shell .v2-grupo>small{font-size:11px;letter-spacing:.09em;color:#9AA4B2;padding:4px 14px 8px}
+#v2Shell .v2-item{gap:14px;padding:11px 14px;margin:2px 0;font-size:15px;font-weight:500;color:#2E3A4D;border-radius:11px}
+#v2Shell .v2-item svg{width:22px!important;height:22px!important;max-width:none;max-height:none;stroke-width:1.75;color:#4B5668}
+#v2Shell .v2-item:hover{background:#F6F7FA;color:#162031}
+#v2Shell .v2-item.on{background:#FDEBEA;color:#E2231A;font-weight:600}
+#v2Shell .v2-item.on svg{color:#E2231A;stroke-width:2}
+#v2Shell .v2-item .v2-num{min-width:9px;height:9px;padding:0;font-size:0;background:#E2231A;border-radius:50%}
+#v2Shell .v2-item .v2-num:not(:empty){min-width:20px;height:20px;padding:0 6px;font-size:11px;border-radius:999px}
+#v2Shell .v2-bottom svg{width:23px!important;height:23px!important;max-width:none;max-height:none;stroke-width:1.75}
+#v2Shell .v2-head svg{max-width:none;max-height:none}
+#v2Shell .v2-burger svg,#v2Shell .v2-icon svg{width:22px;height:22px;stroke-width:1.75}
+
+/* Pantallas: ocupan todo el ancho disponible (antes 1180px centrado) */
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .wrap>.screen{max-width:none!important;width:auto!important;margin-left:0!important;margin-right:0!important}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .wrap>.screen>.card{max-width:none!important;width:auto!important}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .wrap>.screen :is(#rbac-perfil,.toolbar,.count,#movieResults){max-width:none!important}
+/* La tarjeta que envuelve toda la pantalla pasa a ser el fondo de la página: título arriba y secciones como tarjetas */
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body .wrap>.screen>.card:has(>h2){background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;border-radius:0!important}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body .wrap>.screen>.card:has(>h2)>h2{font-size:26px!important;font-weight:700!important;margin:0 0 6px!important;display:flex;align-items:center;gap:12px}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body .wrap>.screen>.card:has(>h2)>h2>.ico{display:none!important}
+/* Tablas y listas sueltas dentro de la pantalla: siempre sobre tarjeta blanca */
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body .wrap>.screen>.card:has(>h2) :is(.table-wrap,.tbl-wrap,.clientes-table-wrap,table:not(.v2-tabla)){background:#fff!important;border-radius:14px}
+/* Clientes: el botón "Crear / actualizar CRM" va arriba a la derecha, a la altura del título */
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes>.card>.ficha-open-btn{position:absolute!important;top:2px!important;right:0!important;left:auto!important;bottom:auto!important;margin:0!important}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes>.card{position:relative!important}
+html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes>.card>h2{padding-right:300px!important;min-height:52px}
+@media (max-width:767.98px){html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes>.card>h2{padding-right:0!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes>.card>.ficha-open-btn{position:static!important;width:100%;margin:0 0 12px!important}}
+/* Clientes en celular: cada cliente es una tarjeta (sin columnas cortadas ni scroll de lado) */
+@media (max-width:767.98px){
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes .clientes-table-wrap{overflow:visible!important;border:0!important;background:transparent!important;box-shadow:none!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes .clientes-table-wrap table{min-width:0!important;width:100%!important;background:transparent!important;display:block!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes .clientes-table-wrap thead{display:none!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes .clientes-table-wrap tbody{display:block!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:10px 8px;height:auto!important;background:#fff!important;border:1px solid #E7EAF0!important;border-radius:16px!important;padding:14px!important;margin:0 0 10px!important;position:relative;box-shadow:0 6px 28px rgba(19,26,45,.045)}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td{display:block!important;height:auto!important;min-height:0!important;line-height:1.3!important;padding:0!important;border:0!important;background:transparent!important;min-width:0;text-align:left!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(1){grid-column:1/4}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(5){grid-column:4;grid-row:1;text-align:right!important;font-weight:700}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(2){grid-column:1/5}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(3){grid-column:1/2;color:#4B5668!important;font-size:13px}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(4){grid-column:2/5;text-align:right!important}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(6){grid-column:1/3}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(6) .client-renew-btn{width:100%!important;justify-content:center}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(7){grid-column:3}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td:nth-child(8){grid-column:4;position:relative}
+  html.ui-v2:not(#v2a):not(#v2b):not(#v2c):not(#v2d):not(#v2e) body #screen-clientes #tbody>tr>td .client-platform{white-space:normal!important}
+}
