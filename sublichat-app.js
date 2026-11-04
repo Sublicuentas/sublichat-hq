@@ -7269,7 +7269,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     inicio:['🏡','Inicio'], clientes:['👥','Clientes'], agenda:['📆','Cobros'], egresos:['💸','Egresos'], cierre:['🧾','Cierre'],
     importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], actividad:['🧾','Actividad'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
-    pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil']
+    pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil'],
+    permisos:['🛡️','Usuarios y permisos'] // R162 · solo Sublicuentas
   };
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   const currentUser=()=>{
@@ -7300,7 +7301,42 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   function canControlMaestro(){return isSublicuentasAccount()||isGeisellAdminAccount();}
   function isRelojesAccount(){return ['relojes','libni'].includes(norm(currentUser()));}
   function canPortalCliente(){return isSublicuentasAccount()||isRelojesAccount();}
+  // R162 · Módulos por usuario que define Sublicuentas (api/permisos.js). Si el servidor ya respondió para este
+  // usuario, manda esa lista; si no (sin conexión o primera carga), quedan las reglas de siempre.
+  const PERM_KEY='sublichat_permisos_v1';
+  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
+  let permisosSrv=null, permisosPidiendo=false, permisosAt=0;
+  function claveActual(){const u=norm(currentUser());return u==='geissel'?'geisell':u;}
+  function permisosVigentes(){
+    if(!permisosSrv){try{const c=JSON.parse(localStorage.getItem(PERM_KEY)||'null');if(c&&Array.isArray(c.pantallas))permisosSrv=c;}catch(_){}}
+    return permisosSrv&&permisosSrv.usuario===claveActual()?permisosSrv:null;
+  }
+  async function cargarPermisos(forzar){
+    if(permisosPidiendo||(!forzar&&Date.now()-permisosAt<60000))return;
+    permisosPidiendo=true;permisosAt=Date.now();
+    try{
+      const r=await fetch('/api/permisos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'mis_permisos'})});
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok&&Array.isArray(j.pantallas)){
+        const antes=JSON.stringify(permisosVigentes()&&permisosVigentes().pantallas);
+        permisosSrv={usuario:j.usuario,supervisor:!!j.supervisor,pantallas:j.pantallas,modulos:j.modulos||{}};
+        try{localStorage.setItem(PERM_KEY,JSON.stringify(permisosSrv));}catch(_){}
+        if(antes!==JSON.stringify(permisosSrv.pantallas)){
+          buildNav();
+          const act=document.querySelector('.screen.active');const id=act?String(act.id||'').replace(/^screen-/,''):'';
+          if(id&&!can(id))rbacGo('inicio');
+        }
+      }
+    }catch(_){}finally{permisosPidiendo=false;}
+  }
+  window.addEventListener('focus',()=>cargarPermisos(false));
   function can(screen){
+    if(screen==='permisos')return isSublicuentasAccount();
+    const pv=permisosVigentes();
+    if(pv)return pv.pantallas.includes(screen);
+    return canHoy(screen);
+  }
+  function canHoy(screen){
     if(screen==='control-cuentas')return canControlMaestro();
     if(screen==='actividad')return isSublicuentasAccount();
     if(screen==='revendedores')return isSublicuentasAccount();
@@ -7629,6 +7665,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
     ensureScreen('auditoria','Cuadre y auditoría','Detecta servicios sin precio, sin vendedor, vencidos o posibles fugas.','');
     ensureScreen('estadisticas','Métricas y rendimiento','Resumen por plataforma, vendedor y cartera.','');
+    ensureScreen('permisos','Usuarios y permisos','Sublicuentas define qué módulos tiene cada usuario. Sublicuentas siempre tiene todos.','');
     ensureScreen('objetivos','Objetivos y metas','Módulo nuevo: metas de ventas diarias, semanales y mensuales con progreso en vivo. Las metas se guardan en este navegador y las puede editar Relojes, Sublicuentas o Magdiel.','');
   }
 
@@ -7639,7 +7676,10 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     document.body.classList.toggle('role-admin',role==='admin');
     document.body.classList.toggle('role-auditor',role==='auditor');
     // El menú usa el mismo permiso que abre el módulo para incluir a Geisell en Control Maestro.
-    const screens=(ROLE_NAV[role]||ROLE_NAV.admin).filter(can);
+    const pv=permisosVigentes();
+    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'permisos'].filter(can); // R162
+    setTimeout(()=>cargarPermisos(false),0);
+    try{window.dispatchEvent(new CustomEvent('sublichat:nav',{detail:{screens:screens.slice(),role}}));}catch(_){}
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&['admin','geisell_admin'].includes(role))?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
     nav.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>rbacGo(btn.dataset.screen)));
     setTimeout(()=>{if(!tk.loaded&&!tk.loading)tkLoad();else tkUpdateNavBadge();},260);
@@ -7660,6 +7700,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(screen==='catalogo-relojes'&&window.SublichatCatalogoRelojes)window.SublichatCatalogoRelojes.open();
     if(screen==='revendedores'&&window.SublichatRevendedores)window.SublichatRevendedores.open();
     if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
+    if(screen==='permisos'&&window.SublichatPermisos)window.SublichatPermisos.open();
+    try{window.dispatchEvent(new CustomEvent('sublichat:screen',{detail:{screen}}));}catch(_){}
   }
 
 
@@ -8462,6 +8504,10 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   const _oldIrASeccion=irASeccion;
   irASeccion=function(s){ if(document.getElementById('screen-'+s)) rbacGo(s); else _oldIrASeccion(s); };
   window.subliRBAC={apply:applyRBAC,go:rbacGo,role:currentRole,can};
+  // R162 · Para el diseño nuevo (ui-v2.js) y la pantalla de permisos (permisos-admin.js).
+  window.SublichatRBAC={ir:rbacGo,can,rol:currentRole,rolEtiqueta:()=>ROLE_LABEL[currentRole()]||'Usuario',usuario:currentUser,esSupervisor:isSublicuentasAccount,
+    pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'permisos'].filter(can);},
+    meta:(s)=>NAV_META[s]||['•',s],recargarPermisos:()=>cargarPermisos(true)};
   if(document.body.classList.contains('ready')) applyRBAC();
 })();
 
