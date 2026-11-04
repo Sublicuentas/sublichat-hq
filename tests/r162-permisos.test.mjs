@@ -93,7 +93,7 @@ test('las APIs de los módulos consultan los permisos', () => {
 test('diseño nuevo: apagado por defecto, sin Activar TV, assets livianos', () => {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const js = fs.readFileSync(new URL('../ui-v2.js', import.meta.url), 'utf8');
-  assert.match(html, /ui-v2\.css\?v=/); assert.match(html, /ui-v2\.js\?v=/); assert.match(html, /permisos-admin\.js\?v=/);
+  assert.match(html, /ui-v2\.css\?v=/); assert.match(html, /ui-v2\.js\?v=/); assert.match(html, /ui-v2-inicio\.js\?v=/); assert.match(html, /permisos-admin\.js\?v=/);
   assert.match(js, /if \(!activo\) return;/);
   assert.ok(!/activar\s*tv/i.test(js));
   for (const a of ['sublirobot-96.webp', 'sublirobot-240.webp', 'sublicuentas-logo-claro-ui.webp']) {
