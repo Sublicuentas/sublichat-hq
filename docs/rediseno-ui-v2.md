@@ -40,8 +40,8 @@ Solo la web de Sublichat HQ. **No cambia** APK, bot, base de datos ni endpoints 
 | `api/importar.js`, `inventario.js`, `codigos.js`, `finanzas.js`, `sorteos.js`, `portal-cliente.js`, `catalogo-relojes.js`, `revendedores-admin.js`, `auditoria.js` | Consultan los permisos |
 | `sublichat-app.js` | Menú desde el servidor + pantalla Usuarios y permisos + `window.SublichatRBAC` |
 | `permisos-admin.js` | Nuevo: pantalla de permisos |
-| `ui-v2.css`, `ui-v2.js` | Nuevos: diseño nuevo detrás de la bandera |
-| `index.html` | Carga los 3 archivos nuevos; versión `20261104-r162` |
+| `ui-v2.css`, `ui-v2.js`, `ui-v2-inicio.js` | Nuevos: diseño nuevo detrás de la bandera (base, estilo general e Inicio) |
+| `index.html` | Carga los 3 archivos nuevos; versión `20261104-r162b` |
 | `assets/sublicuentas-logo-claro-ui.webp`, `assets/sublirobot-96.webp`, `assets/sublirobot-240.webp` | Nuevos |
 | `tests/r162-permisos.test.mjs`, `tests/visual/arnes.mjs`, `tests/visual/r162-menu.mjs` | Pruebas |
 
@@ -52,7 +52,16 @@ Solo la web de Sublichat HQ. **No cambia** APK, bot, base de datos ni endpoints 
 3. **Permisos de todos**: borrar el documento `config/sublichat_permisos` en Firestore → todos vuelven a las reglas de hoy (la web y las APIs lo leen cada 20 s).
 4. **Código completo**: volver a subir los archivos de la entrega anterior (zip 23). `api/permisos.js` y `api/_permisos.js` pueden quedarse: sin el documento no cambian nada.
 
-## Fase 2 (siguiente)
+## Fase 2 · Contenido (r162b, 04/11/2026)
+
+- **Todo el lado derecho** toma el estilo nuevo: colores de la base anterior pasados a los tokens Sublicuentas (rojo, tinta, gris), letra Inter, tarjetas blancas lisas con borde fino, botones rojos, campos, pestañas y tablas iguales en todos los módulos. Se quitaron degradados, ondas y el botón azul "← Inicio" (el menú lateral está siempre).
+- **Inicio = Panel general** (`ui-v2-inicio.js`), con datos reales de Sublichat (`window.SublichatDatos`, que publica `sublichat-app.js`, sin correos/claves/PIN):
+  - Clientes activos (regla canónica de cartera vigente), Por vencer 7 días, Vencidos este mes, Esperado del mes (vs. mes anterior).
+  - Cartera vigente por plataforma y Cobros próximos por semana (por fecha de renovación).
+  - Próximos vencimientos: "Gestionar" abre el cliente en Clientes; renovar, cobro y "No renovó" siguen en sus flujos de siempre.
+  - Se conserva el banner/frase del día y los accesos rápidos.
+
+## Fase 2 (resto)
 
 Inicio → Clientes → Renovaciones → Control Maestro, uno por entrega, con capturas antes/después. Reglas que se mantienen: Control Maestro no corta perfiles a 3; en la ficha "Agregar otra cuenta a este cliente"; "Renovar a fecha", "No renovó" y comprobante único; credenciales ocultas.
 
