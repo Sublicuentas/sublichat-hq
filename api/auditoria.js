@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
 function getApp(){
   if(admin.apps.length)return admin.app();
@@ -87,7 +88,7 @@ export default async function handler(req,res){
       return res.status(200).json({ok:true,id:ref.id});
     }
     if(req.method==="GET"){
-      if(!me.admin)return res.status(403).json({ok:false,error:"La bitácora completa es privada de Sublicuentas."});
+      if(!PERMISOS.aplicar(await PERMISOS.contexto(db,user),"actividad",me.admin))return res.status(403).json({ok:false,error:"La bitácora completa es privada de Sublicuentas."}); // R162
       const limit=Math.max(50,Math.min(1000,Number(req.query?.limit||500)||500));
       const antesDe=String(req.query?.antesDe||"").trim(); // cursor ISO: trae lo anterior a esa fecha
       let q1=db.collection("actividad_usuarios").orderBy("createdAt","desc");

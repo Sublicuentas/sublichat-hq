@@ -6,6 +6,7 @@
 // FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 import admin from "firebase-admin";
+import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 import { financeMetadata } from "./_finance-schema.js";
 import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
 import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-categorias.js"; // R112 · R137
@@ -169,7 +170,8 @@ const METODOS_RESPALDO = [
 ];
 function hoyYmdHN() { return ymd(new Date(Date.now() - 6 * 3600000)); }
 function ymdStartTs(value) { const [y, m, d] = String(value).split("-").map(Number); return admin.firestore.Timestamp.fromDate(new Date(Date.UTC(y, m - 1, d, 0, 0, 0))); }
-function canUseLibro(identity) { return ["sublicuentas", "relojes"].includes(identity.role); }
+// R162: si Sublicuentas activó o desactivó Finanzas a este usuario, manda eso (identity.puedeFinanzas).
+function canUseLibro(identity) { return typeof identity.puedeFinanzas === "boolean" ? identity.puedeFinanzas : ["sublicuentas", "relojes"].includes(identity.role); }
 function libroRef(db) { return db.collection(LIBRO_REF[0]).doc(LIBRO_REF[1]); }
 
 async function loadMethods(db) {
@@ -807,6 +809,7 @@ export default async function handler(req, res) {
     const authUser = await requireFirebaseUser(req, res);
     if (!authUser) return;
     const identity = authIdentity(authUser);
+    identity.puedeFinanzas = await PERMISOS.decidir(db, authUser, "finanzas", ["sublicuentas", "relojes"].includes(identity.role)); // R162
     const body = req.body || {};
     const accion = cleanText(body.accion || body.tipoAccion);
     const now = isoNow();

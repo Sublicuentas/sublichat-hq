@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 import { randomInt, randomBytes, createHash } from "node:crypto";
 import {
   reglasSorteo, nivelFidelidad, NIVELES_FIDELIDAD, sorteoClean, sorteoNorm, sorteoSafeId, sorteoFechaKey,
@@ -56,8 +57,10 @@ async function requireEditor(req, res) {
   if (!token) { res.status(401).json({ ok: false, error: "Sesión requerida." }); return null; }
   try {
     const user = await admin.auth().verifyIdToken(token);
-    const kind = editorKind(user);
-    if (!kind) { res.status(403).json({ ok: false, error: "Sorteos está disponible únicamente para Sublicuentas y Relojes." }); return null; }
+    // R162: si Sublicuentas se lo activa a otro usuario, entra con el alcance de Relojes; si se lo desactiva, 403.
+    const kind0 = editorKind(user);
+    const kind = PERMISOS.aplicar(await PERMISOS.contexto(admin.firestore(), user), "sorteos", !!kind0) ? (kind0 || "relojes") : "";
+    if (!kind) { res.status(403).json({ ok: false, error: "Sorteos no está habilitado para este usuario." }); return null; }
     return { user, kind, actor: sorteoNorm(user.usuario || user.name || kind) };
   } catch (_) {
     res.status(401).json({ ok: false, error: "Sesión inválida o vencida." });

@@ -4,6 +4,7 @@
 // Requiere variables: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 
 const admin = require("firebase-admin");
+const PERMISOS = require("./_permisos.js"); // R162 · módulos por usuario que define Sublicuentas
 const crypto = require("crypto");
 
 function getApp() {
@@ -617,7 +618,8 @@ function controlDateKey(value) {
 function controlEsAdmin(body) {
   const usuario = String(body && (body.usuario || body.editor) || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const rol = String(body && body.rol || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  return ["sublicuentas", "naara", "geisell", "geissel"].includes(usuario) || ["sublicuentas", "admin", "administrador", "owner", "geisell_admin", "control_admin"].includes(rol);
+  const hoy = ["sublicuentas", "naara", "geisell", "geissel"].includes(usuario) || ["sublicuentas", "admin", "administrador", "owner", "geisell_admin", "control_admin"].includes(rol);
+  return PERMISOS.aplicar(body && body.__permisos, "control-maestro", hoy); // R162: lo que defina Sublicuentas
 }
 
 function controlDenegado() {
@@ -1081,7 +1083,12 @@ function secRole(body) {
   if (['sublicuentas','naara','admin','administrador','owner'].includes(raw)) return 'sublicuentas';
   return 'sin_permiso';
 }
+// R162 · Cada sección de Mesas de trabajo responde al módulo que Sublicuentas activa o desactiva por usuario.
+const SECCION_MODULO = { bodega: "bodega", auditoria: "auditoria", flujo_diario: "mesas" };
 function secCanEdit(body, seccion) {
+  return PERMISOS.aplicar(body && body.__permisos, SECCION_MODULO[seccion] || "mesas", secCanEditHoy(body, seccion));
+}
+function secCanEditHoy(body, seccion) {
   const r = secRole(body);
   if (r === 'sublicuentas') return true;
   if (r === 'magdiel') return seccion === 'auditoria';
@@ -1520,6 +1527,7 @@ async function handler(req, res) {
     body.usuario = identity.usuario;
     body.editor = identity.usuario;
     body.rol = identity.role;
+    Object.defineProperty(body, "__permisos", { value: await PERMISOS.contexto(db, authUser), enumerable: false }); // R162 (no se guarda)
     const accion = body.accion || "guardar_respaldo_excel";
 
     if (accion === "control_datos") {

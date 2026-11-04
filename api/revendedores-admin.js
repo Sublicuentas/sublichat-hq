@@ -18,6 +18,7 @@
 //   REV_API_BASE  (opcional; por defecto https://sublicuentas-panel-api.onrender.com)
 
 import admin from "firebase-admin";
+import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 import { normalizarBorrador, firmaBorrador, armarListaPublica, leerPreciosSocios, categoriaLimpia, CONFIG_DOC, VERSION_PRECIOS_PUBLICOS } from "./_precios-publicos-lib.js"; // R145
 
 function getApp() {
@@ -111,7 +112,8 @@ export default async function handler(req, res) {
     const user = await requireFirebaseUser(req, res);
     if (!user) return; // requireFirebaseUser ya respondió
 
-    if (!esUsuarioSublicuentas(user)) {
+    // R162: Panel de Socios lo puede activar Sublicuentas a otro usuario (o quitárselo).
+    if (!PERMISOS.aplicar(await PERMISOS.contexto(admin.firestore(), user), "panel-socios", esUsuarioSublicuentas(user))) {
       return res.status(403).json({ ok: false, error: "Esta sección es solo para el usuario sublicuentas." });
     }
 

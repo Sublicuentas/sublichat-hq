@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const PERMISOS = require('./_permisos.js'); // R162 · módulos por usuario que define Sublicuentas
 const crypto = require('crypto');
 
 function credentialFrom(prefix=''){
@@ -36,7 +37,7 @@ function editorKind(user){const u=norm(user&&(user.usuario||user.name||''));if([
 async function requireEditor(req,res){
   const auth=clean(req.headers.authorization||'',4000),token=auth.startsWith('Bearer ')?auth.slice(7).trim():'';
   if(!token){res.status(401).json({ok:false,error:'Sesión requerida.'});return null;}
-  try{const user=await admin.auth().verifyIdToken(token);const kind=editorKind(user);if(!kind){res.status(403).json({ok:false,error:'Catálogo Relojes está disponible únicamente para Sublicuentas y Relojes.'});return null;}return{user,kind,actor:norm(user.usuario||user.name||kind)};}catch(_){res.status(401).json({ok:false,error:'Sesión inválida o vencida.'});return null;}
+  try{const user=await admin.auth().verifyIdToken(token);const kind0=editorKind(user);/* R162: Sublicuentas activa/desactiva; activado a otro usuario = alcance de Relojes */const kind=PERMISOS.aplicar(await PERMISOS.contexto(admin.firestore(),user),'catalogo',!!kind0)?(kind0||'relojes'):'';if(!kind){res.status(403).json({ok:false,error:'Catálogo no está habilitado para este usuario.'});return null;}return{user,kind,actor:norm(user.usuario||user.name||kind)};}catch(_){res.status(401).json({ok:false,error:'Sesión inválida o vencida.'});return null;}
 }
 function id(v,fallback='item'){return clean(v,90).toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||fallback;}
 const price=v=>v===''||v==null?null:(Number.isFinite(Number(v))?Math.max(0,Math.round(Number(v)*100)/100):null);

@@ -14,6 +14,7 @@ const admin = require('firebase-admin');
 // R81: el lector IMAP vive DENTRO de /api (como _sorteos-*.js). Desde lib/ Vercel no encontraba
 // "imapflow" (MODULE_NOT_FOUND): las dependencias de la función se instalan junto a api/package.json.
 const imap = require('./_codigos-imap.js');
+const PERMISOS = require('./_permisos.js'); // R162 · módulos por usuario que define Sublicuentas
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -73,6 +74,8 @@ async function handler(req, res, deps = {}) {
   let user;
   try { user = await auth().verifyIdToken(token, true); } catch (_) { return res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' }); }
   const me = accessFor(user);
+  let permisosCtx = null; try { permisosCtx = await PERMISOS.contexto(dbOf(), user); } catch (_) { permisosCtx = null; }
+  me.puede = PERMISOS.aplicar(permisosCtx, 'codigos', me.puede); // R162
   if (!me.puede) return res.status(403).json({ ok: false, error: 'Los códigos solo están disponibles para Sublicuentas, Relojes y Geisell.' });
 
   const body = req.body && typeof req.body === 'object' ? req.body : {};

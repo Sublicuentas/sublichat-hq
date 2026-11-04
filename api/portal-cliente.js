@@ -5,6 +5,7 @@
 // cada cliente. Los terceros de Relojes también pueden consultar Sorteos.
 
 const admin = require('firebase-admin');
+const PERMISOS = require('./_permisos.js'); // R162 · módulos por usuario que define Sublicuentas
 
 const PROMOS_COLLECTION = 'portal_promociones';
 const CONFIG_COLLECTION = 'portal_cliente';
@@ -105,7 +106,9 @@ async function requirePortalEditor(req, res) {
   }
   try {
     const user = await admin.auth().verifyIdToken(token);
-    const kind = editorKind(user);
+    // R162: si Sublicuentas se lo activa a otro usuario, entra con el alcance de Relojes; si se lo desactiva, 403.
+    const kind0 = editorKind(user);
+    const kind = PERMISOS.aplicar(await PERMISOS.contexto(admin.firestore(), user), 'portal-cliente', !!kind0) ? (kind0 || 'relojes') : '';
     if (!kind) {
       res.status(403).json({ ok: false, error: 'Este módulo no está disponible para este usuario.' });
       return null;

@@ -6,6 +6,7 @@
 import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
+import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -520,7 +521,10 @@ export default async function handler(req, res) {
     if (accion === "tvUrls") {
       return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db) });
     }
-    if (!isAdminUser(authUser)) {
+    // R162: Control Maestro / Bodega según lo que Sublicuentas active o desactive a cada usuario.
+    const permisosCtx = await PERMISOS.contexto(db, authUser);
+    const puedeInventario = PERMISOS.aplicar(permisosCtx, "control-maestro", isAdminUser(authUser)) || permisosCtx.overrides?.bodega === true;
+    if (!puedeInventario) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
     }
 
