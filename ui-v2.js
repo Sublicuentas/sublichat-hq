@@ -25,14 +25,14 @@
 
   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
   var NAV = [
-    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'catalogo-relojes' },
+    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'catalogo-relojes' }, { s: 'sala-juntas' },
     { g: 'Operación', items: ['importar', 'inventario', 'egresos', 'cierre'] },
     { g: 'Supervisión', items: ['actividad', 'auditoria', 'crm-master', 'estadisticas', 'permisos'] },
     { g: 'Más', items: ['sorteos', 'tickets', 'revendedores', 'chat', 'objetivos', 'pelis', 'partidos'] }
   ];
   var NOMBRE = {
     inicio: 'Inicio', clientes: 'Clientes', agenda: 'Renovaciones', 'control-cuentas': 'Control Maestro', 'portal-cliente': 'Portal Cliente',
-    'catalogo-relojes': 'Catálogo', sorteos: 'Sorteos', tickets: 'Tickets / Avisos', revendedores: 'Panel de Socios', perfil: 'Mi perfil',
+    'catalogo-relojes': 'Catálogo', 'sala-juntas': 'Sala de Juntas', sorteos: 'Sorteos', tickets: 'Tickets / Avisos', revendedores: 'Panel de Socios', perfil: 'Mi perfil',
     importar: 'Mesas de trabajo', inventario: 'Bodega', egresos: 'Egresos', cierre: 'Cierre', actividad: 'Actividad', auditoria: 'Auditoría',
     'crm-master': 'CRM Master', estadisticas: 'Métricas', permisos: 'Usuarios y permisos', objetivos: 'Objetivos', chat: 'Subli', pelis: 'Pelis', partidos: 'Partidos'
   };
@@ -66,6 +66,7 @@
     chat: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
     pelis: '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
     partidos: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+    'sala-juntas': '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
     menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>', buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     campana: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
     mas: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',

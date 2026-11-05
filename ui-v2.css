@@ -376,3 +376,6 @@ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{backgro
 #v2Shell .v2-nav .v2-tab.v2-hijo,#v2Shell .v2-nav .v2-tab[aria-expanded="true"]{background:var(--n-hover);border-color:#F6C9C6}
 #v2Shell .v2-nav .v2-tab::after{bottom:3px}
 #v2Shell .v2-user img{object-fit:cover;padding:0}
+
+/* R167 · con "Sala de Juntas" son 10 botones: en 1280-1599px se compactan un poco para que quepan en una fila */
+@media (min-width:1280px) and (max-width:1599.98px){#v2Shell .v2-nav .v2-tab{padding:0 11px;font-size:13px;gap:7px}#v2Shell .v2-nav-in{gap:6px!important;padding:0 18px}#v2Shell .v2-tab>svg{width:17px;height:17px}}

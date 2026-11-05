@@ -7279,7 +7279,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     importar:['📥','Flujo Diario'], inventario:['📦','Bodega'], 'control-cuentas':['🗃️','Control Maestro'], actividad:['🧾','Actividad'], revendedores:['🤝','Catálogo Socios'], 'portal-cliente':['🌐','Portal del cliente'], 'catalogo-relojes':['⌚','Catálogo Relojes'], sorteos:['🎁','Sorteos y premios'], tickets:['🎫','Tickets'],
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil'],
-    permisos:['🛡️','Usuarios y permisos'] // R162 · solo Sublicuentas
+    permisos:['🛡️','Usuarios y permisos'], // R162 · solo Sublicuentas
+    'sala-juntas':['🎥','Sala de Juntas'] // R167 · solo las 3 fundadoras
   };
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   const currentUser=()=>{
@@ -7313,7 +7314,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   // R162 · Módulos por usuario que define Sublicuentas (api/permisos.js). Si el servidor ya respondió para este
   // usuario, manda esa lista; si no (sin conexión o primera carga), quedan las reglas de siempre.
   const PERM_KEY='sublichat_permisos_v1';
-  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
+  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sala-juntas','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
   let permisosSrv=null, permisosPidiendo=false, permisosAt=0;
   function claveActual(){const u=norm(currentUser());return u==='geissel'?'geisell':u;}
   function permisosVigentes(){
@@ -7339,8 +7340,10 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     }catch(_){}finally{permisosPidiendo=false;}
   }
   window.addEventListener('focus',()=>cargarPermisos(false));
+  function esFundadoraSala(){return ['sublicuentas','naara','libni','relojes','geisell','geissel'].includes(norm(currentUser()));}
   function can(screen){
     if(screen==='permisos')return isSublicuentasAccount();
+    if(screen==='sala-juntas')return esFundadoraSala(); // R167 · solo Naara/Libni/Geisell (el servidor lo vuelve a validar)
     const pv=permisosVigentes();
     if(pv)return pv.pantallas.includes(screen);
     return canHoy(screen);
@@ -7674,6 +7677,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     ensureScreen('crm-master','Directorio CRM Master','Vista maestra de clientes históricos con filtros para auditoría.','');
     ensureScreen('auditoria','Cuadre y auditoría','Detecta servicios sin precio, sin vendedor, vencidos o posibles fugas.','');
     ensureScreen('estadisticas','Métricas y rendimiento','Resumen por plataforma, vendedor y cartera.','');
+    ensureScreen('sala-juntas','Sala de Juntas','SubliStudio 3D · Reuniones, convocatorias y acuerdos del equipo','');
     ensureScreen('permisos','Usuarios y permisos','Sublicuentas define qué módulos tiene cada usuario. Sublicuentas siempre tiene todos.','');
     ensureScreen('objetivos','Objetivos y metas','Módulo nuevo: metas de ventas diarias, semanales y mensuales con progreso en vivo. Las metas se guardan en este navegador y las puede editar Relojes, Sublicuentas o Magdiel.','');
   }
@@ -7686,7 +7690,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     document.body.classList.toggle('role-auditor',role==='auditor');
     // El menú usa el mismo permiso que abre el módulo para incluir a Geisell en Control Maestro.
     const pv=permisosVigentes();
-    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'permisos'].filter(can); // R162
+    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'sala-juntas','permisos'].filter(can); // R162 · R167
     setTimeout(()=>cargarPermisos(false),0);
     try{window.dispatchEvent(new CustomEvent('sublichat:nav',{detail:{screens:screens.slice(),role}}));}catch(_){}
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&['admin','geisell_admin'].includes(role))?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
@@ -7710,6 +7714,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(screen==='revendedores'&&window.SublichatRevendedores)window.SublichatRevendedores.open();
     if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
     if(screen==='permisos'&&window.SublichatPermisos)window.SublichatPermisos.open();
+    if(screen==='sala-juntas'&&window.SublichatSala)window.SublichatSala.open();
     try{window.dispatchEvent(new CustomEvent('sublichat:screen',{detail:{screen}}));}catch(_){}
   }
 
@@ -8515,7 +8520,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   window.subliRBAC={apply:applyRBAC,go:rbacGo,role:currentRole,can};
   // R162 · Para el diseño nuevo (ui-v2.js) y la pantalla de permisos (permisos-admin.js).
   window.SublichatRBAC={ir:rbacGo,can,rol:currentRole,rolEtiqueta:()=>ROLE_LABEL[currentRole()]||'Usuario',usuario:currentUser,esSupervisor:isSublicuentasAccount,
-    pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'permisos'].filter(can);},
+    pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'sala-juntas','permisos'].filter(can);},
     meta:(s)=>NAV_META[s]||['•',s],recargarPermisos:()=>cargarPermisos(true),
     // R166 · Foto del usuario autenticado: MISMA fuente que Perfil (perfil guardado de ese usuario; sin foto → Sublirobot).
     avatar:()=>{try{return svgAvatar(profileBase());}catch(_){return '';}},nombrePerfil:()=>{try{return profileBase().nombre||'';}catch(_){return '';}}};
