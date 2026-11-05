@@ -32,6 +32,10 @@
     campana: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
     corona: '<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/>',
     micOff: '<path d="M2 2l20 20M18.89 13.23A7 7 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3"/>',
+    manoI: '<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+    expandir: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    contraer: '<path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>',
+    ojo: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     pantalla: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
     chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>', sonrisa: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
     atras: '<path d="m12 19-7-7 7-7M19 12H5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', puerta: '<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
@@ -47,6 +51,7 @@
   function toast(t, malo) {
     let el = document.getElementById('sjToast');
     if (!el) { el = document.createElement('div'); el.id = 'sjToast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    const raiz = document.fullscreenElement || document.webkitFullscreenElement || document.body; if (el.parentNode !== raiz) raiz.appendChild(el);
     el.textContent = t; el.className = 'on' + (malo ? ' malo' : ''); clearTimeout(toast.t); toast.t = setTimeout(() => { el.className = ''; }, 3200);
   }
   const fechaLarga = (r) => { if (!r || !r.inicioMs) return 'Sin fecha'; const d = new Date(r.inicioMs - 6 * 3600000); return `${DIAS[d.getUTCDay()].replace(/^./, (x) => x.toUpperCase())}, ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]} de ${d.getUTCFullYear()}`; };
@@ -95,6 +100,9 @@
     else cuerpo = inicio();
     desmontar3D();
     if (st.vivo && st.vista !== 'sala3d') salirVivo();
+    document.documentElement.classList.toggle('sj-en-sala', st.vista === 'sala3d');
+    document.documentElement.classList.toggle('sj-en-editor', st.vista === 'personaje');
+    if (st.vista !== 'sala3d') salirPantallaCompleta();
     host.innerHTML = cab() + (st.error ? `<div class="sj-alerta">${esc(st.error)}</div>` : '') + cuerpo;
     if (st.vista === 'antesala') pintarMedidor();
     if (st.vista === 'personaje') montarEditor3D();
@@ -297,7 +305,7 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r170');
+    M3 = await import('/sala-3d.js?v=20261105-r171');
     return M3;
   }
   function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -323,7 +331,7 @@
           <button type="button" class="sj-rot sj-rot-i" data-sj="rotar" data-d="-0.6" aria-label="Girar a la izquierda">‹</button><button type="button" class="sj-rot sj-rot-d" data-sj="rotar" data-d="0.6" aria-label="Girar a la derecha">›</button>
           <div class="sj-ed-carga" id="sjEdCarga">Cargando 3D…</div></div>
       </div>
-      <div class="sj-form-acc">
+      <div class="sj-form-acc sj-ed-acc">
         <button type="button" class="sj-btn sj-rojo sj-grande" data-sj="guardarPers">${ico('check')}Guardar personaje</button>
         <button type="button" class="sj-btn sj-sec" data-sj="verSalaPers">${ico('play')}Vista previa en sala</button>
         <button type="button" class="sj-btn sj-sec" data-sj="restablecer">Restablecer</button>
@@ -365,18 +373,19 @@
   function sala3dHtml() {
     const r = st.sala3dReu, parts = r ? r.participantes : ['naara', 'libni', 'geisell'];
     const V = st.vivo;
-    const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkPant', 'pantalla', 'Compartir'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat'], ['lkReac', 'sonrisa', 'Reacciones']]
+    const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkVer', 'ojo', 'Ver'], ['lkPant', 'pantalla', 'Compartir'], ['lkMano', 'manoI', 'Mano'], ['lkReac', 'sonrisa', 'Reacciones'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat']]
       .map(([a, i, t]) => `<button type="button" class="sj3d-ctl" data-sj="${a}" id="sj3d-${a}">${ico(i)}<span>${t}</span></button>`).join('') + `<button type="button" class="sj3d-ctl" disabled title="La grabación necesita aprobación aparte (tiene costo).">${ico('reloj')}<span>Grabar</span></button>`
       : [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
       .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Disponible al entrar a la reunión en vivo">${ico(i)}<span>${t}</span></button>`).join('');
     const terminar = V && st.data.permisos.moderar ? `<button type="button" class="sj3d-ctl sj3d-salir sj3d-fin" data-sj="lkTerminar">${ico('x')}<span>Terminar</span></button>` : '';
     const vistas = [...(V ? [['auto', 'Automática', 'Sigue a quien habla']] : []), ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
       .map(([v, t, d]) => `<button type="button" class="sj3d-vista${v === (V ? 'auto' : 'general') ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('');
-    return `<div class="sj3d">
+    return `<div class="sj3d${V ? ' sj3d-vivo' : ''}" id="sj3dRaiz">
       <div class="sj3d-top"><img src="/assets/sublicuentas-logo-oscuro-ui.webp" alt="Sublicuentas"><span class="sj3d-sep"></span><b>SubliStudio <i>3D</i></b><span class="sj3d-sala">${ico('grupo')}Sala de Juntas</span>
-        <span class="sj3d-chip" id="sj3dChip">${r ? esc(r.titulo) : 'Vista previa'} · ${V ? '<i class="sj3d-led"></i>En vivo' : 'vista previa sin audio'}</span></div>
+        <span class="sj3d-chip" id="sj3dChip">${r ? esc(r.titulo) : 'Vista previa'} · ${V ? '<i class="sj3d-led"></i>En vivo' : 'vista previa sin audio'}</span>
+        <button type="button" class="sj3d-full" data-sj="pantallaCompleta" id="sj3dFull" title="Pantalla completa (tecla F)">${ico('expandir')}<span>Pantalla completa</span></button></div>
       <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div>
-        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
+        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><div class="sj3d-pres" id="sj3dPres" hidden></div><button type="button" class="sj3d-verpres" data-sj="lkVerPres" id="sj3dVerPres" hidden>' + ico('pantalla') + 'Ver presentación en grande</button><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
         <aside class="sj3d-vistas"><b>${ico('cam')}Vistas de cámara</b>${vistas}</aside></div>
       <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button>${terminar}</div>
     </div>`;
@@ -408,7 +417,7 @@
     st.sala3dReu = r; st.volver3d = 'antesala'; st.vista = 'sala3d'; pintar(); window.scrollTo({ top: 0 });
     const V = st.vivo;
     try {
-      const L = await import('/sala-vivo.js?v=20261105-r170');
+      const L = await import('/sala-vivo.js?v=20261105-r171');
       V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
         estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
         presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
@@ -417,14 +426,20 @@
         video: (quien, track) => { if (st.vivo !== V) return; ponerVideo(quien, track); },
         chat: (m) => { if (st.vivo !== V) return; V.chat.push(m); if (V.chat.length > 200) V.chat.shift(); if (V.panel !== 'chat' && !m.mio) V.noLeidos++; pintarPanel(); pintarBarra(); },
         reaccion: (quien, e) => { if (sala3 && st.vivo === V) sala3.reaccion(quien, e); },
+        manos: (m) => { if (st.vivo !== V) return; const antes = new Set((V.manos?.cola || []).map((x) => x.id)); V.manos = m;
+          if (st.data.permisos.moderar) m.cola.filter((x) => !antes.has(x.id) && x.id !== st.data.yo.id).forEach((x) => toast(`✋ ${funda(x.id).nombre} pidió la palabra.`));
+          if (sala3) (st.sala3dReu?.participantes || []).forEach((u) => sala3.setMano(u, m.cola.some((x) => x.id === u)));
+          pintarPanel(); pintarBarra(); pintarPres(); },
+        turno: (quien) => { if (st.vivo !== V) return; if (sala3) sala3.saludar(quien); toast(quien === st.data.yo.id ? 'Naara le dio la palabra.' : `${funda(quien).nombre} tiene la palabra.`); },
         aviso: (t) => toast(t),
         audioBloqueado: (b) => { const x = document.getElementById('sj3dAudio'); if (x) x.hidden = !b; },
       } });
       if (st.vivo !== V) { V.ctl.salir(); return; } // salió mientras conectaba
       pintarBarra();
-      const quedan = V.expira - Date.now(); // tope de la reunión (costo): se corta sola
-      V.tope = setTimeout(() => { toast('Se terminó el tiempo de esta reunión.'); salirVivo(true); }, Math.max(1000, quedan));
-      V.avisoTope = setTimeout(() => toast('Quedan 5 minutos de reunión.'), Math.max(0, quedan - 5 * 60000));
+      // la duración es un objetivo, no un corte: avisa 5 min antes y al llegar la hora de fin (no saca a nadie)
+      const fin = Number(r.inicioMs || 0) + (Number(r.duracionMin) || 60) * 60000, aFin = fin - Date.now();
+      if (aFin - 5 * 60000 > 0) V.avisoTope = setTimeout(() => toast('Quedan 5 minutos de la hora prevista.'), aFin - 5 * 60000);
+      if (aFin > 0) V.tope = setTimeout(() => toast('Llegaron a la hora prevista de fin. Pueden cerrar cuando terminen.'), aFin);
       V.cuenta = setInterval(camaraAuto, 1000);
     } catch (e) {
       if (st.vivo !== V) return;
@@ -438,11 +453,14 @@
     Object.values(V.videos).forEach((el) => el.remove());
     if (V.pantallaEl) V.pantallaEl.remove();
     if (V.ctl) V.ctl.salir();
+    if (V.presEl) V.presEl.remove();
+    salirPantallaCompleta();
     if (volver && st.vista === 'sala3d') { st.vista = 'antesala'; pintar(); }
   }
   function aplicarVivo3D() {
     const V = st.vivo; if (!V || !sala3) return;
-    (st.sala3dReu?.participantes || []).forEach((u) => { sala3.setPresente(u, V.presentes.has(u)); sala3.setMicro(u, V.mics[u] !== false); });
+    (st.sala3dReu?.participantes || []).forEach((u) => { sala3.setPresente(u, V.presentes.has(u)); sala3.setMicro(u, V.mics[u] !== false); sala3.setMano(u, (V.manos?.cola || []).some((x) => x.id === u)); });
+    pintarPres();
     pintarPanel(); pintarBarra();
   }
   // cámara automática: corta a quien habla si lleva ~1.5 s hablando y pasaron 4 s del último corte; pantalla compartida manda
@@ -459,9 +477,10 @@
   function ponerPantalla(track, de) {
     const V = st.vivo; if (!V) return;
     if (V.pantallaEl) { V.pantallaEl.remove(); V.pantallaEl = null; }
-    if (!track) { if (V.pantalla && V.pantalla.de !== de) return; V.pantalla = null; if (sala3) sala3.setPantalla(null); return; }
+    if (!track) { if (V.pantalla && V.pantalla.de !== de) return; V.pantalla = null; V.verPres = false; if (sala3) sala3.setPantalla(null); pintarPres(); return; }
     const el = track.attach(); el.muted = true; el.playsInline = true; el.className = 'sj3d-oculto'; document.body.appendChild(el); try { el.play(); } catch (_) {}
-    V.pantalla = { de }; V.pantallaEl = el; if (sala3) sala3.setPantalla(el);
+    V.pantalla = { de, track }; V.pantallaEl = el; if (sala3) sala3.setPantalla(el);
+    V.verPres = de !== st.data.yo.id; pintarPres(); // quien comparte no se ve a sí misma en grande (evita el efecto espejo)
     if (de !== st.data.yo.id) toast(`${funda(de).nombre} está compartiendo pantalla.`);
     V.vistaAuto = null; V.ultimoCorte = 0; camaraAuto();
   }
@@ -474,6 +493,44 @@
     fig.appendChild(el); const c = document.createElement('figcaption'); c.textContent = funda(quien).nombre + (quien === st.data.yo.id ? ' (Tú)' : ''); fig.appendChild(c);
     cont.appendChild(fig); V.videos[quien] = fig;
   }
+  // Modo presentación: la pantalla compartida ocupa ~78 % y las fundadoras quedan en una banda lateral
+  function pintarPres() {
+    const V = st.vivo, o = document.getElementById('sj3dPres'), b = document.getElementById('sj3dVerPres'); if (!V || !o) return;
+    if (b) b.hidden = !(V.pantalla && !V.verPres);
+    const raiz = document.getElementById('sj3dRaiz'); if (raiz) raiz.classList.toggle('sj3d-presentando', !!(V.pantalla && V.verPres));
+    if (!(V.pantalla && V.verPres)) { o.hidden = true; if (V.presEl) { V.presEl.remove(); V.presEl = null; } return; }
+    o.hidden = false;
+    if (!V.presEl || V.presDe !== V.pantalla.de) {
+      if (V.presEl) V.presEl.remove();
+      const el = V.pantalla.track.attach(); el.muted = true; el.playsInline = true; el.autoplay = true; el.className = 'sj3d-presv'; V.presEl = el; V.presDe = V.pantalla.de;
+      o.innerHTML = `<div class="sj3d-presm"></div><aside class="sj3d-presb"></aside><div class="sj3d-presc"><span>${ico('pantalla')}${esc(funda(V.pantalla.de).nombre)} está presentando</span><button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkVolverSala">Volver a la sala</button></div>`;
+      o.querySelector('.sj3d-presm').appendChild(el); try { el.play(); } catch (_) {}
+    }
+    const band = o.querySelector('.sj3d-presb'); const habla = new Set(V.hablantes || []), cola = (V.manos?.cola || []).map((x) => x.id);
+    band.innerHTML = `<b>Participantes (${V.presentes.size})</b>` + (st.sala3dReu?.participantes || []).map((u) => `<div class="sj3d-presp${habla.has(u) ? ' sj3d-habla' : ''}${V.presentes.has(u) ? '' : ' sj3d-ausente'}">${cara(u, 36)}<span><b>${esc(funda(u).nombre)}</b><small>${!V.presentes.has(u) ? 'No ha entrado' : V.manos?.turno === u ? 'Tiene la palabra' : cola.includes(u) ? `✋ Turno ${cola.indexOf(u) + 1}` : u === 'naara' ? 'Anfitriona' : 'Fundadora'}</small></span>${V.presentes.has(u) ? ico(V.mics[u] !== false ? 'mic' : 'micOff', 'sj3d-pmic') : ''}</div>`).join('');
+  }
+  const enPantallaCompleta = () => !!(document.fullscreenElement || document.webkitFullscreenElement) || !!document.querySelector('.sj3d-expandido');
+  async function pantallaCompleta() {
+    const raiz = document.getElementById('sj3dRaiz'); if (!raiz) return;
+    if (enPantallaCompleta()) return salirPantallaCompleta();
+    const pedir = raiz.requestFullscreen || raiz.webkitRequestFullscreen;
+    let ok = false;
+    if (pedir) { try { await pedir.call(raiz, { navigationUI: 'hide' }); ok = true; } catch (_) {} }
+    if (!ok) { raiz.classList.add('sj3d-expandido'); document.documentElement.classList.add('sj-sala-expandida'); } // celulares sin Fullscreen API: modo expandido
+    marcarFull();
+  }
+  function salirPantallaCompleta() {
+    const raiz = document.getElementById('sj3dRaiz');
+    if (raiz) raiz.classList.remove('sj3d-expandido'); document.documentElement.classList.remove('sj-sala-expandida');
+    const fe = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fe) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) {} }
+    marcarFull();
+  }
+  function marcarFull() {
+    const b = document.getElementById('sj3dFull'); const on = enPantallaCompleta();
+    if (b) { b.innerHTML = `${ico(on ? 'contraer' : 'expandir')}<span>${on ? 'Salir del modo' : 'Pantalla completa'}</span>`; b.classList.toggle('sj3d-full-on', on); }
+  }
+  document.addEventListener('fullscreenchange', marcarFull); document.addEventListener('webkitfullscreenchange', marcarFull);
   function pintarEstado() {
     const V = st.vivo, e = document.getElementById('sj3dEstado'); if (!e || !V) return;
     e.hidden = V.estado === 'conectado'; e.textContent = V.estado === 'reconectando' ? 'Reconectando… no cierre esta ventana.' : V.estado === 'conectando' ? 'Conectando a la sala…' : '';
@@ -489,13 +546,21 @@
     set('lkPart', V.panel === 'part', `Participantes (${V.presentes.size})`, 'grupo', 'grupo');
     set('lkChat', V.panel === 'chat', V.noLeidos ? `Chat (${V.noLeidos})` : 'Chat', 'chat', 'chat');
     set('lkReac', V.panel === 'reac', 'Reacciones', 'sonrisa', 'sonrisa');
+    set('lkVer', V.panel === 'ver', 'Ver', 'ojo', 'ojo');
+    const tengoMano = !!(V.manos?.cola || []).find((x) => x.id === st.data.yo.id), nCola = (V.manos?.cola || []).length;
+    set('lkMano', tengoMano, tengoMano ? 'Bajar mano' : (st.data.permisos.moderar && nCola ? `Mano (${nCola})` : 'Mano'), 'manoI', 'manoI');
+    const bm2 = document.getElementById('sj3d-lkMano'); if (bm2) bm2.classList.toggle('sj3d-alerta', st.data.permisos.moderar && nCola > 0 && !tengoMano);
   }
   function pintarPanel() {
     const V = st.vivo, p = document.getElementById('sj3dPanel'); if (!V || !p) return;
     p.hidden = !V.panel; if (!V.panel) return;
     const cab = (t) => `<div class="sj3d-pcab"><b>${t}</b><button type="button" class="sj3d-px" data-sj="lkCerrarPanel" aria-label="Cerrar">${ico('x')}</button></div>`;
     if (V.panel === 'part') {
-      p.innerHTML = cab('Participantes') + (st.sala3dReu?.participantes || []).map((u) => { const en = V.presentes.has(u), mic = V.mics[u] !== false;
+      const M = V.manos || { cola: [], turno: '' }, mod = st.data.permisos.moderar, yo = st.data.yo.id;
+      const cola = `<div class="sj3d-cola"><b>${ico('manoI')}Pedir la palabra</b>${M.turno ? `<div class="sj3d-turno">🎙️ Tiene la palabra: <b>${esc(funda(M.turno).nombre)}</b>${mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkFinTurno">Terminar turno</button>` : ''}</div>` : ''}
+        ${M.cola.length ? `<ol>${M.cola.map((x) => `<li><span>${esc(funda(x.id).nombre)}${x.id === yo ? ' (Tú)' : ''}${M.turno === x.id ? ' · con la palabra' : ''}</span>${mod && M.turno !== x.id ? `<button type="button" class="sj-btn sj-rojo sj-mini" data-sj="lkDarTurno" data-u="${x.id}">Dar la palabra</button>` : ''}${x.id === yo ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkMano">Retirar</button>` : ''}</li>`).join('')}</ol>` : '<p class="sj-hint">Nadie ha pedido la palabra.</p>'}
+        ${mod && (M.cola.length || M.turno) ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkLimpiarCola">Limpiar cola</button>` : ''}<p class="sj-hint">La cola no apaga micrófonos: todas se siguen escuchando.</p></div>`;
+      p.innerHTML = cab('Participantes') + cola + (st.sala3dReu?.participantes || []).map((u) => { const en = V.presentes.has(u), mic = V.mics[u] !== false;
         return `<div class="sj3d-pp">${cara(u, 32)}<span><b>${esc(funda(u).nombre)}${u === st.data.yo.id ? ' (Tú)' : ''}${u === 'naara' ? ' 👑' : ''}</b><small>${en ? (mic ? 'En la sala' : 'En la sala · silenciada') : 'No ha entrado'}</small></span>
           ${en ? ico(mic ? 'mic' : 'micOff', 'sj3d-pmic') : ''}${st.data.permisos.moderar && en && u !== st.data.yo.id ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkSacar" data-u="${u}">Sacar</button>` : ''}</div>`; }).join('');
     } else if (V.panel === 'chat') {
@@ -504,23 +569,37 @@
         <form class="sj3d-chatf" id="sj3dChatF"><input id="sj3dChatT" maxlength="500" autocomplete="off" placeholder="Escriba un mensaje…" aria-label="Mensaje"><button type="submit" class="sj-btn sj-rojo sj-mini" aria-label="Enviar">${ico('enviar')}</button></form>`;
       const m = document.getElementById('sj3dMsgs'); if (m) m.scrollTop = m.scrollHeight;
     } else if (V.panel === 'reac') {
-      p.innerHTML = cab('Reacciones') + `<div class="sj3d-reacs">${['👍', '👏', '❤️', '😂', '🎉', '✅', '🙋'].map((e) => `<button type="button" class="sj3d-re" data-sj="lkReaccion" data-e="${e}">${e}</button>`).join('')}</div><p class="sj-hint">Aparece sobre su personaje para todas.</p>`;
+      p.innerHTML = cab('Reacciones') + `<div class="sj3d-reacs">${REAC.map(([e, n], i) => `<button type="button" class="sj3d-re" data-sj="lkReaccion" data-e="${e}" aria-label="${n} (tecla ${i + 1})" title="${n} · tecla ${i + 1}">${e}<small>${n}</small></button>`).join('')}</div><p class="sj-hint">Aparece 2-3 segundos sobre su personaje. Atajos: teclas 1 a 6.</p>`;
+    } else if (V.panel === 'ver') {
+      const parts = st.sala3dReu?.participantes || [];
+      p.innerHTML = cab('Vistas de cámara') + `<div class="sj3d-verl">${[['auto', 'Automática', 'Sigue a quien habla'], ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, '']), ['presentacion', 'Vista presentación', 'La pantalla de la sala'], ['panoramica', 'Vista panorámica', 'Recorrido lento']].map(([v, t, d]) => `<button type="button" class="sj3d-vista${(V.auto ? 'auto' : V.vistaManual) === v ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b>${d ? `<small>${esc(d)}</small>` : ''}</button>`).join('')}</div>`;
     }
+  }
+  const REAC = [['👏', 'Aplausos'], ['👍', 'Me gusta'], ['❤️', 'Corazón'], ['😂', 'Risa'], ['😮', 'Sorpresa'], ['🎉', 'Fiesta']];
+  async function reaccionar(e) {
+    const V = st.vivo; if (!V?.ctl) return;
+    try { if (!(await V.ctl.reaccion(e))) toast('Espere un momento antes de enviar otra reacción.'); } catch (_) {}
   }
   async function accionVivo(a, b) {
     const V = st.vivo; if (!V) return;
-    if (a === 'lkPart' || a === 'lkChat' || a === 'lkReac' || a === 'lkCerrarPanel') {
-      const k = { lkPart: 'part', lkChat: 'chat', lkReac: 'reac' }[a] || '';
+    if (a === 'lkVerPres') { V.verPres = true; return pintarPres(); }
+    if (a === 'lkVolverSala') { V.verPres = false; return pintarPres(); }
+    if (a === 'lkPart' || a === 'lkChat' || a === 'lkReac' || a === 'lkVer' || a === 'lkCerrarPanel') {
+      const k = { lkPart: 'part', lkChat: 'chat', lkReac: 'reac', lkVer: 'ver' }[a] || '';
       V.panel = V.panel === k ? '' : k; if (V.panel === 'chat') V.noLeidos = 0; pintarPanel(); pintarBarra();
       if (V.panel === 'chat') { const t = document.getElementById('sj3dChatT'); if (t) t.focus(); }
       return;
     }
     if (a === 'lkAudio') { try { await V.ctl.activarAudio(); } catch (_) {} return; }
     if (!V.ctl) return;
-    if (a === 'lkReaccion') { try { await V.ctl.reaccion(b.dataset.e); } catch (_) {} return; }
+    if (a === 'lkReaccion') return reaccionar(b.dataset.e);
     b.disabled = true;
     try {
       if (a === 'lkMic') await V.ctl.setMicro(!V.ctl.micro);
+      else if (a === 'lkMano') { const sube = !V.ctl.mano; await V.ctl.setMano(sube); if (sube) toast('Levantó la mano. Naara verá su turno en la cola.'); }
+      else if (a === 'lkDarTurno') await V.ctl.darTurno(b.dataset.u);
+      else if (a === 'lkFinTurno') { const sig = (V.manos?.cola || []).find((x) => x.id !== V.manos.turno); await V.ctl.darTurno(''); if (sig) toast(`Siguiente en la cola: ${funda(sig.id).nombre}.`); }
+      else if (a === 'lkLimpiarCola') await V.ctl.limpiarCola();
       else if (a === 'lkCam') await V.ctl.setCamara(!V.ctl.camara);
       else if (a === 'lkPant') {
         if (!navigator.mediaDevices?.getDisplayMedia && !V.ctl.compartiendo) throw new Error('Este dispositivo no permite compartir pantalla (en celular use una computadora).');
@@ -584,8 +663,10 @@
     if (a === 'verSala' || a === 'verSalaPers') { st.sala3dReu = a === 'verSala' ? (st.ante || reu()) : null; st.volver3d = st.vista; st.vista = 'sala3d'; detenerMic(); pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'vista3d') {
       if (st.vivo) { st.vivo.auto = b.dataset.v === 'auto'; if (st.vivo.auto) { st.vivo.vistaAuto = null; st.vivo.ultimoCorte = 0; marcarVista('auto'); camaraAuto(); return; } }
-      if (sala3) sala3.setVista(b.dataset.v); return;
+      if (st.vivo) st.vivo.vistaManual = b.dataset.v;
+      if (sala3) sala3.setVista(b.dataset.v); if (st.vivo?.panel === 'ver') pintarPanel(); return;
     }
+    if (a === 'pantallaCompleta') return pantallaCompleta();
     if (a === 'salirSala') { if (st.vivo) { salirVivo(false); st.vista = 'antesala'; return pintar(); } st.vista = st.volver3d || 'inicio'; return pintar(); }
   });
   document.addEventListener('click', (e) => { const b = host && host.contains(e.target) && e.target.closest('[data-op]'); if (!b || b.type === 'checkbox' || !st.pers) return; cambiarOpcion(b.dataset.op, b.dataset.v); });
@@ -595,6 +676,15 @@
     if (e.target && e.target.id === 'sj3dChatF') { e.preventDefault(); const t = document.getElementById('sj3dChatT'); const v = t ? t.value : ''; if (t) t.value = ''; if (st.vivo?.ctl && v.trim()) st.vivo.ctl.chat(v).catch(() => toast('No se pudo enviar el mensaje.', true)); }
   });
   window.addEventListener('pagehide', () => { if (st.vivo) salirVivo(false); });
+  document.addEventListener('keydown', (e) => {
+    if (st.vista !== 'sala3d' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape' && document.querySelector('.sj3d-expandido')) { salirPantallaCompleta(); return; }
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); pantallaCompleta(); return; }
+    if (!st.vivo?.ctl) return;
+    if (/^[1-6]$/.test(e.key)) { e.preventDefault(); reaccionar(REAC[Number(e.key) - 1][0]); }
+    if (e.key === 'h' || e.key === 'H') { const b = document.getElementById('sj3d-lkMano'); if (b) b.click(); }
+  });
 
   function estilos() {
     if (document.getElementById('sjCss')) return;
@@ -738,6 +828,48 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-on{background:#2B3340!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-mute{color:#FF8A80!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-fin{background:#7A1F2B!important}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) [hidden]{display:none!important}
+/* R171 · Fase 5: pantalla completa, mano/turnos, reacciones, modo presentación */
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font:600 13px Inter,sans-serif;color:#fff;background:#222833;border:1px solid #2F3744;border-radius:999px;padding:7px 13px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full.sj3d-full-on{background:#C62828;border-color:#C62828}.sj3d-full .sj-i{width:16px;height:16px}
+#sj3dRaiz:fullscreen,#sj3dRaiz:-webkit-full-screen,.sj3d.sj3d-expandido{display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none}
+.sj3d.sj3d-expandido{position:fixed;inset:0;z-index:2147483000}
+#sj3dRaiz:fullscreen .sj3d-g,.sj3d-expandido .sj3d-g{flex:1;min-height:0;grid-template-columns:minmax(0,1fr)}
+#sj3dRaiz:fullscreen .sj3d-escena,.sj3d-expandido .sj3d-escena{aspect-ratio:auto;min-height:0;height:100%}
+#sj3dRaiz:fullscreen .sj3d-vistas,.sj3d-expandido .sj3d-vistas{display:none}
+#sj3dRaiz:fullscreen .sj3d-barra,.sj3d-expandido .sj3d-barra{padding-bottom:max(12px,env(safe-area-inset-bottom))}
+#sj3dRaiz:fullscreen #sjToast{z-index:2147483647}
+html.sj-sala-expandida,html.sj-sala-expandida body{overflow:hidden!important}
+/* un ancestro con transform (animación de entrada) rompe position:fixed: se anula mientras haga falta */
+html.sj-sala-expandida #screen-sala-juntas,html.sj-sala-expandida .screen-sala-juntas,html.sj-sala-expandida .sj-card{transform:none!important;animation:none!important;filter:none!important}
+@media (max-width:760px){html.sj-en-editor #screen-sala-juntas,html.sj-en-editor .screen-sala-juntas,html.sj-en-editor .sj-editor{transform:none!important;animation:none!important;filter:none!important}}
+.sj3d-presentando .sj3d-g{grid-template-columns:minmax(0,1fr)}.sj3d-presentando .sj3d-vistas{display:none}
+.sj3d-pres{position:absolute;inset:0;z-index:4;background:#141920;display:grid;grid-template-columns:minmax(0,1fr) 220px;grid-template-rows:minmax(0,1fr) auto;gap:10px;padding:10px}
+.sj3d-presm{min-width:0;min-height:0;border-radius:12px;overflow:hidden;background:#000;display:grid;place-items:center}.sj3d-presv{width:100%;height:100%;object-fit:contain}
+.sj3d-presb{background:#1B2028;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}.sj3d-presb>b{font-size:13px;letter-spacing:.02em}
+.sj3d-presp{display:flex;align-items:center;gap:9px;background:#222833;border:1px solid #2F3744;border-radius:10px;padding:8px}.sj3d-presp span{flex:1;display:flex;flex-direction:column;min-width:0}.sj3d-presp b{font-size:13px}.sj3d-presp small{font-size:11.5px;color:#AEB6C2}
+.sj3d-presp.sj3d-habla{border-color:#2ECC71;box-shadow:0 0 0 2px rgba(46,204,113,.35)}.sj3d-presp.sj3d-ausente{opacity:.5}.sj3d-presp .sj3d-pmic{color:#AEB6C2}
+.sj3d-presc{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 13px Inter,sans-serif}.sj3d-presc span{display:inline-flex;align-items:center;gap:7px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-verpres{all:unset;cursor:pointer;position:absolute;left:12px;top:12px;z-index:3;display:inline-flex;align-items:center;gap:7px;background:#C62828;color:#fff;font:600 13px Inter,sans-serif;padding:8px 13px;border-radius:999px}.sj3d-verpres .sj-i{width:16px;height:16px}
+.sj3d-cola{padding:12px 14px;border-bottom:1px solid #ECEEF2;display:flex;flex-direction:column;gap:8px}.sj3d-cola>b{display:flex;align-items:center;gap:7px;font-size:14px}.sj3d-cola>b .sj-i{width:17px;height:17px}
+.sj3d-cola ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}.sj3d-cola li{font-size:14px}.sj3d-cola li span{margin-right:8px}.sj3d-cola li .sj-btn{margin:2px 4px 0 0}
+.sj3d-turno{background:#E9F8EF;border:1px solid #BFE8CF;border-radius:10px;padding:8px 10px;font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sj3d-reacs{grid-template-columns:repeat(3,1fr)!important}.sj3d-re small{display:block;font:600 11px Inter,sans-serif;color:#5E6B7A;margin-top:4px}
+.sj3d-verl{padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj3d-verl button.sj3d-vista{background:#F4F5F8!important;border-color:#E3E6EB!important;color:#1F2430!important}.sj3d-verl .sj3d-vista small{color:#6B7380}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj3d-verl button.sj3d-vista.on{background:#FDECEC!important;border-color:#E2231A!important}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-alerta{box-shadow:inset 0 0 0 2px #F5A623}
+@media (max-width:900px){html.sj-en-sala:not(#x1):not(#x2) body .nav,html.sj-en-sala:not(#x1):not(#x2) body .rbac-nav-arrow{display:none!important}}
+@media (max-width:760px){
+  .sj3d-vivo .sj3d-vistas{display:none}
+  .sj3d-pres{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto auto}.sj3d-presb{flex-direction:row;overflow-x:auto;padding:8px}.sj3d-presb>b{display:none}.sj3d-presp{flex:0 0 auto}.sj3d-presp small{display:none}
+  .sj3d-full span{display:none}
+  .sj-ed-acc{position:fixed;left:10px;right:10px;bottom:calc(var(--sj-pie,12px) + env(safe-area-inset-bottom,0px));z-index:10000;background:#fff;padding:10px!important;margin:0!important;border:1px solid #ECEEF2;box-shadow:0 -6px 20px rgba(20,25,32,.12);border-radius:14px;display:grid!important;grid-template-columns:1fr 1fr;gap:8px}
+  #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-acc button[data-sj="guardarPers"]{grid-column:1/-1;width:100%}
+  #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-acc button{min-height:44px;margin:0}
+  html.sj-en-editor #rbac-sala-juntas{padding-bottom:calc(var(--sj-pie,12px) + 150px)}
+  html:not(.ui-v2) #rbac-sala-juntas{--sj-pie:104px}
+}
 .sj-alerta{background:#FFF4F3;border:1px solid #F3C3C0;color:#B91C1C;border-radius:12px;padding:10px 14px;font-size:13px}
 .sj-borr{padding:14px 18px}.sj-borr>b{display:block;margin:0 0 6px}
 .sj-fila{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:9px 0;border-top:1px solid var(--b);cursor:pointer;font-size:13.5px}.sj-fila span{flex:1;font-weight:600}.sj-fila small{color:var(--m)}

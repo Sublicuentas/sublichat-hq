@@ -6,7 +6,20 @@
    · Nada de grabación: requiere aprobación y tiene costo aparte. */
 export const LK_URL = 'https://cdn.jsdelivr.net/npm/livekit-client@2.15.8/dist/livekit-client.esm.mjs';
 const TEXTO = new TextEncoder(), LEER = new TextDecoder();
-const REACCIONES = ['👍', '👏', '❤️', '😂', '🎉', '✅', '🙋'];
+// R171 · 6 reacciones (lámina 14) con límite anti-spam: 1 cada 1.2 s y máximo 6 cada 10 s, al enviar y al recibir
+export const REACCIONES = [['👏', 'Aplausos'], ['👍', 'Me gusta'], ['❤️', 'Corazón'], ['😂', 'Risa'], ['😮', 'Sorpresa'], ['🎉', 'Fiesta']];
+const EMOJIS = REACCIONES.map((r) => r[0]);
+export function limitador(minMs = 1200, max = 6, ventana = 10000) {
+  const h = []; return (ahora = Date.now()) => { while (h.length && ahora - h[0] > ventana) h.shift(); if (h.length >= max || (h.length && ahora - h[h.length - 1] < minMs)) return false; h.push(ahora); return true; };
+}
+// Mano levantada: atributo `mano` (hora) de cada participante; turno y "limpiar cola" son atributos de Naara y solo se aceptan de ella.
+export const ANFITRIONA = 'naara';
+export function colaManos(parts) { // parts: [{identity, attributes}]
+  const host = parts.find((p) => p.identity === ANFITRIONA);
+  const turno = host?.attributes?.turno || '';
+  const cola = parts.filter((p) => Number(p.attributes?.mano) > 0).map((p) => ({ id: p.identity, ms: Number(p.attributes.mano) })).sort((a, b) => a.ms - b.ms);
+  return { cola, turno, limpia: Number(host?.attributes?.limpia || 0) };
+}
 
 export async function conectar({ url, token, yo, on = {} }) {
   const LK = await import(LK_URL);
@@ -18,7 +31,8 @@ export async function conectar({ url, token, yo, on = {} }) {
     videoCaptureDefaults: { resolution: { width: 640, height: 360, frameRate: 24 } }, // cámara liviana: ahorra minutos y datos
   });
   const audios = new Map(); // sid → <audio>
-  let cerrado = false;
+  let cerrado = false; const limEnvio = limitador(); const limRecibe = {};
+  let ultimoTurno = '';
   const presentes = () => { const s = new Set([yo]); room.remoteParticipants.forEach((p) => s.add(p.identity)); return s; };
   const micDe = (p) => !!p && p.isMicrophoneEnabled;
   const avisarPresencia = () => {
@@ -47,8 +61,9 @@ export async function conectar({ url, token, yo, on = {} }) {
       if (!p || payload.byteLength > 2000) return; // remitente verificado por LiveKit; mensajes cortos
       let d; try { d = JSON.parse(LEER.decode(payload)); } catch (_) { return; }
       if (topic === 'chat' && typeof d.t === 'string' && d.t.trim()) emitir('chat', { de: p.identity, nombre: p.name || p.identity, t: d.t.slice(0, 500), ms: Date.now() });
-      if (topic === 'reaccion' && REACCIONES.includes(d.e)) emitir('reaccion', p.identity, d.e);
+      if (topic === 'reaccion' && EMOJIS.includes(d.e) && (limRecibe[p.identity] = limRecibe[p.identity] || limitador(800, 8))()) emitir('reaccion', p.identity, d.e);
     })
+    .on(RoomEvent.ParticipantAttributesChanged, () => revisarManos())
     .on(RoomEvent.Reconnecting, () => emitir('estado', 'reconectando'))
     .on(RoomEvent.Reconnected, () => { emitir('estado', 'conectado'); avisarPresencia(); })
     .on(RoomEvent.AudioPlaybackStatusChanged, () => emitir('audioBloqueado', !room.canPlaybackAudio))
@@ -62,6 +77,16 @@ export async function conectar({ url, token, yo, on = {} }) {
       emitir('estado', 'desconectado', m);
     });
 
+  const todos = () => [room.localParticipant, ...room.remoteParticipants.values()].filter(Boolean);
+  function revisarManos() {
+    const est = colaManos(todos()); const lp = room.localParticipant;
+    const mia = Number(lp?.attributes?.mano || 0);
+    // terminó mi turno, o la anfitriona limpió la cola después de que levanté la mano → bajo mi mano
+    if (mia && ((ultimoTurno === yo && est.turno !== yo) || (est.limpia && est.limpia >= mia))) lp.setAttributes({ mano: '' }).catch(() => {});
+    if (est.turno && est.turno !== ultimoTurno) emitir('turno', est.turno);
+    ultimoTurno = est.turno;
+    emitir('manos', est);
+  }
   function limpiar() { audios.forEach((el) => el.remove()); audios.clear(); }
 
   emitir('estado', 'conectando');
@@ -75,7 +100,7 @@ export async function conectar({ url, token, yo, on = {} }) {
     if (pub.track && pub.isSubscribed && pub.source === Track.Source.ScreenShare) emitir('pantalla', pub.track, p.identity);
     if (pub.track && pub.isSubscribed && pub.source === Track.Source.Camera) emitir('video', p.identity, pub.track);
   }));
-  avisarPresencia();
+  avisarPresencia(); revisarManos();
 
   const enviar = (topic, obj) => room.localParticipant.publishData(TEXTO.encode(JSON.stringify(obj)), { reliable: true, topic });
   const lp = room.localParticipant;
@@ -96,10 +121,15 @@ export async function conectar({ url, token, yo, on = {} }) {
       return lp.isScreenShareEnabled;
     },
     async chat(t) { t = String(t || '').trim().slice(0, 500); if (!t) return; await enviar('chat', { t }); emitir('chat', { de: yo, nombre: lp.name || yo, t, ms: Date.now(), mio: true }); },
-    async reaccion(e) { if (!REACCIONES.includes(e)) return; await enviar('reaccion', { e }); emitir('reaccion', yo, e); },
+    async reaccion(e) { if (!EMOJIS.includes(e)) return false; if (!limEnvio()) return false; await enviar('reaccion', { e }); emitir('reaccion', yo, e); return true; },
+    get mano() { return Number(lp.attributes?.mano || 0) > 0; },
+    async setMano(v) { await lp.setAttributes({ mano: v ? String(Date.now()) : '' }); revisarManos(); },
+    // solo la anfitriona (los demás clientes ignoran estos atributos si no vienen de ella)
+    async darTurno(id) { if (yo !== ANFITRIONA) return; await lp.setAttributes({ turno: id || '' }); revisarManos(); },
+    async limpiarCola() { if (yo !== ANFITRIONA) return; await lp.setAttributes({ turno: '', limpia: String(Date.now()) }); revisarManos(); },
+    manos: () => colaManos(todos()),
     async activarAudio() { await room.startAudio(); emitir('audioBloqueado', !room.canPlaybackAudio); },
     presentes,
     async salir() { cerrado = true; limpiar(); try { await room.disconnect(); } catch (_) {} },
   };
 }
-export { REACCIONES };

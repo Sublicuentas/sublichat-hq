@@ -116,15 +116,28 @@ export function crearPersonaje(cfg = {}, { sentado = false } = {}) {
     brazos.forEach(({ hombro, codo }) => { hombro.rotation.x = -0.35; codo.rotation.x = -1.1; });
     g.position.y = -0.24;
   } else brazos.forEach(({ hombro, codo }) => { codo.rotation.x = -0.15; });
-  g.userData = { torso, cabeza, boca, brazos, t0: Math.random() * 10 };
+  brazos.forEach((b) => { b.base = { hx: b.hombro.rotation.x, hz: b.hombro.rotation.z, cx: b.codo.rotation.x, cz: b.codo.rotation.z }; });
+  g.userData = { torso, cabeza, boca, brazos, t0: Math.random() * 10, gesto: null, alza: 0 };
   return g;
 }
 function animarPersonaje(p, t, hablando = 0) {
-  const u = p.userData; if (!u || reducido) return;
+  const u = p.userData; if (!u) return;
   const s = t + u.t0;
-  u.torso.scale.y = 1 + Math.sin(s * 1.6) * 0.006;
-  u.cabeza.rotation.y = Math.sin(s * 0.45) * 0.12; u.cabeza.rotation.x = Math.sin(s * 0.7) * 0.03;
-  u.boca.scale.y = 1 + hablando * (0.6 + Math.sin(s * 18) * 0.6);
+  if (!reducido) {
+    u.torso.scale.y = 1 + Math.sin(s * 1.6) * 0.006;
+    u.cabeza.rotation.y = Math.sin(s * 0.45) * 0.12; u.cabeza.rotation.x = Math.sin(s * 0.7) * 0.03;
+    u.boca.scale.y = 1 + hablando * (0.6 + Math.sin(s * 18) * 0.6);
+  } else u.boca.scale.y = 1 + hablando * 0.6;
+  // R171 · mano levantada (se queda arriba) y saludo al recibir la palabra (2.4 s)
+  const b = u.brazos && u.brazos[1]; if (!b || !b.base) return;
+  const ahora = performance.now();
+  const saluda = u.saludo && ahora - u.saludo < 2400;
+  const meta = u.mano || saluda ? 1 : 0;
+  u.alza = reducido ? meta : u.alza + (meta - u.alza) * 0.12;
+  b.hombro.rotation.x = b.base.hx + (-2.55 - b.base.hx) * u.alza;
+  b.hombro.rotation.z = b.base.hz + (0.18 - b.base.hz) * u.alza;
+  b.codo.rotation.x = b.base.cx + (-0.35 - b.base.cx) * u.alza;
+  b.codo.rotation.z = saluda && !reducido ? Math.sin(ahora / 120) * 0.45 * u.alza : 0;
 }
 function liberar(obj) { obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
 
@@ -300,7 +313,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const matLogo = pantalla.material.map; let texVideo = null;
   const nombreBase = (id) => (id === 'naara' ? '👑 Naara (Anfitriona)' : id.charAt(0).toUpperCase() + id.slice(1));
   const est = {}; // id → { presente, mic }
-  const pintarEtq = (id) => { const e = etiquetas[id]; if (!e) return; const x = est[id] || {}; const txt = nombreBase(id) + (x.presente === false ? ' · no ha entrado' : x.mic === false ? ' 🔇' : ''); if (e.firstChild && e.firstChild.nodeType === 3) e.firstChild.nodeValue = txt; else e.prepend(txt); e.classList.toggle('sj3d-ausente', x.presente === false); };
+  const pintarEtq = (id) => { const e = etiquetas[id]; if (!e) return; const x = est[id] || {}; const txt = (x.mano ? '✋ ' : '') + nombreBase(id) + (x.presente === false ? ' · no ha entrado' : x.mic === false ? ' 🔇' : ''); if (e.firstChild && e.firstChild.nodeType === 3) e.firstChild.nodeValue = txt; else e.prepend(txt); e.classList.toggle('sj3d-ausente', x.presente === false); };
   function setPresente(id, presente) {
     const p = personajes[id]; if (!p) return; (est[id] = est[id] || {}).presente = presente;
     p.traverse((o) => { if (o.material && !o.userData.sjMat) { o.material = o.material.clone(); o.userData.sjMat = true; } if (o.material) { o.material.transparent = !presente; o.material.opacity = presente ? 1 : 0.22; o.material.depthWrite = presente; } });
@@ -310,6 +323,8 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   return {
     setVista, vistas: ['general', 'presentacion', 'panoramica'],
     setHablante(id) { hablando = id; }, calidad: () => calidad,
+    setMano(id, on) { const p = personajes[id]; if (!p) return; p.userData.mano = !!on; (est[id] = est[id] || {}).mano = !!on; pintarEtq(id); },
+    saludar(id) { const p = personajes[id]; if (p) p.userData.saludo = performance.now(); },
     setPresente, setMicro(id, on) { (est[id] = est[id] || {}).mic = !!on; pintarEtq(id); },
     setPantalla(video) {
       if (texVideo) { texVideo.dispose(); texVideo = null; }
