@@ -298,28 +298,37 @@
   // ---------- R169 · Mi personaje (editor 3D) ----------
   const ETQ = {
     genero: { mujer: 'Mujer', hombre: 'Hombre' },
-    cabello: { largo: 'Largo', melena: 'Melena', cola: 'Cola', rizado: 'Rizado', recogido: 'Recogido', corto: 'Corto', peinado: 'Peinado', rapado: 'Rapado' },
-    superior: { blazer: 'Blazer', camisa: 'Camisa', polo: 'Polo', blusa: 'Blusa' }, inferior: { pantalon: 'Pantalón', falda: 'Falda' }, cejas: { suaves: 'Suaves', marcadas: 'Marcadas' },
+    cabello: { melena: 'Melena', recogido: 'Recogido', lacio: 'Lacio', corto: 'Corto moderno', ondulado: 'Ondulado', largo: 'Largo', clasico: 'Clásico', moderno: 'Moderno', rizado: 'Rizado', largoMedio: 'Largo medio', conBarba: 'Con barba', cresta: 'Cresta' },
+    superior: { blazer: 'Blazer', blusa: 'Blusa', vestido: 'Vestido', camiseta: 'Camiseta', chaqueta: 'Chamarra', traje: 'Traje', sueter: 'Suéter', chaleco: 'Chaleco' },
+    inferior: { pantalon: 'Pantalón formal', falda: 'Falda', casual: 'Pantalón casual', jeans: 'Jeans', shorts: 'Shorts' },
+    calzado: { formal: 'Formal', tacon: 'Tacones', casual: 'Casual', botas: 'Botas', tenis: 'Tenis' },
   };
-  const ACC = [['lentes', 'Lentes'], ['aretes', 'Aretes'], ['reloj', 'Reloj'], ['barba', 'Barba'], ['logo', 'Logo Sublicuentas en la ropa']];
+  // R172 · piezas por base (mismas listas que api/_sala-juntas.js · AVATAR_GENERO)
+  const PIEZAS = {
+    mujer: { cabello: ['melena', 'recogido', 'lacio', 'corto', 'ondulado', 'largo'], superior: ['blazer', 'blusa', 'vestido', 'camiseta', 'chaqueta'], inferior: ['pantalon', 'falda', 'casual'], calzado: ['formal', 'tacon', 'casual', 'botas'] },
+    hombre: { cabello: ['clasico', 'moderno', 'rizado', 'largoMedio', 'conBarba', 'cresta'], superior: ['traje', 'sueter', 'camiseta', 'chaleco'], inferior: ['pantalon', 'jeans', 'shorts'], calzado: ['formal', 'tenis', 'casual'] },
+  };
+  const CON_INTERIOR = ['blazer', 'traje'];
+  const ACC = [['lentes', 'Lentes'], ['aretes', 'Aretes'], ['reloj', 'Reloj'], ['barba', 'Bigote'], ['logo', 'Logo Sublicuentas en la ropa']];
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r171');
+    M3 = await import('/sala-3d.js?v=20261105-r172');
     return M3;
   }
   function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
-  const OPC = { genero: ['mujer', 'hombre'], piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'], cabello: ['largo', 'melena', 'cola', 'rizado', 'recogido', 'corto', 'peinado', 'rapado'], colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'], cejas: ['suaves', 'marcadas'], ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'], superior: ['blazer', 'camisa', 'polo', 'blusa'], colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'], colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'], inferior: ['pantalon', 'falda'], colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'], calzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'] };
+  const OPC = { genero: ['mujer', 'hombre'], piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'], colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'], ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'], colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'], colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'], colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'], colorCalzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'] };
+  const opcDe = (k, c) => (PIEZAS[c.genero === 'hombre' ? 'hombre' : 'mujer'][k] || OPC[k]);
   function personaje() {
     const yo = st.data.yo.id, av = st.data.avatares?.[yo] || { config: {}, version: 0 };
     if (!st.pers) st.pers = { config: { ...av.config }, version: av.version, tab: 'apariencia' };
     const c = st.pers.config, tab = st.pers.tab;
     const fila = (t, html) => `<div class="sj-op"><b>${t}</b><div class="sj-op-v">${html}</div></div>`;
-    const chips = (k) => OPC[k].map((v) => `<button type="button" class="sj-chip-op${c[k] === v ? ' on' : ''}" data-op="${k}" data-v="${v}" aria-pressed="${c[k] === v}">${esc((ETQ[k] || {})[v] || v)}</button>`).join('');
+    const chips = (k) => opcDe(k, c).map((v) => `<button type="button" class="sj-chip-op${c[k] === v ? ' on' : ''}" data-op="${k}" data-v="${v}" aria-pressed="${c[k] === v}">${esc((ETQ[k] || {})[v] || v)}</button>`).join('');
     const colores = (k) => OPC[k].map((v) => `<button type="button" class="sj-sw-col${c[k] === v ? ' on' : ''}" style="--c:${v}" data-op="${k}" data-v="${v}" aria-label="Color ${v}" aria-pressed="${c[k] === v}"></button>`).join('');
     let panel = '';
-    if (tab === 'apariencia') panel = fila('Género', chips('genero')) + fila('Tono de piel', colores('piel')) + fila('Estilo de cabello', chips('cabello')) + fila('Color de cabello', colores('colorCabello')) + fila('Color de ojos', colores('ojos')) + fila('Cejas', chips('cejas'));
-    if (tab === 'ropa') panel = fila('Parte de arriba', chips('superior')) + fila('Color', colores('colorSuperior')) + (c.superior === 'blazer' ? fila('Camisa interior', colores('colorInterior')) : '') + fila('Parte de abajo', chips('inferior')) + fila('Color', colores('colorInferior')) + fila('Calzado', colores('calzado'));
+    if (tab === 'apariencia') panel = fila('Género', chips('genero')) + fila('Tono de piel', colores('piel')) + fila('Estilo de cabello', chips('cabello')) + fila('Color de cabello', colores('colorCabello')) + fila('Color de ojos', colores('ojos'));
+    if (tab === 'ropa') panel = fila('Parte de arriba', chips('superior')) + fila('Color', colores('colorSuperior')) + (CON_INTERIOR.includes(c.superior) ? fila('Camisa interior', colores('colorInterior')) : '') + fila('Parte de abajo', chips('inferior')) + fila('Color', colores('colorInferior')) + fila('Calzado', chips('calzado')) + fila('Color del calzado', colores('colorCalzado'));
     if (tab === 'accesorios') panel = ACC.filter(([k]) => k !== 'barba' || c.genero === 'hombre').map(([k, t]) => `<label class="sj-rec sj-acc-op"><span>${t}</span><input type="checkbox" role="switch" class="sj-sw" data-op="${k}" ${c[k] ? 'checked' : ''}></label>`).join('');
     const tabs = [['apariencia', 'Apariencia', 'persona'], ['ropa', 'Ropa', 'lista'], ['accesorios', 'Accesorios', 'check']].map(([k, t, i]) => `<button type="button" class="sj-tab${tab === k ? ' on' : ''}" data-sj="tabPers" data-t="${k}" role="tab" aria-selected="${tab === k}">${ico(i)}${t}</button>`).join('');
     return `<div class="sj-card sj-pn sj-editor">
@@ -329,6 +338,7 @@
         <div class="sj-ed-op" id="sjOps">${panel}</div>
         <div class="sj-ed-3d"><canvas id="sjEdCanvas" aria-label="Vista 360° de su personaje. Arrastre para girar."></canvas>
           <button type="button" class="sj-rot sj-rot-i" data-sj="rotar" data-d="-0.6" aria-label="Girar a la izquierda">‹</button><button type="button" class="sj-rot sj-rot-d" data-sj="rotar" data-d="0.6" aria-label="Girar a la derecha">›</button>
+          <div class="sj-ed-cam" role="group" aria-label="Cámara del personaje">${[['frente', 'Frente'], ['tresCuartos', '3/4'], ['espalda', 'Espalda']].map(([v, t]) => `<button type="button" data-sj="vistaPers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="zoomPers" data-d="0.6" aria-label="Acercar">+</button><button type="button" data-sj="zoomPers" data-d="-0.6" aria-label="Alejar">−</button><button type="button" data-sj="camReset" aria-label="Restablecer cámara">↺</button></div>
           <div class="sj-ed-carga" id="sjEdCarga">Cargando 3D…</div></div>
       </div>
       <div class="sj-form-acc sj-ed-acc">
@@ -342,14 +352,17 @@
     try {
       const M = await modulo3D(); if (!document.getElementById('sjEdCanvas')) return;
       if (!M.soportaWebGL()) throw new Error('Este navegador no puede mostrar 3D (WebGL). Pruebe con Chrome actualizado.');
+      const c0 = document.getElementById('sjEdCarga'); if (c0) c0.textContent = 'Cargando su personaje 3D…';
       ed3 = M.montarEditor(cv, st.pers.config);
+      await ed3.listo;
       const c = document.getElementById('sjEdCarga'); if (c) c.remove();
+      if (ed3.respaldo && ed3.respaldo()) toast('No se pudo cargar el modelo 3D; se muestra la versión simple. Revise su internet.', true);
     } catch (e) { const c = document.getElementById('sjEdCarga'); if (c) c.textContent = e.message || 'No se pudo cargar el 3D.'; }
   }
   function cambiarOpcion(k, v) {
     const c = st.pers.config;
     if (['lentes', 'aretes', 'reloj', 'barba', 'logo'].includes(k)) c[k] = !!v; else c[k] = v;
-    if (k === 'genero' && v === 'mujer') c.barba = false;
+    if (k === 'genero') { if (v === 'mujer') c.barba = false; const P = PIEZAS[v === 'hombre' ? 'hombre' : 'mujer']; for (const s of ['cabello', 'superior', 'inferior', 'calzado']) if (!P[s].includes(c[s])) c[s] = P[s][0]; }
     if (ed3) ed3.set(c);
     const necesitaRepintar = k === 'superior' || k === 'genero';
     if (necesitaRepintar) { const ops = document.getElementById('sjOps'); if (ops) { const t = document.createElement('div'); t.innerHTML = personaje(); ops.innerHTML = t.querySelector('#sjOps').innerHTML; } return; }
@@ -399,6 +412,7 @@
       if (st.pers) avatares[st.data.yo.id] = { config: st.pers.config }; // vista previa del personaje sin guardar
       sala3 = await M.montarSala(cont, { avatares, participantes: st.sala3dReu ? st.sala3dReu.participantes : ['naara', 'libni', 'geisell'],
         alCambiarVista: (v) => host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', b.dataset.v === v)) });
+      await sala3.listo;
       const c = document.getElementById('sj3dCarga'); if (c) c.remove();
       if (st.vivo) aplicarVivo3D();
     } catch (e) { const c = document.getElementById('sj3dCarga'); if (c) c.textContent = e.message || 'No se pudo cargar la sala 3D.'; }
@@ -658,6 +672,9 @@
     if (a === 'tabPers') { st.pers.tab = b.dataset.t; const ed = ed3; ed3 = null; const cfg = st.pers; const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; host.querySelectorAll('.sj-tab').forEach((x) => { const on = x.dataset.t === cfg.tab; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }); ed3 = ed; return; }
     if (a === 'rotar') { if (ed3) ed3.rotar(Number(b.dataset.d)); return; }
     if (a === 'guardarPers') return guardarPersonaje();
+    if (a === 'vistaPers') { if (ed3) ed3.vista(b.dataset.v); return; }
+    if (a === 'zoomPers') { if (ed3) ed3.zoom(Number(b.dataset.d)); return; }
+    if (a === 'camReset') { if (ed3) ed3.reiniciar(); return; }
     if (a === 'restablecer') { const av = st.data.avatares[st.data.yo.id]; st.pers.config = { ...av.config }; if (ed3) ed3.set(st.pers.config); const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; return toast('Se restableció el último personaje guardado.'); }
     if (a === 'personajeAnte') { st.volverAnte = true; st.pers = null; st.vista = 'personaje'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'verSala' || a === 'verSalaPers') { st.sala3dReu = a === 'verSala' ? (st.ante || reu()) : null; st.volver3d = st.vista; st.vista = 'sala3d'; detenerMic(); pintar(); return window.scrollTo({ top: 0 }); }
@@ -829,6 +846,10 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-mute{color:#FF8A80!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-fin{background:#7A1F2B!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) [hidden]{display:none!important}
+/* R172 · cámara del editor */
+.sj-ed-cam{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.92);border:1px solid #E3E6EB;border-radius:999px;padding:4px;z-index:2}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{all:unset;cursor:pointer;font:600 12px Inter,sans-serif;color:#1F2430;padding:6px 10px;border-radius:999px;min-width:16px;text-align:center}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button:hover{background:#F2F3F6}
 /* R171 · Fase 5: pantalla completa, mano/turnos, reacciones, modo presentación */
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font:600 13px Inter,sans-serif;color:#fff;background:#222833;border:1px solid #2F3744;border-radius:999px;padding:7px 13px}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full.sj3d-full-on{background:#C62828;border-color:#C62828}.sj3d-full .sj-i{width:16px;height:16px}

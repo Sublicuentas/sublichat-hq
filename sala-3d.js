@@ -1,4 +1,5 @@
-/* sala-3d.js · R169 — SubliStudio 3D · Fase 3: personajes 3D y Escenario C "Cálida Ejecutiva".
+/* sala-3d.js · R169/R172 — SubliStudio 3D: personajes 3D y Escenario C "Cálida Ejecutiva".
+   R172: los personajes son modelos 3D reales (avatar-glb.js, CC0 Quaternius); crearPersonaje() queda solo como respaldo.
    Módulo ES que sala-juntas.js descarga SOLO al abrir "Mi personaje" o la vista de la sala (no pesa en otras pantallas).
    · crearPersonaje(cfg): personaje 3D construido en código (geometría + materiales), configurable con las opciones
      permitidas del servidor (api/_sala-juntas.js · AVATAR_OPC). Cuando existan modelos VRoid (.vrm) se podrán cargar
@@ -122,6 +123,8 @@ export function crearPersonaje(cfg = {}, { sentado = false } = {}) {
 }
 function animarPersonaje(p, t, hablando = 0) {
   const u = p.userData; if (!u) return;
+  if (u.glb) { u.glb.animar(t + (u.t0 || 0), hablando, u, reducido); return; }
+  if (!u.torso) return; // todavía cargando
   const s = t + u.t0;
   if (!reducido) {
     u.torso.scale.y = 1 + Math.sin(s * 1.6) * 0.006;
@@ -149,31 +152,60 @@ function renderer(canvas, { alpha = false } = {}) {
 }
 function ajustar(r, cam, el) { const w = el.clientWidth || 600, h = el.clientHeight || 400; r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
 
+// ---------- R172 · avatares reales (GLB) con respaldo ----------
+let moduloGLB = null;
+const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r172'));
+// Crea el avatar 3D real; si el modelo no carga (sin red, equipo sin soporte) usa el personaje anterior y lo avisa.
+export async function crearAvatar3D(cfg = {}, opts = {}) {
+  try { const M = await avatarGLB(); const g = await M.crearAvatar(cfg, opts); g.userData.glb = g.userData.avatar; g.userData.t0 = Math.random() * 10; return g; }
+  catch (e) { console.warn('[sala-3d] avatar GLB no disponible:', e && e.message); const p = crearPersonaje(cfg, opts); p.userData.respaldo = true; return p; }
+}
+export function precargarAvatares(generos = ['mujer']) { avatarGLB().then((M) => generos.forEach((g) => M.cargarKit(g).catch(() => {}))).catch(() => {}); }
+
 // ---------- editor ----------
 export function montarEditor(canvas, cfg) {
   const r = renderer(canvas, { alpha: true });
   const escena = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 50); cam.position.set(0, 0.95, 4.4); cam.lookAt(0, 0.86, 0);
+  const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 50); let dist = 3.9, distObj = 3.9; const ponerCam = () => { const k = Math.min(1, (dist - 1.6) / (3.9 - 1.6)); cam.position.set(0, 0.9 + (1 - k) * 0.6, dist); cam.lookAt(0, 0.82 + (1 - k) * 0.66, 0); }; ponerCam();
   escena.add(new THREE.HemisphereLight(0xfff4e6, 0x8a7a6a, 1.1));
   const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(2, 3, 3); escena.add(key);
   const rim = new THREE.DirectionalLight(0xffd9b0, 0.8); rim.position.set(-2, 2, -2); escena.add(rim);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.06, 40), mat('#E9ECF1', { r: 0.4 })); base.position.y = -0.03; escena.add(base);
-  let p = crearPersonaje(cfg); escena.add(p);
+  let p = new THREE.Group(); escena.add(p); let ficha = 0; let cfgActual = cfg;
   let giro = 0.35, objetivo = 0.35, vivo = true, t0 = performance.now(), arrastre = null;
-  const loop = () => { if (!vivo) return; ajustar(r, cam, canvas); giro += (objetivo - giro) * (reducido ? 1 : 0.12); p.rotation.y = giro; animarPersonaje(p, (performance.now() - t0) / 1000); r.render(escena, cam); requestAnimationFrame(loop); };
+  const reconstruir = async (c) => {
+    const yo = ++ficha; const nuevo = await crearAvatar3D(c);
+    if (!vivo || yo !== ficha) { liberar(nuevo); return; }
+    escena.remove(p); liberar(p); p = nuevo; p.rotation.y = giro; escena.add(p);
+  };
+  const listo = reconstruir(cfg);
+  const loop = () => { if (!vivo) return; ajustar(r, cam, canvas); giro += (objetivo - giro) * (reducido ? 1 : 0.12); dist += (distObj - dist) * (reducido ? 1 : 0.15); ponerCam(); p.rotation.y = giro; animarPersonaje(p, (performance.now() - t0) / 1000); r.render(escena, cam); requestAnimationFrame(loop); };
   loop();
   const down = (e) => { arrastre = { x: e.clientX, g: objetivo }; canvas.setPointerCapture?.(e.pointerId); };
   const move = (e) => { if (arrastre) objetivo = arrastre.g + (e.clientX - arrastre.x) * 0.012; };
   const up = () => { arrastre = null; };
+  const rueda = (e) => { e.preventDefault(); distObj = Math.min(3.9, Math.max(1.6, distObj + Math.sign(e.deltaY) * 0.35)); };
+  canvas.addEventListener('wheel', rueda, { passive: false });
   canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move); canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   return {
-    set(nueva) { escena.remove(p); liberar(p); p = crearPersonaje(nueva); p.rotation.y = giro; escena.add(p); },
+    listo, respaldo: () => !!p.userData.respaldo,
+    // misma base (mujer/hombre): cambia piezas y colores al instante; otra base: carga el otro modelo
+    set(nueva) {
+      const mismo = p.userData.glb && (nueva.genero === 'hombre' ? 'hombre' : 'mujer') === p.userData.glb.genero;
+      cfgActual = nueva;
+      if (mismo) { ficha++; p.userData.glb.aplicar(nueva); return Promise.resolve(); }
+      return reconstruir(nueva);
+    },
     rotar(d) { objetivo += d; },
+    // R172 · vistas fijas, acercar y restablecer cámara
+    vista(n) { const a = { frente: 0, tresCuartos: 0.8, lado: Math.PI / 2, espalda: Math.PI }[n]; if (a === undefined) return; const vueltas = Math.round((objetivo - a) / (Math.PI * 2)); objetivo = a + vueltas * Math.PI * 2; },
+    zoom(d) { distObj = Math.min(3.9, Math.max(1.6, distObj - d)); },
+    reiniciar() { objetivo = 0.35; distObj = 3.9; },
     // Miniatura (busto, 160×160 WebP) para mostrar el personaje en listas sin cargar 3D.
     miniatura() {
       const c2 = document.createElement('canvas'); c2.width = 160; c2.height = 160;
       const r2 = new THREE.WebGLRenderer({ canvas: c2, antialias: true, alpha: false, preserveDrawingBuffer: true }); r2.outputColorSpace = THREE.SRGBColorSpace; r2.setClearColor(0xF2E7DC);
-      const cam2 = new THREE.PerspectiveCamera(26, 1, 0.1, 20); cam2.position.set(0.2, 1.62, 1.05); cam2.lookAt(0, 1.58, 0);
+      const cam2 = new THREE.PerspectiveCamera(26, 1, 0.1, 20); cam2.position.set(0.2, 1.5, 1.15); cam2.lookAt(0, 1.47, 0);
       const rot = p.rotation.y; p.rotation.y = 0.25; base.visible = false; r2.render(escena, cam2); p.rotation.y = rot; base.visible = true;
       let url = ''; try { url = c2.toDataURL('image/webp', 0.82); if (!url.startsWith('data:image/webp')) url = c2.toDataURL('image/jpeg', 0.82); } catch (_) {}
       r2.dispose(); return url;
@@ -267,13 +299,19 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const tazaG = new THREE.Group(); tazaG.position.set(-1.25, 0.82, -0.15); tazaG.add(malla(new THREE.CylinderGeometry(0.045, 0.04, 0.09, 16), mat('#FFFFFF', { r: 0.2 }), 0, 0.045, 0)); mesa.add(tazaG);
 
   // asientos y personajes
-  const personajes = {}; const etiquetas = {};
+  const personajes = {}; const etiquetas = {}; const cargas = [];
   const colocar = (pos, atras = 0) => { const s = silla(); s.position.set(pos.x - Math.sin(pos.ry) * atras, 0, pos.z - Math.cos(pos.ry) * atras); s.rotation.y = pos.ry; escena.add(s); return s; };
   for (const id of ['naara', 'libni', 'geisell']) {
     const pos = ASIENTOS[id]; colocar(pos, 0.12);
     const lap = laptop(); lap.position.set(pos.x * 0.7 + Math.cos(pos.ry) * 0.28, 0.82, pos.z * 0.66 - Math.sin(pos.ry) * 0.28); lap.rotation.y = pos.ry; lap.scale.setScalar(0.85); mesa.add(lap);
     if (!participantes.includes(id)) continue;
-    const p = crearPersonaje(avatares[id]?.config || {}, { sentado: true }); p.position.set(pos.x, 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
+    const p = new THREE.Group(); p.position.set(pos.x, 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
+    cargas.push(crearAvatar3D(avatares[id]?.config || {}, { sentado: true }).then((a) => {
+      if (!vivo) { liberar(a); return; }
+      p.add(a); Object.assign(p.userData, { glb: a.userData.glb || null, t0: a.userData.t0 || 0 });
+      if (!a.userData.glb) Object.assign(p.userData, a.userData); // respaldo: el personaje anterior se anima como antes
+      if (est[id] && est[id].presente === false) setPresente(id, false);
+    }));
   }
   LIBRES.forEach((pos) => colocar(pos));
 
@@ -304,7 +342,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) animarPersonaje(p, t, hablando === id ? 1 : 0);
     r.render(escena, cam);
     const w = contenedor.clientWidth, h = contenedor.clientHeight;
-    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, 1.95, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
+    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, p.userData.glb ? 1.62 : 1.95, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
     frames++; if (ahora - tMed > 3000) { const fps = frames / ((ahora - tMed) / 1000); frames = 0; tMed = ahora; if (fps < 28 && calidad === 'alta') { calidad = 'baja'; r.setPixelRatio(1); r.shadowMap.enabled = false; escena.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); } }
     requestAnimationFrame(loop);
   };
@@ -321,6 +359,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   }
   const caer = []; // reacciones flotando
   return {
+    listo: Promise.all(cargas),
     setVista, vistas: ['general', 'presentacion', 'panoramica'],
     setHablante(id) { hablando = id; }, calidad: () => calidad,
     setMano(id, on) { const p = personajes[id]; if (!p) return; p.userData.mano = !!on; (est[id] = est[id] || {}).mano = !!on; pintarEtq(id); },
