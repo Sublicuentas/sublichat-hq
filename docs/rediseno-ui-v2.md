@@ -93,3 +93,13 @@ La guía nueva reemplaza el menú lateral (precedencia, p. 2). Entregado en esta
 | Activar TV | No está en esta web; por decisión del dueño no se agrega |
 
 Rollback: menú del avatar → "Diseño anterior", o `?ui=v1`. Sin la bandera la web se ve igual que hoy.
+
+
+## R165 · TopNav Premium 2.0 (opción B · Cápsula premium)
+
+- Dos niveles de esquina a esquina (100% del ancho, sin max-width): barra grafito #141920 de 72px (logo, búsqueda, avisos, perfil) y navegación blanca de 58px.
+- Botones cápsula de 42px con ícono + texto. Estados distintos: normal (transparente) · hover (rojo suave #FFF0EF + raya animada 180ms) · activo (cápsula roja sólida, texto blanco) · foco teclado (anillo azul 2px) · submenú abierto (rojo tenue + chevrón girado) · presionado (escala .98).
+- Paneles Operación / Supervisión / Más de 360px: encabezado con título y descripción, cada acceso con ícono en recuadro, título, descripción y flecha; abren con clic o teclado, cierran con Esc, clic fuera o cambio de pantalla; se ubican bajo su botón sin recortarse.
+- Tablet: lo que no cabe pasa a "Más secciones". Celular: drawer desde la derecha con búsqueda y secciones plegables.
+- Animación: hover 180ms, panel 220ms (opacidad + 8px), cambio de pantalla 220ms; respeta "reducir movimiento".
+- Activar TV no se incluye (no existe en esta web; decisión del dueño).
