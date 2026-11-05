@@ -124,7 +124,7 @@ test('R169 · Mi personaje: cada fundadora guarda SOLO el suyo, opciones permiti
   let r = await llamar(db, 'libni', { accion: 'avatar_guardar', version: 0, config: { genero: 'hombre', cabello: 'corto', barba: true, piel: '#a86f4c', superior: 'zzz', url: 'https://malo' }, miniatura: 'data:image/webp;base64,AAAA' });
   assert.equal(r.code, 200); assert.equal(r.body.version, 1);
   assert.equal(r.body.config.genero, 'hombre'); assert.equal(r.body.config.barba, true); assert.equal(r.body.config.piel, '#A86F4C');
-  assert.equal(r.body.config.superior, 'blazer', 'valor no permitido → el de base'); assert.equal(r.body.config.url, undefined);
+  assert.equal(r.body.config.superior, 'traje', 'valor no permitido → la primera prenda de esa base (R172)'); assert.equal(r.body.config.url, undefined);
   const guardado = db.todos('sala_avatares');
   assert.equal(guardado.length, 1); assert.equal(guardado[0].id, 'libni', 'se guarda en el documento de quien inició sesión');
   r = await llamar(db, 'libni', { accion: 'avatar_guardar', version: 0, config: {} });
