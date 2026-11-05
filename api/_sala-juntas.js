@@ -148,7 +148,7 @@ function tokenParticipante({ apiKey, apiSecret, identidad, nombre, sala, ttlSeg,
   const iat = Math.floor(ahora / 1000);
   return jwtHS256({ iss: apiKey, sub: identidad, name: nombre, nbf: iat - 5, iat, exp: iat + Math.max(60, Math.floor(ttlSeg)), jti: crypto.randomBytes(8).toString('hex'),
     metadata: JSON.stringify({ rol: anfitriona ? 'anfitriona' : 'fundadora' }),
-    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true, canPublishSources: ['microphone', 'camera', 'screen_share', 'screen_share_audio'], roomAdmin: !!anfitriona, canUpdateOwnMetadata: false } }, apiSecret);
+    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true, canPublishSources: ['microphone', 'camera', 'screen_share', 'screen_share_audio'], roomAdmin: !!anfitriona, canUpdateOwnMetadata: true } }, apiSecret);
 }
 // Token corto del servidor para la API de LiveKit (expulsar, cerrar la sala).
 function tokenServidor({ apiKey, apiSecret, sala, ahora = Date.now() }) {
