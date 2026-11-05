@@ -45,7 +45,7 @@ async function avataresDe(db) {
   const out = {};
   for (const f of S.FUNDADORAS) {
     let d = null; try { const s = await db.collection(C.AV).doc(f.id).get(); d = s.exists ? s.data() : null; } catch (_) {}
-    out[f.id] = d ? { config: S.limpiarAvatar(d.config, S.AVATAR_BASE[f.id]), version: Number(d.version) || 1, miniatura: S.miniaturaValida(d.miniatura) ? d.miniatura : '', guardado: true, actualizadoAt: d.actualizadoAt || '' }
+    out[f.id] = d ? { config: S.limpiarAvatar(d.config, S.AVATAR_BASE[f.id]), version: Number(d.version) || 1, miniatura: S.miniaturaValida(d.miniatura) && d.config && d.config.colorCalzado ? d.miniatura : '', /* R172: miniaturas del muñeco anterior ya no se muestran */ guardado: true, actualizadoAt: d.actualizadoAt || '' }
       : { config: { ...S.AVATAR_BASE[f.id] }, version: 0, miniatura: '', guardado: false };
   }
   return out;
@@ -217,7 +217,7 @@ async function handler(req, res, deps = {}) {
         const s = await tx.get(ref); const actual = s.exists ? Number(s.data().version) || 1 : 0;
         if (body.version != null && Number(body.version) !== actual) { conflicto = true; return; }
         nueva = actual + 1;
-        tx.set(ref, { usuario: yo.id, modelRef: 'procedural:v1', config: cfg, miniatura: mini, version: nueva, actualizadoAt: iso }, { merge: false });
+        tx.set(ref, { usuario: yo.id, modelRef: 'glb:quaternius-modular:20261105-r172', config: cfg, miniatura: mini, version: nueva, actualizadoAt: iso }, { merge: false });
         const a = auditoria(db, yo, 'avatar_guardar', yo.id, { version: nueva }); tx.set(a.ref, a.data);
       });
       if (conflicto) return res.status(409).json({ ok: false, error: 'Su personaje se cambió desde otro dispositivo. Recargue para ver la versión más reciente.' });

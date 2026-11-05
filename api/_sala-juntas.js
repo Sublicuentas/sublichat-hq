@@ -102,33 +102,56 @@ function roomIdOpaco(rnd = Math.random) {
 
 // ---------- R169 · Mi personaje (Fase 3) ----------
 // Opciones permitidas del personaje 3D. Todo lo que no esté aquí se descarta (no se guarda texto libre ni URLs).
+// R172 · Fase 3B: avatares 3D reales (modelos CC0 Quaternius). Cada base tiene sus propias piezas (mallas distintas).
+const AVATAR_GENERO = Object.freeze({
+  mujer: Object.freeze({ cabello: ['melena', 'recogido', 'lacio', 'corto', 'ondulado', 'largo'], superior: ['blazer', 'blusa', 'vestido', 'camiseta', 'chaqueta'], inferior: ['pantalon', 'falda', 'casual'], calzado: ['formal', 'tacon', 'casual', 'botas'] }),
+  hombre: Object.freeze({ cabello: ['clasico', 'moderno', 'rizado', 'largoMedio', 'conBarba', 'cresta'], superior: ['traje', 'sueter', 'camiseta', 'chaleco'], inferior: ['pantalon', 'jeans', 'shorts'], calzado: ['formal', 'tenis', 'casual'] }),
+});
+const unir = (k) => [...new Set([...AVATAR_GENERO.mujer[k], ...AVATAR_GENERO.hombre[k]])];
 const AVATAR_OPC = Object.freeze({
   genero: ['mujer', 'hombre'],
   piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'],
-  cabello: ['largo', 'melena', 'cola', 'rizado', 'recogido', 'corto', 'peinado', 'rapado'],
+  cabello: unir('cabello'),
   colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'],
-  cejas: ['suaves', 'marcadas'],
   ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'],
-  superior: ['blazer', 'camisa', 'polo', 'blusa'],
+  superior: unir('superior'),
   colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'],
   colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'],
-  inferior: ['pantalon', 'falda'],
+  inferior: unir('inferior'),
   colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'],
-  calzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'],
+  calzado: unir('calzado'),
+  colorCalzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'],
   lentes: [false, true], aretes: [false, true], reloj: [false, true], barba: [false, true], logo: [false, true],
 });
 const AVATAR_BASE = Object.freeze({
-  naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: '#1A1A1A', lentes: false, aretes: true, reloj: false, barba: false, logo: false },
-  libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: '#1A1A1A', lentes: false, aretes: true, reloj: true, barba: false, logo: false },
-  geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'cola', colorCabello: '#3B2A20', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: '#1A1A1A', lentes: true, aretes: true, reloj: false, barba: false, logo: false },
+  naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'tacon', colorCalzado: '#1A1A1A', lentes: false, aretes: true, reloj: false, barba: false, logo: false },
+  libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: false, aretes: true, reloj: true, barba: false, logo: false },
+  geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'recogido', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: true, aretes: true, reloj: false, barba: false, logo: false },
 });
+// Personajes guardados con el editor anterior (R169): se traducen a las piezas nuevas sin perder colores.
+const MIGRA = {
+  mujer: { cabello: { cola: 'recogido', rizado: 'ondulado', peinado: 'melena', rapado: 'corto' }, superior: { camisa: 'blusa', polo: 'camiseta' } },
+  hombre: { cabello: { largo: 'largoMedio', melena: 'largoMedio', cola: 'largoMedio', recogido: 'clasico', corto: 'clasico', peinado: 'clasico', rapado: 'clasico' }, superior: { blazer: 'traje', camisa: 'camiseta', polo: 'camiseta', blusa: 'camiseta' }, inferior: { falda: 'pantalon' } },
+};
+function migrarAvatar(cfg = {}) {
+  const c = { ...(cfg || {}) };
+  const g = c.genero === 'hombre' ? 'hombre' : 'mujer';
+  if (typeof c.calzado === 'string' && c.calzado.startsWith('#')) { if (!c.colorCalzado) c.colorCalzado = c.calzado; c.calzado = 'formal'; }
+  for (const k of ['cabello', 'superior', 'inferior']) if (MIGRA[g][k] && MIGRA[g][k][c[k]]) c[k] = MIGRA[g][k][c[k]];
+  delete c.cejas;
+  return c;
+}
 function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
+  const entrada = migrarAvatar(cfg);
   const out = {};
   for (const [k, opc] of Object.entries(AVATAR_OPC)) {
-    let v = cfg && Object.prototype.hasOwnProperty.call(cfg, k) ? cfg[k] : base[k];
+    let v = entrada && Object.prototype.hasOwnProperty.call(entrada, k) ? entrada[k] : base[k];
     if (typeof v === 'string' && v.startsWith('#')) v = v.toUpperCase();
     out[k] = opc.includes(v) ? v : base[k];
   }
+  // cada pieza debe existir en la base elegida (mujer/hombre)
+  const G = AVATAR_GENERO[out.genero];
+  for (const k of ['cabello', 'superior', 'inferior', 'calzado']) if (!G[k].includes(out[k])) out[k] = G[k].includes(base[k]) ? base[k] : G[k][0];
   if (out.genero === 'mujer') out.barba = false;
   return out;
 }
@@ -159,4 +182,4 @@ const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https
 // Ventana para entrar: desde 30 min antes del inicio hasta 60 min después del final previsto (tope de costo).
 function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
 
-module.exports = { jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+module.exports = { AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
