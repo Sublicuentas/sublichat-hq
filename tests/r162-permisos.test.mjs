@@ -30,7 +30,7 @@ test('sin cambios cada usuario conserva exactamente lo de hoy', () => {
   const pv = (u) => P.pantallasVisibles({ usuario: u, role: 'asesor' }, {});
   assert.ok(P.esSupervisor({ usuario: 'naara' }) && P.esSupervisor({ usuario: 'sublicuentas' }));
   assert.equal(P.MODULOS.filter((m) => P.porDefecto({ usuario: 'naara' })[m.id]).length, P.MODULOS.length);
-  assert.deepEqual(pv('geisell').sort(), ['clientes', 'control-cuentas', 'inicio', 'perfil', 'tickets']);
+  assert.deepEqual(pv('geisell').sort(), ['clientes', 'control-cuentas', 'inicio', 'perfil', 'sala-juntas', 'tickets']); // R167: Sala de Juntas (ACL fija de fundadoras)
   const rel = pv('relojes');
   for (const s of ['sorteos', 'portal-cliente', 'catalogo-relojes', 'importar', 'agenda']) assert.ok(rel.includes(s), s);
   for (const s of ['control-cuentas', 'revendedores', 'inventario', 'actividad']) assert.ok(!rel.includes(s), s);
