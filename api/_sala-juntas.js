@@ -100,4 +100,39 @@ function roomIdOpaco(rnd = Math.random) {
   return 'sj_' + s;
 }
 
-module.exports = { FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+// ---------- R169 · Mi personaje (Fase 3) ----------
+// Opciones permitidas del personaje 3D. Todo lo que no esté aquí se descarta (no se guarda texto libre ni URLs).
+const AVATAR_OPC = Object.freeze({
+  genero: ['mujer', 'hombre'],
+  piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'],
+  cabello: ['largo', 'melena', 'cola', 'rizado', 'recogido', 'corto', 'peinado', 'rapado'],
+  colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'],
+  cejas: ['suaves', 'marcadas'],
+  ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'],
+  superior: ['blazer', 'camisa', 'polo', 'blusa'],
+  colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'],
+  colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'],
+  inferior: ['pantalon', 'falda'],
+  colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'],
+  calzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'],
+  lentes: [false, true], aretes: [false, true], reloj: [false, true], barba: [false, true], logo: [false, true],
+});
+const AVATAR_BASE = Object.freeze({
+  naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: '#1A1A1A', lentes: false, aretes: true, reloj: false, barba: false, logo: false },
+  libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: '#1A1A1A', lentes: false, aretes: true, reloj: true, barba: false, logo: false },
+  geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'cola', colorCabello: '#3B2A20', cejas: 'suaves', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: '#1A1A1A', lentes: true, aretes: true, reloj: false, barba: false, logo: false },
+});
+function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
+  const out = {};
+  for (const [k, opc] of Object.entries(AVATAR_OPC)) {
+    let v = cfg && Object.prototype.hasOwnProperty.call(cfg, k) ? cfg[k] : base[k];
+    if (typeof v === 'string' && v.startsWith('#')) v = v.toUpperCase();
+    out[k] = opc.includes(v) ? v : base[k];
+  }
+  if (out.genero === 'mujer') out.barba = false;
+  return out;
+}
+// Miniatura generada por el editor: solo imagen WebP/JPEG/PNG en data URL y de tamaño acotado.
+function miniaturaValida(t) { return typeof t === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(t) && t.length <= 90000; }
+
+module.exports = { AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };

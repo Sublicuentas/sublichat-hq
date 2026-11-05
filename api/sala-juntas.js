@@ -15,7 +15,7 @@ function getApp() {
   if (!projectId || !clientEmail || !privateKey) throw new Error('Faltan credenciales Firebase.');
   return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
 }
-const C = { R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AUD: 'auditoria_eventos' };
+const C = { R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AV: 'sala_avatares', AUD: 'auditoria_eventos' };
 const err = (status, msg) => Object.assign(new Error(msg), { status, publico: msg });
 
 function publica(id, r, invs = {}, ahora = Date.now()) {
@@ -39,6 +39,16 @@ async function invitacionesDe(db, ids) {
 async function anularPendientes(db, reunionId, ahoraIso) {
   const s = await db.collection(C.A).where('reunionId', '==', reunionId).where('estado', '==', 'pendiente').get();
   return s.docs.map((d) => ({ ref: d.ref, data: { estado: 'anulado', anuladoAt: ahoraIso } }));
+}
+// R169 · Personajes guardados de las 3 fundadoras (o el de base si aún no guardó el suyo).
+async function avataresDe(db) {
+  const out = {};
+  for (const f of S.FUNDADORAS) {
+    let d = null; try { const s = await db.collection(C.AV).doc(f.id).get(); d = s.exists ? s.data() : null; } catch (_) {}
+    out[f.id] = d ? { config: S.limpiarAvatar(d.config, S.AVATAR_BASE[f.id]), version: Number(d.version) || 1, miniatura: S.miniaturaValida(d.miniatura) ? d.miniatura : '', guardado: true, actualizadoAt: d.actualizadoAt || '' }
+      : { config: { ...S.AVATAR_BASE[f.id] }, version: 0, miniatura: '', guardado: false };
+  }
+  return out;
 }
 function auditoria(db, yo, accion, objetivo, extra = {}) {
   return { ref: db.collection(C.AUD).doc(), data: { tipo: 'sala_juntas', modulo: 'sala-juntas', accion, actorUsuario: yo.id, objetivo, resultado: 'ok', createdAt: new Date().toISOString(), ...extra } };
@@ -86,6 +96,14 @@ async function handler(req, res, deps = {}) {
       docs = docs.slice(0, 60);
       const invs = await invitacionesDe(db, docs.map((x) => x.id));
       const reuniones = docs.map((x) => publica(x.id, x.r, invs[x.id], ahora));
+      if (S.puede.moderar(yo)) { // R168 · Naara ve qué avisos de Telegram salieron, cuáles faltan y cuáles fallaron
+        for (const r of reuniones.filter((x) => ['programada', 'en_curso', 'cancelada'].includes(x.estado)).slice(0, 12)) {
+          const a = await db.collection(C.A).where('reunionId', '==', r.id).get(); const res = { enviado: 0, pendiente: 0, fallido: 0, fallas: [] };
+          a.docs.forEach((d) => { const x = d.data() || {}; if (Number(x.version || 1) !== Number(r.version || 1) && x.tipo !== 'cancelacion') return;
+            if (x.estado === 'enviado') res.enviado++; else if (x.estado === 'pendiente' || x.estado === 'enviando') res.pendiente++; else if (x.estado === 'fallido') { res.fallido++; res.fallas.push({ usuario: x.usuario, tipo: x.tipo, error: String(x.error || '').slice(0, 120) }); } });
+          r.avisos = res;
+        }
+      }
       const d = new Date(ahora - 6 * 3600000), mesIni = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) + 6 * 3600000;
       const mesFin = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) + 6 * 3600000;
       const activas = reuniones.filter((x) => ['programada', 'en_curso'].includes(x.estado));
@@ -96,7 +114,7 @@ async function handler(req, res, deps = {}) {
         ok: true, yo: { id: yo.id, nombre: yo.nombre, anfitriona: yo.anfitriona },
         permisos: { crear: S.puede.crear(yo), moderar: S.puede.moderar(yo) },
         fundadoras: S.FUNDADORAS.map(({ id, nombre, cargo, anfitriona, asiento }) => ({ id, nombre, cargo, anfitriona, asiento })),
-        kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
+        avatares: await avataresDe(db), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
         proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora,
       });
     }
@@ -182,6 +200,24 @@ async function handler(req, res, deps = {}) {
       if (['cancelada', 'borrador'].includes(estado)) throw err(409, estado === 'cancelada' ? 'Esta reunión fue cancelada.' : 'Esta reunión todavía es un borrador.');
       const invs = (await invitacionesDe(db, [id]))[id];
       return res.status(200).json({ ok: true, reunion: publica(id, r, invs, ahora), yo: { id: yo.id, nombre: yo.nombre }, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET) });
+    }
+
+    if (accion === 'avatares') return res.status(200).json({ ok: true, avatares: await avataresDe(db), opciones: S.AVATAR_OPC });
+
+    if (accion === 'avatar_guardar') { // cada fundadora SOLO guarda el suyo; control de versión para no pisar otro dispositivo
+      const cfg = S.limpiarAvatar(body.config, S.AVATAR_BASE[yo.id]);
+      const mini = S.miniaturaValida(body.miniatura) ? body.miniatura : '';
+      const ref = db.collection(C.AV).doc(yo.id);
+      let nueva = 0, conflicto = false;
+      await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref); const actual = s.exists ? Number(s.data().version) || 1 : 0;
+        if (body.version != null && Number(body.version) !== actual) { conflicto = true; return; }
+        nueva = actual + 1;
+        tx.set(ref, { usuario: yo.id, modelRef: 'procedural:v1', config: cfg, miniatura: mini, version: nueva, actualizadoAt: iso }, { merge: false });
+        const a = auditoria(db, yo, 'avatar_guardar', yo.id, { version: nueva }); tx.set(a.ref, a.data);
+      });
+      if (conflicto) return res.status(409).json({ ok: false, error: 'Su personaje se cambió desde otro dispositivo. Recargue para ver la versión más reciente.' });
+      return res.status(200).json({ ok: true, config: cfg, version: nueva });
     }
 
     if (accion === 'token_tiempo_real') throw err(501, 'La sala 3D con audio en tiempo real se habilita en la Fase 4.');
