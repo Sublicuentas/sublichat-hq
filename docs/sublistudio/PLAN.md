@@ -122,5 +122,18 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - **Android**: "Guardar personaje" queda fijo encima de la barra inferior (ya no se tapa); dentro de la sala se oculta la barra inferior del sistema para que no tape controles.
 - Compartir imágenes/PDF/video **no** se hace (decisión del propietario: solo compartir pantalla por ahora, costo cero).
 
-## Fase 3B · Pendiente — depende de modelos 3D
-El PDF exige modelos GLB/VRM profesionales (2 bases, ropa/cabello/accesorios por piezas, esqueleto y expresiones). Eso no se puede generar desde código; el propietario enviará un PDF con la fuente de los modelos. Lo que sí está listo para recibirlos: editor, guardado por cuenta con versión, sala y animaciones (boca, mano, saludo).
+## Fase 3B · Hecha (R172) — avatares 3D reales, sin pagar ni instalar
+- **Modelos**: Quaternius *Ultimate Modular Women/Men* (CC0 1.0, uso comercial permitido), integrados en el proyecto (`assets/avatares/*.glb`, 920 KB y 784 KB comprimidos). Origen, commit y huellas en `assets/avatares/LICENCIAS.md`. El paquete "Universal Base Characters" que sugería el PDF no trae ropa en su versión gratis; estos sí, del mismo autor y licencia.
+- **Dos bases** con esqueleto (mujer 51 huesos, hombre 49). **Mujer**: 6 peinados, blazer/blusa/vestido/camiseta/chamarra, pantalón formal/falda/pantalón casual, formal/tacones/casual/botas. **Hombre**: 6 peinados (incluye con barba), traje/suéter/camiseta/chaleco, pantalón/jeans/shorts, formal/tenis/casual, aretes y bigote. Cada prenda es una malla distinta.
+- Colores por rol (piel, cabello, ojos, prenda principal, camisa interior, abajo, calzado). Lentes, aretes de mujer, reloj y logo son piezas pequeñas colgadas de los huesos.
+- **Posturas por huesos**: de pie (editor), sentada en la sala, mano levantada y saludo; cabeza se mueve al hablar.
+- **Editor**: vistas Frente / 3/4 / Espalda, acercar/alejar (botones o rueda), restablecer cámara, giro 360°. Cambiar prenda es instantáneo; cambiar de base carga el otro modelo.
+- **Persistencia**: mismo documento `sala_avatares/{usuario}` con `modelRef: glb:quaternius-modular:20261105-r172`. Los personajes guardados antes se **migran solos** (p. ej. cola→recogido, polo→camiseta, color de calzado se conserva). Las miniaturas del muñeco anterior ya no se muestran hasta volver a guardar.
+- **Respaldo**: si el modelo no descarga, aparece el personaje anterior con aviso; no se borra nada.
+- Pruebas: `tests/r172-avatares-glb.test.mjs` (4) y `tests/visual/r172-avatares-glb.mjs` (4 recorridos).
+
+### Pendiente honesto de la Fase 3B
+- **Expresiones faciales (6 gestos)**: estos modelos no traen "blendshapes" de cara. Hoy al hablar se mueve la cabeza; la boca no. Falta un modelo con gestos (VRM) o agregar huesos de mandíbula.
+- **Polo con cuello**: no viene en el paquete; está "camiseta". **Suéter de mujer**: no viene.
+- Estilo **low-poly facetado** (caras planas): es el estilo del autor; no es igual a las ilustraciones aprobadas.
+- Tipos de cuerpo (delgada/media/curvilínea) no incluidos: una sola complexión por base.
