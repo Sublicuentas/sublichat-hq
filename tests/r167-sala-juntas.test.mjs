@@ -94,7 +94,7 @@ test('borrador: solo lo ve Naara y no genera avisos; abrir sala solo Naara; pane
   const p = (await llamar(db, 'naara', { accion: 'panel' })).body;
   assert.equal(p.kpis.reunionesMes, 1); assert.equal(p.kpis.convocatoriasActivas, 1); assert.equal(p.proxima.id, id);
   assert.equal(p.proxima.salaAbierta, true); assert.equal(p.tiempoReal, false);
-  assert.equal((await llamar(db, 'naara', { accion: 'token_tiempo_real', id })).code, 501);
+  assert.equal((await llamar(db, 'naara', { accion: 'token_tiempo_real', id })).code, 503); // R170: sin LIVEKIT_* configurado
 });
 
 test('web: botón Sala de Juntas después de Catálogo y pantalla separada', () => {
