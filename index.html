@@ -1323,9 +1323,9 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
 }
 </style>
 <!-- R162 · diseño nuevo (apagado por defecto: ?ui=v2) -->
-<link rel="stylesheet" href="/ui-v2.css?v=20261104-r162c">
-<script src="/ui-v2.js?v=20261104-r162c"></script>
-<script src="/ui-v2-inicio.js?v=20261104-r162c"></script>
+<link rel="stylesheet" href="/ui-v2.css?v=20261105-r164">
+<script src="/ui-v2.js?v=20261105-r164"></script>
+<script src="/ui-v2-inicio.js?v=20261105-r164"></script>
 </head>
 <body>
 <!-- INTRO SUBLIROBOT -->
@@ -1716,7 +1716,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
 </nav>
 <div id="sidebarWrap" class="sidebar-wrap"></div>
-<script type="module" src="./sublichat-app.js?v=20261104-r162c"></script>
+<script type="module" src="./sublichat-app.js?v=20261105-r164"></script>
 <!-- MODAL MENSAJE DE COBRO -->
 <div id="cobroModal" class="cobro-overlay">
   <div class="cobro-sheet">
@@ -1745,7 +1745,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
     </div>
     <div class="cobro-renovar" id="cobroRenovar" style="display:none">
       <div class="cr-label">¿Ya pagó? Elegí cuánto renovar:</div>
-      <!-- Oct-2026 · mismas opciones en Web, APK y Bot. La fecha la calcula el servidor: vigente → desde el vencimiento · vencido → desde hoy -->
+      <!-- Oct-2026 · mismas opciones en Web, APK y Bot. La fecha la calcula el servidor (R163): siempre desde el vencimiento · 1 mes = 30 días -->
       <div class="cobro-dur-grid" id="cobroDuraciones" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0">
         <button class="cobro-btn renew" data-dur-unidad="dias" data-dur-cantidad="31" id="cobroR31" type="button" style="margin:0">+31 días</button>
         <button class="cobro-btn renew" data-dur-unidad="meses" data-dur-cantidad="1" type="button" style="margin:0">+1 mes</button>
@@ -5511,7 +5511,7 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <script src="/revendedores-admin.js?v=20261030-r156"></script>
 <script src="/juego-premio-admin.js?v=20261025-2"></script>
 <script src="/sorteos-admin.js?v=20261025-1"></script>
-<script src="/permisos-admin.js?v=20261104-r162c"></script>
+<script src="/permisos-admin.js?v=20261105-r164"></script>
 <style id="licInicioVisual1Web20261012">
 /* ==================================================================
    VISUAL 1 · INICIO (Sublichat Web) · 12/10/2026

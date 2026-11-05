@@ -3555,7 +3555,7 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
   }
 }
 // Oct-2026 · Renovar: +31 días, 1, 2, 3, 6 y 12 meses + Personalizado (fecha). Iguales en Web, APK y Bot.
-// El servidor calcula la fecha: vigente → desde el vencimiento; vencido → desde hoy.
+// El servidor calcula la fecha (R163): siempre desde el vencimiento · 1 mes = 30 días.
 document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:"auto"})));
 
 // Botón que despliega/oculta las opciones de renovación
