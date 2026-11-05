@@ -85,3 +85,21 @@ Hecho (Sublichat HQ):
 - Pruebas: `tests/r167-sala-juntas.test.mjs` (7) y `tests/visual/r167-sala.mjs` (Naara programa, Libni confirma, celular, Magdiel bloqueado).
 
 No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram (F2), personaje 3D y editor (F3), sala 3D con audio en tiempo real (F4), actas (F5).
+
+## Fase 2 entregada (R168 · 05/11/2026) · Telegram
+
+- Bot (sublicuentas-tg-bot): `lib_sala_juntas.js` envía cada 30 s los avisos de `sala_avisos` (invitación, 24 h, 1 h, 10 min, inicio, cancelación) al chat de cada cuenta (`TELEGRAM_CHAT_ID_SUBLICUENTAS` / `_RELOJES` / `_GEISELL`). Una sola vez aunque haya dos instancias (transacción). Reprogramada → los avisos de la versión vieja se anulan. Bot apagado a la hora → recordatorio "vencido" (no llega tarde). Bloqueado / sin /start → "fallido" sin reintentar sin fin.
+- Botones Confirmar / No asistiré (`sj:r:<invitación>:a|n`): solo funcionan desde el chat de esa cuenta; actualizan solo esa invitación; se avisa a Naara; idempotente; auditado.
+- Botón "Abrir convocatoria segura": `https://sublichat.capuchino.lat/?sala=<id>` (o `SUBLICHAT_WEB_URL`). Abre Sublichat con su login normal y la antesala de esa reunión. Sin tokens.
+- Sublichat: Naara ve en cada reunión cuántos avisos salieron, cuántos faltan y cuáles no llegaron (y por qué).
+- Apagar: `SALA_JUNTAS_ENABLED=0` en el servicio del bot.
+
+## Fase 3 entregada (R169 · 05/11/2026) · Mi personaje + Escenario C
+
+- `sala-3d.js` (módulo que se descarga solo al abrir Mi personaje o la sala; three.js 0.160.0 desde jsDelivr, licencia MIT).
+- Personajes 3D construidos en código (no imágenes): mujer/hombre, 7 tonos de piel, 8 estilos y 7 colores de cabello, ojos, cejas, blazer/camisa/polo/blusa con colores, pantalón/falda, calzado, lentes, aretes, reloj, barba, logo. Giro 360° (arrastrar o flechas).
+- Guardado por cuenta en Firestore `sala_avatares/{naara|libni|geisell}` con control de versión (si se cambió en otro dispositivo, avisa en vez de pisar) y miniatura (≤90 KB). Solo se aceptan opciones de la lista; nada de texto libre ni URLs.
+- Escenario C navegable: madera, libreros, plantas, luces cálidas, mesa ovalada con flores, laptops, pantalla con el logo; Naara al centro, Libni izquierda, Geisell derecha + 3 sillas libres. Cámaras: general, plano de cada una, presentación, panorámica (transiciones suaves; con "reducir movimiento" cambian sin animación). Calidad baja automática si el equipo va lento; aviso si no hay WebGL.
+- Antesala: muestra el personaje guardado; si no existe, "Crear mi personaje" y vuelve a la antesala al guardar. "Ver la sala 3D (vista previa)".
+- **VRoid:** los modelos VRoid (.vrm) se hacen en la app VRoid Studio (escritorio). Cuando los exporten, se cargan con el mismo editor (campo `modelRef`) y three-vrm; esta entrega no los incluye.
+- Pendiente Fase 4: audio en tiempo real (LiveKit), presencia, hablante activo automático, compartir pantalla.
