@@ -62,6 +62,8 @@ export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto =
     return r.fulfill({ json: { ok: true, items: [], data: [], tickets: [], avisos: [] } });
   });
   await ctx.route(/open-meteo|api\.|fonts\.g|cdn|unsplash|picsum/i, (r) => { const u = r.request().url(); if (u.startsWith(base)) return r.continue(); if (/cdnjs|jsdelivr|unpkg/.test(u)) return r.continue(); r.fulfill({ status: 200, body: '' }); });
+  // three.js para la sala 3D (R169): copia local de la misma versión que pide sala-3d.js (sin red en pruebas)
+  await ctx.route('https://cdn.jsdelivr.net/npm/three@0.160.0/**', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(ROOT, 'tests/visual/vendor/three-0.160.0.module.min.js'), 'utf8') }));
   await ctx.addInitScript(({ usuario, ui }) => {
     try { localStorage.setItem('sublichat_user', usuario); localStorage.setItem('sublichat_role', 'asesor'); sessionStorage.setItem('sublichat_intro_seen', '1');
       if (!sessionStorage.getItem('__arnes_ui')) { sessionStorage.setItem('__arnes_ui', '1'); if (ui === 'v2') localStorage.setItem('sublichat_ui_v2', '1'); else localStorage.removeItem('sublichat_ui_v2'); } } catch (_) {}
