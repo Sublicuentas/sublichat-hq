@@ -191,6 +191,10 @@ async function handler(req, res, deps = {}) {
       b.set(db.collection(C.R).doc(id), abrir ? { salaAbierta: true, estado: 'en_curso', abiertaAt: iso, actualizadoAt: iso } : { salaAbierta: false, estado: 'finalizada', cerradaAt: iso, actualizadoAt: iso }, { merge: true });
       const a = auditoria(db, yo, accion, id); b.set(a.ref, a.data);
       await b.commit();
+      if (!abrir && env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET) { // cerrar = termina la llamada para todas
+        const sala = r.roomId || `sj_${id}`;
+        try { await (deps.fetch || fetch)(`${S.httpDeLiveKit(env.LIVEKIT_URL)}/twirp/livekit.RoomService/DeleteRoom`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${S.tokenServidor({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, sala, ahora })}` }, body: JSON.stringify({ room: sala }) }); } catch (_) {}
+      }
       return res.status(200).json({ ok: true, id, salaAbierta: abrir });
     }
 
@@ -220,7 +224,40 @@ async function handler(req, res, deps = {}) {
       return res.status(200).json({ ok: true, config: cfg, version: nueva });
     }
 
-    if (accion === 'token_tiempo_real') throw err(501, 'La sala 3D con audio en tiempo real se habilita en la Fase 4.');
+    if (accion === 'token_tiempo_real') { // R170 · entrar a la sala con audio (LiveKit)
+      if (!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET)) throw err(503, 'Falta configurar el audio en tiempo real (LiveKit).');
+      const { id, r } = await leerReunion(body.id);
+      const estado = S.estadoVigente(r, ahora);
+      if (!['programada', 'en_curso'].includes(estado)) throw err(409, estado === 'cancelada' ? 'Esta reunión fue cancelada.' : 'Esta reunión ya terminó.');
+      const v = S.ventanaSala(r);
+      if (ahora < v.desde) throw err(409, 'La sala se puede abrir desde 30 minutos antes de la hora de inicio.');
+      if (ahora > v.hasta) throw err(409, 'Se pasó el tiempo de esta reunión.');
+      const inv = await db.collection(C.I).doc(`${id}_${yo.id}`).get();
+      if (!inv.exists) throw err(403, 'No está invitada a esa reunión.');
+      if (!r.salaAbierta) {
+        if (!S.puede.moderar(yo)) throw err(409, 'Esperando que la anfitriona abra la sala.');
+        await db.collection(C.R).doc(id).set({ salaAbierta: true, estado: 'en_curso', abiertaAt: iso, actualizadoAt: iso }, { merge: true }); // Naara entra = abre
+      }
+      const sala = r.roomId || `sj_${id}`;
+      const ttlSeg = Math.min(2 * 3600, Math.floor((v.hasta - ahora) / 1000));
+      const token = S.tokenParticipante({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, identidad: yo.id, nombre: yo.nombre, sala, ttlSeg, anfitriona: S.puede.moderar(yo), ahora });
+      const a = auditoria(db, yo, 'entrar_sala', id); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true, url: String(env.LIVEKIT_URL).trim(), token, identidad: yo.id, expiraMs: ahora + ttlSeg * 1000 });
+    }
+
+    if (accion === 'expulsar') { // solo la anfitriona; lo hace el servidor con la API de LiveKit
+      if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede sacar a alguien de la sala.');
+      const { id, r } = await leerReunion(body.id);
+      const quien = String(body.usuario || '');
+      if (!S.POR_ID[quien] || quien === yo.id) throw err(400, 'Participante no válido.');
+      if (!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET)) throw err(503, 'Falta configurar LiveKit.');
+      const sala = r.roomId || `sj_${id}`;
+      const f = deps.fetch || fetch;
+      const resp = await f(`${S.httpDeLiveKit(env.LIVEKIT_URL)}/twirp/livekit.RoomService/RemoveParticipant`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${S.tokenServidor({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, sala, ahora })}` }, body: JSON.stringify({ room: sala, identity: quien }) });
+      if (!resp.ok && resp.status !== 404) throw err(502, 'LiveKit no pudo sacar a esa persona. Intente de nuevo.');
+      const a = auditoria(db, yo, 'expulsar', id, { usuario: quien }); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true });
+    }
     return res.status(400).json({ ok: false, error: 'Acción no reconocida.' });
   } catch (e) {
     if (e.publico) return res.status(e.status || 400).json({ ok: false, error: e.publico });

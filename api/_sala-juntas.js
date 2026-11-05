@@ -135,4 +135,28 @@ function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
 // Miniatura generada por el editor: solo imagen WebP/JPEG/PNG en data URL y de tamaño acotado.
 function miniaturaValida(t) { return typeof t === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(t) && t.length <= 90000; }
 
-module.exports = { AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+// ---------- R170 · Fase 4: tokens de LiveKit (firmados en el servidor; nunca viajan por Telegram) ----------
+const crypto = require('crypto');
+const b64u = (x) => Buffer.from(typeof x === 'string' ? x : JSON.stringify(x)).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+function jwtHS256(payload, secret) {
+  const cab = b64u({ alg: 'HS256', typ: 'JWT' }), cuerpo = b64u(payload);
+  const firma = crypto.createHmac('sha256', String(secret)).update(`${cab}.${cuerpo}`).digest('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return `${cab}.${cuerpo}.${firma}`;
+}
+// Token de participante: solo esa sala, solo esa identidad, permisos mínimos; la anfitriona además modera.
+function tokenParticipante({ apiKey, apiSecret, identidad, nombre, sala, ttlSeg, anfitriona, ahora = Date.now() }) {
+  const iat = Math.floor(ahora / 1000);
+  return jwtHS256({ iss: apiKey, sub: identidad, name: nombre, nbf: iat - 5, iat, exp: iat + Math.max(60, Math.floor(ttlSeg)), jti: crypto.randomBytes(8).toString('hex'),
+    metadata: JSON.stringify({ rol: anfitriona ? 'anfitriona' : 'fundadora' }),
+    video: { room: sala, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true, canPublishSources: ['microphone', 'camera', 'screen_share', 'screen_share_audio'], roomAdmin: !!anfitriona, canUpdateOwnMetadata: false } }, apiSecret);
+}
+// Token corto del servidor para la API de LiveKit (expulsar, cerrar la sala).
+function tokenServidor({ apiKey, apiSecret, sala, ahora = Date.now() }) {
+  const iat = Math.floor(ahora / 1000);
+  return jwtHS256({ iss: apiKey, nbf: iat - 5, iat, exp: iat + 120, video: { room: sala, roomAdmin: true, roomCreate: true } }, apiSecret);
+}
+const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:').replace(/\/+$/, '');
+// Ventana para entrar: desde 30 min antes del inicio hasta 60 min después del final previsto (tope de costo).
+function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
+
+module.exports = { jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
