@@ -260,6 +260,10 @@
     var r = rbac(); if (!r || !shell) return;
     var u = r.usuario() || ''; var nombre = r.esSupervisor() ? 'Sublicuentas' : (u === 'libni' ? 'Relojes' : u);
     shell.querySelector('#v2Nombre').textContent = nombre || 'Usuario';
+    // R166 · El avatar de arriba es la MISMA foto de Perfil (mismo registro del usuario). Sin foto: Sublirobot.
+    var img = shell.querySelector('#v2User img'), src = '';
+    try { src = r.avatar ? r.avatar() : ''; } catch (_) {}
+    if (img) { if (src && img.getAttribute('src') !== src) img.setAttribute('src', src); else if (!src) img.setAttribute('src', '/assets/sublirobot-96.webp'); img.alt = 'Foto de ' + (nombre || 'usuario'); }
     shell.querySelector('#v2Rol').textContent = r.esSupervisor() ? 'Supervisor' : r.rolEtiqueta();
   }
   function campana() {
@@ -288,6 +292,8 @@
   }
 
   window.addEventListener('sublichat:nav', function () { construir(); usuario(); });
+  window.addEventListener('sublichat:profile-changed', function () { setTimeout(usuario, 30); }); // guardar foto, cargar del servidor
+  window.addEventListener('storage', function (e) { if (e.key && e.key.indexOf('sublichat_profile_') === 0) usuario(); }); // otra pestaña
   window.addEventListener('sublichat:screen', function (e) { if (((e.detail && e.detail.screen) || '') === 'perfil') setTimeout(ordenarPerfil, 60); });
   window.addEventListener('sublichat:screen', function (e) { marcar((e.detail && e.detail.screen) || actual()); });
   function iniciar() {

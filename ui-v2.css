@@ -364,3 +364,15 @@ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .v2-apariencia-in{bor
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{min-height:0!important;height:220px!important;box-shadow:none!important}
 @media (max-width:767.98px){html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{height:170px!important}}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;height:auto!important;outline:none!important}
+
+/* =====================================================================================================
+   R166 · Corrección: los 9 botones en UN solo grupo continuo (sin espacios repartidos) · alto 38px · borde fino
+   ===================================================================================================== */
+#v2Shell .v2-nav-in{justify-content:flex-start!important;gap:8px!important}
+#v2Shell .v2-nav-in>*{flex:0 0 auto!important;justify-content:flex-start!important;margin:0!important}
+#v2Shell .v2-nav .v2-tab{height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--n-borde);background:#fff;font-size:13.5px}
+#v2Shell .v2-nav .v2-tab:hover{background:var(--n-hover);border-color:#F6C9C6}
+#v2Shell .v2-nav .v2-tab.on{border-color:var(--n-rojo);background:var(--n-rojo)}
+#v2Shell .v2-nav .v2-tab.v2-hijo,#v2Shell .v2-nav .v2-tab[aria-expanded="true"]{background:var(--n-hover);border-color:#F6C9C6}
+#v2Shell .v2-nav .v2-tab::after{bottom:3px}
+#v2Shell .v2-user img{object-fit:cover;padding:0}

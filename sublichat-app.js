@@ -8516,7 +8516,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   // R162 · Para el diseño nuevo (ui-v2.js) y la pantalla de permisos (permisos-admin.js).
   window.SublichatRBAC={ir:rbacGo,can,rol:currentRole,rolEtiqueta:()=>ROLE_LABEL[currentRole()]||'Usuario',usuario:currentUser,esSupervisor:isSublicuentasAccount,
     pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'permisos'].filter(can);},
-    meta:(s)=>NAV_META[s]||['•',s],recargarPermisos:()=>cargarPermisos(true)};
+    meta:(s)=>NAV_META[s]||['•',s],recargarPermisos:()=>cargarPermisos(true),
+    // R166 · Foto del usuario autenticado: MISMA fuente que Perfil (perfil guardado de ese usuario; sin foto → Sublirobot).
+    avatar:()=>{try{return svgAvatar(profileBase());}catch(_){return '';}},nombrePerfil:()=>{try{return profileBase().nombre||'';}catch(_){return '';}}};
   if(document.body.classList.contains('ready')) applyRBAC();
 })();
 
