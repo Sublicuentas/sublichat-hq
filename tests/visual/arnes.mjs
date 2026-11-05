@@ -22,7 +22,9 @@ export function clientesFicticios(n = 36) {
   return out;
 }
 
-export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto = 900, permisos = null, salida = null } = {}) {
+export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto = 900, permisos = null, salida = null, salaDb = null, ahora = null } = {}) {
+  const { crearFakeDb } = require(path.join(ROOT, 'tests/helpers/fake-firestore.cjs'));
+  const dbSala = salaDb || crearFakeDb(); const salaHandler = require(path.join(ROOT, 'api/sala-juntas.js'));
   const app = await crearApp(); const srv = app.listen(0); await new Promise((r) => srv.once('listening', r));
   const base = `http://127.0.0.1:${srv.address().port}`;
   const browser = await chromium.launch();
@@ -50,6 +52,11 @@ export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto =
       if (body.accion === 'listar') return r.fulfill({ json: { ok: true, catalogo, usuarios: ['sublicuentas', 'geisell', 'magdiel', 'relojes'].map((x) => { const ux = { usuario: x, role: 'asesor' }; return { usuario: x, rol: P.esSupervisor(ux) ? 'Supervisor' : x === 'geisell' ? 'Admin Control' : x === 'magdiel' ? 'Auditor' : 'Operativo · Finanzas', supervisor: P.esSupervisor(ux), porDefecto: P.porDefecto(ux), cambios: P.overridesDe(cfg, x), modulos: P.efectivos(ux, cfg) }; }) } });
       return r.fulfill({ json: { ok: true, usuario, supervisor: P.esSupervisor(u), modulos: P.efectivos(u, cfg), pantallas: P.pantallasVisibles(u, cfg), catalogo } });
     }
+    if (nombre === 'sala-juntas') { // API real de la Sala con Firestore en memoria
+      const out = await new Promise((resolve) => { const res = { code: 200, setHeader() {}, status(c) { this.code = c; return this; }, json(b) { resolve({ code: this.code, body: b }); } };
+        salaHandler({ method: 'POST', headers: { authorization: 'Bearer t' }, body }, res, { auth: () => ({ verifyIdToken: async () => ({ uid: 'asesor-' + usuario, usuario, role: 'asesor' }) }), db: () => dbSala, env: {}, ahora: ahora ? () => ahora : undefined }); });
+      return r.fulfill({ status: out.code, json: out.body });
+    }
     if (nombre === 'mobile-core') return r.fulfill({ json: { ok: true, items: [], nextCursor: '' } });
     if (nombre === 'importar' && body.accion === 'control_datos') return r.fulfill({ json: { ok: true, coleccion: body.coleccion, documentos: body.coleccion === 'clientes' ? docs.map((d) => ({ id: d.id, data: d.data })) : [], nextCursor: '' } });
     return r.fulfill({ json: { ok: true, items: [], data: [], tickets: [], avisos: [] } });
@@ -64,7 +71,7 @@ export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto =
   await page.goto(base + '/');
   await page.waitForFunction(() => document.body.classList.contains('ready'), null, { timeout: 30000 });
   await page.waitForTimeout(2500);
-  return { page, ctx, browser, srv, errores, base, async cerrar() { await browser.close(); srv.close(); } };
+  return { page, ctx, browser, srv, errores, base, dbSala, async cerrar() { await browser.close(); srv.close(); } };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
