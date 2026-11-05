@@ -73,6 +73,8 @@
   };
   function ico(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (P[k] || P.mas) + '</svg>'; }
   P.flecha = '<path d="m6 9 6 6 6-6"/>';
+  P.op = '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>';
+  P.puntos = '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>';
   P.cerrar = '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>';
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function rbac() { return window.SublichatRBAC || null; }
@@ -102,7 +104,6 @@
       '<a class="v2-salto" href="#v2Main">Saltar al contenido</a>' +
       '<header class="v2-top" role="banner">' +
         '<div class="v2-top-in">' +
-          '<button class="v2-ico-btn v2-solo-movil" id="v2Menu" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="v2Panel">' + ico('menu') + '</button>' +
           '<a class="v2-logo" href="#" data-s="inicio" aria-label="Sublicuentas · Inicio"><img src="/assets/sublicuentas-logo-oscuro-ui.webp" alt="Sublicuentas" width="154" height="30"></a>' +
           '<label class="v2-buscar" id="v2BuscarBox">' + ico('buscar') + '<input id="v2Buscar" type="search" placeholder="Buscar cliente o teléfono" autocomplete="off" aria-label="Buscar cliente o teléfono"></label>' +
           '<div class="v2-top-der">' +
@@ -116,11 +117,14 @@
                 '<hr><button type="button" role="menuitem" data-v2a="salir" class="v2-peligro">' + ico('salir') + 'Cerrar sesión</button>' +
               '</div>' +
             '</div>' +
+            '<button class="v2-ico-btn v2-solo-movil" id="v2Menu" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="v2Panel">' + ico('menu') + '</button>' +
           '</div>' +
         '</div>' +
       '</header>' +
       '<nav class="v2-nav" aria-label="Secciones"><div class="v2-nav-in" id="v2Fila"></div></nav>' +
-      '<div class="v2-panel" id="v2Panel" hidden><div class="v2-panel-in" id="v2PanelIn"></div></div>';
+      '<div class="v2-panel" id="v2Panel" hidden><div class="v2-panel-in" role="dialog" aria-label="Navegación"><div class="v2-panel-tit">Navegación</div>' +
+        '<label class="v2-panel-buscar">' + ico('buscar') + '<input id="v2BuscarDrawer" type="search" placeholder="Buscar cliente o teléfono" autocomplete="off" aria-label="Buscar cliente o teléfono"></label>' +
+        '<div id="v2PanelIn"></div></div></div>';
     document.body.insertBefore(shell, document.body.firstChild);
     filaEl = shell.querySelector('#v2Fila'); popUser = shell.querySelector('#v2PopUser'); panelMovil = shell.querySelector('#v2Panel'); puntoEl = shell.querySelector('#v2Punto');
     var wrap = document.querySelector('.wrap'); if (wrap) { wrap.id = wrap.id || 'v2Main'; wrap.setAttribute('tabindex', '-1'); wrap.setAttribute('role', 'main'); }
@@ -140,23 +144,32 @@
     });
     shell.querySelector('#v2User').addEventListener('click', function (e) { e.stopPropagation(); var abierto = !popUser.hidden; cerrarTodo(); if (!abierto) abrirPop(popUser, this); });
     shell.querySelector('#v2Avisos').addEventListener('click', function () { if (puede('tickets')) ir('tickets'); });
-    shell.querySelector('#v2Menu').addEventListener('click', function (e) { e.stopPropagation(); var ab = panelMovil.hidden; cerrarTodo(); if (ab) { panelMovil.hidden = false; this.setAttribute('aria-expanded', 'true'); document.documentElement.classList.add('v2-panel-abierto'); var f = panelMovil.querySelector('button'); if (f) f.focus(); } });
-    shell.querySelector('#v2BuscarMovil').addEventListener('click', function () { document.documentElement.classList.toggle('v2-buscando'); var i = document.getElementById('v2Buscar'); if (i) i.focus(); });
+    var abrirDrawer = function (foco) { var b = shell.querySelector('#v2Menu'); var ab = panelMovil.hidden; cerrarTodo(); if (!ab) return; panelMovil.hidden = false; b.setAttribute('aria-expanded', 'true'); document.documentElement.classList.add('v2-panel-abierto'); var f = foco ? shell.querySelector('#v2BuscarDrawer') : panelMovil.querySelector('.v2-tab'); if (f) try { f.focus({ preventScroll: true }); } catch (_) {} };
+    shell.querySelector('#v2Menu').addEventListener('click', function (e) { e.stopPropagation(); abrirDrawer(false); });
+    shell.querySelector('#v2BuscarMovil').addEventListener('click', function (e) { e.stopPropagation(); abrirDrawer(true); });
+    panelMovil.addEventListener('click', function (e) { // secciones plegables del drawer (no cierran el drawer)
+      if (e.target === panelMovil) { cerrarTodo(); return; }
+      var m = e.target.closest('[data-v2m]'); if (!m) return; e.stopPropagation();
+      var lista = document.getElementById(m.getAttribute('aria-controls')); var ab = m.getAttribute('aria-expanded') === 'true';
+      m.setAttribute('aria-expanded', ab ? 'false' : 'true'); if (lista) lista.hidden = ab;
+    });
     document.addEventListener('click', function (e) { if (!e.target.closest('#v2Shell .v2-pop, #v2Shell .v2-panel')) cerrarTodo(); });
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       var origen = document.querySelector('#v2Shell [aria-expanded="true"]');
       cerrarTodo(); if (origen) origen.focus();
     });
-    var buscar = shell.querySelector('#v2Buscar'), t;
-    var pasar = function () {
+    var t;
+    var pasar = function (valor) {
       if (!puede('clientes')) return;
       if (actual() !== 'clientes') ir('clientes');
       var qi = document.getElementById('q'); if (!qi) return;
-      qi.value = buscar.value; qi.dispatchEvent(new Event('input', { bubbles: true }));
+      qi.value = valor; qi.dispatchEvent(new Event('input', { bubbles: true }));
     };
-    buscar.addEventListener('input', function () { clearTimeout(t); t = setTimeout(pasar, 250); });
-    buscar.addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(t); pasar(); } });
+    [shell.querySelector('#v2Buscar'), shell.querySelector('#v2BuscarDrawer')].forEach(function (buscar) {
+      buscar.addEventListener('input', function () { if (buscar.id === 'v2BuscarDrawer') return; clearTimeout(t); t = setTimeout(function () { pasar(buscar.value); }, 250); });
+      buscar.addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(t); pasar(buscar.value); } });
+    });
     window.addEventListener('resize', function () { clearTimeout(t2); t2 = setTimeout(ajustarFila, 120); });
     var t2;
     construir(); usuario(); campana();
@@ -164,7 +177,8 @@
   function abrirPop(pop, origen) {
     pop.hidden = false; origen.setAttribute('aria-expanded', 'true');
     if (pop.classList.contains('v2-pop-g')) { // debajo de su categoría, sin salirse de la pantalla
-      var r = origen.getBoundingClientRect(), w = pop.offsetWidth || 280;
+      var r = origen.getBoundingClientRect(), w = pop.offsetWidth || 360;
+      pop.style.top = (r.bottom + 10) + 'px';
       pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 12)) + 'px';
     } var f = pop.querySelector('button,[data-s]'); if (f) try { f.focus({ preventScroll: true }); } catch (_) {} }
   function cerrarTodo() {
@@ -194,24 +208,27 @@
     return out;
   }
   function nombreDe(s) { return NOMBRE[s] || ((rbac() && rbac().meta(s)[1]) || s); }
-  function itemMenu(s) { return '<button type="button" role="menuitem" class="v2-mi" data-s="' + esc(s) + '">' + ico(s) + '<span><b>' + esc(nombreDe(s)) + '</b>' + (DESC[s] ? '<small>' + esc(DESC[s]) + '</small>' : '') + '</span>' + (s === 'tickets' ? '<i class="v2-cuenta" hidden></i>' : '') + '</button>'; }
+  var GRUPO_INFO = { 'Operación': ['op', 'Accesos agrupados por función'], 'Supervisión': ['permisos', 'Control, auditoría y permisos'], 'Más': ['puntos', 'Herramientas y extras'] };
+  function itemMenu(s) { return '<button type="button" role="menuitem" class="v2-mi" data-s="' + esc(s) + '"><span class="v2-mi-ico">' + ico(s) + '</span><span class="v2-mi-t"><b>' + esc(nombreDe(s)) + '</b>' + (DESC[s] ? '<small>' + esc(DESC[s]) + '</small>' : '') + '</span>' + (s === 'tickets' ? '<i class="v2-cuenta" hidden></i>' : '') + '<svg class="v2-mi-flecha" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></button>'; }
+  function chev() { return '<svg class="v2-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'; }
   function construir() {
     if (!filaEl) return;
     var est = estructura(), html = '', movil = '';
     est.forEach(function (n, i) {
       if (n.s) {
-        html += '<button type="button" class="v2-tab" data-s="' + n.s + '">' + esc(nombreDe(n.s)) + '</button>';
-        movil += '<button type="button" class="v2-mi" data-s="' + n.s + '">' + ico(n.s) + '<span><b>' + esc(nombreDe(n.s)) + '</b></span></button>';
+        html += '<button type="button" class="v2-tab" data-s="' + n.s + '">' + ico(n.s) + '<span>' + esc(nombreDe(n.s)) + '</span></button>';
+        movil += '<button type="button" class="v2-tab" data-s="' + n.s + '">' + ico(n.s) + '<span>' + esc(nombreDe(n.s)) + '</span></button>';
       } else {
         var id = 'v2G' + i;
-        html += '<div class="v2-grupo" data-grupo="' + esc(n.g) + '"><button type="button" class="v2-tab v2-tab-g" data-v2g="1" aria-haspopup="menu" aria-expanded="false" aria-controls="' + id + '">' + esc(n.g) + ico('flecha') + '</button>' +
-          '<div class="v2-pop v2-pop-g" id="' + id + '" role="menu" hidden>' + n.items.map(itemMenu).join('') + '</div></div>';
-        movil += '<div class="v2-panel-g"><small>' + esc(n.g) + '</small>' + n.items.map(itemMenu).join('') + '</div>';
+        var gi = GRUPO_INFO[n.g] || ['puntos', ''];
+        html += '<div class="v2-grupo" data-grupo="' + esc(n.g) + '"><button type="button" class="v2-tab v2-tab-g" data-v2g="1" aria-haspopup="menu" aria-expanded="false" aria-controls="' + id + '">' + ico(gi[0]) + '<span>' + esc(n.g) + '</span>' + chev() + '</button>' +
+          '<div class="v2-pop v2-pop-g" id="' + id + '" role="menu" aria-label="' + esc(n.g) + '" hidden><div class="v2-pop-h"><b>' + esc(n.g) + '</b><small>' + esc(gi[1]) + '</small></div>' + n.items.map(itemMenu).join('') + '</div></div>';
+        movil += '<div class="v2-panel-g"><button type="button" class="v2-tab v2-tab-g" data-v2m="1" aria-expanded="false" aria-controls="' + id + 'm">' + ico(gi[0]) + '<span>' + esc(n.g) + '</span>' + chev() + '</button><div class="v2-panel-lista" id="' + id + 'm" hidden>' + n.items.map(itemMenu).join('') + '</div></div>';
       }
     });
-    html += '<div class="v2-grupo v2-desborde" hidden><button type="button" class="v2-tab v2-tab-g" data-v2g="1" aria-haspopup="menu" aria-expanded="false" aria-controls="v2GDes">Secciones' + ico('flecha') + '</button><div class="v2-pop v2-pop-g v2-pop-der" id="v2GDes" role="menu" hidden></div></div>';
+    html += '<div class="v2-grupo v2-desborde" hidden><button type="button" class="v2-tab v2-tab-g" data-v2g="1" aria-haspopup="menu" aria-expanded="false" aria-controls="v2GDes">' + ico('puntos') + '<span>Más secciones</span>' + chev() + '</button><div class="v2-pop v2-pop-g v2-pop-der" id="v2GDes" role="menu" hidden></div></div>';
     filaEl.innerHTML = html;
-    shell.querySelector('#v2PanelIn').innerHTML = movil + '<div class="v2-panel-g"><small>Cuenta</small>' + itemMenu('perfil') + '</div>';
+    shell.querySelector('#v2PanelIn').innerHTML = movil + '<button type="button" class="v2-tab" data-s="perfil">' + ico('perfil') + '<span>Mi perfil</span></button>';
     shell.querySelector('#v2Avisos').hidden = !pantallas().includes('tickets');
     ajustarFila(); marcar(actual()); campana();
   }
@@ -236,7 +253,7 @@
   function marcar(s) {
     if (!shell) return;
     shell.querySelectorAll('[data-s]').forEach(function (b) { var on = b.getAttribute('data-s') === s && !b.classList.contains('v2-logo'); b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    shell.querySelectorAll('.v2-grupo').forEach(function (g) { var t = g.querySelector('.v2-tab-g'); if (t) t.classList.toggle('on', !!g.querySelector('.v2-pop [data-s="' + s + '"]')); });
+    shell.querySelectorAll('.v2-grupo').forEach(function (g) { var t = g.querySelector('.v2-tab-g'); if (t) t.classList.toggle('v2-hijo', !!g.querySelector('[data-s="' + s + '"]')); });
     try { document.title = nombreDe(s) + ' · Sublichat'; } catch (_) {}
   }
   function usuario() {
