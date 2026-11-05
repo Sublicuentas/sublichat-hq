@@ -71,3 +71,25 @@ Inicio → Clientes → Renovaciones → Control Maestro, uno por entrega, con c
 - `tests/r162-permisos.test.mjs`: 5/5.
 - `node tests/visual/r162-menu.mjs`: 6/6 (Sublicuentas, Relojes, Geisell, con y sin cambios, diseño nuevo y anterior, "Diseño anterior" vuelve).
 - Capturas 360/390/768/1024/1366/1920 antes y después: Inicio, Clientes, Renovaciones, Control Maestro y Usuarios y permisos.
+
+
+## R164 · Navegación superior (guía "Sublichat Web · Rediseño integral", 05/11/2026)
+
+La guía nueva reemplaza el menú lateral (precedencia, p. 2). Entregado en esta fase (Fase 1 + pilotos):
+
+| Punto de la guía | Estado |
+|---|---|
+| A02 · Sin menú lateral ni espacio reservado | Hecho. Encabezado grafito 60px (logo, buscador, avisos, perfil) + fila de categorías 46px con activo rojo |
+| Mapa de navegación p. 7 | Inicio · Clientes · Renovaciones · Control Maestro · Portal Cliente · Catálogo · Operación ▾ · Supervisión ▾ · Más ▾. Perfil y Cerrar sesión en el menú del avatar. Grupos vacíos no se muestran (permisos) |
+| Desbordamiento | Lo que no cabe pasa a "Secciones ▾" con nombres completos, sin achicar la letra |
+| Celular | Logo, menú, búsqueda, avisos y avatar. Menú baja desde arriba con scroll propio; nunca columna lateral |
+| Teclado | Esc cierra y devuelve el foco, enlace "Saltar al contenido", foco visible rojo |
+| Movimiento | Cambio de sección 220ms, menús 160ms, panel 200ms; con "reducir movimiento" se apaga |
+| Tokens p. 5 | Grafito #17191E, texto #20242B, fondo #F5F6F8, borde #DDE2E8, acción #B91C1C (botón con texto blanco), marca #E2231A |
+| Inicio (piloto) | Panel general con datos reales (R162b) |
+| Perfil (piloto) | Datos personales primero; galería de temas plegada en "Apariencia avanzada" al final (no se borra nada, mismos IDs) |
+| Clientes (piloto) | Ancho fluido y tarjetas en celular (R162c). Pendiente: ficha y filtros a la medida |
+| Renovaciones, Control Maestro y resto | Pendiente (Fases 3-4): heredan el estilo, todavía no tienen composición nueva |
+| Activar TV | No está en esta web; por decisión del dueño no se agrega |
+
+Rollback: menú del avatar → "Diseño anterior", o `?ui=v1`. Sin la bandera la web se ve igual que hoy.
