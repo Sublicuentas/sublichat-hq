@@ -137,21 +137,18 @@ function sumarDias(fechaStr, dias) {
   return `${dd}/${mm}/${base.getFullYear()}`;
 }
 
-// Oct-2026 · Renovación por duración (15 días, 1–12 meses o personalizado).
-// Regla: si el servicio sigue vigente se suma desde su vencimiento; si ya venció, desde hoy.
-// base "vencimiento" u "hoy" fuerza la base cuando el negocio lo requiere.
+// Renovación por duración (días, meses o personalizado). Esta es la regla que usan la web y la APK.
+// R163 (04/11/2026), igual que el bot de Telegram:
+//   · Se cuenta SIEMPRE desde la fecha de vencimiento: si vencía el 1 y renueva el 4, se cuenta desde el 1.
+//     Solo si el servicio no tiene fecha válida (o se pide base "hoy" de forma explícita) se usa hoy.
+//   · 1 mes = 30 días exactos (2 meses = 60, 3 = 90, 6 = 180, 12 = 360). "+31 días" = 31 días.
 function dmyDe(d) {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 function sumarMesesDMY(fechaStr, meses) {
-  const base = parseFechaDMY(fechaStr);
   const n = Number(meses);
-  if (!base || !Number.isInteger(n) || n <= 0) return "";
-  const dia = base.getDate();
-  const destino = new Date(base.getFullYear(), base.getMonth() + n, 1);
-  const ultimo = new Date(destino.getFullYear(), destino.getMonth() + 1, 0).getDate();
-  destino.setDate(Math.min(dia, ultimo)); // 31/01 + 1 mes = 28/02 (o 29), nunca salta a marzo
-  return dmyDe(destino);
+  if (!Number.isInteger(n) || n <= 0) return "";
+  return sumarDias(fechaStr, n * 30 /* 1 mes = 30 días */);
 }
 function calcularRenovacionPorDuracion(fechaActual, duracion = {}) {
   const unidad = String(duracion.unidad || "").toLowerCase() === "dias" ? "dias" : "meses";
@@ -162,9 +159,9 @@ function calcularRenovacionPorDuracion(fechaActual, duracion = {}) {
   const actual = parseFechaDMY(fechaActual);
   const vigente = actual && actual >= parseFechaDMY(hoy);
   const baseElegida = ["vencimiento", "hoy"].includes(String(duracion.base || "")) ? String(duracion.base) : "auto";
-  const fechaBase = baseElegida === "hoy" || !actual ? hoy : (baseElegida === "vencimiento" || vigente ? fechaActual : hoy);
+  const fechaBase = baseElegida === "hoy" || !actual ? hoy : fechaActual;
   const fechaNueva = unidad === "dias" ? sumarDias(fechaBase, cantidad) : sumarMesesDMY(fechaBase, cantidad);
-  return { unidad, cantidad, base: baseElegida, baseUsada: fechaBase === hoy && fechaBase !== fechaActual ? "hoy" : "vencimiento", fechaBase, fechaNueva, vigente: !!vigente };
+  return { unidad, cantidad, dias: unidad === "dias" ? cantidad : cantidad * 30, base: baseElegida, baseUsada: fechaBase === fechaActual ? "vencimiento" : "hoy", fechaBase, fechaNueva, vigente: !!vigente };
 }
 
 function normPlat(v) {
