@@ -106,3 +106,33 @@ test('web: botón Sala de Juntas después de Catálogo y pantalla separada', () 
   assert.ok(P.pantallasVisibles({ usuario: 'relojes' }, {}).includes('sala-juntas'));
   assert.ok(!P.pantallasVisibles({ usuario: 'magdiel' }, {}).includes('sala-juntas'));
 });
+
+test('R168 · Naara ve el estado de los avisos de Telegram; Libni no', async () => {
+  const db = crearFakeDb();
+  const id = (await llamar(db, 'naara', conv())).body.id;
+  await db.collection('sala_avisos').doc(`${id}_geisell_invitacion_v1`).set({ estado: 'fallido', error: 'Esta cuenta no tiene Telegram vinculado (TELEGRAM_CHAT_ID).' }, { merge: true });
+  await db.collection('sala_avisos').doc(`${id}_libni_invitacion_v1`).set({ estado: 'enviado' }, { merge: true });
+  const n = (await llamar(db, 'naara', { accion: 'panel' })).body.reuniones[0].avisos;
+  assert.equal(n.enviado, 1); assert.equal(n.fallido, 1); assert.equal(n.fallas[0].usuario, 'geisell');
+  assert.equal((await llamar(db, 'libni', { accion: 'panel' })).body.reuniones[0].avisos, undefined);
+});
+
+test('R169 · Mi personaje: cada fundadora guarda SOLO el suyo, opciones permitidas, control de versión', async () => {
+  const db = crearFakeDb();
+  let p = (await llamar(db, 'libni', { accion: 'panel' })).body;
+  assert.equal(p.avatares.libni.guardado, false); assert.equal(p.avatares.naara.config.genero, 'mujer');
+  let r = await llamar(db, 'libni', { accion: 'avatar_guardar', version: 0, config: { genero: 'hombre', cabello: 'corto', barba: true, piel: '#a86f4c', superior: 'zzz', url: 'https://malo' }, miniatura: 'data:image/webp;base64,AAAA' });
+  assert.equal(r.code, 200); assert.equal(r.body.version, 1);
+  assert.equal(r.body.config.genero, 'hombre'); assert.equal(r.body.config.barba, true); assert.equal(r.body.config.piel, '#A86F4C');
+  assert.equal(r.body.config.superior, 'blazer', 'valor no permitido → el de base'); assert.equal(r.body.config.url, undefined);
+  const guardado = db.todos('sala_avatares');
+  assert.equal(guardado.length, 1); assert.equal(guardado[0].id, 'libni', 'se guarda en el documento de quien inició sesión');
+  r = await llamar(db, 'libni', { accion: 'avatar_guardar', version: 0, config: {} });
+  assert.equal(r.code, 409, 'otro dispositivo ya guardó (versión vieja)');
+  r = await llamar(db, 'libni', { accion: 'avatar_guardar', version: 1, config: { genero: 'mujer', barba: true }, miniatura: 'javascript:alert(1)' });
+  assert.equal(r.body.config.barba, false, 'mujer sin barba'); assert.equal(db.todos('sala_avatares')[0].miniatura, '', 'miniatura no válida se descarta');
+  p = (await llamar(db, 'geisell', { accion: 'panel' })).body;
+  assert.equal(p.avatares.libni.guardado, true); assert.equal(p.avatares.libni.version, 2);
+  assert.equal((await llamar(db, 'magdiel', { accion: 'avatar_guardar', config: {} })).code, 403);
+  assert.ok(db.todos('auditoria_eventos').some((x) => x.accion === 'avatar_guardar' && x.actorUsuario === 'libni'));
+});
