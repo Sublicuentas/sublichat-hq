@@ -54,8 +54,8 @@
   const RSVP = { aceptada: ['Confirmó', 'verde'], rechazada: ['No asistirá', 'rojo'], pendiente: ['Pendiente', 'ambar'] };
   const funda = (id) => (st.data?.fundadoras || []).find((f) => f.id === id) || { id, nombre: id };
   function cara(id, tam = 40) {
-    const f = funda(id); let src = '';
-    if (st.data && id === st.data.yo.id) { try { src = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {} }
+    const f = funda(id); let src = st.data?.avatares?.[id]?.miniatura || '';
+    if (!src && st.data && id === st.data.yo.id) { try { src = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {} }
     const ini = String(f.nombre || '?').slice(0, 1).toUpperCase();
     return src ? `<img class="sj-cara" style="width:${tam}px;height:${tam}px" src="${esc(src)}" alt="">`
       : `<span class="sj-cara sj-ini" style="width:${tam}px;height:${tam}px;background:${COLOR[id] || '#58616D'}">${esc(ini)}</span>`;
@@ -73,7 +73,7 @@
     estilos();
     const sec = document.getElementById('screen-sala-juntas'); if (sec) sec.classList.add('sj-pantalla');
     st.vista = 'inicio'; st.editar = null; cargar();
-    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); return; } if (!st.guardando && st.vista !== 'form') cargar(true); }, 30000);
+    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d'].includes(st.vista)) cargar(true); }, 30000);
   }
 
   // ---------- pintar ----------
@@ -88,9 +88,13 @@
     else if (st.vista === 'historial') cuerpo = volver('Historial y acuerdos') + listaReuniones((r) => ['finalizada', 'cancelada'].includes(r.estado), 'Todavía no hay reuniones terminadas.') + `<div class="sj-card sj-nota">${ico('doc')}<div><b>Actas y acuerdos</b><p>El registro de actas y acuerdos con responsables se agrega en la Fase 5. Por ahora el historial muestra las reuniones realizadas y canceladas.</p></div></div>`;
     else if (st.vista === 'config') cuerpo = volver('Configuración de la sala') + configuracion();
     else if (st.vista === 'personaje') cuerpo = volver('Mi personaje (Avatar)') + personaje();
+    else if (st.vista === 'sala3d') cuerpo = sala3dHtml();
     else cuerpo = inicio();
+    desmontar3D();
     host.innerHTML = cab() + (st.error ? `<div class="sj-alerta">${esc(st.error)}</div>` : '') + cuerpo;
     if (st.vista === 'antesala') pintarMedidor();
+    if (st.vista === 'personaje') montarEditor3D();
+    if (st.vista === 'sala3d') montarSala3D();
   }
   function cab() {
     return `<div class="sj-cab"><span class="sj-cab-ico">${ico('sala')}</span><div><h2>Sala de Juntas</h2><p>SubliStudio 3D · Reuniones, convocatorias y acuerdos del equipo</p></div></div>`;
@@ -110,6 +114,7 @@
         <div class="sj-prox-t"><div class="sj-prox-h">${ico('cal')}<b>Próxima reunión</b>${pill(p.estado)}</div>
           <h4>${esc(p.titulo)}</h4>
           <div class="sj-meta"><span>${ico('cal')}${esc(fechaLarga(p))}</span><span>${ico('reloj')}${esc(horaHN(p))} (Honduras)</span><span>${ico('grupo')}Socias fundadoras (${p.participantes.length})</span></div>
+          ${avisosTxt(st.data.reuniones.find((x) => x.id === p.id) || {})}
           ${mia && mia.estado === 'pendiente' && p.estado === 'programada' ? `<div class="sj-rsvp-mini">¿Asistirá? <button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${p.id}" data-r="aceptada">Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${p.id}" data-r="rechazada">No asistiré</button></div>` : ''}
         </div>
         <img class="sj-prox-img" src="/assets/sala/sala-escenario-c.webp" alt="Sala de Juntas · Escenario C" loading="lazy">
@@ -132,11 +137,17 @@
     const lista = st.data.reuniones.filter((r) => ['programada', 'en_curso'].includes(r.estado));
     return `<div class="sj-card sj-pn"><div class="sj-ph">${ico('campana')}<b>Mis invitaciones</b></div>${lista.length ? lista.map(filaReunion).join('') : '<p class="sj-p">No tiene invitaciones pendientes.</p>'}</div>`;
   }
+  function avisosTxt(r) {
+    if (!r.avisos) return '';
+    const a = r.avisos, nombre = { naara: 'Naara', libni: 'Libni', geisell: 'Geisell' }, tipo = { invitacion: 'invitación', h24: 'aviso 24 h', h1: 'aviso 1 h', m10: 'aviso 10 min', inicio: 'aviso de inicio', cancelacion: 'aviso de cancelación' };
+    return `<div class="sj-avisos">${ico('enviar')}<span>Telegram: <b>${a.enviado}</b> enviado${a.enviado === 1 ? '' : 's'} · ${a.pendiente} programado${a.pendiente === 1 ? '' : 's'}${a.fallido ? ` · <b class="sj-mal">${a.fallido} sin entregar</b>` : ''}</span></div>` +
+      (a.fallas || []).slice(0, 4).map((f) => `<div class="sj-falla">${esc(nombre[f.usuario] || f.usuario)} · ${esc(tipo[f.tipo] || f.tipo)}: ${esc(/vinculado/.test(f.error) ? 'su cuenta no tiene Telegram vinculado' : /blocked|403|initiate|chat not found/i.test(f.error) ? 'no ha iniciado el bot o lo bloqueó (debe escribirle /start)' : 'Telegram no lo aceptó')}</div>`).join('');
+  }
   function filaReunion(r) {
     const mia = (r.invitaciones || {})[st.data.yo.id] || { estado: 'pendiente' }, x = RSVP[mia.estado] || RSVP.pendiente;
     const puedeResp = r.estado === 'programada' && st.data.yo.id !== 'naara';
     return `<div class="sj-reu"><div class="sj-reu-f"><b>${esc(diaCorto(r))}</b><small>${esc(horaHN(r))}</small></div>
-      <div class="sj-reu-t"><b>${esc(r.titulo)}</b><small>${esc(fechaLarga(r))} · ${r.participantes.map((u) => esc(funda(u).nombre)).join(', ')}</small>
+      <div class="sj-reu-t"><b>${esc(r.titulo)}</b><small>${esc(fechaLarga(r))} · ${r.participantes.map((u) => esc(funda(u).nombre)).join(', ')}</small>${avisosTxt(r)}
         <div class="sj-chips">${r.participantes.map((u) => { const e = (r.invitaciones || {})[u]?.estado || 'pendiente'; const y = RSVP[e]; return `<span class="sj-chip sj-${y[1]}">${esc(funda(u).nombre)}: ${y[0]}</span>`; }).join('')}</div></div>
       <div class="sj-reu-a">${pill(r.estado)}${puedeResp ? `<span class="sj-pill sj-${x[1]}">Usted: ${x[0]}</span><div class="sj-fila-btn"><button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="aceptada"${mia.estado === 'aceptada' ? ' disabled' : ''}>Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="rechazada"${mia.estado === 'rechazada' ? ' disabled' : ''}>No asistiré</button></div>` : ''}
         ${['programada', 'en_curso'].includes(r.estado) ? `<button class="sj-btn sj-rojo sj-mini" data-sj="antesala" data-id="${r.id}">Antesala</button>` : ''}
@@ -166,7 +177,7 @@
         </div>
         <div class="sj-form-d"><b class="sj-sub">Participantes (Socias fundadoras)</b>${parts}
           <b class="sj-sub">Recordatorios automáticos (Telegram)</b>${rec}
-          <p class="sj-hint">Hora de Honduras (UTC-6). Los avisos de Telegram se activan en la Fase 2; la convocatoria ya queda guardada.</p></div>
+          <p class="sj-hint">Hora de Honduras (UTC-6). Al programar, cada invitada recibe la convocatoria por Telegram con botones Confirmar / No asistiré.</p></div>
       </div>
       <div class="sj-form-acc">
         <button type="button" class="sj-btn sj-sec" data-sj="${embebido ? 'limpiar' : 'inicio'}">Cancelar</button>
@@ -203,11 +214,12 @@
     const todoOk = st.mic.estado === 'activo' && st.audio === 'activo';
     const puedeEntrar = r.salaAbierta && tr;
     const motivo = !r.salaAbierta ? (yo.id === 'naara' ? 'Abra la sala para que las demás puedan entrar.' : 'Esperando que la anfitriona abra la sala.') : !tr ? 'La sala 3D con audio en tiempo real se habilita en la Fase 4.' : '';
-    let avatar = ''; try { avatar = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {}
+    const miAv = st.data.avatares?.[yo.id] || {};
+    let avatar = miAv.miniatura || ''; if (!avatar) { try { avatar = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {} }
     return `<div class="sj-card sj-pn sj-ante">
       <div class="sj-ph">${ico('grupo')}<b>Antesala virtual</b>${embebido ? '' : `<button class="sj-btn sj-sec sj-mini sj-der-btn" data-sj="inicio">${ico('atras')}Volver</button>`}</div>
       <div class="sj-ante-g">
-        <div class="sj-ante-av">${avatar ? `<img src="${esc(avatar)}" alt="Su foto de perfil">` : ''}<span>Su personaje 3D se crea en <b>Mi personaje</b> (Fase 3). Mientras tanto se usa su foto de Perfil.</span></div>
+        <div class="sj-ante-av${miAv.guardado ? ' sj-ante-ok' : ''}">${avatar ? `<img src="${esc(avatar)}" alt="Su personaje">` : ''}<span>${miAv.guardado ? 'Su personaje 3D está listo.' : 'Todavía no ha creado su personaje 3D.'} <button class="sj-btn sj-sec sj-mini" data-sj="personajeAnte">${miAv.guardado ? 'Cambiar' : 'Crear mi personaje'}</button></span></div>
         <div class="sj-ante-c"><b class="sj-ante-tit">Reunión: ${esc(r.titulo)}</b>
           <div class="sj-meta sj-meta-col"><span>${ico('cal')}${esc(fechaLarga(r))}</span><span>${ico('reloj')}${esc(horaHN(r))} (Honduras)</span><span>${ico('grupo')}Socias fundadoras (${r.participantes.length})</span></div>
           <div class="sj-listo ${todoOk ? 'sj-listo-ok' : ''}"><b>${todoOk ? ico('check') + 'Todo listo para ingresar' : 'Revise su micrófono y audio'}</b><div class="sj-disps">${dispo}</div>
@@ -221,6 +233,7 @@
       </div>
       <div class="sj-ante-acc">
         <button class="sj-btn sj-rojo sj-grande" data-sj="entrar" data-id="${r.id}" ${puedeEntrar ? '' : 'disabled'}>${ico('sala')}Entrar a la Sala de Juntas 3D</button>
+        <button class="sj-btn sj-sec" data-sj="verSala" data-id="${r.id}">${ico('play')}Ver la sala 3D (vista previa)</button>
         ${st.data.permisos.moderar ? `<button class="sj-btn ${r.salaAbierta ? 'sj-sec' : 'sj-ok'}" data-sj="${r.salaAbierta ? 'cerrar' : 'abrir'}" data-id="${r.id}">${r.salaAbierta ? 'Cerrar sala' : 'Abrir sala'}</button>` : ''}
         <button class="sj-btn sj-sec" data-sj="salirAnte">${ico('salir')}Salir</button>
       </div>${motivo ? `<p class="sj-hint sj-motivo">${esc(motivo)}</p>` : ''}</div>`;
@@ -266,15 +279,110 @@
       <div class="sj-card sj-pn"><div class="sj-ph">${ico('config')}<b>Estado de la sala</b></div>
         <div class="sj-estado"><span>Escenario</span><b>C · Cálida Ejecutiva</b></div>
         <div class="sj-estado"><span>Zona horaria</span><b>Honduras (UTC-6)</b></div>
-        <div class="sj-estado"><span>Recordatorios Telegram</span><b class="sj-ambar-t">Fase 2</b></div>
-        <div class="sj-estado"><span>Personajes 3D (VRoid)</span><b class="sj-ambar-t">Fase 3</b></div>
+        <div class="sj-estado"><span>Invitaciones y recordatorios Telegram</span><b class="sj-verde-t">Activos (24 h · 1 h · 10 min · inicio)</b></div>
+        <div class="sj-estado"><span>Personajes 3D</span><b class="sj-verde-t">${Object.values(d.avatares || {}).filter((x) => x.guardado).length} de 3 guardados</b></div>
         <div class="sj-estado"><span>Audio en tiempo real (LiveKit)</span><b class="${d.tiempoReal ? 'sj-verde-t' : 'sj-ambar-t'}">${d.tiempoReal ? 'Configurado' : 'Fase 4 · falta configurar'}</b></div></div></div>`;
   }
+  // ---------- R169 · Mi personaje (editor 3D) ----------
+  const ETQ = {
+    genero: { mujer: 'Mujer', hombre: 'Hombre' },
+    cabello: { largo: 'Largo', melena: 'Melena', cola: 'Cola', rizado: 'Rizado', recogido: 'Recogido', corto: 'Corto', peinado: 'Peinado', rapado: 'Rapado' },
+    superior: { blazer: 'Blazer', camisa: 'Camisa', polo: 'Polo', blusa: 'Blusa' }, inferior: { pantalon: 'Pantalón', falda: 'Falda' }, cejas: { suaves: 'Suaves', marcadas: 'Marcadas' },
+  };
+  const ACC = [['lentes', 'Lentes'], ['aretes', 'Aretes'], ['reloj', 'Reloj'], ['barba', 'Barba'], ['logo', 'Logo Sublicuentas en la ropa']];
+  let M3 = null, ed3 = null, sala3 = null;
+  async function modulo3D() {
+    if (M3) return M3;
+    M3 = await import('/sala-3d.js?v=20261105-r169b');
+    return M3;
+  }
+  function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
+  const OPC = { genero: ['mujer', 'hombre'], piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'], cabello: ['largo', 'melena', 'cola', 'rizado', 'recogido', 'corto', 'peinado', 'rapado'], colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'], cejas: ['suaves', 'marcadas'], ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'], superior: ['blazer', 'camisa', 'polo', 'blusa'], colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'], colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'], inferior: ['pantalon', 'falda'], colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'], calzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'] };
   function personaje() {
-    let avatar = ''; try { avatar = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {}
-    return `<div class="sj-card sj-pn sj-pers">${avatar ? `<img src="${esc(avatar)}" alt="">` : ''}<div><b>Mi personaje 3D llega en la Fase 3</b>
-      <p class="sj-p">Cada fundadora tendrá un personaje 3D (hecho en VRoid Studio) que podrá ajustar: tono de piel, cabello y color, ropa y accesorios, con vista previa en la sala. Se guardará en su cuenta, así lo verá igual en cualquier navegador.</p>
-      <p class="sj-p">Por ahora la antesala usa su foto de Perfil.</p></div></div>`;
+    const yo = st.data.yo.id, av = st.data.avatares?.[yo] || { config: {}, version: 0 };
+    if (!st.pers) st.pers = { config: { ...av.config }, version: av.version, tab: 'apariencia' };
+    const c = st.pers.config, tab = st.pers.tab;
+    const fila = (t, html) => `<div class="sj-op"><b>${t}</b><div class="sj-op-v">${html}</div></div>`;
+    const chips = (k) => OPC[k].map((v) => `<button type="button" class="sj-chip-op${c[k] === v ? ' on' : ''}" data-op="${k}" data-v="${v}" aria-pressed="${c[k] === v}">${esc((ETQ[k] || {})[v] || v)}</button>`).join('');
+    const colores = (k) => OPC[k].map((v) => `<button type="button" class="sj-sw-col${c[k] === v ? ' on' : ''}" style="--c:${v}" data-op="${k}" data-v="${v}" aria-label="Color ${v}" aria-pressed="${c[k] === v}"></button>`).join('');
+    let panel = '';
+    if (tab === 'apariencia') panel = fila('Género', chips('genero')) + fila('Tono de piel', colores('piel')) + fila('Estilo de cabello', chips('cabello')) + fila('Color de cabello', colores('colorCabello')) + fila('Color de ojos', colores('ojos')) + fila('Cejas', chips('cejas'));
+    if (tab === 'ropa') panel = fila('Parte de arriba', chips('superior')) + fila('Color', colores('colorSuperior')) + (c.superior === 'blazer' ? fila('Camisa interior', colores('colorInterior')) : '') + fila('Parte de abajo', chips('inferior')) + fila('Color', colores('colorInferior')) + fila('Calzado', colores('calzado'));
+    if (tab === 'accesorios') panel = ACC.filter(([k]) => k !== 'barba' || c.genero === 'hombre').map(([k, t]) => `<label class="sj-rec sj-acc-op"><span>${t}</span><input type="checkbox" role="switch" class="sj-sw" data-op="${k}" ${c[k] ? 'checked' : ''}></label>`).join('');
+    const tabs = [['apariencia', 'Apariencia', 'persona'], ['ropa', 'Ropa', 'lista'], ['accesorios', 'Accesorios', 'check']].map(([k, t, i]) => `<button type="button" class="sj-tab${tab === k ? ' on' : ''}" data-sj="tabPers" data-t="${k}" role="tab" aria-selected="${tab === k}">${ico(i)}${t}</button>`).join('');
+    return `<div class="sj-card sj-pn sj-editor">
+      <div class="sj-ed-h"><span class="sj-ed-tit">${ico('persona')}<b>Mi Personaje</b> <small>(Avatar)</small></span><div class="sj-tabs" role="tablist">${tabs}</div></div>
+      <div class="sj-ed-g">
+        <div class="sj-ed-mini">${av.miniatura ? `<img src="${esc(av.miniatura)}" alt="Personaje guardado">` : '<div class="sj-ed-vacio">Aún no ha guardado su personaje</div>'}<small>${av.guardado ? `Guardado · versión ${av.version}` : 'Sin guardar'}</small></div>
+        <div class="sj-ed-op" id="sjOps">${panel}</div>
+        <div class="sj-ed-3d"><canvas id="sjEdCanvas" aria-label="Vista 360° de su personaje. Arrastre para girar."></canvas>
+          <button type="button" class="sj-rot sj-rot-i" data-sj="rotar" data-d="-0.6" aria-label="Girar a la izquierda">‹</button><button type="button" class="sj-rot sj-rot-d" data-sj="rotar" data-d="0.6" aria-label="Girar a la derecha">›</button>
+          <div class="sj-ed-carga" id="sjEdCarga">Cargando 3D…</div></div>
+      </div>
+      <div class="sj-form-acc">
+        <button type="button" class="sj-btn sj-rojo sj-grande" data-sj="guardarPers">${ico('check')}Guardar personaje</button>
+        <button type="button" class="sj-btn sj-sec" data-sj="verSalaPers">${ico('play')}Vista previa en sala</button>
+        <button type="button" class="sj-btn sj-sec" data-sj="restablecer">Restablecer</button>
+      </div></div>`;
+  }
+  async function montarEditor3D() {
+    const cv = document.getElementById('sjEdCanvas'); if (!cv) return;
+    try {
+      const M = await modulo3D(); if (!document.getElementById('sjEdCanvas')) return;
+      if (!M.soportaWebGL()) throw new Error('Este navegador no puede mostrar 3D (WebGL). Pruebe con Chrome actualizado.');
+      ed3 = M.montarEditor(cv, st.pers.config);
+      const c = document.getElementById('sjEdCarga'); if (c) c.remove();
+    } catch (e) { const c = document.getElementById('sjEdCarga'); if (c) c.textContent = e.message || 'No se pudo cargar el 3D.'; }
+  }
+  function cambiarOpcion(k, v) {
+    const c = st.pers.config;
+    if (['lentes', 'aretes', 'reloj', 'barba', 'logo'].includes(k)) c[k] = !!v; else c[k] = v;
+    if (k === 'genero' && v === 'mujer') c.barba = false;
+    if (ed3) ed3.set(c);
+    const necesitaRepintar = k === 'superior' || k === 'genero';
+    if (necesitaRepintar) { const ops = document.getElementById('sjOps'); if (ops) { const t = document.createElement('div'); t.innerHTML = personaje(); ops.innerHTML = t.querySelector('#sjOps').innerHTML; } return; }
+    document.querySelectorAll(`#sjOps [data-op="${k}"]`).forEach((b) => { if (b.type === 'checkbox') return; const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  }
+  async function guardarPersonaje() {
+    if (st.guardando) return; st.guardando = 'pers';
+    const btn = host.querySelector('[data-sj="guardarPers"]'); if (btn) btn.disabled = true;
+    try {
+      const miniatura = ed3 ? ed3.miniatura() : '';
+      const r = await api({ accion: 'avatar_guardar', config: st.pers.config, version: st.pers.version, miniatura });
+      st.data.avatares[st.data.yo.id] = { config: r.config, version: r.version, miniatura, guardado: true };
+      st.pers = null; st.guardando = '';
+      toast('Personaje guardado. Lo verá igual en cualquier navegador.');
+      if (st.volverAnte && st.ante) { st.volverAnte = false; st.vista = 'antesala'; } else st.vista = 'personaje';
+      pintar();
+    } catch (e) { st.guardando = ''; if (btn) btn.disabled = false; toast(e.message, true); }
+  }
+
+  // ---------- R169 · Sala 3D (vista previa, sin audio hasta la Fase 4) ----------
+  function sala3dHtml() {
+    const r = st.sala3dReu, parts = r ? r.participantes : ['naara', 'libni', 'geisell'];
+    const ctr = [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
+      .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Se habilita con el audio en tiempo real (Fase 4)">${ico(i)}<span>${t}</span></button>`).join('');
+    const vistas = [['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
+      .map(([v, t, d]) => `<button type="button" class="sj3d-vista${v === 'general' ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('');
+    return `<div class="sj3d">
+      <div class="sj3d-top"><img src="/assets/sublicuentas-logo-oscuro-ui.webp" alt="Sublicuentas"><span class="sj3d-sep"></span><b>SubliStudio <i>3D</i></b><span class="sj3d-sala">${ico('grupo')}Sala de Juntas</span>
+        <span class="sj3d-chip">${r ? esc(r.titulo) : 'Vista previa'} · sin audio (Fase 4)</span></div>
+      <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div></div>
+        <aside class="sj3d-vistas"><b>${ico('cam')}Vistas de cámara</b>${vistas}</aside></div>
+      <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button></div>
+    </div>`;
+  }
+  async function montarSala3D() {
+    const cont = document.getElementById('sj3dEscena'); if (!cont) return;
+    try {
+      const M = await modulo3D(); if (!document.getElementById('sj3dEscena')) return;
+      if (!M.soportaWebGL()) throw new Error('Este equipo no puede mostrar la sala 3D (WebGL). Puede seguir la reunión con audio cuando se habilite.');
+      const avatares = { ...(st.data.avatares || {}) };
+      if (st.pers) avatares[st.data.yo.id] = { config: st.pers.config }; // vista previa del personaje sin guardar
+      sala3 = await M.montarSala(cont, { avatares, participantes: st.sala3dReu ? st.sala3dReu.participantes : ['naara', 'libni', 'geisell'],
+        alCambiarVista: (v) => host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', b.dataset.v === v)) });
+      const c = document.getElementById('sj3dCarga'); if (c) c.remove();
+    } catch (e) { const c = document.getElementById('sj3dCarga'); if (c) c.textContent = e.message || 'No se pudo cargar la sala 3D.'; }
   }
 
   // ---------- eventos ----------
@@ -284,8 +392,8 @@
     const a = b.dataset.sj, id = b.dataset.id;
     const reu = () => st.data.reuniones.find((r) => r.id === id) || (st.data.proxima && st.data.proxima.id === id ? st.data.proxima : null);
     if (a === 'recargar') return cargar();
-    if (a === 'inicio' || a === 'salirAnte') { detenerMic(); st.vista = 'inicio'; st.editar = null; return pintar(); }
-    if (['calendario', 'mis', 'historial', 'config', 'personaje'].includes(a)) { st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'inicio' || a === 'salirAnte') { detenerMic(); if (st.vista === 'personaje' && st.volverAnte && st.ante) { st.volverAnte = false; st.vista = 'antesala'; return pintar(); } st.vista = 'inicio'; st.editar = null; return pintar(); }
+    if (['calendario', 'mis', 'historial', 'config', 'personaje'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'nueva') { st.editar = null; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'limpiar') { st.editar = null; return pintar(); }
     if (a === 'editar') { st.editar = { ...reu() }; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
@@ -313,7 +421,17 @@
       return;
     }
     if (a === 'entrar') toast('La sala 3D con audio en tiempo real se habilita en la Fase 4.');
+    if (a === 'tabPers') { st.pers.tab = b.dataset.t; const ed = ed3; ed3 = null; const cfg = st.pers; const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; host.querySelectorAll('.sj-tab').forEach((x) => { const on = x.dataset.t === cfg.tab; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }); ed3 = ed; return; }
+    if (a === 'rotar') { if (ed3) ed3.rotar(Number(b.dataset.d)); return; }
+    if (a === 'guardarPers') return guardarPersonaje();
+    if (a === 'restablecer') { const av = st.data.avatares[st.data.yo.id]; st.pers.config = { ...av.config }; if (ed3) ed3.set(st.pers.config); const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; return toast('Se restableció el último personaje guardado.'); }
+    if (a === 'personajeAnte') { st.volverAnte = true; st.pers = null; st.vista = 'personaje'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'verSala' || a === 'verSalaPers') { st.sala3dReu = a === 'verSala' ? (st.ante || reu()) : null; st.volver3d = st.vista; st.vista = 'sala3d'; detenerMic(); pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'vista3d') { if (sala3) sala3.setVista(b.dataset.v); return; }
+    if (a === 'salirSala') { st.vista = st.volver3d || 'inicio'; return pintar(); }
   });
+  document.addEventListener('click', (e) => { const b = host && host.contains(e.target) && e.target.closest('[data-op]'); if (!b || b.type === 'checkbox' || !st.pers) return; cambiarOpcion(b.dataset.op, b.dataset.v); });
+  document.addEventListener('change', (e) => { const b = host && host.contains(e.target) && e.target.closest('input[data-op]'); if (!b || !st.pers) return; cambiarOpcion(b.dataset.op, b.checked); });
   document.addEventListener('submit', (e) => { if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); } });
 
   function estilos() {
@@ -407,6 +525,32 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-pers{display:flex;gap:18px;align-items:flex-start}.sj-pers img{width:140px;height:140px;border-radius:14px;object-fit:cover}.sj-pers b{display:block;font-size:16px;margin:0 0 8px}
 .sj-vacio{padding:28px;text-align:center;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:8px}.sj-vacio b{color:var(--t)}.sj-vacio .sj-i{width:30px;height:30px}
 .sj-nota{display:flex;gap:12px;padding:16px}.sj-nota p{margin:4px 0 0;font-size:13px;color:var(--m)}
+.sj-avisos{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#58616D}.sj-avisos .sj-i{width:14px;height:14px;color:#2879C7}.sj-mal{color:#B91C1C}
+.sj-falla{font-size:11.5px;color:#B91C1C;margin-top:3px;padding-left:20px}
+.sj-editor{padding:18px}.sj-ed-h{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px}.sj-ed-tit{display:flex;align-items:center;gap:8px;font-size:17px}.sj-ed-tit small{color:var(--m);font-weight:500}
+.sj-tabs{display:flex;gap:6px;flex-wrap:wrap}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-tab{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px!important;font-size:13px;font-weight:700;background:var(--f)!important;color:var(--t)!important}.sj-tab .sj-i{width:16px;height:16px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-tab.on{background:var(--r)!important;color:#fff!important}
+.sj-ed-g{display:grid;grid-template-columns:200px minmax(0,1fr) minmax(260px,320px);gap:18px;align-items:stretch}
+.sj-ed-mini{display:flex;flex-direction:column;gap:8px;align-items:center}.sj-ed-mini img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;background:#F2E7DC}.sj-ed-mini small{color:var(--m);font-size:12px}
+.sj-ed-vacio{width:100%;aspect-ratio:1;border-radius:14px;border:1px dashed var(--b);display:grid;place-items:center;text-align:center;color:var(--m);font-size:12.5px;padding:12px}
+.sj-op{margin:0 0 14px}.sj-op>b{display:block;font-size:12.5px;margin:0 0 7px}.sj-op-v{display:flex;flex-wrap:wrap;gap:8px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-chip-op{all:unset;cursor:pointer;padding:7px 13px;border-radius:999px!important;border:1px solid var(--b)!important;font-size:13px;font-weight:600;background:#fff!important;color:var(--t)!important}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-chip-op.on{background:var(--r)!important;border-color:var(--r)!important;color:#fff!important}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-sw-col{all:unset;cursor:pointer;width:30px;height:30px;border-radius:50%!important;background:var(--c)!important;border:0!important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)!important}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-sw-col.on{background:var(--c)!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #E2231A!important}
+.sj-chip-op:focus-visible,.sj-sw-col:focus-visible,.sj-tab:focus-visible,.sj-rot:focus-visible{outline:2px solid #2879C7;outline-offset:2px}
+.sj-acc-op{padding:10px 0;border-bottom:1px solid var(--b)}
+.sj-ed-3d{position:relative;border-radius:14px;background:#F4F1EC;min-height:420px;overflow:hidden}.sj-ed-3d canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot{all:unset;border-radius:50%!important;background:#20242B!important;cursor:pointer;position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:#20242B;color:#fff;display:grid;place-items:center;font-size:22px;line-height:1}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot-i{left:10px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot-d{right:10px;left:auto}
+.sj-ed-carga{position:absolute;inset:0;display:grid;place-items:center;color:var(--m);font-size:13px;text-align:center;padding:20px}
+.sj-ante-ok span{background:rgba(21,155,98,.85)!important}.sj-ante-av .sj-btn{margin-top:6px}
+.sj3d{background:#141920;border-radius:18px;overflow:hidden;color:#fff;box-shadow:0 10px 40px rgba(20,25,32,.25)}
+.sj3d-top{display:flex;align-items:center;gap:14px;padding:12px 18px;flex-wrap:wrap}.sj3d-top img{height:24px}.sj3d-sep{width:1px;height:24px;background:#3A404B}.sj3d-top b{font-size:18px}.sj3d-top b i{font-style:normal;background:var(--r);border-radius:6px;padding:0 6px;margin-left:4px}
+.sj3d-sala{display:inline-flex;align-items:center;gap:6px;font-weight:600}.sj3d-chip{margin-left:auto;font-size:12px;background:#222833;border:1px solid #2F3744;border-radius:999px;padding:6px 12px}
+.sj3d-g{display:grid;grid-template-columns:minmax(0,1fr) 230px}.sj3d-escena{position:relative;min-height:540px;aspect-ratio:16/9;background:#2A1C14}.sj3d-canvas{position:absolute;inset:0;width:100%;height:100%}
+.sj3d-nombres{position:absolute;inset:0;pointer-events:none}.sj3d-nombre{position:absolute;left:0;top:0;background:rgba(20,25,32,.85);color:#fff;font:600 13px Inter,sans-serif;padding:5px 10px;border-radius:999px;white-space:nowrap}.sj3d-anf{background:rgba(20,25,32,.9);border:1px solid #E0A100}
+.sj3d-vistas{background:#1B2028;padding:14px;display:flex;flex-direction:column;gap:8px;overflow:auto}.sj3d-vistas>b{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:4px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-vista{all:unset;cursor:pointer;padding:10px 12px;border-radius:10px!important;background:#222833!important;border:1px solid #2F3744!important;color:#fff!important}.sj3d-vista b{display:block;font-size:13px}.sj3d-vista small{display:block;font-size:11.5px;color:#AEB6C2;margin-top:2px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-vista.on{border-color:#E2231A!important;background:#3A1F22!important}
+.sj3d-barra{display:flex;justify-content:center;gap:4px;flex-wrap:wrap;padding:10px;background:#0F1318}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl{all:unset;background:transparent!important;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;padding:8px 6px;border-radius:10px;font-size:11.5px;color:#E9EBEF}.sj3d-ctl .sj-i{width:22px;height:22px}.sj3d-ctl:disabled{opacity:.45;cursor:not-allowed}.sj3d-ctl:not(:disabled):hover{background:#222833}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-salir{background:#C62828!important;color:#fff!important}
 .sj-alerta{background:#FFF4F3;border:1px solid #F3C3C0;color:#B91C1C;border-radius:12px;padding:10px 14px;font-size:13px}
 .sj-borr{padding:14px 18px}.sj-borr>b{display:block;margin:0 0 6px}
 .sj-fila{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:9px 0;border-top:1px solid var(--b);cursor:pointer;font-size:13.5px}.sj-fila span{flex:1;font-weight:600}.sj-fila small{color:var(--m)}
@@ -414,8 +558,9 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #sjToast.on{opacity:1;transform:translateX(-50%)}#sjToast.malo{background:#B91C1C}
 #rbac-sala-juntas>*{animation:sjEntra .3s cubic-bezier(.2,.8,.2,1)}@keyframes sjEntra{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){#rbac-sala-juntas *{animation:none!important;transition:none!important}}
-@media (max-width:1279.98px){.sj-top{grid-template-columns:1fr}.sj-hero{min-height:0;aspect-ratio:3/1}.sj-accs{grid-template-columns:repeat(3,minmax(0,1fr))}.sj-dos{grid-template-columns:1fr}}
+@media (max-width:1279.98px){.sj-ed-g{grid-template-columns:160px minmax(0,1fr)}.sj-ed-3d{grid-column:1/-1}.sj3d-g{grid-template-columns:1fr}.sj3d-vistas{flex-direction:row;flex-wrap:wrap}.sj3d-vistas>b{width:100%}.sj-top{grid-template-columns:1fr}.sj-hero{min-height:0;aspect-ratio:3/1}.sj-accs{grid-template-columns:repeat(3,minmax(0,1fr))}.sj-dos{grid-template-columns:1fr}}
 @media (max-width:767.98px){.sj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sj-prox{grid-template-columns:1fr}.sj-prox-img{width:100%;height:140px}.sj-accs,.sj-accs.sj-n4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sj-ed-g{grid-template-columns:1fr}.sj-ed-mini{flex-direction:row}.sj-ed-mini img,.sj-ed-vacio{width:90px}.sj-ed-3d{min-height:360px}.sj3d-escena{min-height:0;aspect-ratio:4/5}.sj3d-ctl{min-width:56px;font-size:10px}.sj3d-chip{margin-left:0}
   .sj-form-g{grid-template-columns:1fr}.sj-form-img{display:none}.sj-ante-g{grid-template-columns:1fr}.sj-ante-av{min-height:160px}.sj-form-acc .sj-btn{flex:1 1 100%}.sj-cab h2{font-size:22px!important}
   .sj-reu{grid-template-columns:56px minmax(0,1fr)}.sj-reu-a{grid-column:1/-1;align-items:flex-start}.sj-cal{gap:3px}.sj-dia{min-height:60px;padding:3px}.sj-ev{font-size:9.5px;padding:2px 3px}
   #rbac-sala-juntas .sj-btn{min-height:44px}}
@@ -423,5 +568,22 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
     document.head.appendChild(s);
   }
 
+  // R168 · Enlace de Telegram: /?sala=<id> abre la Sala (con el login normal de Sublichat) y la antesala de esa reunión.
+  (function enlace() {
+    let id = ''; try { id = new URLSearchParams(location.search).get('sala') || ''; } catch (_) {}
+    if (!/^[A-Za-z0-9_-]{6,60}$/.test(id)) return;
+    let n = 0; const iv = setInterval(async () => {
+      n++; const R = window.SublichatRBAC;
+      if (n > 240) return clearInterval(iv);
+      if (!R || !document.body.classList.contains('ready') || !R.can('sala-juntas')) return;
+      clearInterval(iv);
+      try { const u = new URL(location.href); u.searchParams.delete('sala'); history.replaceState(null, '', u.toString()); } catch (_) {}
+      R.ir('sala-juntas');
+      for (let i = 0; i < 40 && !st.data; i++) await new Promise((r) => setTimeout(r, 250));
+      if (!st.data) return;
+      try { const j = await api({ accion: 'antesala', id }); st.ante = j.reunion; st.data.tiempoReal = j.tiempoReal; st.vista = 'antesala'; pintar(); }
+      catch (e) { toast(e.message, true); }
+    }, 250);
+  })();
   window.SublichatSala = { open, recargar: () => cargar(true) };
 })();
