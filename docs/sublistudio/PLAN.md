@@ -111,3 +111,16 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - **Grabar** sigue apagado: necesita aprobación y tiene costo aparte (Egress).
 - Pruebas: `tests/r170-sala-tiempo-real.test.mjs` (5) y `tests/visual/r170-sala-vivo.mjs` (3 recorridos con LiveKit simulado).
 - **Antes de producción:** prueba real con 3 dispositivos (Naara, Libni, Geisell) en el entorno de prueba.
+
+## Fase 5 · Hecha (R171) — interacción en la reunión (PDF "Avatares + Reuniones interactivas" v2.0)
+- **Pantalla completa** (botón arriba o tecla F): usa la Fullscreen API; si el navegador no la permite (iPhone, algunos Android) entra en **modo expandido** que ocupa toda la pantalla. Se sale con "Salir del modo" o Escape. No corta el audio ni la conexión.
+- **Mano levantada y turnos**: "Mano" pone a la persona en la cola (orden de hora), se ve ✋ en su etiqueta y el brazo arriba. Naara recibe aviso, ve la cola en Participantes y puede **Dar la palabra** (el personaje saluda), **Terminar turno** (la mano de esa persona baja sola y se sugiere la siguiente) o **Limpiar cola**. Cada quien puede retirar su mano. La cola no apaga micrófonos. El turno solo se acepta si lo pone Naara (atributos de LiveKit; el token permite a cada una cambiar solo sus propios atributos).
+- **6 reacciones** (Aplausos, Me gusta, Corazón, Risa, Sorpresa, Fiesta), con nombre accesible, teclas 1–6, 2-3 s sobre el personaje, respeta "reducir movimiento". Límite anti-spam al enviar (1 cada 1.2 s, máx. 6 cada 10 s) y al recibir. No se guardan.
+- **Modo presentación**: cuando otra comparte pantalla, la presentación ocupa ~78 % y las fundadoras quedan en una banda lateral (quién habla, micrófono, turno). "Volver a la sala" la deja en la pantalla 3D; "Ver presentación en grande" la vuelve a abrir.
+- **Ver**: panel de vistas de cámara también en celular y pantalla completa.
+- **Duración**: ya no se corta la llamada al tope; avisa 5 min antes y a la hora de fin (la anfitriona cierra con Terminar).
+- **Android**: "Guardar personaje" queda fijo encima de la barra inferior (ya no se tapa); dentro de la sala se oculta la barra inferior del sistema para que no tape controles.
+- Compartir imágenes/PDF/video **no** se hace (decisión del propietario: solo compartir pantalla por ahora, costo cero).
+
+## Fase 3B · Pendiente — depende de modelos 3D
+El PDF exige modelos GLB/VRM profesionales (2 bases, ropa/cabello/accesorios por piezas, esqueleto y expresiones). Eso no se puede generar desde código; el propietario enviará un PDF con la fuente de los modelos. Lo que sí está listo para recibirlos: editor, guardado por cuenta con versión, sala y animaciones (boca, mano, saludo).
