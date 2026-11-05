@@ -102,7 +102,7 @@ export function crearPersonaje(cfg = {}, { sentado = false } = {}) {
   if (est === 'rapado') cabeza.add(casco(1.0, 0.48));
   else cabeza.add(casco());
   if (est === 'largo') { const l = malla(new THREE.CapsuleGeometry(0.13, 0.28, 8, 18), pelo, 0, -0.2, -0.055); l.scale.set(1.1, 1, 0.55); cabeza.add(l); for (const lado of [-1, 1]) { const m = malla(new THREE.CapsuleGeometry(0.04, 0.26, 6, 10), pelo, lado * 0.125, -0.13, 0.04); m.rotation.z = lado * 0.08; cabeza.add(m); } const fl = malla(new THREE.SphereGeometry(0.08, 14, 10), pelo, 0.05, 0.1, 0.09); fl.scale.set(1.3, 0.45, 0.6); fl.rotation.z = -0.4; cabeza.add(fl); }
-  if (est === 'melena') { const l = malla(new THREE.CylinderGeometry(0.15, 0.16, 0.2, 24, 1, true, Math.PI * 0.62, Math.PI * 1.76), mat(c.colorCabello, { doble: true, r: 0.5 }), 0, -0.04, -0.005); l.rotation.y = Math.PI; cabeza.add(l); const fl = malla(new THREE.SphereGeometry(0.08, 14, 10), pelo, -0.04, 0.1, 0.09); fl.scale.set(1.4, 0.45, 0.6); fl.rotation.z = 0.35; cabeza.add(fl); }
+  if (est === 'melena') { const l = malla(new THREE.CylinderGeometry(0.15, 0.16, 0.2, 24, 1, true, Math.PI * 0.34, Math.PI * 1.32), mat(c.colorCabello, { doble: true, r: 0.5 }), 0, -0.04, -0.005); cabeza.add(l); /* R170: abierta al frente (antes tapaba la cara) */ const fl = malla(new THREE.SphereGeometry(0.08, 14, 10), pelo, -0.04, 0.1, 0.09); fl.scale.set(1.4, 0.45, 0.6); fl.rotation.z = 0.35; cabeza.add(fl); }
   if (est === 'cola') { const nudo = malla(new THREE.SphereGeometry(0.04, 12, 10), pelo, 0, 0.06, -0.14); cabeza.add(nudo); const cola = malla(new THREE.CapsuleGeometry(0.045, 0.24, 6, 12), pelo, 0, -0.08, -0.17); cola.rotation.x = 0.25; cabeza.add(cola); }
   if (est === 'recogido') cabeza.add(malla(new THREE.SphereGeometry(0.07, 16, 12), pelo, 0, 0.11, -0.11));
   if (est === 'rizado') for (let i = 0; i < 26; i++) { const a = (i / 26) * Math.PI * 2, y = 0.03 + Math.sin(i * 1.7) * 0.06; const r = malla(new THREE.SphereGeometry(0.045, 10, 8), pelo, Math.cos(a) * 0.13, y, Math.sin(a) * 0.12 - 0.01); if (Math.sin(a) > 0.55 && y < 0.05) continue; cabeza.add(r); }
@@ -296,10 +296,32 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     requestAnimationFrame(loop);
   };
   loop();
+  // R170 · presencia, micrófono, pantalla compartida y reacciones (Fase 4)
+  const matLogo = pantalla.material.map; let texVideo = null;
+  const nombreBase = (id) => (id === 'naara' ? '👑 Naara (Anfitriona)' : id.charAt(0).toUpperCase() + id.slice(1));
+  const est = {}; // id → { presente, mic }
+  const pintarEtq = (id) => { const e = etiquetas[id]; if (!e) return; const x = est[id] || {}; const txt = nombreBase(id) + (x.presente === false ? ' · no ha entrado' : x.mic === false ? ' 🔇' : ''); if (e.firstChild && e.firstChild.nodeType === 3) e.firstChild.nodeValue = txt; else e.prepend(txt); e.classList.toggle('sj3d-ausente', x.presente === false); };
+  function setPresente(id, presente) {
+    const p = personajes[id]; if (!p) return; (est[id] = est[id] || {}).presente = presente;
+    p.traverse((o) => { if (o.material && !o.userData.sjMat) { o.material = o.material.clone(); o.userData.sjMat = true; } if (o.material) { o.material.transparent = !presente; o.material.opacity = presente ? 1 : 0.22; o.material.depthWrite = presente; } });
+    pintarEtq(id);
+  }
+  const caer = []; // reacciones flotando
   return {
     setVista, vistas: ['general', 'presentacion', 'panoramica'],
     setHablante(id) { hablando = id; }, calidad: () => calidad,
+    setPresente, setMicro(id, on) { (est[id] = est[id] || {}).mic = !!on; pintarEtq(id); },
+    setPantalla(video) {
+      if (texVideo) { texVideo.dispose(); texVideo = null; }
+      if (video) { texVideo = new THREE.VideoTexture(video); texVideo.colorSpace = THREE.SRGBColorSpace; pantalla.material.map = texVideo; }
+      else pantalla.material.map = matLogo;
+      pantalla.material.needsUpdate = true;
+    },
+    reaccion(id, emoji) {
+      const e = etiquetas[id]; if (!e) return; const b = document.createElement('span'); b.className = 'sj3d-reac'; b.textContent = emoji;
+      e.appendChild(b); caer.push(b); setTimeout(() => { b.remove(); caer.splice(caer.indexOf(b), 1); }, 2600);
+    },
     foto() { try { return canvas.toDataURL('image/jpeg', 0.85); } catch (_) { return ''; } },
-    destruir() { vivo = false; liberar(escena); r.dispose(); canvas.remove(); capa.remove(); },
+    destruir() { vivo = false; if (texVideo) texVideo.dispose(); pantalla.material.map = matLogo; liberar(escena); r.dispose(); canvas.remove(); capa.remove(); },
   };
 }

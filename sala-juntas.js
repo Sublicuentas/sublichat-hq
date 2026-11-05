@@ -31,6 +31,9 @@
     guardar: '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7"/>',
     campana: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
     corona: '<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/>',
+    micOff: '<path d="M2 2l20 20M18.89 13.23A7 7 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3"/>',
+    pantalla: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>', sonrisa: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
     atras: '<path d="m12 19-7-7 7-7M19 12H5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', puerta: '<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
   };
   const ico = (k, c = '') => `<svg class="sj-i ${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k] || ''}</svg>`;
@@ -73,7 +76,7 @@
     estilos();
     const sec = document.getElementById('screen-sala-juntas'); if (sec) sec.classList.add('sj-pantalla');
     st.vista = 'inicio'; st.editar = null; cargar();
-    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d'].includes(st.vista)) cargar(true); }, 30000);
+    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d'].includes(st.vista)) cargar(true); }, 30000);
   }
 
   // ---------- pintar ----------
@@ -91,6 +94,7 @@
     else if (st.vista === 'sala3d') cuerpo = sala3dHtml();
     else cuerpo = inicio();
     desmontar3D();
+    if (st.vivo && st.vista !== 'sala3d') salirVivo();
     host.innerHTML = cab() + (st.error ? `<div class="sj-alerta">${esc(st.error)}</div>` : '') + cuerpo;
     if (st.vista === 'antesala') pintarMedidor();
     if (st.vista === 'personaje') montarEditor3D();
@@ -212,8 +216,8 @@
     const est = (e) => ({ activo: ['Activo', 'verde'], denegado: ['Bloqueado', 'rojo'], no_disponible: ['No disponible', 'gris'], sin_probar: ['Sin probar', 'gris'], probando: ['Probando…', 'ambar'] }[e] || ['—', 'gris']);
     const dispo = [['mic', 'Micrófono', st.mic.estado], ['auri', 'Audio', st.audio], ['cam', 'Cámara', st.cam]].map(([i, t, e]) => { const x = est(e); return `<div class="sj-disp">${ico(i)}<b>${t}</b><span class="sj-dot sj-${x[1]}">${x[0]}</span></div>`; }).join('');
     const todoOk = st.mic.estado === 'activo' && st.audio === 'activo';
-    const puedeEntrar = r.salaAbierta && tr;
-    const motivo = !r.salaAbierta ? (yo.id === 'naara' ? 'Abra la sala para que las demás puedan entrar.' : 'Esperando que la anfitriona abra la sala.') : !tr ? 'La sala 3D con audio en tiempo real se habilita en la Fase 4.' : '';
+    const puedeEntrar = tr && (r.salaAbierta || st.data.permisos.moderar) && ['programada', 'en_curso'].includes(r.estado);
+    const motivo = !tr ? 'El audio en tiempo real todavía no está configurado en el servidor.' : !r.salaAbierta ? (st.data.permisos.moderar ? 'Al entrar, la sala se abre para las demás.' : 'Esperando que la anfitriona abra la sala.') : '';
     const miAv = st.data.avatares?.[yo.id] || {};
     let avatar = miAv.miniatura || ''; if (!avatar) { try { avatar = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {} }
     return `<div class="sj-card sj-pn sj-ante">
@@ -293,7 +297,7 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r169b');
+    M3 = await import('/sala-3d.js?v=20261105-r170');
     return M3;
   }
   function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -360,16 +364,21 @@
   // ---------- R169 · Sala 3D (vista previa, sin audio hasta la Fase 4) ----------
   function sala3dHtml() {
     const r = st.sala3dReu, parts = r ? r.participantes : ['naara', 'libni', 'geisell'];
-    const ctr = [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
-      .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Se habilita con el audio en tiempo real (Fase 4)">${ico(i)}<span>${t}</span></button>`).join('');
-    const vistas = [['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
-      .map(([v, t, d]) => `<button type="button" class="sj3d-vista${v === 'general' ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('');
+    const V = st.vivo;
+    const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkPant', 'pantalla', 'Compartir'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat'], ['lkReac', 'sonrisa', 'Reacciones']]
+      .map(([a, i, t]) => `<button type="button" class="sj3d-ctl" data-sj="${a}" id="sj3d-${a}">${ico(i)}<span>${t}</span></button>`).join('') + `<button type="button" class="sj3d-ctl" disabled title="La grabación necesita aprobación aparte (tiene costo).">${ico('reloj')}<span>Grabar</span></button>`
+      : [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
+      .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Disponible al entrar a la reunión en vivo">${ico(i)}<span>${t}</span></button>`).join('');
+    const terminar = V && st.data.permisos.moderar ? `<button type="button" class="sj3d-ctl sj3d-salir sj3d-fin" data-sj="lkTerminar">${ico('x')}<span>Terminar</span></button>` : '';
+    const vistas = [...(V ? [['auto', 'Automática', 'Sigue a quien habla']] : []), ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
+      .map(([v, t, d]) => `<button type="button" class="sj3d-vista${v === (V ? 'auto' : 'general') ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('');
     return `<div class="sj3d">
       <div class="sj3d-top"><img src="/assets/sublicuentas-logo-oscuro-ui.webp" alt="Sublicuentas"><span class="sj3d-sep"></span><b>SubliStudio <i>3D</i></b><span class="sj3d-sala">${ico('grupo')}Sala de Juntas</span>
-        <span class="sj3d-chip">${r ? esc(r.titulo) : 'Vista previa'} · sin audio (Fase 4)</span></div>
-      <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div></div>
+        <span class="sj3d-chip" id="sj3dChip">${r ? esc(r.titulo) : 'Vista previa'} · ${V ? '<i class="sj3d-led"></i>En vivo' : 'vista previa sin audio'}</span></div>
+      <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div>
+        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
         <aside class="sj3d-vistas"><b>${ico('cam')}Vistas de cámara</b>${vistas}</aside></div>
-      <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button></div>
+      <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button>${terminar}</div>
     </div>`;
   }
   async function montarSala3D() {
@@ -382,7 +391,152 @@
       sala3 = await M.montarSala(cont, { avatares, participantes: st.sala3dReu ? st.sala3dReu.participantes : ['naara', 'libni', 'geisell'],
         alCambiarVista: (v) => host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', b.dataset.v === v)) });
       const c = document.getElementById('sj3dCarga'); if (c) c.remove();
+      if (st.vivo) aplicarVivo3D();
     } catch (e) { const c = document.getElementById('sj3dCarga'); if (c) c.textContent = e.message || 'No se pudo cargar la sala 3D.'; }
+  }
+
+  // ---------- R170 · Fase 4: reunión en vivo (LiveKit) ----------
+  // st.vivo = { id, ctl, estado, presentes:Set, mics:{}, hablantes:[], auto, chat:[], panel, pantalla:{track,de}, videos:{}, expira }
+  async function entrarVivo(id) {
+    if (st.vivo || st.guardando) return;
+    const r = st.ante && st.ante.id === id ? st.ante : (st.data.proxima && st.data.proxima.id === id ? st.data.proxima : null); if (!r) return;
+    st.ante = r;
+    st.guardando = 'entrar'; detenerMic();
+    let j; try { j = await api({ accion: 'token_tiempo_real', id }); } catch (e) { st.guardando = ''; return toast(e.message, true); }
+    st.guardando = '';
+    st.vivo = { id, ctl: null, estado: 'conectando', presentes: new Set([st.data.yo.id]), mics: {}, hablantes: [], auto: true, chat: [], noLeidos: 0, panel: '', pantalla: null, videos: {}, expira: j.expiraMs, ultimoCorte: 0, candidato: null, desde: 0 };
+    st.sala3dReu = r; st.volver3d = 'antesala'; st.vista = 'sala3d'; pintar(); window.scrollTo({ top: 0 });
+    const V = st.vivo;
+    try {
+      const L = await import('/sala-vivo.js?v=20261105-r170');
+      V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
+        estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
+        presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
+        hablantes: (ids) => { if (st.vivo !== V) return; V.hablantes = ids; if (sala3) sala3.setHablante(ids[0] || null); camaraAuto(); },
+        pantalla: (track, de) => { if (st.vivo !== V) return; ponerPantalla(track, de); },
+        video: (quien, track) => { if (st.vivo !== V) return; ponerVideo(quien, track); },
+        chat: (m) => { if (st.vivo !== V) return; V.chat.push(m); if (V.chat.length > 200) V.chat.shift(); if (V.panel !== 'chat' && !m.mio) V.noLeidos++; pintarPanel(); pintarBarra(); },
+        reaccion: (quien, e) => { if (sala3 && st.vivo === V) sala3.reaccion(quien, e); },
+        aviso: (t) => toast(t),
+        audioBloqueado: (b) => { const x = document.getElementById('sj3dAudio'); if (x) x.hidden = !b; },
+      } });
+      if (st.vivo !== V) { V.ctl.salir(); return; } // salió mientras conectaba
+      pintarBarra();
+      const quedan = V.expira - Date.now(); // tope de la reunión (costo): se corta sola
+      V.tope = setTimeout(() => { toast('Se terminó el tiempo de esta reunión.'); salirVivo(true); }, Math.max(1000, quedan));
+      V.avisoTope = setTimeout(() => toast('Quedan 5 minutos de reunión.'), Math.max(0, quedan - 5 * 60000));
+      V.cuenta = setInterval(camaraAuto, 1000);
+    } catch (e) {
+      if (st.vivo !== V) return;
+      toast(/permission|denied|NotAllowed/i.test(e && e.message) ? 'El navegador no dejó usar el micrófono.' : 'No se pudo conectar a la sala. Revise su internet e intente de nuevo.', true);
+      salirVivo(true);
+    }
+  }
+  function salirVivo(volver) {
+    const V = st.vivo; if (!V) return; st.vivo = null;
+    clearTimeout(V.tope); clearTimeout(V.avisoTope); clearInterval(V.cuenta);
+    Object.values(V.videos).forEach((el) => el.remove());
+    if (V.pantallaEl) V.pantallaEl.remove();
+    if (V.ctl) V.ctl.salir();
+    if (volver && st.vista === 'sala3d') { st.vista = 'antesala'; pintar(); }
+  }
+  function aplicarVivo3D() {
+    const V = st.vivo; if (!V || !sala3) return;
+    (st.sala3dReu?.participantes || []).forEach((u) => { sala3.setPresente(u, V.presentes.has(u)); sala3.setMicro(u, V.mics[u] !== false); });
+    pintarPanel(); pintarBarra();
+  }
+  // cámara automática: corta a quien habla si lleva ~1.5 s hablando y pasaron 4 s del último corte; pantalla compartida manda
+  function camaraAuto() {
+    const V = st.vivo; if (!V || !V.auto || !sala3) return;
+    const ahora = Date.now(), top = V.hablantes[0] || null;
+    if (top !== V.candidato) { V.candidato = top; V.desde = ahora; }
+    let dest = V.pantalla ? 'presentacion' : null;
+    if (!dest && top && ahora - V.desde >= 1500) dest = top;
+    if (!dest && !top && ahora - V.desde >= 6000) dest = 'general';
+    if (dest && dest !== V.vistaAuto && ahora - V.ultimoCorte >= 4000) { V.vistaAuto = dest; V.ultimoCorte = ahora; sala3.setVista(dest); marcarVista('auto'); }
+  }
+  const marcarVista = (v) => host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  function ponerPantalla(track, de) {
+    const V = st.vivo; if (!V) return;
+    if (V.pantallaEl) { V.pantallaEl.remove(); V.pantallaEl = null; }
+    if (!track) { if (V.pantalla && V.pantalla.de !== de) return; V.pantalla = null; if (sala3) sala3.setPantalla(null); return; }
+    const el = track.attach(); el.muted = true; el.playsInline = true; el.className = 'sj3d-oculto'; document.body.appendChild(el); try { el.play(); } catch (_) {}
+    V.pantalla = { de }; V.pantallaEl = el; if (sala3) sala3.setPantalla(el);
+    if (de !== st.data.yo.id) toast(`${funda(de).nombre} está compartiendo pantalla.`);
+    V.vistaAuto = null; V.ultimoCorte = 0; camaraAuto();
+  }
+  function ponerVideo(quien, track) {
+    const V = st.vivo; if (!V) return; const cont = document.getElementById('sj3dVideos');
+    if (V.videos[quien]) { V.videos[quien].remove(); delete V.videos[quien]; }
+    if (!track || !cont) return;
+    const fig = document.createElement('figure'); fig.className = 'sj3d-video'; const el = track.attach(); el.muted = true; el.playsInline = true;
+    if (quien === st.data.yo.id) el.style.transform = 'scaleX(-1)';
+    fig.appendChild(el); const c = document.createElement('figcaption'); c.textContent = funda(quien).nombre + (quien === st.data.yo.id ? ' (Tú)' : ''); fig.appendChild(c);
+    cont.appendChild(fig); V.videos[quien] = fig;
+  }
+  function pintarEstado() {
+    const V = st.vivo, e = document.getElementById('sj3dEstado'); if (!e || !V) return;
+    e.hidden = V.estado === 'conectado'; e.textContent = V.estado === 'reconectando' ? 'Reconectando… no cierre esta ventana.' : V.estado === 'conectando' ? 'Conectando a la sala…' : '';
+    const ch = document.getElementById('sj3dChip'); if (ch) ch.classList.toggle('sj3d-reconecta', V.estado === 'reconectando');
+  }
+  function pintarBarra() {
+    const V = st.vivo; if (!V) return; const c = V.ctl;
+    const set = (a, on, txt, icoOn, icoOff) => { const b = document.getElementById('sj3d-' + a); if (!b) return; b.classList.toggle('sj3d-on', !!on); b.disabled = !c; if (icoOn) b.innerHTML = `${ico(on ? icoOn : icoOff)}<span>${txt}</span>`; b.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+    set('lkMic', c && c.micro, c && c.micro ? 'Silenciar' : 'Activar mic', 'mic', 'micOff');
+    const bm = document.getElementById('sj3d-lkMic'); if (bm) bm.classList.toggle('sj3d-mute', !!c && !c.micro);
+    set('lkCam', c && c.camara, c && c.camara ? 'Apagar cámara' : 'Cámara', 'cam', 'cam');
+    set('lkPant', c && c.compartiendo, c && c.compartiendo ? 'Dejar de compartir' : 'Compartir', 'pantalla', 'pantalla');
+    set('lkPart', V.panel === 'part', `Participantes (${V.presentes.size})`, 'grupo', 'grupo');
+    set('lkChat', V.panel === 'chat', V.noLeidos ? `Chat (${V.noLeidos})` : 'Chat', 'chat', 'chat');
+    set('lkReac', V.panel === 'reac', 'Reacciones', 'sonrisa', 'sonrisa');
+  }
+  function pintarPanel() {
+    const V = st.vivo, p = document.getElementById('sj3dPanel'); if (!V || !p) return;
+    p.hidden = !V.panel; if (!V.panel) return;
+    const cab = (t) => `<div class="sj3d-pcab"><b>${t}</b><button type="button" class="sj3d-px" data-sj="lkCerrarPanel" aria-label="Cerrar">${ico('x')}</button></div>`;
+    if (V.panel === 'part') {
+      p.innerHTML = cab('Participantes') + (st.sala3dReu?.participantes || []).map((u) => { const en = V.presentes.has(u), mic = V.mics[u] !== false;
+        return `<div class="sj3d-pp">${cara(u, 32)}<span><b>${esc(funda(u).nombre)}${u === st.data.yo.id ? ' (Tú)' : ''}${u === 'naara' ? ' 👑' : ''}</b><small>${en ? (mic ? 'En la sala' : 'En la sala · silenciada') : 'No ha entrado'}</small></span>
+          ${en ? ico(mic ? 'mic' : 'micOff', 'sj3d-pmic') : ''}${st.data.permisos.moderar && en && u !== st.data.yo.id ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkSacar" data-u="${u}">Sacar</button>` : ''}</div>`; }).join('');
+    } else if (V.panel === 'chat') {
+      const yo = st.data.yo.id;
+      p.innerHTML = cab('Chat de la reunión') + `<div class="sj3d-msgs" id="sj3dMsgs">${V.chat.length ? V.chat.map((m) => `<div class="sj3d-msg${m.de === yo ? ' sj3d-mio' : ''}"><small>${esc(funda(m.de).nombre)} · ${new Date(m.ms).toLocaleTimeString('es-HN', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Tegucigalpa' })}</small><p>${esc(m.t)}</p></div>`).join('') : '<p class="sj-hint">Todavía no hay mensajes. El chat no se guarda al terminar.</p>'}</div>
+        <form class="sj3d-chatf" id="sj3dChatF"><input id="sj3dChatT" maxlength="500" autocomplete="off" placeholder="Escriba un mensaje…" aria-label="Mensaje"><button type="submit" class="sj-btn sj-rojo sj-mini" aria-label="Enviar">${ico('enviar')}</button></form>`;
+      const m = document.getElementById('sj3dMsgs'); if (m) m.scrollTop = m.scrollHeight;
+    } else if (V.panel === 'reac') {
+      p.innerHTML = cab('Reacciones') + `<div class="sj3d-reacs">${['👍', '👏', '❤️', '😂', '🎉', '✅', '🙋'].map((e) => `<button type="button" class="sj3d-re" data-sj="lkReaccion" data-e="${e}">${e}</button>`).join('')}</div><p class="sj-hint">Aparece sobre su personaje para todas.</p>`;
+    }
+  }
+  async function accionVivo(a, b) {
+    const V = st.vivo; if (!V) return;
+    if (a === 'lkPart' || a === 'lkChat' || a === 'lkReac' || a === 'lkCerrarPanel') {
+      const k = { lkPart: 'part', lkChat: 'chat', lkReac: 'reac' }[a] || '';
+      V.panel = V.panel === k ? '' : k; if (V.panel === 'chat') V.noLeidos = 0; pintarPanel(); pintarBarra();
+      if (V.panel === 'chat') { const t = document.getElementById('sj3dChatT'); if (t) t.focus(); }
+      return;
+    }
+    if (a === 'lkAudio') { try { await V.ctl.activarAudio(); } catch (_) {} return; }
+    if (!V.ctl) return;
+    if (a === 'lkReaccion') { try { await V.ctl.reaccion(b.dataset.e); } catch (_) {} return; }
+    b.disabled = true;
+    try {
+      if (a === 'lkMic') await V.ctl.setMicro(!V.ctl.micro);
+      else if (a === 'lkCam') await V.ctl.setCamara(!V.ctl.camara);
+      else if (a === 'lkPant') {
+        if (!navigator.mediaDevices?.getDisplayMedia && !V.ctl.compartiendo) throw new Error('Este dispositivo no permite compartir pantalla (en celular use una computadora).');
+        if (!V.ctl.compartiendo && V.pantalla && V.pantalla.de !== st.data.yo.id) throw new Error(`${funda(V.pantalla.de).nombre} ya está compartiendo pantalla.`);
+        await V.ctl.setCompartir(!V.ctl.compartiendo);
+      } else if (a === 'lkSacar') {
+        if (!confirm(`¿Sacar a ${funda(b.dataset.u).nombre} de la sala?`)) return;
+        await api({ accion: 'expulsar', id: V.id, usuario: b.dataset.u }); toast(`${funda(b.dataset.u).nombre} salió de la sala.`);
+      } else if (a === 'lkTerminar') {
+        if (!confirm('¿Terminar la reunión para todas? Se cierra la sala.')) return;
+        await api({ accion: 'cerrar_sala', id: V.id }); toast('Reunión terminada.'); salirVivo(false); st.vista = 'inicio'; await cargar(true); return;
+      }
+    } catch (e) {
+      const m = String(e && e.message || '');
+      toast(/NotAllowed|Permission|denied/i.test(m) ? (a === 'lkPant' ? 'Se canceló compartir pantalla.' : 'El navegador bloqueó el permiso. Toque el candado junto a la dirección para permitirlo.') : (m || 'No se pudo completar.'), true);
+    } finally { b.disabled = false; pintarBarra(); }
   }
 
   // ---------- eventos ----------
@@ -420,19 +574,27 @@
       } catch (err) { st.guardando = ''; b.disabled = false; toast(err.message, true); }
       return;
     }
-    if (a === 'entrar') toast('La sala 3D con audio en tiempo real se habilita en la Fase 4.');
+    if (a === 'entrar') return entrarVivo(id);
+    if (a.startsWith('lk')) return accionVivo(a, b);
     if (a === 'tabPers') { st.pers.tab = b.dataset.t; const ed = ed3; ed3 = null; const cfg = st.pers; const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; host.querySelectorAll('.sj-tab').forEach((x) => { const on = x.dataset.t === cfg.tab; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }); ed3 = ed; return; }
     if (a === 'rotar') { if (ed3) ed3.rotar(Number(b.dataset.d)); return; }
     if (a === 'guardarPers') return guardarPersonaje();
     if (a === 'restablecer') { const av = st.data.avatares[st.data.yo.id]; st.pers.config = { ...av.config }; if (ed3) ed3.set(st.pers.config); const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; return toast('Se restableció el último personaje guardado.'); }
     if (a === 'personajeAnte') { st.volverAnte = true; st.pers = null; st.vista = 'personaje'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'verSala' || a === 'verSalaPers') { st.sala3dReu = a === 'verSala' ? (st.ante || reu()) : null; st.volver3d = st.vista; st.vista = 'sala3d'; detenerMic(); pintar(); return window.scrollTo({ top: 0 }); }
-    if (a === 'vista3d') { if (sala3) sala3.setVista(b.dataset.v); return; }
-    if (a === 'salirSala') { st.vista = st.volver3d || 'inicio'; return pintar(); }
+    if (a === 'vista3d') {
+      if (st.vivo) { st.vivo.auto = b.dataset.v === 'auto'; if (st.vivo.auto) { st.vivo.vistaAuto = null; st.vivo.ultimoCorte = 0; marcarVista('auto'); camaraAuto(); return; } }
+      if (sala3) sala3.setVista(b.dataset.v); return;
+    }
+    if (a === 'salirSala') { if (st.vivo) { salirVivo(false); st.vista = 'antesala'; return pintar(); } st.vista = st.volver3d || 'inicio'; return pintar(); }
   });
   document.addEventListener('click', (e) => { const b = host && host.contains(e.target) && e.target.closest('[data-op]'); if (!b || b.type === 'checkbox' || !st.pers) return; cambiarOpcion(b.dataset.op, b.dataset.v); });
   document.addEventListener('change', (e) => { const b = host && host.contains(e.target) && e.target.closest('input[data-op]'); if (!b || !st.pers) return; cambiarOpcion(b.dataset.op, b.checked); });
-  document.addEventListener('submit', (e) => { if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); } });
+  document.addEventListener('submit', (e) => {
+    if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); }
+    if (e.target && e.target.id === 'sj3dChatF') { e.preventDefault(); const t = document.getElementById('sj3dChatT'); const v = t ? t.value : ''; if (t) t.value = ''; if (st.vivo?.ctl && v.trim()) st.vivo.ctl.chat(v).catch(() => toast('No se pudo enviar el mensaje.', true)); }
+  });
+  window.addEventListener('pagehide', () => { if (st.vivo) salirVivo(false); });
 
   function estilos() {
     if (document.getElementById('sjCss')) return;
@@ -551,6 +713,31 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj3d-barra{display:flex;justify-content:center;gap:4px;flex-wrap:wrap;padding:10px;background:#0F1318}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl{all:unset;background:transparent!important;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;padding:8px 6px;border-radius:10px;font-size:11.5px;color:#E9EBEF}.sj3d-ctl .sj-i{width:22px;height:22px}.sj3d-ctl:disabled{opacity:.45;cursor:not-allowed}.sj3d-ctl:not(:disabled):hover{background:#222833}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-salir{background:#C62828!important;color:#fff!important}
+/* R170 · en vivo */
+.sj3d-led{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ECC71;margin-right:6px;vertical-align:1px;box-shadow:0 0 0 3px rgba(46,204,113,.25)}.sj3d-chip.sj3d-reconecta .sj3d-led{background:#F5A623}
+.sj3d-estado{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:4;background:#F5A623;color:#141920;font:600 13px Inter,sans-serif;padding:7px 14px;border-radius:999px}
+.sj3d-oculto{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0;pointer-events:none}
+.sj3d-videos{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;gap:8px;flex-wrap:wrap;max-width:60%}
+.sj3d-video{margin:0;position:relative;width:170px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000;border:2px solid #2F3744}.sj3d-video video{width:100%;height:100%;object-fit:cover}
+.sj3d-video figcaption{position:absolute;left:6px;bottom:5px;font:600 11px Inter,sans-serif;background:rgba(20,25,32,.8);padding:2px 7px;border-radius:999px}
+.sj3d-panel{position:absolute;right:12px;top:12px;bottom:12px;width:300px;max-width:calc(100% - 24px);z-index:5;background:#fff;color:#1F2430;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;flex-direction:column;overflow:hidden}
+.sj3d-pcab{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #ECEEF2}.sj3d-pcab b{font-size:15px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-px{all:unset;cursor:pointer;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;color:#5E6B7A}.sj3d-px .sj-i{width:18px;height:18px}
+.sj3d-pp{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F2F3F6}.sj3d-pp span{flex:1;display:flex;flex-direction:column}.sj3d-pp small{color:#6B7380;font-size:12px}.sj3d-pmic{width:18px;height:18px;color:#5E6B7A}
+.sj3d-msgs{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}.sj3d-msg{background:#F4F5F8;border-radius:10px;padding:7px 10px;max-width:88%}.sj3d-msg small{color:#6B7380;font-size:11px}.sj3d-msg p{margin:2px 0 0;white-space:pre-wrap;word-break:break-word;font-size:14px}
+.sj3d-mio{align-self:flex-end;background:#FDECEC}
+.sj3d-chatf{display:flex;gap:8px;padding:10px;border-top:1px solid #ECEEF2}.sj3d-chatf input{flex:1;min-width:0;border:1px solid #DADDE3;border-radius:10px;padding:9px 11px;font:14px Inter,sans-serif}
+.sj3d-reacs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-re{all:unset;cursor:pointer;text-align:center;font-size:28px;padding:10px 0;border-radius:12px;background:#F4F5F8}#rbac-sala-juntas button.sj3d-re:hover{background:#ECEEF2}
+.sj3d-reacs+.sj-hint{padding:0 14px}
+.sj3d-reac{position:absolute;left:50%;bottom:100%;font-size:30px;animation:sj3dSube 2.6s ease-out forwards;pointer-events:none}
+@keyframes sj3dSube{0%{transform:translate(-50%,0) scale(.6);opacity:0}15%{transform:translate(-50%,-10px) scale(1.1);opacity:1}100%{transform:translate(-50%,-90px) scale(1);opacity:0}}
+@media (prefers-reduced-motion:reduce){.sj3d-reac{animation-duration:1.4s}}
+.sj3d-nombre.sj3d-ausente{opacity:.55!important;font-style:italic}
+.sj3d-audio{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-on{background:#2B3340!important}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-mute{color:#FF8A80!important}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-fin{background:#7A1F2B!important}
 .sj-alerta{background:#FFF4F3;border:1px solid #F3C3C0;color:#B91C1C;border-radius:12px;padding:10px 14px;font-size:13px}
 .sj-borr{padding:14px 18px}.sj-borr>b{display:block;margin:0 0 6px}
 .sj-fila{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:9px 0;border-top:1px solid var(--b);cursor:pointer;font-size:13.5px}.sj-fila span{flex:1;font-weight:600}.sj-fila small{color:var(--m)}
@@ -560,6 +747,7 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 @media (prefers-reduced-motion:reduce){#rbac-sala-juntas *{animation:none!important;transition:none!important}}
 @media (max-width:1279.98px){.sj-ed-g{grid-template-columns:160px minmax(0,1fr)}.sj-ed-3d{grid-column:1/-1}.sj3d-g{grid-template-columns:1fr}.sj3d-vistas{flex-direction:row;flex-wrap:wrap}.sj3d-vistas>b{width:100%}.sj-top{grid-template-columns:1fr}.sj-hero{min-height:0;aspect-ratio:3/1}.sj-accs{grid-template-columns:repeat(3,minmax(0,1fr))}.sj-dos{grid-template-columns:1fr}}
 @media (max-width:767.98px){.sj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sj-prox{grid-template-columns:1fr}.sj-prox-img{width:100%;height:140px}.sj-accs,.sj-accs.sj-n4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sj3d-panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:62%}.sj3d-msgs{min-height:120px}.sj3d-video{width:110px}
   .sj-ed-g{grid-template-columns:1fr}.sj-ed-mini{flex-direction:row}.sj-ed-mini img,.sj-ed-vacio{width:90px}.sj-ed-3d{min-height:360px}.sj3d-escena{min-height:0;aspect-ratio:4/5}.sj3d-ctl{min-width:56px;font-size:10px}.sj3d-chip{margin-left:0}
   .sj-form-g{grid-template-columns:1fr}.sj-form-img{display:none}.sj-ante-g{grid-template-columns:1fr}.sj-ante-av{min-height:160px}.sj-form-acc .sj-btn{flex:1 1 100%}.sj-cab h2{font-size:22px!important}
   .sj-reu{grid-template-columns:56px minmax(0,1fr)}.sj-reu-a{grid-column:1/-1;align-items:flex-start}.sj-cal{gap:3px}.sj-dia{min-height:60px;padding:3px}.sj-ev{font-size:9.5px;padding:2px 3px}
