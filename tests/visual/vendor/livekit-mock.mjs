@@ -1,6 +1,6 @@
 // Doble de prueba de livekit-client (misma superficie que usa sala-vivo.js). Sin red: window.__lk simula a las demás socias.
 const ev = (n) => n;
-export const RoomEvent = Object.fromEntries(['ParticipantConnected', 'ParticipantDisconnected', 'ActiveSpeakersChanged', 'TrackMuted', 'TrackUnmuted', 'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackSubscribed', 'TrackUnsubscribed', 'DataReceived', 'Reconnecting', 'Reconnected', 'AudioPlaybackStatusChanged', 'Disconnected'].map((k) => [k, ev(k)]));
+export const RoomEvent = Object.fromEntries(['ParticipantConnected', 'ParticipantDisconnected', 'ParticipantAttributesChanged', 'ActiveSpeakersChanged', 'TrackMuted', 'TrackUnmuted', 'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackSubscribed', 'TrackUnsubscribed', 'DataReceived', 'Reconnecting', 'Reconnected', 'AudioPlaybackStatusChanged', 'Disconnected'].map((k) => [k, ev(k)]));
 export const Track = { Source: { Microphone: 'microphone', Camera: 'camera', ScreenShare: 'screen_share' }, Kind: { Audio: 'audio', Video: 'video' } };
 export const DisconnectReason = { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, PARTICIPANT_REMOVED: 4, ROOM_DELETED: 5 };
 let sid = 0;
@@ -18,7 +18,7 @@ function pista(kind, dibujo) {
 }
 class Emisor { constructor() { this._h = {}; } on(n, f) { (this._h[n] = this._h[n] || []).push(f); return this; } emit(n, ...a) { (this._h[n] || []).forEach((f) => f(...a)); } }
 class Participante {
-  constructor(identity, name) { this.identity = identity; this.name = name; this.trackPublications = new Map(); this.isMicrophoneEnabled = true; this.isCameraEnabled = false; this.isScreenShareEnabled = false; }
+  constructor(identity, name) { this.identity = identity; this.name = name; this.trackPublications = new Map(); this.isMicrophoneEnabled = true; this.isCameraEnabled = false; this.isScreenShareEnabled = false; this.attributes = {}; }
 }
 export class Room extends Emisor {
   constructor(op) { super(); this.op = op; this.remoteParticipants = new Map(); this.canPlaybackAudio = true; window.__lk = this; this.enviados = []; }
@@ -30,6 +30,7 @@ export class Room extends Emisor {
       async setMicrophoneEnabled(v) { this.isMicrophoneEnabled = v; room.emit(RoomEvent.LocalTrackPublished, { source: 'microphone' }); },
       async setCameraEnabled(v) { this.isCameraEnabled = v; if (v) this.trackPublications.set('camera', { source: 'camera', track: pista('video', 'Cámara ' + c.name) }); else { this.trackPublications.delete('camera'); room.emit(RoomEvent.LocalTrackUnpublished, { source: 'camera' }); } },
       async setScreenShareEnabled(v) { this.isScreenShareEnabled = v; if (v) this.trackPublications.set('screen_share', { source: 'screen_share', track: pista('video', 'Pantalla de ' + c.name) }); else { this.trackPublications.delete('screen_share'); room.emit(RoomEvent.LocalTrackUnpublished, { source: 'screen_share' }); } },
+      async setAttributes(a) { this.attributes = { ...this.attributes, ...a }; room.emit(RoomEvent.ParticipantAttributesChanged, a, this); },
       getTrackPublication(s) { return this.trackPublications.get(s); },
       async publishData(data, o) { room.enviados.push({ topic: o.topic, d: JSON.parse(new TextDecoder().decode(data)) }); },
     });
@@ -43,6 +44,8 @@ export class Room extends Emisor {
       reaccion: (id, e) => this.emit(RoomEvent.DataReceived, new TextEncoder().encode(JSON.stringify({ e })), this.remoteParticipants.get(id), 0, 'reaccion'),
       pantalla: (id) => { const p = this.remoteParticipants.get(id); const t = pista('video', 'Presentación de ' + p.name); const pub = { source: 'screen_share', track: t, isSubscribed: true }; p.trackPublications.set('ss', pub); this.emit(RoomEvent.TrackSubscribed, t, pub, p); },
       quitaPantalla: (id) => { const p = this.remoteParticipants.get(id); const pub = p.trackPublications.get('ss'); p.trackPublications.delete('ss'); this.emit(RoomEvent.TrackUnsubscribed, pub.track, pub, p); },
+      atributos: (id, a) => { const p = this.remoteParticipants.get(id); p.attributes = { ...p.attributes, ...a }; this.emit(RoomEvent.ParticipantAttributesChanged, a, p); },
+      mano: (id, on) => this.sim.atributos(id, { mano: on ? String(Date.now()) : '' }),
       reconecta: () => { this.emit(RoomEvent.Reconnecting); setTimeout(() => this.emit(RoomEvent.Reconnected), 800); },
       expulsar: () => this.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED),
     };
