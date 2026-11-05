@@ -89,7 +89,7 @@ assert.equal(await h.page.evaluate(() => window.__lk.claims.video.roomAdmin), fa
 assert.equal(await h.page.$('[data-sj="lkTerminar"]'), null, 'Libni no tiene Terminar');
 await h.page.evaluate(() => window.__lk.sim.entra('naara', 'Naara')); await h.page.waitForTimeout(600);
 await foto(h.page, 'r170-7-libni-390.png');
-await h.page.click('#sj3d-lkReac'); await h.page.click('[data-sj="lkReaccion"][data-e="🙋"]'); await h.page.waitForTimeout(400);
+await h.page.click('#sj3d-lkReac'); await h.page.click('[data-sj="lkReaccion"][data-e="🎉"]'); await h.page.waitForTimeout(400);
 await foto(h.page, 'r170-8-libni-390-reaccion.png');
 assert.equal(await h.page.evaluate(() => document.documentElement.scrollWidth), 390);
 await h.page.evaluate(() => window.__lk.sim.expulsar()); await h.page.waitForSelector('.sj-ante');
