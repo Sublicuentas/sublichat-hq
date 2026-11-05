@@ -131,7 +131,8 @@ function efectivos(user = {}, config = {}) {
 // agrega todas sus pantallas y uno desactivado las quita. Sublicuentas ve todos los módulos.
 function pantallasVisibles(user = {}, config = {}) {
   const mods = efectivos(user, config);
-  if (esSupervisor(user)) return MODULOS.flatMap((m) => m.pantallas);
+  const sala = ['sublicuentas', 'naara', 'libni', 'relojes', 'geisell'].includes(claveUsuario(user)) ? ['sala-juntas'] : []; // R167 · ACL fija (api/_sala-juntas.js)
+  if (esSupervisor(user)) return [...MODULOS.flatMap((m) => m.pantallas), ...sala];
   const base = porDefecto(user), ov = overridesDe(config, claveUsuario(user));
   const menu = new Set(MENU_ROL[rolDe(user)] || []);
   const out = [];
@@ -140,7 +141,7 @@ function pantallasVisibles(user = {}, config = {}) {
     const todas = ov[m.id] === true && !base[m.id];
     for (const p of m.pantallas) if (todas || m.fijo || menu.has(p) || ov[m.id] === true) out.push(p);
   }
-  return out;
+  return [...out, ...sala];
 }
 // Normaliza lo que manda Sublicuentas al guardar: { id: true | false | null }. null = volver a lo de siempre.
 function limpiarCambios(cambios = {}) {
