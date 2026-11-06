@@ -6,6 +6,7 @@ export const DisconnectReason = { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, PA
 let sid = 0;
 function pista(kind, dibujo) {
   const t = { sid: 'TR_' + (++sid), kind, els: [] };
+  if (kind === 'audio') { try { window.__ac = window.__ac || new AudioContext(); const o = window.__ac.createOscillator(); const d = window.__ac.createMediaStreamDestination(); o.connect(d); o.start(); t.mediaStreamTrack = d.stream.getAudioTracks()[0]; } catch (_) {} }
   t.attach = () => {
     if (kind === 'audio') { const a = document.createElement('audio'); t.els.push(a); return a; }
     const c = document.createElement('canvas'); c.width = 640; c.height = 360; const g = c.getContext('2d'); let f = 0;
