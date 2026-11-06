@@ -105,7 +105,10 @@ export async function conectar({ url, token, yo, on = {} }) {
 
   const enviar = (topic, obj) => room.localParticipant.publishData(TEXTO.encode(JSON.stringify(obj)), { reliable: true, topic });
   const lp = room.localParticipant;
+  // R183 · nivel de voz REAL (0–1) de cada persona, el que mide LiveKit sobre su audio. Micrófono apagado = 0 (sin boca).
+  const nivel = (id) => { const p = id === yo ? room.localParticipant : room.remoteParticipants.get(id); if (!p || !p.isMicrophoneEnabled) return 0; const v = Number(p.audioLevel || 0); return v > 0 ? v : (p.isSpeaking ? 0.35 : 0); };
   return {
+    nivel,
     microOk,
     get micro() { return lp.isMicrophoneEnabled; },
     get camara() { return lp.isCameraEnabled; },

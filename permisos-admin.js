@@ -14,7 +14,7 @@
     'codigos': 'Solo la APK: códigos de Netflix, Disney y demás.',
     'actividad': 'Bitácora completa de lo que hace cada usuario.',
   };
-  const st = { cargando: false, error: '', data: null, edit: {}, guardando: '', msg: {} };
+  const st = { cargando: false, error: '', data: null, edit: {}, guardando: '', msg: {}, retirar: '', buscar: '' }; // R180: retirar = usuario con el cuadro de baja abierto
 
   function toast(t) {
     let el = document.getElementById('permToast');
@@ -51,7 +51,12 @@
     const msg = st.msg[u.usuario];
     return `<article class="perm-card" data-card="${esc(u.usuario)}"><header><span class="perm-av">${esc((u.usuario[0] || '?').toUpperCase())}</span><div><b>${esc(u.usuario)}</b><small>${esc(u.rol)}${cambios ? ` · ${cambios} cambio${cambios === 1 ? '' : 's'} de Sublicuentas` : ' · como siempre'}</small></div></header>
       <div class="perm-grid">${filas}</div>
-      <footer><button type="button" class="perm-btn sec" data-reset="${esc(u.usuario)}" ${cambios || sucio(u) ? '' : 'disabled'}>Volver a lo de siempre</button>
+      ${st.retirar === u.usuario ? `<div class="perm-baja" role="group" aria-label="Retirar a ${esc(u.usuario)}"><b>Retirar a ${esc(u.usuario)} de Sublichat</b>
+        <p>Pierde el acceso de inmediato: no puede iniciar sesión, se cierran sus sesiones, sale de convocatorias futuras de la Sala, sus avisos de Telegram pendientes se anulan y se desvincula su Telegram. <b>No se borra</b> nada del negocio (ventas, clientes, pagos, contabilidad, auditoría, actas pasadas).</p>
+        <label class="perm-baja-c"><input type="checkbox" data-baja-datos> Borrar también su personaje de la Sala (dato personal)</label>
+        <label class="perm-baja-i">Escriba <code>${esc(u.usuario)}</code> para confirmar<input type="text" autocomplete="off" data-baja-conf="${esc(u.usuario)}"></label>
+        <div class="perm-baja-b"><button type="button" class="perm-btn sec" data-baja-cancelar>Cancelar</button><button type="button" class="perm-btn peligro" data-baja-ok="${esc(u.usuario)}" disabled>Retirar usuario</button></div></div>` : ''}
+      <footer><button type="button" class="perm-btn sec perm-btn-baja" data-baja="${esc(u.usuario)}">Retirar usuario</button><span class="perm-sp"></span><button type="button" class="perm-btn sec" data-reset="${esc(u.usuario)}" ${cambios || sucio(u) ? '' : 'disabled'}>Volver a lo de siempre</button>
         <button type="button" class="perm-btn pri" data-save="${esc(u.usuario)}" ${sucio(u) && st.guardando !== u.usuario ? '' : 'disabled'}>${st.guardando === u.usuario ? 'Guardando…' : 'Guardar cambios'}</button>
         ${msg ? `<span class="perm-msg ${msg.ok ? 'ok' : 'err'}" role="status">${esc(msg.t)}</span>` : ''}</footer></article>`;
   }
@@ -64,12 +69,33 @@
     const d = st.data || { usuarios: [], catalogo: [] };
     host.innerHTML = `<div class="perm-top"><p class="perm-help">Active o desactive los módulos de cada usuario. Lo que no cambie queda como hasta hoy. Los módulos marcados también se bloquean en el servidor y en la APK.${d.actualizado ? ` Último cambio: ${esc(new Date(d.actualizado).toLocaleString('es-HN'))} por ${esc(d.actualizadoPor || '—')}.` : ''}</p>
       <button type="button" class="perm-btn sec" data-recargar>Actualizar</button></div>
-      <div class="perm-list">${d.usuarios.map((u) => tarjeta(u, d.catalogo)).join('') || '<div class="perm-empty">No hay usuarios configurados.</div>'}</div>`;
+      <label class="perm-buscar"><span>Buscar usuario</span><input type="search" data-buscar placeholder="Buscar usuario por nombre" value="${esc(st.buscar)}"></label>
+      <div class="perm-list">${d.usuarios.filter((u) => !st.buscar || u.usuario.includes(st.buscar.toLowerCase().trim())).map((u) => tarjeta(u, d.catalogo)).join('') || '<div class="perm-empty">No hay usuarios con ese nombre.</div>'}</div>
+      ${(d.retirados || []).length ? `<details class="perm-ret"><summary>Usuarios retirados (${d.retirados.length}) · no aparecen en ninguna lista operativa</summary>${d.retirados.map((r) => `<div class="perm-ret-f"><span><b>${esc(r.usuario)}</b><small>Retirado ${esc(String(r.retiradoAt).slice(0, 10))} por ${esc(r.por)}</small></span><button type="button" class="perm-btn sec" data-reactivar="${esc(r.usuario)}">Reactivar</button></div>`).join('')}</details>` : ''}`;
     bind(host);
   }
   function usuario(id) { return (st.data?.usuarios || []).find((u) => u.usuario === id); }
   function bind(host) {
     host.querySelector('[data-recargar]')?.addEventListener('click', cargar);
+    const bq = host.querySelector('[data-buscar]'); bq?.addEventListener('input', () => { st.buscar = bq.value; const pos = bq.selectionStart; pintar(); const n = document.querySelector('#rbac-permisos [data-buscar]'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} } });
+    // R180 · baja de usuario
+    host.querySelectorAll('[data-baja]').forEach((b) => b.addEventListener('click', () => { st.retirar = b.dataset.baja; pintar(); host.querySelector('[data-baja-conf]')?.focus(); }));
+    host.querySelector('[data-baja-cancelar]')?.addEventListener('click', () => { st.retirar = ''; pintar(); });
+    const conf = host.querySelector('[data-baja-conf]'); const ok = host.querySelector('[data-baja-ok]');
+    conf?.addEventListener('input', () => { ok.disabled = conf.value.trim().toLowerCase() !== conf.dataset.bajaConf; });
+    ok?.addEventListener('click', async () => {
+      const u = ok.dataset.bajaOk; ok.disabled = true; ok.textContent = 'Retirando…';
+      try {
+        const r = await api({ accion: 'retirar', usuario: u, confirmar: conf.value.trim(), borrarDatosSala: !!host.querySelector('[data-baja-datos]')?.checked });
+        const sa = r.informe?.sala || {}; st.retirar = '';
+        toast(`✅ ${u} retirado · sesiones: ${r.informe?.firebase === 'revocado_y_deshabilitado' ? 'cerradas' : r.informe?.firebase === 'sin_cuenta_firebase' ? 'no tenía' : 'revisar'} · Sala: ${sa.reuniones || 0} reunión(es), ${sa.avisos || 0} aviso(s) anulados`);
+        await cargar();
+      } catch (e) { ok.textContent = 'Retirar usuario'; ok.disabled = false; toast('❌ ' + e.message); }
+    });
+    host.querySelectorAll('[data-reactivar]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm(`¿Reactivar a ${b.dataset.reactivar}? Vuelve con sus módulos de siempre; las convocatorias de las que salió no se restauran.`)) return;
+      try { await api({ accion: 'reactivar', usuario: b.dataset.reactivar }); toast(`✅ ${b.dataset.reactivar} reactivado`); await cargar(); } catch (e) { toast('❌ ' + e.message); }
+    }));
     host.querySelectorAll('.perm-sw').forEach((i) => i.addEventListener('change', () => {
       const e = st.edit[i.dataset.u] || (st.edit[i.dataset.u] = {});
       e[i.dataset.m] = i.checked; st.msg[i.dataset.u] = null; pintar();
@@ -125,6 +151,13 @@
   .perm-msg{font-size:13px;font-weight:600}.perm-msg.ok{color:#159B62}.perm-msg.err{color:#C93030}
   .perm-empty{padding:24px;text-align:center;color:#707C8D;background:#fff;border:1px dashed #E7EAF0;border-radius:16px}.perm-empty.err{color:#C93030}
   .perm-card.sup{border-color:#FBD5D2}
+  .perm-sp{flex:1}.perm-btn.peligro{background:#B42318;border-color:#B42318;color:#fff}.perm-btn-baja{color:#B42318}
+  .perm-baja{border:1px solid #F5C2BE;background:#FFF7F6;border-radius:12px;padding:12px 14px;margin-top:12px;display:grid;gap:8px}.perm-baja p{margin:0;font-size:13px;color:#4A5565;line-height:1.45}
+  .perm-baja-i{display:grid;gap:4px;font-size:13px;color:#162031}.perm-baja-i input,.perm-buscar input{min-height:42px;border:1px solid #D5D9E0;border-radius:10px;padding:0 12px;font:500 14px Inter,system-ui;background:#fff}
+  .perm-baja-c{font-size:13px;display:flex;gap:8px;align-items:center}.perm-baja-b{display:flex;gap:8px;justify-content:flex-end}
+  .perm-buscar{display:grid;gap:4px;margin:0 0 12px;font-size:12px;font-weight:700;color:#707C8D;max-width:420px}
+  .perm-ret{margin-top:16px;background:#fff;border:1px dashed #E7EAF0;border-radius:14px;padding:10px 14px}.perm-ret summary{cursor:pointer;font-weight:700;color:#4A5565;font-size:14px}
+  .perm-ret-f{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #F0F2F5;margin-top:8px}.perm-ret-f b{display:block;text-transform:capitalize}.perm-ret-f small{color:#707C8D;font-size:12px}
   .perm-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:#162031;color:#fff;padding:12px 18px;border-radius:12px;font:600 14px Inter,system-ui;z-index:99999;transition:.2s;pointer-events:none}
   .perm-toast.on{opacity:1;transform:translate(-50%,0)}`;
   function estilos() { if (document.getElementById('permAdminCss')) return; const s = document.createElement('style'); s.id = 'permAdminCss'; s.textContent = css; document.head.appendChild(s); }

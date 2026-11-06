@@ -166,7 +166,7 @@ export function precargarAvatares(generos = ['mujer']) { avatarGLB().then((M) =>
 export function montarEditor(canvas, cfg) {
   const r = renderer(canvas, { alpha: true });
   const escena = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 50); let dist = 3.9, distObj = 3.9; const ponerCam = () => { const k = Math.min(1, (dist - 1.6) / (3.9 - 1.6)); cam.position.set(0, 0.9 + (1 - k) * 0.6, dist); cam.lookAt(0, 0.82 + (1 - k) * 0.66, 0); }; ponerCam();
+  const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 50); let dist = 3.9, distObj = 3.9, foco = null, focoY = 1.2, focoObj = 1.2; const ponerCam = () => { if (foco) { focoY += (focoObj - focoY) * 0.15; cam.position.set(0, focoY + 0.04, dist); cam.lookAt(0, focoY, 0); return; } const k = Math.min(1, (dist - 1.6) / (3.9 - 1.6)); cam.position.set(0, 0.9 + (1 - k) * 0.6, dist); cam.lookAt(0, 0.82 + (1 - k) * 0.66, 0); }; ponerCam(); // R183: foco = rostro / torso / cuerpo
   escena.add(new THREE.HemisphereLight(0xfff4e6, 0x8a7a6a, 1.1));
   const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(2, 3, 3); escena.add(key);
   const rim = new THREE.DirectionalLight(0xffd9b0, 0.8); rim.position.set(-2, 2, -2); escena.add(rim);
@@ -201,8 +201,10 @@ export function montarEditor(canvas, cfg) {
     girar(on) { vuelta = on === undefined ? !vuelta : !!on; return vuelta; },
     // R172 · vistas fijas, acercar y restablecer cámara
     vista(n) { vuelta = false; const a = { frente: 0, tresCuartos: 0.8, lado: Math.PI / 2, espalda: Math.PI }[n]; if (a === undefined) return; const vueltas = Math.round((objetivo - a) / (Math.PI * 2)); objetivo = a + vueltas * Math.PI * 2; },
-    zoom(d) { distObj = Math.min(3.9, Math.max(1.6, distObj - d)); },
-    reiniciar() { vuelta = false; objetivo = 0.35; distObj = 3.9; },
+    zoom(d) { foco = null; distObj = Math.min(3.9, Math.max(1.6, distObj - d)); },
+    // R183 · acercamientos para revisar accesorios y vestuario (rostro: lentes y aretes; torso: logo, collar, reloj)
+    enfocar(z) { const F = { rostro: [0.95, 1.53], torso: [1.75, 1.2], cuerpo: [3.9, null] }[z]; if (!F) return; vuelta = false; distObj = F[0]; if (F[1] == null) { foco = null; } else { if (!foco) focoY = 1.2; foco = z; focoObj = F[1]; } },
+    reiniciar() { vuelta = false; foco = null; objetivo = 0.35; distObj = 3.9; },
     // Miniatura (busto, 160×160 WebP) para mostrar el personaje en listas sin cargar 3D.
     miniatura() {
       const c2 = document.createElement('canvas'); c2.width = 160; c2.height = 160;
@@ -275,6 +277,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = '/assets/sublicuentas-logo.png'; });
   // R174: Sala C con su estilo base = el diseño original aprobado; cualquier otro escenario/estilo lo arma escenarios.js
   const original = escenario === 'sala-c' && esBase(estilo);
+  let fuenteNivel = null; // R183 · (id) => nivel 0–1 del audio de esa persona (declarado arriba: el bucle lo lee desde el primer cuadro)
   let libresEsc = null; // R179 · asientos libres para invitados (usuarios con el módulo activado)
   let A = ASIENTOS, pantalla = null, VIS0 = null, centro = new THREE.Vector3(0, 1.0, -0.4), mesa = null;
   if (!original) {
@@ -393,7 +396,13 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     else if (modo === 'libre') { cam.position.lerp(posLibre(), reducido ? 1 : 0.2); actual.mira.copy(VISTAS.libre.mira); }
     else if (modo === 'panoramica' && !reducido) { panT += 0.0018; cam.position.set(centro.x + Math.sin(panT) * PAN.radio, PAN.alto, centro.z + Math.cos(panT) * PAN.radio); actual.mira.copy(centro); }
     cam.lookAt(actual.mira);
-    const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) { const hb = hablando === id; animarPersonaje(p, t, hb ? 1 : 0); const a = p.userData.aro; if (a) { const meta = hb ? (reducido ? 0.7 : 0.55 + Math.sin(t * 6) * 0.25) : 0; a.material.opacity += (meta - a.material.opacity) * (reducido ? 1 : 0.2); a.visible = a.material.opacity > 0.02; } }
+    const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) {
+      // R183 · boca por NIVEL de audio real (ataque rápido, caída suave, umbral de silencio); sin fuente: estado "hablando"
+      const crudo = fuenteNivel ? Math.min(1, Math.max(0, fuenteNivel(id) || 0) * 3.2) : (hablando === id ? 1 : 0);
+      const ud = p.userData; const prev = ud.nivelVoz || 0; const dtv = Math.min(0.5, Math.max(0.001, (ahora - (ud.tVoz || ahora)) / 1000 || 0.016)); ud.tVoz = ahora;
+      ud.nivelVoz = prev + (crudo - prev) * (1 - Math.exp(-dtv / (crudo > prev ? 0.045 : 0.12))); // suavizado por tiempo real (igual a 60 o a 10 cuadros/s)
+      const voz = ud.nivelVoz < 0.06 ? 0 : ud.nivelVoz;
+      const hb = hablando === id || voz > 0.15; animarPersonaje(p, t, voz); const a = p.userData.aro; if (a) { const meta = hb ? (reducido ? 0.7 : 0.55 + Math.sin(t * 6) * 0.25) : 0; a.material.opacity += (meta - a.material.opacity) * (reducido ? 1 : 0.2); a.visible = a.material.opacity > 0.02; } }
     r.render(escena, cam);
     const w = contenedor.clientWidth, h = contenedor.clientHeight;
     for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, (p.userData.glb ? 1.46 : 1.95) + p.position.y, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
@@ -429,6 +438,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
       const e = etiquetas[id]; if (!e) return; const b = document.createElement('span'); b.className = 'sj3d-reac'; b.textContent = emoji;
       e.appendChild(b); caer.push(b); setTimeout(() => { b.remove(); caer.splice(caer.indexOf(b), 1); }, 2600);
     },
+    setFuenteNivel(fn) { fuenteNivel = typeof fn === 'function' ? fn : null; },
     modoGrabacion(on) {
       escena.traverse((o) => { if (o.userData && o.userData.secundario) o.visible = !on; });
       if (on && !expBase) expBase = r.toneMappingExposure; r.toneMappingExposure = on ? expBase * 1.12 : (expBase || r.toneMappingExposure); if (!on) expBase = 0;

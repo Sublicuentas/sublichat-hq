@@ -160,7 +160,7 @@
     ].filter(Boolean).map(([v, i, t, rojo]) => `<button class="sj-acc${rojo ? ' sj-acc-rojo' : ''}" data-sj="${v}">${ico(i)}<span>${t}</span></button>`).join('');
     const borradores = puedeCrear ? d.reuniones.filter((r) => r.estado === 'borrador') : [];
     return `<div class="sj-top"><div class="sj-hero"><img src="/assets/sala/sala-hero.webp" alt="SubliStudio 3D · Nuestra sala virtual de fundadores"></div>
-        <div class="sj-der"><div class="sj-kpis">${kpis}</div>${prox}</div></div>
+        <div class="sj-der">${miTelegram()}<div class="sj-kpis">${kpis}</div>${prox}</div></div>
       <div class="sj-accs sj-n${puedeCrear ? 6 : 4}">${acc}</div>
       ${borradores.length ? `<div class="sj-card sj-borr"><b>Borradores</b>${borradores.map((r) => `<button class="sj-fila" data-sj="editar" data-id="${r.id}"><span>${esc(r.titulo || 'Sin título')}</span><small>${r.inicioMs ? esc(fechaLarga(r)) : 'Sin fecha'}</small>${pill('borrador')}</button>`).join('')}</div>` : ''}
       <div class="sj-dos">${puedeCrear ? formulario(true) : misInvitaciones()}${p ? antesala(true) : `<div class="sj-card sj-vacio">${ico('puerta')}<b>Antesala virtual</b><p>Se activa cuando haya una reunión programada.</p></div>`}</div>`;
@@ -170,11 +170,26 @@
     const lista = st.data.reuniones.filter((r) => ['programada', 'en_curso'].includes(r.estado));
     return `<div class="sj-card sj-pn"><div class="sj-ph">${ico('campana')}<b>Mis invitaciones</b></div>${lista.length ? lista.map(filaReunion).join('') : '<p class="sj-p">No tiene invitaciones pendientes.</p>'}</div>`;
   }
+  // R182 · estado de la convocatoria por persona: lo que respondió la API de Telegram (enviado ≠ leído)
   function avisosTxt(r) {
     if (!r.avisos) return '';
-    const a = r.avisos, nombre = { naara: 'Naara', libni: 'Libni', geisell: 'Geisell' }, tipo = { invitacion: 'invitación', h24: 'aviso 24 h', h1: 'aviso 1 h', m10: 'aviso 10 min', inicio: 'aviso de inicio', cancelacion: 'aviso de cancelación' };
-    return `<div class="sj-avisos">${ico('enviar')}<span>Telegram: <b>${a.enviado}</b> enviado${a.enviado === 1 ? '' : 's'} · ${a.pendiente} programado${a.pendiente === 1 ? '' : 's'}${a.fallido ? ` · <b class="sj-mal">${a.fallido} sin entregar</b>` : ''}</span></div>` +
-      (a.fallas || []).slice(0, 4).map((f) => `<div class="sj-falla">${esc(nombre[f.usuario] || f.usuario)} · ${esc(tipo[f.tipo] || f.tipo)}: ${esc(/vinculado/.test(f.error) ? 'su cuenta no tiene Telegram vinculado' : /blocked|403|initiate|chat not found/i.test(f.error) ? 'no ha iniciado el bot o lo bloqueó (debe escribirle /start)' : 'Telegram no lo aceptó')}</div>`).join('');
+    const a = r.avisos, pu = a.porUsuario || {}, tg = st.data.telegram || {};
+    const tipo = { invitacion: 'invitación', h24: 'aviso 24 h', h1: 'aviso 1 h', m10: 'aviso 10 min', inicio: 'aviso de inicio', cancelacion: 'aviso de cancelación' };
+    const otros = r.participantes.filter((u) => u !== 'naara');
+    const E = { enviado: ['verde', 'ENVIADO'], pendiente: ['gris', 'EN COLA'], enviando: ['gris', 'EN COLA'], sin_vinculo: ['ambar', 'PENDIENTE · sin Telegram'], fallido: ['rojo', 'NO ENTREGADO'], anulado: ['gris', 'anulado'] };
+    const chips = otros.map((u) => { const e = (pu[u] || {}).estado || (tg[u] && tg[u].estado !== 'listo' ? 'sin_vinculo' : 'pendiente'); const x = E[e] || ['gris', e]; return `<span class="sj-chip sj-${x[0]}" title="${esc((pu[u] || {}).error || '')}">${esc(nomVis(u))}: ${x[1]}</span>`; }).join('');
+    const faltan = otros.filter((u) => ((pu[u] || {}).estado || '') === 'sin_vinculo' || (tg[u] && tg[u].estado !== 'listo' && !(pu[u] || {}).estado));
+    const completo = otros.length && otros.every((u) => (pu[u] || {}).estado === 'enviado');
+    return `<div class="sj-avisos">${ico('enviar')}<span>Telegram: ${completo ? '<b class="sj-bien">convocatoria enviada a todas las personas</b>' : `<b class="sj-mal">envío incompleto</b>`} · ${a.enviado} enviado${a.enviado === 1 ? '' : 's'} · ${a.pendiente} programado${a.pendiente === 1 ? '' : 's'}${a.fallido ? ` · ${a.fallido} sin entregar` : ''}</span></div><div class="sj-chips sj-chips-tg">${chips}</div>` +
+      (faltan.length ? `<div class="sj-falla">${esc(faltan.map(nomVis).join(', '))}: debe${faltan.length > 1 ? 'n' : ''} abrir Sublichat → Sala de Juntas → <b>Vincular Telegram</b> y tocar Iniciar en el bot. <button class="sj-btn sj-sec sj-mini" data-sj="reintentarAvisos" data-id="${r.id}">Reintentar envío</button></div>` : '') +
+      (a.fallas || []).filter((f) => !faltan.includes(f.usuario)).slice(0, 4).map((f) => `<div class="sj-falla">${esc(nomVis(f.usuario))} · ${esc(tipo[f.tipo] || f.tipo)}: ${esc(/blocked|403|initiate|chat not found/i.test(f.error) ? 'bloqueó al bot o no lo ha iniciado (debe tocar Iniciar en el bot)' : 'Telegram no lo aceptó')}</div>`).join('');
+  }
+  // R182 · tarjeta "Mi Telegram" para cualquier participante
+  function miTelegram() {
+    const yo = st.data.yo.id, t = (st.data.telegram || {})[yo] || { estado: 'sin_vincular' };
+    if (t.estado === 'listo') return `<div class="sj-tg sj-tg-ok">${ico('enviar')}<span><b>Telegram vinculado</b><small>Aquí le llegan convocatorias y recordatorios.${t.fuente === 'vercel' ? ' (Configurado por Sublicuentas)' : ''}</small></span></div>`;
+    const txt = t.estado === 'bloqueado' ? 'Telegram rechazó el mensaje: desbloquee el bot y vuelva a vincular.' : t.estado === 'pendiente' ? 'Abrió el enlace pero falta tocar Iniciar en el bot.' : 'Vincule su Telegram para recibir convocatorias y recordatorios.';
+    return `<div class="sj-tg sj-tg-no" role="status">${ico('enviar')}<span><b>Telegram ${t.estado === 'bloqueado' ? 'bloqueado' : 'sin vincular'}</b><small>${esc(txt)}</small></span><div class="sj-fila-btn">${st.data.botTelegram ? `<button class="sj-btn sj-rojo sj-mini" data-sj="tgVincular">Vincular Telegram</button>` : '<small>Falta configurar el bot en Vercel (TELEGRAM_BOT_USERNAME).</small>'}<button class="sj-btn sj-sec sj-mini" data-sj="tgComprobar">Ya lo hice</button></div></div>`;
   }
   function filaReunion(r) {
     const mia = (r.invitaciones || {})[st.data.yo.id] || { estado: 'pendiente' }, x = RSVP[mia.estado] || RSVP.pendiente;
@@ -344,7 +359,7 @@
   function formulario(embebido) {
     const r = st.editar || { titulo: '', fecha: '', hora: '', agenda: [], participantes: ['naara', 'libni', 'geisell'], recordatorios: { h24: true, h1: true, m10: true }, duracionMin: 60 };
     const ed = !!r.id;
-    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Anfitriona · Super Admin' : f.invitado ? (f.cargo || 'Invitado') : 'Socia fundadora')}</small><small class="sj-perm">${f.anfitriona ? 'Modera, da la palabra, graba y cierra la sala' : 'Voz, cámara, chat, mano y presentar'}</small></span></label>`).join('');
+    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Anfitriona · Super Admin' : f.invitado ? (f.cargo || 'Invitado') : 'Socia fundadora')}</small><small class="sj-perm">${f.anfitriona ? 'Modera, da la palabra, graba y cierra la sala' : 'Voz, cámara, chat, mano y presentar'}</small>${(() => { if (f.anfitriona) return ''; const t = (st.data.telegram || {})[f.id]; return t ? `<small class="sj-tgchip sj-tg-${t.estado === 'listo' ? 'listo' : 'pend'}">Telegram: ${t.estado === 'listo' ? 'LISTO' : t.estado === 'bloqueado' ? 'BLOQUEADO' : 'PENDIENTE · sin vincular'}</small>` : ''; })()}</span></label>`).join('');
     const rec = [['h24', '24 horas antes'], ['h1', '1 hora antes'], ['m10', '10 minutos antes']].map(([k, t]) => `<label class="sj-rec">${ico('campana')}<span>${t}</span><input type="checkbox" role="switch" class="sj-sw" name="sjRec" value="${k}" ${r.recordatorios[k] !== false ? 'checked' : ''}></label>`).join('');
     return `<form class="sj-card sj-pn sj-form" id="sjForm" novalidate>
       <div class="sj-ph">${ico('calPlus')}<b>${ed ? 'Editar convocatoria' : 'Crear nueva convocatoria'}</b>${ed ? pill(r.estado) : ''}</div>
@@ -411,7 +426,8 @@
     st.guardando = 'form'; marcarOcupado(true);
     try {
       const r = await api({ ...datos, accion: ed ? 'editar' : 'crear', id: ed || undefined, borrador });
-      toast(borrador ? 'Borrador guardado.' : (ed ? 'Reunión reprogramada. Las invitadas deben confirmar de nuevo si cambió la hora.' : 'Convocatoria programada. Quedó lista para enviarse por Telegram.'));
+      const inc = (r && r.envioIncompleto) || [];
+      toast(borrador ? 'Borrador guardado.' : inc.length ? `Convocatoria guardada. Envío INCOMPLETO: ${inc.map(nomVis).join(', ')} no tiene${inc.length > 1 ? 'n' : ''} Telegram vinculado.` : (ed ? 'Reunión reprogramada. Las invitadas deben confirmar de nuevo si cambió la hora.' : 'Convocatoria programada. Sale por Telegram a todas las personas; el estado de cada una aparece en la reunión.'), !!inc.length);
       st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; st.vista = 'inicio'; st.guardando = ''; await cargar(true, true);
       return r;
     } catch (e) { st.guardando = ''; marcarOcupado(false); toast(e.message, true); }
@@ -444,7 +460,8 @@
           ${mia.estado === 'pendiente' && yo.id !== 'naara' ? `<div class="sj-fila-btn"><button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="aceptada">Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="rechazada">No asistiré</button></div>` : ''}
         </div>
       </div>
-      <div class="sj-ante-acc">
+      ${esperaHtml(r)}
+      <div class="sj-ante-acc"${st.espera && st.espera.id === r.id ? ' hidden' : ''}>
         <button class="sj-btn sj-rojo sj-grande" data-sj="entrar" data-id="${r.id}" ${puedeEntrar ? '' : 'disabled'}>${ico('sala')}Entrar a la Sala de Juntas 3D</button>
         <button class="sj-btn sj-sec" data-sj="verSala" data-id="${r.id}">${ico('play')}Ver la sala 3D (vista previa)</button>
         ${st.data.permisos.moderar ? `<button class="sj-btn ${r.salaAbierta ? 'sj-sec' : 'sj-ok'}" data-sj="${r.salaAbierta ? 'cerrar' : 'abrir'}" data-id="${r.id}">${r.salaAbierta ? 'Cerrar sala' : 'Abrir sala'}</button>` : ''}
@@ -514,7 +531,7 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r177');
+    M3 = await import('/sala-3d.js?v=20261106-r183');
     return M3;
   }
   function desmontar3D() { if (esc3) { try { esc3.destruir(); } catch (_) {} esc3 = null; } if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -540,7 +557,7 @@
         <div class="sj-ed-op" id="sjOps">${panel}</div>
         <div class="sj-ed-3d"><canvas id="sjEdCanvas" aria-label="Vista 360° de su personaje. Arrastre para girar."></canvas><span class="sj-ed-nom" id="sjEdNom">${esc((c.nombre || '').trim() || nomDef)}</span>
           <button type="button" class="sj-rot sj-rot-i" data-sj="rotar" data-d="-0.6" aria-label="Girar a la izquierda">‹</button><button type="button" class="sj-rot sj-rot-d" data-sj="rotar" data-d="0.6" aria-label="Girar a la derecha">›</button>
-          <div class="sj-ed-cam" role="group" aria-label="Cámara del personaje">${[['frente', 'Frente'], ['lado', 'Lateral'], ['tresCuartos', '3/4'], ['espalda', 'Espalda']].map(([v, t]) => `<button type="button" data-sj="vistaPers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="giro360" aria-pressed="false">360°</button><button type="button" data-sj="zoomPers" data-d="0.6" aria-label="Acercar">+</button><button type="button" data-sj="zoomPers" data-d="-0.6" aria-label="Alejar">−</button><button type="button" data-sj="camReset" aria-label="Restablecer cámara">↺</button></div>
+          <div class="sj-ed-cam" role="group" aria-label="Cámara del personaje">${[['frente', 'Frente'], ['lado', 'Lateral'], ['tresCuartos', '3/4'], ['espalda', 'Espalda']].map(([v, t]) => `<button type="button" data-sj="vistaPers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="giro360" aria-pressed="false">360°</button><span class="sj-ed-sep"></span>${[['rostro', 'Rostro'], ['torso', 'Torso'], ['cuerpo', 'Cuerpo']].map(([v, t]) => `<button type="button" data-sj="enfoquePers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="zoomPers" data-d="0.6" aria-label="Acercar">+</button><button type="button" data-sj="zoomPers" data-d="-0.6" aria-label="Alejar">−</button><button type="button" data-sj="camReset" aria-label="Restablecer cámara">↺</button></div>
           <div class="sj-ed-carga" id="sjEdCarga">Cargando 3D…</div></div>
       </div>
       <div class="sj-form-acc sj-ed-acc">
@@ -624,6 +641,47 @@
 
   // ---------- R170 · Fase 4: reunión en vivo (LiveKit) ----------
   // st.vivo = { id, ctl, estado, presentes:Set, mics:{}, hablantes:[], auto, chat:[], panel, pantalla:{track,de}, videos:{}, expira }
+  // ---------- R181 · sala de espera (invitado que llega tarde) y aprobación exclusiva de Sublicuentas ----------
+  let esperaTimer = null;
+  function pararEspera() { clearInterval(esperaTimer); esperaTimer = null; }
+  function seguirEspera() {
+    pararEspera();
+    esperaTimer = setInterval(async () => {
+      const E = st.espera; if (!E) return pararEspera();
+      if (!E.sol || E.sol.estado !== 'pendiente') return;
+      try { const j = await api({ accion: 'solicitud_estado', id: E.id, requestId: E.sol.requestId }); if (st.espera !== E) return; E.sol = j.solicitud;
+        if (E.sol && E.sol.estado === 'aprobada') { pararEspera(); toast('Sublicuentas aprobó su ingreso.'); st.espera = null; return entrarVivo(E.id); }
+        if (!E.sol || E.sol.estado !== 'pendiente') pararEspera();
+        pintarEspera(); } catch (_) {}
+    }, 3000);
+  }
+  function esperaHtml(r) {
+    const E = st.espera; if (!E || E.id !== r.id) return '';
+    const s = E.sol; const est = !s ? 'sin' : s.estado;
+    const T = { sin: ['SIN SOLICITAR', 'Pida permiso para entrar. Mientras tanto no puede escuchar ni ver nada de la reunión.'], pendiente: ['ESPERANDO', 'Su solicitud llegó a Sublicuentas. Aún no puede escuchar ni ver contenido privado.'], rechazada: ['RECHAZADA', 'Sublicuentas no aprobó su ingreso a esta reunión.'], vencida: ['VENCIDA', 'Nadie respondió en 2 minutos. Puede solicitar de nuevo.'], expulsado: ['FUERA DE LA SALA', 'La anfitriona lo sacó de esta reunión. Para volver necesita una nueva convocatoria.'] }[est] || ['—', ''];
+    const seg = s && s.estado === 'pendiente' ? Math.max(0, Math.round((s.expiraMs - Date.now()) / 1000)) : 0;
+    return `<div class="sj-espera" id="sjEspera" role="status" aria-live="polite"><b class="sj-espera-t">${ico('reloj')}La junta ya comenzó</b><p>${esc(T[1])}</p>
+      <div class="sj-espera-e"><span>Estado: <b class="sj-est-${est}">${T[0]}</b>${seg ? ` <small>(vence en ${seg} s)</small>` : ''}</span><span>Anfitriona: Sublicuentas</span></div>
+      <div class="sj-fila-btn">${['sin', 'rechazada', 'vencida'].includes(est) ? `<button class="sj-btn sj-rojo" data-sj="solicitarIngreso" data-id="${r.id}">${est === 'sin' ? 'Solicitar ingreso' : 'Solicitar de nuevo'}</button>` : ''}<button class="sj-btn sj-sec" data-sj="cancelarEspera">Cancelar</button></div></div>`;
+  }
+  function pintarEspera() { const el = document.getElementById('sjEspera'); const r = st.ante; if (el && r) el.outerHTML = esperaHtml(r); }
+  async function revisarSolicitudes(V) {
+    if (st.vivo !== V || V.solOcupado) return; V.solOcupado = true;
+    try {
+      const j = await api({ accion: 'solicitudes', id: V.id }); if (st.vivo !== V) return;
+      const lista = j.solicitudes || []; const antes = new Set((V.sol || []).map((x) => x.requestId)); V.sol = lista;
+      lista.filter((x) => !antes.has(x.requestId)).forEach((x) => toast(`🔔 ${x.nombre} pide entrar a la reunión.`));
+      let el = document.getElementById('sj3dSol');
+      if (!lista.length) { el?.remove(); return; }
+      if (!el) { el = document.createElement('div'); el.id = 'sj3dSol'; el.className = 'sj3d-sol'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Solicitudes de acceso'); (document.getElementById('sj3dEscena') || host).appendChild(el); }
+      const clave = lista.map((x) => x.requestId).join(',');
+      if (el.dataset.clave === clave) { lista.forEach((x) => { const c = el.querySelector(`[data-req="${CSS.escape(x.requestId)}"] .sj3d-sol-vence`); if (c) c.textContent = `vence en ${Math.max(0, Math.round((x.expiraMs - Date.now()) / 1000))} s`; }); return; } // no rehace los botones (no se mueven bajo el dedo)
+      el.dataset.clave = clave;
+      el.innerHTML = lista.map((x) => `<div class="sj3d-sol-c" data-req="${esc(x.requestId)}"><b>${ico('grupo')}Solicitud de acceso</b><p><b>${esc(nomVis(x.usuario) || x.nombre)}</b> intenta entrar a la reunión iniciada.</p>
+        <small>${ico('check')}Identidad verificada · Sala: ${esc(st.sala3dReu?.titulo || '')}</small><small>Estado: solicitud pendiente · <span class="sj3d-sol-vence">vence en ${Math.max(0, Math.round((x.expiraMs - Date.now()) / 1000))} s</span></small>
+        <div class="sj-fila-btn"><button class="sj-btn sj-ok sj-mini" data-sj="resolverSol" data-u="${esc(x.usuario)}" data-req="${esc(x.requestId)}" data-ok="1">Aceptar</button><button class="sj-btn sj-sec sj-mini" data-sj="resolverSol" data-u="${esc(x.usuario)}" data-req="${esc(x.requestId)}" data-ok="0">Rechazar</button></div></div>`).join('');
+    } catch (_) {} finally { V.solOcupado = false; }
+  }
   async function entrarVivo(id) {
     if (st.vivo || st.guardando) return;
     const r = st.ante && st.ante.id === id ? st.ante : (st.data.proxima && st.data.proxima.id === id ? st.data.proxima : null); if (!r) return;
@@ -631,11 +689,14 @@
     st.guardando = 'entrar'; detenerMic();
     let j; try { j = await api({ accion: 'token_tiempo_real', id }); } catch (e) { st.guardando = ''; return toast(e.message, true); }
     st.guardando = '';
+    if (j.espera) { st.espera = { id, sol: j.solicitud }; pintar(); seguirEspera(); return; } // R181 · la junta ya empezó: sala de espera
+    pararEspera(); st.espera = null;
     st.vivo = { id, ctl: null, estado: 'conectando', presentes: new Set([st.data.yo.id]), mics: {}, hablantes: [], auto: true, chat: [], noLeidos: 0, panel: '', pantalla: null, videos: {}, expira: j.expiraMs, ultimoCorte: 0, candidato: null, desde: 0 };
     st.sala3dReu = r; st.volver3d = 'antesala'; st.vista = 'sala3d'; pintar(); window.scrollTo({ top: 0 });
     const V = st.vivo;
+    if (st.data.yo.id === 'naara') { V.solTimer = setInterval(() => revisarSolicitudes(V), 4000); setTimeout(() => revisarSolicitudes(V), 600); } // R181
     try {
-      const L = await import('/sala-vivo.js?v=20261105-r175');
+      const L = await import('/sala-vivo.js?v=20261106-r183');
       V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
         estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
         presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
@@ -668,6 +729,7 @@
   }
   function salirVivo(volver) {
     const V = st.vivo; if (!V) return; st.vivo = null;
+    clearInterval(V.solTimer); document.getElementById('sj3dSol')?.remove();
     clearTimeout(V.tope); clearTimeout(V.avisoTope); clearInterval(V.cuenta);
     Object.values(V.videos).forEach((el) => el.remove());
     if (V.pantallaEl) V.pantallaEl.remove();
@@ -682,6 +744,7 @@
   function aplicarVivo3D() {
     const V = st.vivo; if (!V || !sala3) return;
     if (V.modoGrab) sala3.modoGrabacion(true);
+    if (V.ctl && V.ctl.nivel && sala3.setFuenteNivel) sala3.setFuenteNivel((id) => (st.vivo === V && V.ctl ? V.ctl.nivel(id) : 0)); // R183 · boca por nivel de voz real
     (st.sala3dReu?.participantes || []).forEach((u) => { sala3.setPresente(u, V.presentes.has(u)); sala3.setMicro(u, V.mics[u] !== false); sala3.setMano(u, (V.manos?.cola || []).some((x) => x.id === u)); });
     pintarPres();
     pintarPanel(); pintarBarra();
@@ -974,11 +1037,18 @@
       return;
     }
     if (a === 'entrar') return entrarVivo(id);
+    if (a === 'tgVincular') { const w = window.open('about:blank', '_blank'); try { const j = await api({ accion: 'telegram_vincular' }); if (w) w.location.href = j.url; else location.href = j.url; toast('Se abrió el bot de Sublicuentas: toque «Iniciar». Luego vuelva y toque «Ya lo hice».'); } catch (e) { if (w) w.close(); toast(e.message, true); } return; }
+    if (a === 'tgComprobar') { try { const j = await api({ accion: 'telegram_estado' }); st.data.telegram = { ...(st.data.telegram || {}), [st.data.yo.id]: j.telegram }; pintar(); toast(j.telegram.estado === 'listo' ? '✅ Telegram vinculado.' : 'Todavía no aparece vinculado. Abra el enlace y toque Iniciar en el bot.', j.telegram.estado !== 'listo'); } catch (e) { toast(e.message, true); } return; }
+    if (a === 'reintentarAvisos') { try { const j = await api({ accion: 'reintentar_avisos', id }); toast(j.reactivados ? `Se reenvían ${j.reactivados} aviso(s).` + (j.faltan.length ? ` Aún sin Telegram: ${j.faltan.map(nomVis).join(', ')}.` : '') : `Aún sin Telegram: ${j.faltan.map(nomVis).join(', ') || '—'}.`, !!j.faltan.length); await cargar(true, true); } catch (e) { toast(e.message, true); } return; }
+    if (a === 'solicitarIngreso') { try { const j = await api({ accion: 'solicitar_ingreso', id }); if (!st.espera) st.espera = { id }; st.espera.sol = j.solicitud; pintarEspera(); seguirEspera(); toast('Solicitud enviada a Sublicuentas.'); } catch (e) { toast(e.message, true); } return; }
+    if (a === 'cancelarEspera') { pararEspera(); st.espera = null; return pintar(); }
+    if (a === 'resolverSol') { const V = st.vivo; if (!V) return; b.disabled = true; try { await api({ accion: 'resolver_solicitud', id: V.id, usuario: b.dataset.u, requestId: b.dataset.req, aprobar: b.dataset.ok === '1' }); toast(b.dataset.ok === '1' ? `✅ ${nomVis(b.dataset.u)} puede entrar.` : `Solicitud de ${nomVis(b.dataset.u)} rechazada.`); } catch (e) { toast(e.message, true); } V.sol = []; return revisarSolicitudes(V); }
     if (a.startsWith('lk')) return accionVivo(a, b);
     if (a === 'tabPers') { st.pers.tab = b.dataset.t; const ed = ed3; ed3 = null; const cfg = st.pers; const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; host.querySelectorAll('.sj-tab').forEach((x) => { const on = x.dataset.t === cfg.tab; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }); ed3 = ed; return; }
     if (a === 'rotar') { if (ed3) ed3.rotar(Number(b.dataset.d)); return; }
     if (a === 'guardarPers') return guardarPersonaje();
     if (a === 'vistaPers') { if (ed3) ed3.vista(b.dataset.v); host.querySelector('[data-sj="giro360"]')?.setAttribute('aria-pressed', 'false'); return; }
+    if (a === 'enfoquePers') { if (ed3 && ed3.enfocar) ed3.enfocar(b.dataset.v); return; }
     if (a === 'giro360') { if (ed3) b.setAttribute('aria-pressed', String(ed3.girar())); return; }
     if (a === 'zoomPers') { if (ed3) ed3.zoom(Number(b.dataset.d)); return; }
     if (a === 'camReset') { if (ed3) ed3.reiniciar(); return; }
@@ -1170,6 +1240,11 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-esc-sws{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px}.sj-esc-sug{padding:4px 0 10px}.sj-esc-sug b{display:block;font:700 13px Inter,sans-serif;margin-bottom:6px}
 .sj3d-limpio{display:none!important}.sj3d-modo{border-bottom:1px solid #EEF0F3}.sj3d-modo .sj-rec span{display:flex;flex-direction:column;gap:2px}.sj3d-modo small{color:#6B7280;font-size:12px;font-weight:400}
 .sj-hora{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.sj-hora b{font-weight:700;color:#1F2430}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-hora select{width:auto;min-width:64px;padding:9px 8px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-hora select[name=ampm]{min-width:96px}
+.sj-tg{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:14px;padding:10px 14px;margin-bottom:12px;border:1px solid #E7EAF0;background:#fff}.sj-tg>span{display:flex;flex-direction:column;flex:1;min-width:180px}.sj-tg small{color:#6B7280;font-size:12px}.sj-tg .sj-i{width:18px;height:18px}.sj-tg-ok .sj-i{color:#1C7C45}.sj-tg-no{border-color:#F5D48A;background:#FFFBF0}.sj-tg-no .sj-i{color:#8A5A00}
+.sj-tgchip{display:inline-block;margin-top:3px;font-size:11px!important;font-weight:700;padding:1px 7px;border-radius:999px}.sj-tg-listo{background:#E6F6EC;color:#1C7C45!important}.sj-tg-pend{background:#FFF3D6;color:#8A5A00!important}.sj-bien{color:#1C7C45}.sj-chips-tg{margin-top:4px}
+.sj-espera{border:1px solid #F5C2BE;background:#FFF7F6;border-radius:14px;padding:14px 16px;margin:12px 0;display:grid;gap:8px}.sj-espera p{margin:0;color:#4A5565;font-size:14px}.sj-espera-t{display:flex;gap:6px;align-items:center;font-size:16px}.sj-espera-t .sj-i{width:18px;height:18px;color:#E2231A}
+.sj-espera-e{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px}.sj-est-pendiente{color:#8A5A00}.sj-est-rechazada,.sj-est-expulsado{color:#B42318}.sj-est-vencida{color:#58616D}
+.sj3d-sol{position:absolute;top:64px;right:12px;z-index:30;display:grid;gap:8px;width:min(340px,calc(100% - 24px))}.sj3d-sol-c{background:#fff;border:1px solid #E7EAF0;border-radius:14px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.18);display:grid;gap:4px;color:#1F2430}.sj3d-sol-c b{display:flex;gap:6px;align-items:center}.sj3d-sol-c p{margin:0;font-size:14px}.sj3d-sol-c small{color:#6B7280;font-size:12px;display:flex;gap:4px;align-items:center}.sj3d-sol-c .sj-i{width:14px;height:14px}
 .sj-perm{display:block;color:#8A919C;font-size:11px;margin-top:1px}
 .sj-sug-nota{display:flex;gap:6px;align-items:flex-start;background:#F6F7F9;border-radius:10px;padding:8px 10px;margin:2px 0 6px}.sj-sug-nota .sj-i{width:15px;height:15px;color:#1C7C45;flex:none;margin-top:1px}
 .sj-ed-nom{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(20,25,32,.88);color:#fff;font:600 13px Inter,sans-serif;padding:5px 12px;border-radius:999px;white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis;z-index:2;pointer-events:none}
@@ -1206,7 +1281,7 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{all:unset;cursor:pointer;font:600 12px Inter,sans-serif;color:#1F2430;padding:6px 10px;border-radius:999px;min-width:16px;text-align:center}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button:hover{background:#F2F3F6}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button[aria-pressed=true]{background:#E2231A;color:#fff}
-.sj-ed-cam{max-width:calc(100% - 16px);overflow-x:auto;scrollbar-width:none}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{flex:none;white-space:nowrap}
+.sj-ed-sep{width:1px;align-self:stretch;background:#E7EAF0;margin:0 2px;flex:none}.sj-ed-cam{max-width:calc(100% - 16px);overflow-x:auto;scrollbar-width:none}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{flex:none;white-space:nowrap}
 @media (max-width:520px){#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{padding:6px 7px;font-size:11px}}
 /* R171 · Fase 5: pantalla completa, mano/turnos, reacciones, modo presentación */
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font:600 13px Inter,sans-serif;color:#fff;background:#222833;border:1px solid #2F3744;border-radius:999px;padding:7px 13px}

@@ -7327,6 +7327,11 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     try{
       const r=await fetch('/api/permisos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'mis_permisos'})});
       const j=await r.json().catch(()=>({}));
+      if(j&&j.ok&&j.retirado){ // R180 · Sublicuentas retiró este usuario: se cierra la sesión en este equipo
+        try{localStorage.removeItem(PERM_KEY);}catch(_){}
+        try{alert('Su usuario fue dado de baja en Sublichat. Consulte con Sublicuentas.');}catch(_){}
+        const lo=document.getElementById('logoutBtn'); if(lo) lo.click(); return;
+      }
       if(j&&j.ok&&Array.isArray(j.pantallas)){
         const antes=JSON.stringify(permisosVigentes()&&permisosVigentes().pantallas);
         permisosSrv={usuario:j.usuario,supervisor:!!j.supervisor,pantallas:j.pantallas,modulos:j.modulos||{}};
