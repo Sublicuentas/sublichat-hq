@@ -168,6 +168,15 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - **Durante la reunión:** estados por asistente (En la sala, Hablando, Mano levantada, Micrófono apagado, No ha entrado). **Modo grabación** en Ajustes: plano frontal, luz más limpia, sin plantas/cuadros/utilería ni nombres.
 - Pendiente de decidir: invitar a usuarios autorizados además de las 3 fundadoras (requiere permisos de Sala por usuario y asientos extra).
 
+## R178 — hora con a. m./p. m.
+- Hora en 3 casillas (1–12, minutos 00–59, a. m./p. m.) + botón "Ahora". Se puede convocar para el momento (hasta 10 min atrás). Si la hora ya pasó, el aviso dice la hora real de Honduras.
+
+## R179 — Sala de Juntas como módulo de Permisos
+- "Sala de Juntas (SubliStudio 3D)" aparece en Permisos (Sublicuentas) como cualquier módulo. Fundadoras: activo por defecto. Demás usuarios: apagado hasta que Sublicuentas lo active.
+- Quien tiene el módulo aparece en "¿Con quién es la reunión?" como **Invitado · <rol>**, ve solo las reuniones donde lo invitan, arma su personaje (base masculina por defecto, editable) y se sienta en un asiento libre del escenario.
+- Si Sublicuentas le quita el módulo a una fundadora (excepto Naara), pierde el acceso.
+- Telegram: solo a las fundadoras (el bot conoce sus chats). Los invitados ven la convocatoria en Sublichat. Hasta 8 participantes; si se acaban los asientos del escenario, la persona participa con voz pero sin personaje.
+
 ## Riesgos conocidos
 - Escenarios hechos con geometría simple: la distribución, colores, luces y mobiliario siguen el PDF, pero no el detalle de ilustración (personas en la sala, ventanas, libreros completos).
 - Grabar consume CPU en el equipo de Naara; si la máquina es lenta, la sala 3D baja de calidad sola.
