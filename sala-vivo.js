@@ -31,7 +31,7 @@ export async function conectar({ url, token, yo, on = {} }) {
     videoCaptureDefaults: { resolution: { width: 640, height: 360, frameRate: 24 } }, // cámara liviana: ahorra minutos y datos
   });
   const audios = new Map(); // sid → <audio>
-  let cerrado = false; const limEnvio = limitador(); const limRecibe = {};
+  let cerrado = false; let pres = null; const limEnvio = limitador(); const limRecibe = {};
   let ultimoTurno = '';
   const presentes = () => { const s = new Set([yo]); room.remoteParticipants.forEach((p) => s.add(p.identity)); return s; };
   const micDe = (p) => !!p && p.isMicrophoneEnabled;
@@ -119,6 +119,29 @@ export async function conectar({ url, token, yo, on = {} }) {
       await lp.setScreenShareEnabled(v, { audio: false, resolution: { width: 1920, height: 1080, frameRate: 15 } });
       const pub = lp.getTrackPublication(Track.Source.ScreenShare); emitir('pantalla', v && pub?.track ? pub.track : null, yo);
       return lp.isScreenShareEnabled;
+    },
+    // R173 · presentar un archivo local (imagen/PDF/video) como pantalla compartida; no se sube a ningún lado
+    // R173 · Ajustes: elegir micrófono y salida de audio
+    async dispositivos() {
+      const lista = async (k) => { try { return (await Room.getLocalDevices(k, false)).map((d, i) => ({ id: d.deviceId, nombre: d.label || (k === 'audioinput' ? 'Micrófono ' : 'Salida ') + (i + 1) })); } catch (_) { return []; } };
+      return { mic: await lista('audioinput'), salida: await lista('audiooutput'), micActual: room.getActiveDevice('audioinput') || 'default', salidaActual: room.getActiveDevice('audiooutput') || 'default' };
+    },
+    async usarDispositivo(tipo, id) { if (!['audioinput', 'audiooutput'].includes(tipo)) return false; return room.switchActiveDevice(tipo, String(id)); },
+    get presentando() { return !!pres; },
+    async presentar(p) {
+      if (pres) await this.dejarDePresentar();
+      if (lp.isScreenShareEnabled) await lp.setScreenShareEnabled(false);
+      const pubV = await lp.publishTrack(p.pistas.video, { source: Track.Source.ScreenShare, name: 'presentacion', simulcast: false, videoEncoding: { maxBitrate: 2500000, maxFramerate: p.tipo === 'video' ? 30 : 5 } });
+      let pubA = null;
+      if (p.pistas.audio) { try { pubA = await lp.publishTrack(p.pistas.audio, { source: Track.Source.ScreenShareAudio, name: 'presentacion-audio', dtx: false, red: false }); } catch (_) { pubA = null; } }
+      pres = { pubV, pubA };
+      emitir('pantalla', pubV.track, yo); avisarPresencia();
+    },
+    async dejarDePresentar() {
+      const x = pres; pres = null; if (!x) return;
+      try { if (x.pubA?.track) await lp.unpublishTrack(x.pubA.track, true); } catch (_) {}
+      try { if (x.pubV?.track) await lp.unpublishTrack(x.pubV.track, true); } catch (_) {}
+      emitir('pantalla', null, yo);
     },
     async chat(t) { t = String(t || '').trim().slice(0, 500); if (!t) return; await enviar('chat', { t }); emitir('chat', { de: yo, nombre: lp.name || yo, t, ms: Date.now(), mio: true }); },
     async reaccion(e) { if (!EMOJIS.includes(e)) return false; if (!limEnvio()) return false; await enviar('reaccion', { e }); emitir('reaccion', yo, e); return true; },

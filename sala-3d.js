@@ -154,7 +154,7 @@ function ajustar(r, cam, el) { const w = el.clientWidth || 600, h = el.clientHei
 
 // ---------- R172 · avatares reales (GLB) con respaldo ----------
 let moduloGLB = null;
-const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r172'));
+const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r173'));
 // Crea el avatar 3D real; si el modelo no carga (sin red, equipo sin soporte) usa el personaje anterior y lo avisa.
 export async function crearAvatar3D(cfg = {}, opts = {}) {
   try { const M = await avatarGLB(); const g = await M.crearAvatar(cfg, opts); g.userData.glb = g.userData.avatar; g.userData.t0 = Math.random() * 10; return g; }
@@ -324,6 +324,21 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const vistaDe = (id) => { const a = ASIENTOS[id]; const frente = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)); return { pos: new THREE.Vector3(a.x, 1.6, a.z).add(frente.multiplyScalar(2.3)), mira: new THREE.Vector3(a.x, 1.2, a.z) }; };
   let actual = { pos: VISTAS.general.pos.clone(), mira: VISTAS.general.mira.clone() }, desde = null, hacia = null, tIni = 0, dur = 900, modo = 'general', panT = 0;
   cam.position.copy(actual.pos); cam.lookAt(actual.mira);
+  // R173 · cámara libre: arrastrar para girar alrededor de la mesa, rueda o pellizco para acercar
+  const libre = { az: 0, el: 0.42, dist: 5.4 };
+  const posLibre = () => new THREE.Vector3(Math.sin(libre.az) * Math.cos(libre.el) * libre.dist, 0.9 + Math.sin(libre.el) * libre.dist, Math.cos(libre.az) * Math.cos(libre.el) * libre.dist);
+  VISTAS.libre = { get pos() { return posLibre(); }, mira: new THREE.Vector3(0, 0.9, 0) };
+  let arr = null; const pts = new Map();
+  canvas.style.touchAction = 'none';
+  canvas.addEventListener('pointerdown', (e) => { if (modo !== 'libre') return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); arr = { x: e.clientX, y: e.clientY, d: null }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', (e) => {
+    if (modo !== 'libre' || !arr || !pts.has(e.pointerId)) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (arr.d) libre.dist = Math.min(8, Math.max(2.2, libre.dist * arr.d / d)); arr.d = d; return; }
+    libre.az -= (e.clientX - arr.x) * 0.006; libre.el = Math.min(1.25, Math.max(0.08, libre.el + (e.clientY - arr.y) * 0.004)); arr.x = e.clientX; arr.y = e.clientY;
+  });
+  const soltar = (e) => { pts.delete(e.pointerId); if (!pts.size) arr = null; else if (arr) arr.d = null; };
+  canvas.addEventListener('pointerup', soltar); canvas.addEventListener('pointercancel', soltar);
+  canvas.addEventListener('wheel', (e) => { if (modo !== 'libre') return; e.preventDefault(); libre.dist = Math.min(8, Math.max(2.2, libre.dist + Math.sign(e.deltaY) * 0.4)); }, { passive: false });
   function setVista(v) {
     modo = v; const dest = VISTAS[v] || (ASIENTOS[v] ? vistaDe(v) : VISTAS.general);
     desde = { pos: cam.position.clone(), mira: actual.mira.clone() }; hacia = { pos: dest.pos.clone(), mira: dest.mira.clone() }; tIni = performance.now(); if (reducido) tIni -= dur;
@@ -337,6 +352,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const loop = () => {
     if (!vivo) return; ajustar(r, cam, contenedor); const ahora = performance.now();
     if (hacia) { const k = Math.min(1, (ahora - tIni) / dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; cam.position.lerpVectors(desde.pos, hacia.pos, e); actual.mira.lerpVectors(desde.mira, hacia.mira, e); if (k >= 1) hacia = null; }
+    else if (modo === 'libre') { cam.position.lerp(posLibre(), reducido ? 1 : 0.2); actual.mira.copy(VISTAS.libre.mira); }
     else if (modo === 'panoramica' && !reducido) { panT += 0.0018; cam.position.set(Math.sin(panT) * 5.2, 2.9, Math.cos(panT) * 5.2); actual.mira.set(0, 1.0, -0.4); }
     cam.lookAt(actual.mira);
     const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) animarPersonaje(p, t, hablando === id ? 1 : 0);
@@ -360,7 +376,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const caer = []; // reacciones flotando
   return {
     listo: Promise.all(cargas),
-    setVista, vistas: ['general', 'presentacion', 'panoramica'],
+    setVista, vistas: ['general', 'presentacion', 'panoramica', 'libre'],
     setHablante(id) { hablando = id; }, calidad: () => calidad,
     setMano(id, on) { const p = personajes[id]; if (!p) return; p.userData.mano = !!on; (est[id] = est[id] || {}).mano = !!on; pintarEtq(id); },
     saludar(id) { const p = personajes[id]; if (p) p.userData.saludo = performance.now(); },

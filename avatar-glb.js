@@ -97,7 +97,7 @@ class Avatar {
     const h = this.h; const quitar = (k) => { if (this.acc[k]) { this.acc[k].parent?.remove(this.acc[k]); this.acc[k].traverse((o) => o.geometry?.dispose()); delete this.acc[k]; } };
     const k = this.escalaHueso || 1;
     const m = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? 0.4, metalness: o.m ?? 0.2 });
-    quitar('lentes'); quitar('aretes'); quitar('reloj'); quitar('logo');
+    quitar('lentes'); quitar('aretes'); quitar('reloj'); quitar('logo'); quitar('collar');
     if (cfg.lentes && h.cabeza) {
       const g = new THREE.Group(); const marco = m('#1A1A1A', { m: 0.4, r: 0.3 });
       for (const lado of [-1, 1]) { const aro = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0032, 8, 22), marco); aro.position.set(lado * 0.028, 0, 0); g.add(aro); const pat = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.09), marco); pat.position.set(lado * 0.047, 0.004, -0.045); g.add(pat); }
@@ -113,6 +113,12 @@ class Avatar {
       const g = new THREE.Group(); const correa = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.007, 8, 20), m('#222222', { r: 0.6 })); correa.rotation.x = Math.PI / 2; g.add(correa);
       const cara = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.006, 18), m('#C9CED6', { m: 0.8, r: 0.2 })); cara.position.set(0, 0, 0.032); cara.rotation.x = Math.PI / 2; g.add(cara);
       this.fijar(g, h.manoI, this.ANCLA.reloj); this.acc.reloj = g;
+    }
+    if (cfg.collar && (h.cuello || h.pecho)) { // R173 · collar fino con dije
+      const g = new THREE.Group(); const oro = m('#D4A64A', { m: 0.9, r: 0.25 });
+      const r = this.ANCLA.collar.r; const cad = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 6, 48), oro); cad.rotation.set(Math.PI / 2 + 0.3, 0, 0); g.add(cad);
+      const dije = new THREE.Mesh(new THREE.SphereGeometry(0.009, 12, 10), m('#E8E1D5', { m: 0.3, r: 0.15 })); dije.position.set(0, -r * Math.sin(0.3) - 0.01, r * Math.cos(0.3) + 0.004); g.add(dije);
+      this.fijar(g, h.cuello || h.pecho, this.ANCLA.collar); this.acc.collar = g;
     }
     if (cfg.logo && h.pecho) {
       const g = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.006), new THREE.MeshStandardMaterial({ color: '#E2231A', emissive: '#330000' }));
@@ -177,7 +183,7 @@ export async function crearAvatar(cfg = {}, { sentado = false } = {}) {
   const raiz = new THREE.Group(); raiz.name = 'avatar-' + genero;
   const modelo = gltf.scene; raiz.add(modelo);
   const av = new Avatar(raiz, modelo, genero);
-  av.aplicar({ ...cfg, aretes: false, lentes: false, reloj: false, logo: false });
+  av.aplicar({ ...cfg, aretes: false, lentes: false, reloj: false, logo: false, collar: false });
   // escala y altura: de pie, pies en el suelo, alto = ALTURA
   av.postura('pie');
   raiz.updateMatrixWorld(true);
@@ -200,6 +206,7 @@ export async function crearAvatar(cfg = {}, { sentado = false } = {}) {
     oreja: { x: 0.072, y: ojosY - 0.045, z: cab.z + 0.005 },
     reloj: { x: manoI.x, y: manoI.y + 0.06, z: manoI.z },
     logo: { x: -0.08, y: pecho.y + 0.02, z: pecho.z + 0.12 },
+    collar: (() => { const c = av.h.cuello ? raiz.worldToLocal(av.h.cuello.getWorldPosition(new THREE.Vector3())) : v(0, pecho.y + 0.15, 0); return { x: c.x, y: c.y + 0.035, z: c.z + 0.006, r: genero === 'mujer' ? 0.043 : 0.051 }; })(),
   };
   av.aplicar(cfg);
   if (sentado) av.postura('sentado');

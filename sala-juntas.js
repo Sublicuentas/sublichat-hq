@@ -81,7 +81,7 @@
     estilos();
     const sec = document.getElementById('screen-sala-juntas'); if (sec) sec.classList.add('sj-pantalla');
     st.vista = 'inicio'; st.editar = null; cargar();
-    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d'].includes(st.vista)) cargar(true); }, 30000);
+    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d', 'acta'].includes(st.vista)) cargar(true); }, 30000);
   }
 
   // ---------- pintar ----------
@@ -93,7 +93,8 @@
     else if (st.vista === 'antesala') cuerpo = antesala();
     else if (st.vista === 'calendario') cuerpo = volver('Calendario de reuniones') + calendario();
     else if (st.vista === 'mis') cuerpo = volver('Mis reuniones') + listaReuniones((r) => ['programada', 'en_curso'].includes(r.estado), 'No tiene reuniones próximas.');
-    else if (st.vista === 'historial') cuerpo = volver('Historial y acuerdos') + listaReuniones((r) => ['finalizada', 'cancelada'].includes(r.estado), 'Todavía no hay reuniones terminadas.') + `<div class="sj-card sj-nota">${ico('doc')}<div><b>Actas y acuerdos</b><p>El registro de actas y acuerdos con responsables se agrega en la Fase 5. Por ahora el historial muestra las reuniones realizadas y canceladas.</p></div></div>`;
+    else if (st.vista === 'historial') cuerpo = volver('Historial y acuerdos') + historial();
+    else if (st.vista === 'acta') cuerpo = volver('Acta de la reunión') + actaHtml();
     else if (st.vista === 'config') cuerpo = volver('Configuración de la sala') + configuracion();
     else if (st.vista === 'personaje') cuerpo = volver('Mi personaje (Avatar)') + personaje();
     else if (st.vista === 'sala3d') cuerpo = sala3dHtml();
@@ -163,11 +164,66 @@
         <div class="sj-chips">${r.participantes.map((u) => { const e = (r.invitaciones || {})[u]?.estado || 'pendiente'; const y = RSVP[e]; return `<span class="sj-chip sj-${y[1]}">${esc(funda(u).nombre)}: ${y[0]}</span>`; }).join('')}</div></div>
       <div class="sj-reu-a">${pill(r.estado)}${puedeResp ? `<span class="sj-pill sj-${x[1]}">Usted: ${x[0]}</span><div class="sj-fila-btn"><button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="aceptada"${mia.estado === 'aceptada' ? ' disabled' : ''}>Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="rechazada"${mia.estado === 'rechazada' ? ' disabled' : ''}>No asistiré</button></div>` : ''}
         ${['programada', 'en_curso'].includes(r.estado) ? `<button class="sj-btn sj-rojo sj-mini" data-sj="antesala" data-id="${r.id}">Antesala</button>` : ''}
-        ${st.data.permisos.crear && ['programada', 'borrador'].includes(r.estado) ? `<button class="sj-btn sj-sec sj-mini" data-sj="editar" data-id="${r.id}">Editar</button>` : ''}</div></div>`;
+        ${st.data.permisos.crear && ['programada', 'borrador'].includes(r.estado) ? `<button class="sj-btn sj-sec sj-mini" data-sj="editar" data-id="${r.id}">Editar</button>` : ''}
+        ${r.estado === 'finalizada' ? `<button class="sj-btn sj-sec sj-mini" data-sj="verActa" data-id="${r.id}">${(st.actasIdx || {})[r.id] ? 'Ver acta' : (st.data.permisos.moderar ? 'Escribir acta' : 'Acta')}</button>` : ''}</div></div>`;
   }
   function listaReuniones(filtro, vacio) {
     const l = st.data.reuniones.filter(filtro);
     return `<div class="sj-card sj-pn">${l.length ? l.map(filaReunion).join('') : `<p class="sj-p">${esc(vacio)}</p>`}</div>`;
+  }
+
+  // ---------- R173 · historial, acta y acuerdos ----------
+  function historial() {
+    const idx = st.actasIdx || {};
+    const mis = Object.values(idx).reduce((a, x) => a + (x.misPendientes || 0), 0);
+    const nota = mis ? `<div class="sj-card sj-nota">${ico('check')}<div><b>Tiene ${mis} acuerdo${mis === 1 ? '' : 's'} pendiente${mis === 1 ? '' : 's'}</b><p>Ábralos desde "Ver acta" para marcarlos como cumplidos.</p></div></div>` : '';
+    return nota + listaReuniones((r) => ['finalizada', 'cancelada'].includes(r.estado), 'Todavía no hay reuniones terminadas.');
+  }
+  async function cargarActas() { try { const j = await api({ accion: 'actas' }); st.actasIdx = Object.fromEntries(j.actas.map((x) => [x.reunionId, x])); if (st.vista === 'historial') pintar(); } catch (_) {} }
+  async function abrirActa(id, editar) {
+    st.acta = { id, cargando: true, editar: !!editar }; st.vista = 'acta'; pintar(); window.scrollTo({ top: 0 });
+    try { const j = await api({ accion: 'acta', id }); st.acta = { id, ...j, editar: !!editar || (!j.acta && st.data.permisos.moderar) }; }
+    catch (e) { st.acta = { id, error: e.message }; }
+    pintar();
+  }
+  function actaHtml() {
+    const A = st.acta; if (!A) return '';
+    if (A.cargando) return `<div class="sj-card sj-pn"><p class="sj-p">Cargando acta…</p></div>`;
+    if (A.error) return `<div class="sj-card sj-pn"><p class="sj-p">${esc(A.error)}</p></div>`;
+    const r = A.reunion, a = A.acta, mod = st.data.permisos.moderar, yo = st.data.yo.id;
+    const cabA = `<div class="sj-ph">${ico('doc')}<b>${esc(r.titulo)}</b>${pill(r.estado)}</div>
+      <div class="sj-acta-meta"><span>${ico('cal')}${esc(new Date(r.inicioMs).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Tegucigalpa' }))}</span>
+      <span>${ico('reloj')}${A.duracionMin != null ? `Duración ${A.duracionMin} min` : 'Duración no registrada'}</span>
+      <span>${ico('grupo')}Asistieron: ${A.asistentes.length ? A.asistentes.map((u) => esc(funda(u).nombre)).join(', ') : 'sin registro de entrada'}</span></div>`;
+    if (A.editar && mod) {
+      const k = (a && a.acuerdos && a.acuerdos.length ? a.acuerdos : [{ id: 'a1', texto: '', responsable: '', fecha: '' }]);
+      const opR = (sel) => `<option value="">Responsable…</option>` + (r.participantes || []).map((u) => `<option value="${u}"${u === sel ? ' selected' : ''}>${esc(funda(u).nombre)}</option>`).join('');
+      return `<form class="sj-card sj-pn sj-form" id="sjActaF" novalidate>${cabA}
+        <label class="sj-f"><span>Resumen de la reunión</span><textarea name="resumen" rows="5" maxlength="4000" placeholder="Qué se habló, en pocas líneas">${esc(a ? a.resumen : '')}</textarea></label>
+        <label class="sj-f"><span>Decisiones (una por línea)</span><textarea name="decisiones" rows="4" maxlength="6000" placeholder="Ej.: Subir el precio de Netflix a L300 desde diciembre">${esc(a ? (a.decisiones || []).join('\n') : '')}</textarea></label>
+        <div class="sj-f"><span>Acuerdos y tareas</span></div>
+        <div id="sjAcuerdos">${k.map((x) => `<div class="sj-acu-f" data-k="${esc(x.id)}" data-e="${x.estado || 'pendiente'}"><input name="kt" maxlength="300" placeholder="Tarea" value="${esc(x.texto)}"><select name="kr">${opR(x.responsable)}</select><input type="date" name="kf" value="${esc(x.fecha || '')}"><button type="button" class="sj-btn sj-sec sj-mini" data-sj="acuQuitar" aria-label="Quitar">${ico('x')}</button></div>`).join('')}</div>
+        <button type="button" class="sj-btn sj-sec sj-mini" data-sj="acuMas">+ Agregar acuerdo</button>
+        <div class="sj-form-acc"><button type="submit" class="sj-btn sj-rojo sj-grande">${ico('check')}Guardar acta</button>${a ? `<button type="button" class="sj-btn sj-sec" data-sj="actaCancelar">Cancelar</button>` : ''}</div></form>`;
+    }
+    if (!a) return `<div class="sj-card sj-pn">${cabA}<p class="sj-p">La anfitriona todavía no ha escrito el acta de esta reunión.</p></div>`;
+    const acu = (a.acuerdos || []).map((x) => { const puede = x.responsable === yo || mod; return `<li class="sj-acu ${x.estado === 'cumplido' ? 'sj-acu-ok' : ''}"><label><input type="checkbox" data-sj="acuEstado" data-k="${esc(x.id)}" ${x.estado === 'cumplido' ? 'checked' : ''} ${puede ? '' : 'disabled'}><span><b>${esc(x.texto)}</b><small>${esc(funda(x.responsable).nombre)}${x.fecha ? ' · para el ' + esc(x.fecha.split('-').reverse().join('/')) : ''}${x.estado === 'cumplido' ? ' · cumplido' : ''}</small></span></label></li>`; }).join('');
+    return `<div class="sj-card sj-pn sj-acta">${cabA}
+      ${a.resumen ? `<h4>Resumen</h4><p class="sj-p sj-pre">${esc(a.resumen)}</p>` : ''}
+      ${(a.decisiones || []).length ? `<h4>Decisiones</h4><ul class="sj-dec">${a.decisiones.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+      ${(a.acuerdos || []).length ? `<h4>Acuerdos y tareas</h4><ul class="sj-acus">${acu}</ul>` : ''}
+      <p class="sj-hint">Actualizada ${esc(new Date(a.actualizadoAt).toLocaleString('es-HN', { timeZone: 'America/Tegucigalpa' }))} por ${esc(funda(a.actualizadoPor).nombre)}.</p>
+      ${mod ? `<div class="sj-form-acc"><button type="button" class="sj-btn sj-sec" data-sj="actaEditar">Editar acta</button></div>` : ''}</div>`;
+  }
+  async function guardarActa(f) {
+    if (st.guardando) return; const A = st.acta;
+    const filas = [...f.querySelectorAll('.sj-acu-f')].map((d) => ({ id: d.dataset.k, texto: d.querySelector('[name=kt]').value, responsable: d.querySelector('[name=kr]').value, fecha: d.querySelector('[name=kf]').value, estado: d.dataset.e }));
+    const body = { accion: 'acta_guardar', id: A.id, version: A.acta ? A.acta.version : 0, resumen: f.resumen.value, decisiones: f.decisiones.value.split('\n'), acuerdos: filas.filter((x) => x.texto.trim()) };
+    st.guardando = 'acta';
+    try { const j = await api(body); st.acta = { ...A, acta: j.acta, editar: false }; toast('Acta guardada.'); cargarActas(); }
+    catch (e) { toast(e.message, true); }
+    finally { st.guardando = ''; }
+    pintar();
   }
 
   // ---------- formulario ----------
@@ -309,11 +365,11 @@
     hombre: { cabello: ['clasico', 'moderno', 'rizado', 'largoMedio', 'conBarba', 'cresta'], superior: ['traje', 'sueter', 'camiseta', 'chaleco'], inferior: ['pantalon', 'jeans', 'shorts'], calzado: ['formal', 'tenis', 'casual'] },
   };
   const CON_INTERIOR = ['blazer', 'traje'];
-  const ACC = [['lentes', 'Lentes'], ['aretes', 'Aretes'], ['reloj', 'Reloj'], ['barba', 'Bigote'], ['logo', 'Logo Sublicuentas en la ropa']];
+  const ACC = [['lentes', 'Lentes'], ['aretes', 'Aretes'], ['collar', 'Collar'], ['reloj', 'Reloj'], ['barba', 'Bigote'], ['logo', 'Logo Sublicuentas en la ropa']];
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r172');
+    M3 = await import('/sala-3d.js?v=20261105-r173');
     return M3;
   }
   function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -386,7 +442,7 @@
   function sala3dHtml() {
     const r = st.sala3dReu, parts = r ? r.participantes : ['naara', 'libni', 'geisell'];
     const V = st.vivo;
-    const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkVer', 'ojo', 'Ver'], ['lkPant', 'pantalla', 'Compartir'], ['lkMano', 'manoI', 'Mano'], ['lkReac', 'sonrisa', 'Reacciones'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat']]
+    const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkVer', 'ojo', 'Ver'], ['lkPant', 'pantalla', 'Compartir'], ['lkPresentar', 'doc', 'Presentar'], ['lkMano', 'manoI', 'Mano'], ['lkReac', 'sonrisa', 'Reacciones'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat'], ['lkAju', 'config', 'Ajustes']]
       .map(([a, i, t]) => `<button type="button" class="sj3d-ctl" data-sj="${a}" id="sj3d-${a}">${ico(i)}<span>${t}</span></button>`).join('') + `<button type="button" class="sj3d-ctl" disabled title="La grabación necesita aprobación aparte (tiene costo).">${ico('reloj')}<span>Grabar</span></button>`
       : [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
       .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Disponible al entrar a la reunión en vivo">${ico(i)}<span>${t}</span></button>`).join('');
@@ -398,7 +454,7 @@
         <span class="sj3d-chip" id="sj3dChip">${r ? esc(r.titulo) : 'Vista previa'} · ${V ? '<i class="sj3d-led"></i>En vivo' : 'vista previa sin audio'}</span>
         <button type="button" class="sj3d-full" data-sj="pantallaCompleta" id="sj3dFull" title="Pantalla completa (tecla F)">${ico('expandir')}<span>Pantalla completa</span></button></div>
       <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div>
-        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><div class="sj3d-pres" id="sj3dPres" hidden></div><button type="button" class="sj3d-verpres" data-sj="lkVerPres" id="sj3dVerPres" hidden>' + ico('pantalla') + 'Ver presentación en grande</button><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
+        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><div class="sj3d-pres" id="sj3dPres" hidden></div><input type="file" id="sj3dArchivo" accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/webm" multiple hidden><button type="button" class="sj3d-verpres" data-sj="lkVerPres" id="sj3dVerPres" hidden>' + ico('pantalla') + 'Ver presentación en grande</button><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
         <aside class="sj3d-vistas"><b>${ico('cam')}Vistas de cámara</b>${vistas}</aside></div>
       <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button>${terminar}</div>
     </div>`;
@@ -431,7 +487,7 @@
     st.sala3dReu = r; st.volver3d = 'antesala'; st.vista = 'sala3d'; pintar(); window.scrollTo({ top: 0 });
     const V = st.vivo;
     try {
-      const L = await import('/sala-vivo.js?v=20261105-r171');
+      const L = await import('/sala-vivo.js?v=20261105-r173');
       V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
         estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
         presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
@@ -468,6 +524,7 @@
     if (V.pantallaEl) V.pantallaEl.remove();
     if (V.ctl) V.ctl.salir();
     if (V.presEl) V.presEl.remove();
+    if (V.presentador) { try { V.presentador.detener(); } catch (_) {} V.presentador = null; }
     salirPantallaCompleta();
     if (volver && st.vista === 'sala3d') { st.vista = 'antesala'; pintar(); }
   }
@@ -494,8 +551,9 @@
     if (!track) { if (V.pantalla && V.pantalla.de !== de) return; V.pantalla = null; V.verPres = false; if (sala3) sala3.setPantalla(null); pintarPres(); return; }
     const el = track.attach(); el.muted = true; el.playsInline = true; el.className = 'sj3d-oculto'; document.body.appendChild(el); try { el.play(); } catch (_) {}
     V.pantalla = { de, track }; V.pantallaEl = el; if (sala3) sala3.setPantalla(el);
-    V.verPres = de !== st.data.yo.id; pintarPres(); // quien comparte no se ve a sí misma en grande (evita el efecto espejo)
-    if (de !== st.data.yo.id) toast(`${funda(de).nombre} está compartiendo pantalla.`);
+    V.verPres = de !== st.data.yo.id || !!V.presentador; V.presDe = null; pintarPres(); // compartir pantalla propia no se ve en grande (efecto espejo); un archivo sí
+    if (de !== st.data.yo.id && V.presentador) terminarPresentacion();
+    if (de !== st.data.yo.id) toast(`${funda(de).nombre} está presentando.`);
     V.vistaAuto = null; V.ultimoCorte = 0; camaraAuto();
   }
   function ponerVideo(quien, track) {
@@ -517,11 +575,43 @@
     if (!V.presEl || V.presDe !== V.pantalla.de) {
       if (V.presEl) V.presEl.remove();
       const el = V.pantalla.track.attach(); el.muted = true; el.playsInline = true; el.autoplay = true; el.className = 'sj3d-presv'; V.presEl = el; V.presDe = V.pantalla.de;
-      o.innerHTML = `<div class="sj3d-presm"></div><aside class="sj3d-presb"></aside><div class="sj3d-presc"><span>${ico('pantalla')}${esc(funda(V.pantalla.de).nombre)} está presentando</span><button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkVolverSala">Volver a la sala</button></div>`;
+      const mia = V.pantalla.de === st.data.yo.id;
+      o.innerHTML = `<div class="sj3d-presm"></div><aside class="sj3d-presb"></aside><div class="sj3d-presc"><span>${ico('pantalla')}${mia ? 'Usted está presentando' : esc(funda(V.pantalla.de).nombre) + ' está presentando'}</span><div class="sj3d-presctl" id="sj3dPresCtl"></div><button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkVolverSala">Volver a la sala</button></div>`;
       o.querySelector('.sj3d-presm').appendChild(el); try { el.play(); } catch (_) {}
     }
+    pintarCtlPres();
     const band = o.querySelector('.sj3d-presb'); const habla = new Set(V.hablantes || []), cola = (V.manos?.cola || []).map((x) => x.id);
     band.innerHTML = `<b>Participantes (${V.presentes.size})</b>` + (st.sala3dReu?.participantes || []).map((u) => `<div class="sj3d-presp${habla.has(u) ? ' sj3d-habla' : ''}${V.presentes.has(u) ? '' : ' sj3d-ausente'}">${cara(u, 36)}<span><b>${esc(funda(u).nombre)}</b><small>${!V.presentes.has(u) ? 'No ha entrado' : V.manos?.turno === u ? 'Tiene la palabra' : cola.includes(u) ? `✋ Turno ${cola.indexOf(u) + 1}` : u === 'naara' ? 'Anfitriona' : 'Fundadora'}</small></span>${V.presentes.has(u) ? ico(V.mics[u] !== false ? 'mic' : 'micOff', 'sj3d-pmic') : ''}</div>`).join('');
+  }
+  // R173 · controles de quien presenta un archivo (páginas o reproducción)
+  function pintarCtlPres() {
+    const V = st.vivo, c = document.getElementById('sj3dPresCtl'); if (!V || !c) return;
+    const P = V.presentador; if (!P || V.pantalla?.de !== st.data.yo.id) { c.innerHTML = ''; return; }
+    const e = P.estado(); const mm = (x) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
+    c.innerHTML = (e.tipo === 'video'
+      ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkPresAtras">−10 s</button><button type="button" class="sj-btn sj-rojo sj-mini" data-sj="lkPresPlay">${e.reproduciendo ? 'Pausa' : 'Reproducir'}</button><button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkPresAdelante">+10 s</button><b>${mm(e.segundo)} / ${mm(e.duracion)}</b>`
+      : `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkPresAnt" ${e.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button><b>${e.tipo === 'pdf' ? 'Página' : 'Imagen'} ${e.pagina} de ${e.total}</b><button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkPresSig" ${e.pagina >= e.total ? 'disabled' : ''}>Siguiente ›</button>`)
+      + `<button type="button" class="sj-btn sj-rojo sj-mini" data-sj="lkPresFin">Dejar de presentar</button>`;
+  }
+  async function empezarPresentacion(archivos) {
+    const V = st.vivo; if (!V?.ctl || !archivos || !archivos.length) return;
+    if (V.pantalla && V.pantalla.de !== st.data.yo.id) return toast(`${funda(V.pantalla.de).nombre} ya está presentando.`, true);
+    let P = null;
+    try {
+      toast('Preparando la presentación…');
+      const M = await import('/sala-presentar.js?v=20261105-r173');
+      P = await M.crearPresentador(archivos, { alCambiar: () => { if (st.vivo === V) pintarCtlPres(); } });
+      if (V.presentador) { await V.ctl.dejarDePresentar(); V.presentador.detener(); }
+      V.presentador = P; await V.ctl.presentar(P);
+      V.verPres = true; pintarPres(); pintarBarra();
+      if (P.tipo === 'video') toast('Toque Reproducir cuando quiera iniciar el video.');
+    } catch (e) { if (P) P.detener(); if (V.presentador === P) V.presentador = null; toast(e.message || 'No se pudo presentar ese archivo.', true); }
+  }
+  async function terminarPresentacion() {
+    const V = st.vivo; if (!V?.presentador) return;
+    const P = V.presentador; V.presentador = null;
+    try { await V.ctl.dejarDePresentar(); } catch (_) {}
+    P.detener(); pintarBarra();
   }
   const enPantallaCompleta = () => !!(document.fullscreenElement || document.webkitFullscreenElement) || !!document.querySelector('.sj3d-expandido');
   async function pantallaCompleta() {
@@ -556,11 +646,14 @@
     set('lkMic', c && c.micro, c && c.micro ? 'Silenciar' : 'Activar mic', 'mic', 'micOff');
     const bm = document.getElementById('sj3d-lkMic'); if (bm) bm.classList.toggle('sj3d-mute', !!c && !c.micro);
     set('lkCam', c && c.camara, c && c.camara ? 'Apagar cámara' : 'Cámara', 'cam', 'cam');
-    set('lkPant', c && c.compartiendo, c && c.compartiendo ? 'Dejar de compartir' : 'Compartir', 'pantalla', 'pantalla');
+    const presento = !!V.presentador;
+    set('lkPant', c && c.compartiendo && !presento, c && c.compartiendo && !presento ? 'Dejar de compartir' : 'Compartir', 'pantalla', 'pantalla');
+    set('lkPresentar', presento, presento ? 'Dejar de presentar' : 'Presentar', 'doc', 'doc');
     set('lkPart', V.panel === 'part', `Participantes (${V.presentes.size})`, 'grupo', 'grupo');
     set('lkChat', V.panel === 'chat', V.noLeidos ? `Chat (${V.noLeidos})` : 'Chat', 'chat', 'chat');
     set('lkReac', V.panel === 'reac', 'Reacciones', 'sonrisa', 'sonrisa');
     set('lkVer', V.panel === 'ver', 'Ver', 'ojo', 'ojo');
+    set('lkAju', V.panel === 'aju', 'Ajustes', 'config', 'config');
     const tengoMano = !!(V.manos?.cola || []).find((x) => x.id === st.data.yo.id), nCola = (V.manos?.cola || []).length;
     set('lkMano', tengoMano, tengoMano ? 'Bajar mano' : (st.data.permisos.moderar && nCola ? `Mano (${nCola})` : 'Mano'), 'manoI', 'manoI');
     const bm2 = document.getElementById('sj3d-lkMano'); if (bm2) bm2.classList.toggle('sj3d-alerta', st.data.permisos.moderar && nCola > 0 && !tengoMano);
@@ -579,16 +672,23 @@
           ${en ? ico(mic ? 'mic' : 'micOff', 'sj3d-pmic') : ''}${st.data.permisos.moderar && en && u !== st.data.yo.id ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkSacar" data-u="${u}">Sacar</button>` : ''}</div>`; }).join('');
     } else if (V.panel === 'chat') {
       const yo = st.data.yo.id;
-      p.innerHTML = cab('Chat de la reunión') + `<div class="sj3d-msgs" id="sj3dMsgs">${V.chat.length ? V.chat.map((m) => `<div class="sj3d-msg${m.de === yo ? ' sj3d-mio' : ''}"><small>${esc(funda(m.de).nombre)} · ${new Date(m.ms).toLocaleTimeString('es-HN', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Tegucigalpa' })}</small><p>${esc(m.t)}</p></div>`).join('') : '<p class="sj-hint">Todavía no hay mensajes. El chat no se guarda al terminar.</p>'}</div>
+      p.innerHTML = cab('Chat de la reunión') + `<div class="sj3d-msgs" id="sj3dMsgs">${V.chat.length ? V.chat.map((m) => `<div class="sj3d-msg${m.de === yo ? ' sj3d-mio' : ''}"><small>${esc(funda(m.de).nombre)} · ${new Date(m.ms).toLocaleTimeString('es-HN', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Tegucigalpa' })}</small><p>${enlazar(m.t)}</p></div>`).join('') : '<p class="sj-hint">Todavía no hay mensajes. El chat no se guarda al terminar.</p>'}</div>
         <form class="sj3d-chatf" id="sj3dChatF"><input id="sj3dChatT" maxlength="500" autocomplete="off" placeholder="Escriba un mensaje…" aria-label="Mensaje"><button type="submit" class="sj-btn sj-rojo sj-mini" aria-label="Enviar">${ico('enviar')}</button></form>`;
       const m = document.getElementById('sj3dMsgs'); if (m) m.scrollTop = m.scrollHeight;
     } else if (V.panel === 'reac') {
       p.innerHTML = cab('Reacciones') + `<div class="sj3d-reacs">${REAC.map(([e, n], i) => `<button type="button" class="sj3d-re" data-sj="lkReaccion" data-e="${e}" aria-label="${n} (tecla ${i + 1})" title="${n} · tecla ${i + 1}">${e}<small>${n}</small></button>`).join('')}</div><p class="sj-hint">Aparece 2-3 segundos sobre su personaje. Atajos: teclas 1 a 6.</p>`;
+    } else if (V.panel === 'aju') {
+      p.innerHTML = cab('Ajustes') + `<div class="sj3d-aju" id="sj3dAju"><p class="sj-hint">Buscando dispositivos…</p></div>`;
+      V.ctl?.dispositivos().then((d) => { const c = document.getElementById('sj3dAju'); if (!c || V.panel !== 'aju') return;
+        const sel = (tipo, l, act, t) => `<label class="sj-f"><span>${t}</span><select data-aju="${tipo}">${l.map((x) => `<option value="${esc(x.id)}"${x.id === act ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('') || '<option>Predeterminado</option>'}</select></label>`;
+        c.innerHTML = sel('audioinput', d.mic, d.micActual, 'Micrófono') + (d.salida.length ? sel('audiooutput', d.salida, d.salidaActual, 'Escuchar por') : '<p class="sj-hint">Este navegador usa la salida de audio del sistema.</p>') + `<p class="sj-hint">Si no la escuchan, revise que el micrófono correcto esté elegido y que el botón Micrófono no esté en rojo.</p>`; });
     } else if (V.panel === 'ver') {
       const parts = st.sala3dReu?.participantes || [];
-      p.innerHTML = cab('Vistas de cámara') + `<div class="sj3d-verl">${[['auto', 'Automática', 'Sigue a quien habla'], ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, '']), ['presentacion', 'Vista presentación', 'La pantalla de la sala'], ['panoramica', 'Vista panorámica', 'Recorrido lento']].map(([v, t, d]) => `<button type="button" class="sj3d-vista${(V.auto ? 'auto' : V.vistaManual) === v ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b>${d ? `<small>${esc(d)}</small>` : ''}</button>`).join('')}</div>`;
+      p.innerHTML = cab('Vistas de cámara') + `<div class="sj3d-verl">${[['auto', 'Automática', 'Sigue a quien habla'], ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, '']), ['presentacion', 'Vista presentación', 'La pantalla de la sala'], ['panoramica', 'Vista panorámica', 'Recorrido lento'], ['libre', 'Cámara libre', 'Arrastre para mirar']].map(([v, t, d]) => `<button type="button" class="sj3d-vista${(V.auto ? 'auto' : V.vistaManual) === v ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b>${d ? `<small>${esc(d)}</small>` : ''}</button>`).join('')}</div>`;
     }
   }
+  // R173 · enlaces del chat (solo http/https, se abren aparte y sin acceso a esta página)
+  const enlazar = (t) => { const re = /\bhttps?:\/\/[^\s<>"'`]{3,300}/g; let out = '', k = 0, m; while ((m = re.exec(t))) { const u = m[0].replace(/[.,;:!?)]+$/, ''); out += esc(t.slice(k, m.index)) + `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer nofollow">${esc(u)}</a>`; k = m.index + u.length; re.lastIndex = k; } return out + esc(t.slice(k)); };
   const REAC = [['👏', 'Aplausos'], ['👍', 'Me gusta'], ['❤️', 'Corazón'], ['😂', 'Risa'], ['😮', 'Sorpresa'], ['🎉', 'Fiesta']];
   async function reaccionar(e) {
     const V = st.vivo; if (!V?.ctl) return;
@@ -597,9 +697,16 @@
   async function accionVivo(a, b) {
     const V = st.vivo; if (!V) return;
     if (a === 'lkVerPres') { V.verPres = true; return pintarPres(); }
+    if (a === 'lkPresentar') { if (V.presentador) return terminarPresentacion(); const f = document.getElementById('sj3dArchivo'); if (f) { f.value = ''; f.click(); } return; }
+    if (a === 'lkPresFin') return terminarPresentacion();
+    if (V.presentador && /^lkPres(Sig|Ant|Play|Atras|Adelante)$/.test(a)) {
+      const P = V.presentador;
+      try { if (a === 'lkPresSig') await P.siguiente(); else if (a === 'lkPresAnt') await P.anterior(); else if (a === 'lkPresPlay') { if (P.estado().reproduciendo) P.pausa(); else await P.play(); } else if (a === 'lkPresAtras') P.saltar(-10); else if (a === 'lkPresAdelante') P.saltar(10); } catch (e) { toast(e.message || 'No se pudo.', true); }
+      return pintarCtlPres();
+    }
     if (a === 'lkVolverSala') { V.verPres = false; return pintarPres(); }
-    if (a === 'lkPart' || a === 'lkChat' || a === 'lkReac' || a === 'lkVer' || a === 'lkCerrarPanel') {
-      const k = { lkPart: 'part', lkChat: 'chat', lkReac: 'reac', lkVer: 'ver' }[a] || '';
+    if (a === 'lkPart' || a === 'lkChat' || a === 'lkReac' || a === 'lkVer' || a === 'lkAju' || a === 'lkCerrarPanel') {
+      const k = { lkPart: 'part', lkChat: 'chat', lkReac: 'reac', lkVer: 'ver', lkAju: 'aju' }[a] || '';
       V.panel = V.panel === k ? '' : k; if (V.panel === 'chat') V.noLeidos = 0; pintarPanel(); pintarBarra();
       if (V.panel === 'chat') { const t = document.getElementById('sj3dChatT'); if (t) t.focus(); }
       return;
@@ -618,13 +725,14 @@
       else if (a === 'lkPant') {
         if (!navigator.mediaDevices?.getDisplayMedia && !V.ctl.compartiendo) throw new Error('Este dispositivo no permite compartir pantalla (en celular use una computadora).');
         if (!V.ctl.compartiendo && V.pantalla && V.pantalla.de !== st.data.yo.id) throw new Error(`${funda(V.pantalla.de).nombre} ya está compartiendo pantalla.`);
+        if (V.presentador) await terminarPresentacion();
         await V.ctl.setCompartir(!V.ctl.compartiendo);
       } else if (a === 'lkSacar') {
         if (!confirm(`¿Sacar a ${funda(b.dataset.u).nombre} de la sala?`)) return;
         await api({ accion: 'expulsar', id: V.id, usuario: b.dataset.u }); toast(`${funda(b.dataset.u).nombre} salió de la sala.`);
       } else if (a === 'lkTerminar') {
         if (!confirm('¿Terminar la reunión para todas? Se cierra la sala.')) return;
-        await api({ accion: 'cerrar_sala', id: V.id }); toast('Reunión terminada.'); salirVivo(false); st.vista = 'inicio'; await cargar(true); return;
+        const rid = V.id; await api({ accion: 'cerrar_sala', id: rid }); toast('Reunión terminada. Escriba el acta.'); salirVivo(false); await cargar(true); return abrirActa(rid, true);
       }
     } catch (e) {
       const m = String(e && e.message || '');
@@ -640,6 +748,12 @@
     const reu = () => st.data.reuniones.find((r) => r.id === id) || (st.data.proxima && st.data.proxima.id === id ? st.data.proxima : null);
     if (a === 'recargar') return cargar();
     if (a === 'inicio' || a === 'salirAnte') { detenerMic(); if (st.vista === 'personaje' && st.volverAnte && st.ante) { st.volverAnte = false; st.vista = 'antesala'; return pintar(); } st.vista = 'inicio'; st.editar = null; return pintar(); }
+    if (a === 'historial') cargarActas();
+    if (a === 'verActa') return abrirActa(id);
+    if (a === 'actaEditar') { st.acta.editar = true; return pintar(); }
+    if (a === 'actaCancelar') { st.acta.editar = false; return pintar(); }
+    if (a === 'acuMas') { const c = document.getElementById('sjAcuerdos'); if (c && c.children.length < 30) { const n = c.firstElementChild.cloneNode(true); n.dataset.k = 'a' + Date.now().toString(36).slice(-6); n.dataset.e = 'pendiente'; n.querySelectorAll('input').forEach((x) => { x.value = ''; }); n.querySelector('select').value = ''; c.appendChild(n); n.querySelector('input').focus(); } return; }
+    if (a === 'acuQuitar') { const c = document.getElementById('sjAcuerdos'); const fila = b.closest('.sj-acu-f'); if (c.children.length > 1) fila.remove(); else fila.querySelectorAll('input').forEach((x) => { x.value = ''; }); return; }
     if (['calendario', 'mis', 'historial', 'config', 'personaje'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'nueva') { st.editar = null; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'limpiar') { st.editar = null; return pintar(); }
@@ -690,9 +804,20 @@
   document.addEventListener('change', (e) => { const b = host && host.contains(e.target) && e.target.closest('input[data-op]'); if (!b || !st.pers) return; cambiarOpcion(b.dataset.op, b.checked); });
   document.addEventListener('submit', (e) => {
     if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); }
+    if (e.target && e.target.id === 'sjActaF') { e.preventDefault(); guardarActa(e.target); }
     if (e.target && e.target.id === 'sj3dChatF') { e.preventDefault(); const t = document.getElementById('sj3dChatT'); const v = t ? t.value : ''; if (t) t.value = ''; if (st.vivo?.ctl && v.trim()) st.vivo.ctl.chat(v).catch(() => toast('No se pudo enviar el mensaje.', true)); }
   });
   window.addEventListener('pagehide', () => { if (st.vivo) salirVivo(false); });
+  document.addEventListener('change', async (e) => {
+    if (e.target && e.target.id === 'sj3dArchivo') empezarPresentacion(e.target.files);
+    if (e.target && e.target.dataset && e.target.dataset.aju && st.vivo?.ctl) { try { await st.vivo.ctl.usarDispositivo(e.target.dataset.aju, e.target.value); toast('Listo, cambiado.'); } catch (err) { toast('No se pudo cambiar: ' + (err.message || ''), true); } }
+    if (e.target && e.target.dataset && e.target.dataset.sj === 'acuEstado' && st.acta) {
+      const cb = e.target; cb.disabled = true;
+      try { const j = await api({ accion: 'acuerdo_estado', id: st.acta.id, acuerdo: cb.dataset.k, estado: cb.checked ? 'cumplido' : 'pendiente' }); st.acta.acta.acuerdos = j.acuerdos; toast(cb.checked ? 'Acuerdo marcado como cumplido.' : 'Acuerdo pendiente otra vez.'); cargarActas(); }
+      catch (err) { cb.checked = !cb.checked; toast(err.message, true); }
+      pintar();
+    }
+  });
   document.addEventListener('keydown', (e) => {
     if (st.vista !== 'sala3d' || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && document.querySelector('.sj3d-expandido')) { salirPantallaCompleta(); return; }
@@ -700,6 +825,8 @@
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); pantallaCompleta(); return; }
     if (!st.vivo?.ctl) return;
     if (/^[1-6]$/.test(e.key)) { e.preventDefault(); reaccionar(REAC[Number(e.key) - 1][0]); }
+    if (st.vivo.presentador && (e.key === 'ArrowRight' || e.key === 'PageDown')) { e.preventDefault(); st.vivo.presentador.siguiente().then(pintarCtlPres); }
+    if (st.vivo.presentador && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); st.vivo.presentador.anterior().then(pintarCtlPres); }
     if (e.key === 'h' || e.key === 'H') { const b = document.getElementById('sj3d-lkMano'); if (b) b.click(); }
   });
 
@@ -846,6 +973,12 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-mute{color:#FF8A80!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-fin{background:#7A1F2B!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) [hidden]{display:none!important}
+.sj-acta-meta{display:flex;flex-wrap:wrap;gap:8px 18px;color:#5E6B7A;font-size:13.5px;margin:4px 0 12px}.sj-acta-meta span{display:inline-flex;align-items:center;gap:6px}.sj-acta-meta .sj-i{width:16px;height:16px}
+.sj-acta h4{margin:16px 0 6px;font-size:14px;color:#1F2430}.sj-pre{white-space:pre-wrap}.sj-dec{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.sj-acus{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}.sj-acu label{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #ECEEF2;border-radius:12px;cursor:pointer}.sj-acu input{margin-top:3px;width:18px;height:18px;accent-color:#2E9E5A}
+.sj-acu span{display:flex;flex-direction:column}.sj-acu small{color:#6B7380}.sj-acu-ok b{text-decoration:line-through;color:#6B7380}
+.sj-acu-f{display:grid;grid-template-columns:minmax(0,1fr) 150px 150px auto;gap:8px;margin-bottom:8px}.sj-acu-f input,.sj-acu-f select{border:1px solid #DADDE3;border-radius:10px;padding:9px 10px;font:14px Inter,sans-serif;min-width:0;background:#fff}
+@media (max-width:760px){.sj-acu-f{grid-template-columns:1fr 1fr auto}.sj-acu-f [name=kt]{grid-column:1/-1}}
 /* R172 · cámara del editor */
 .sj-ed-cam{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.92);border:1px solid #E3E6EB;border-radius:999px;padding:4px;z-index:2}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{all:unset;cursor:pointer;font:600 12px Inter,sans-serif;color:#1F2430;padding:6px 10px;border-radius:999px;min-width:16px;text-align:center}
@@ -870,12 +1003,14 @@ html.sj-sala-expandida #screen-sala-juntas,html.sj-sala-expandida .screen-sala-j
 .sj3d-presb{background:#1B2028;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}.sj3d-presb>b{font-size:13px;letter-spacing:.02em}
 .sj3d-presp{display:flex;align-items:center;gap:9px;background:#222833;border:1px solid #2F3744;border-radius:10px;padding:8px}.sj3d-presp span{flex:1;display:flex;flex-direction:column;min-width:0}.sj3d-presp b{font-size:13px}.sj3d-presp small{font-size:11.5px;color:#AEB6C2}
 .sj3d-presp.sj3d-habla{border-color:#2ECC71;box-shadow:0 0 0 2px rgba(46,204,113,.35)}.sj3d-presp.sj3d-ausente{opacity:.5}.sj3d-presp .sj3d-pmic{color:#AEB6C2}
-.sj3d-presc{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 13px Inter,sans-serif}.sj3d-presc span{display:inline-flex;align-items:center;gap:7px}
+.sj3d-presc{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 13px Inter,sans-serif;flex-wrap:wrap}
+.sj3d-presctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sj3d-presctl b{font:600 13px Inter,sans-serif;color:#E9ECF1;min-width:110px;text-align:center}.sj3d-presc span{display:inline-flex;align-items:center;gap:7px}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-verpres{all:unset;cursor:pointer;position:absolute;left:12px;top:12px;z-index:3;display:inline-flex;align-items:center;gap:7px;background:#C62828;color:#fff;font:600 13px Inter,sans-serif;padding:8px 13px;border-radius:999px}.sj3d-verpres .sj-i{width:16px;height:16px}
 .sj3d-cola{padding:12px 14px;border-bottom:1px solid #ECEEF2;display:flex;flex-direction:column;gap:8px}.sj3d-cola>b{display:flex;align-items:center;gap:7px;font-size:14px}.sj3d-cola>b .sj-i{width:17px;height:17px}
 .sj3d-cola ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}.sj3d-cola li{font-size:14px}.sj3d-cola li span{margin-right:8px}.sj3d-cola li .sj-btn{margin:2px 4px 0 0}
 .sj3d-turno{background:#E9F8EF;border:1px solid #BFE8CF;border-radius:10px;padding:8px 10px;font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .sj3d-reacs{grid-template-columns:repeat(3,1fr)!important}.sj3d-re small{display:block;font:600 11px Inter,sans-serif;color:#5E6B7A;margin-top:4px}
+.sj3d-aju{padding:12px 14px;display:flex;flex-direction:column;gap:10px}.sj3d-aju select{width:100%;border:1px solid #DADDE3;border-radius:10px;padding:9px 10px;font:14px Inter,sans-serif;background:#fff}
 .sj3d-verl{padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj3d-verl button.sj3d-vista{background:#F4F5F8!important;border-color:#E3E6EB!important;color:#1F2430!important}.sj3d-verl .sj3d-vista small{color:#6B7380}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj3d-verl button.sj3d-vista.on{background:#FDECEC!important;border-color:#E2231A!important}
