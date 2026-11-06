@@ -1,7 +1,7 @@
 // Doble de prueba de livekit-client (misma superficie que usa sala-vivo.js). Sin red: window.__lk simula a las demás socias.
 const ev = (n) => n;
 export const RoomEvent = Object.fromEntries(['ParticipantConnected', 'ParticipantDisconnected', 'ParticipantAttributesChanged', 'ActiveSpeakersChanged', 'TrackMuted', 'TrackUnmuted', 'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackSubscribed', 'TrackUnsubscribed', 'DataReceived', 'Reconnecting', 'Reconnected', 'AudioPlaybackStatusChanged', 'Disconnected'].map((k) => [k, ev(k)]));
-export const Track = { Source: { Microphone: 'microphone', Camera: 'camera', ScreenShare: 'screen_share' }, Kind: { Audio: 'audio', Video: 'video' } };
+export const Track = { Source: { Microphone: 'microphone', Camera: 'camera', ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio' }, Kind: { Audio: 'audio', Video: 'video' } };
 export const DisconnectReason = { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, PARTICIPANT_REMOVED: 4, ROOM_DELETED: 5 };
 let sid = 0;
 function pista(kind, dibujo) {
@@ -31,6 +31,8 @@ export class Room extends Emisor {
       async setCameraEnabled(v) { this.isCameraEnabled = v; if (v) this.trackPublications.set('camera', { source: 'camera', track: pista('video', 'Cámara ' + c.name) }); else { this.trackPublications.delete('camera'); room.emit(RoomEvent.LocalTrackUnpublished, { source: 'camera' }); } },
       async setScreenShareEnabled(v) { this.isScreenShareEnabled = v; if (v) this.trackPublications.set('screen_share', { source: 'screen_share', track: pista('video', 'Pantalla de ' + c.name) }); else { this.trackPublications.delete('screen_share'); room.emit(RoomEvent.LocalTrackUnpublished, { source: 'screen_share' }); } },
       async setAttributes(a) { this.attributes = { ...this.attributes, ...a }; room.emit(RoomEvent.ParticipantAttributesChanged, a, this); },
+      async publishTrack(mst, o) { const t = { sid: 'TR_' + (++sid), kind: mst.kind, mst, els: [], attach() { const v = document.createElement(mst.kind === 'audio' ? 'audio' : 'video'); v.muted = true; v.autoplay = true; v.srcObject = new MediaStream([mst]); this.els.push(v); return v; }, detach() { const e = this.els; this.els = []; return e; } }; const pub = { source: o.source, track: t, trackName: o.name }; this.trackPublications.set(o.source + ':' + t.sid, pub); room.publicados = (room.publicados || []).concat({ source: o.source, name: o.name, kind: mst.kind }); if (o.source === 'screen_share') this.isScreenShareEnabled = true; return pub; },
+      async unpublishTrack(t) { for (const [k, p] of this.trackPublications) if (p.track === t) { this.trackPublications.delete(k); if (p.source === 'screen_share') this.isScreenShareEnabled = false; room.emit(RoomEvent.LocalTrackUnpublished, p); } },
       getTrackPublication(s) { return this.trackPublications.get(s); },
       async publishData(data, o) { room.enviados.push({ topic: o.topic, d: JSON.parse(new TextDecoder().decode(data)) }); },
     });
@@ -50,6 +52,9 @@ export class Room extends Emisor {
       expulsar: () => this.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED),
     };
   }
+  static async getLocalDevices(k) { return k === 'audioinput' ? [{ deviceId: 'default', label: 'Micrófono del equipo' }, { deviceId: 'usb1', label: 'Micrófono USB (prueba)' }] : [{ deviceId: 'default', label: 'Parlantes del equipo' }]; }
+  getActiveDevice(k) { return (this.activos || {})[k]; }
+  async switchActiveDevice(k, id) { this.activos = { ...(this.activos || {}), [k]: id }; return true; }
   async startAudio() { this.canPlaybackAudio = true; }
   async disconnect() { this.desconectada = true; }
 }
