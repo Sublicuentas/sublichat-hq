@@ -25,7 +25,13 @@ function publica(id, r, invs = {}, ahora = Date.now()) {
     duracionMin: r.duracionMin || 60, estado: S.estadoVigente(r, ahora), participantes: r.participantes || [],
     recordatorios: r.recordatorios || {}, salaAbierta: !!r.salaAbierta, version: r.version || 1, anfitrion: r.anfitrion || 'naara',
     invitaciones: invs, actualizadoAt: r.actualizadoAt || '', escenario: r.escenario || 'sala-c', presetId: r.presetId || '',
+    tipo: r.tipo || 'junta', sugerido: r.sugerido || '', estiloUsado: r.estiloUsado || null,
   };
+}
+// R177 · copia del estilo del preset elegido (null si usa el oficial/base/sugerido)
+async function fotoEstilo(db, escenario, presetId) {
+  if (!presetId) return null;
+  try { const d = await db.collection(C.ESC).doc(escenario).get(); const p = d.exists ? (d.data().presets || []).find((x) => x.id === presetId) : null; return p ? S.estiloEscenario(escenario, p.estilo) : null; } catch (_) { return null; }
 }
 async function invitacionesDe(db, ids) {
   const out = {};
@@ -176,7 +182,8 @@ async function handler(req, res, deps = {}) {
       if (prev) escrituras.push(...await anularPendientes(db, prev.id, iso));
       const r = {
         titulo: v.datos.titulo, agenda: v.datos.agenda, inicioMs: v.datos.inicioMs, inicioISO: v.datos.inicioMs ? new Date(v.datos.inicioMs).toISOString() : '',
-        tz: S.TZ, duracionMin: v.datos.duracionMin, participantes: v.datos.participantes, recordatorios: v.datos.recordatorios, escenario: v.datos.escenario, presetId: v.datos.presetId,
+        tz: S.TZ, duracionMin: v.datos.duracionMin, participantes: v.datos.participantes, recordatorios: v.datos.recordatorios, escenario: v.datos.escenario, presetId: v.datos.presetId, tipo: v.datos.tipo, sugerido: v.datos.sugerido,
+        estiloUsado: await fotoEstilo(db, v.datos.escenario, v.datos.presetId), // R177: copia del estilo para reabrir igual aunque el preset cambie
         estado: borrador ? 'borrador' : 'programada', anfitrion: 'naara', salaAbierta: false, roomId: prev?.r.roomId || S.roomIdOpaco(),
         version, actualizadoAt: iso, actualizadoPor: yo.id, ...(prev ? {} : { creadoAt: iso, creadoPor: yo.id }),
       };

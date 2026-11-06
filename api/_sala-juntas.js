@@ -70,7 +70,10 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() }
   }
   const escenario = escenarioValido(body.escenario) ? body.escenario : 'sala-c';
   const presetId = /^[a-z0-9]{4,16}$/.test(String(body.presetId || '')) ? String(body.presetId) : '';
-  return { ok: !errores.length, errores, datos: { titulo, agenda, inicioMs: Number.isFinite(inicioMs) ? inicioMs : null, duracionMin, participantes, recordatorios, escenario, presetId } };
+  // R177 · tipo de sesión y estilo sugerido (sin preset guardado)
+  const tipo = TIPOS_SESION.includes(body.tipo) ? body.tipo : 'junta';
+  const sugerido = !presetId && SUGERIDOS.includes(body.sugerido) ? body.sugerido : '';
+  return { ok: !errores.length, errores, datos: { titulo, agenda, inicioMs: Number.isFinite(inicioMs) ? inicioMs : null, duracionMin, participantes, recordatorios, escenario, presetId, tipo, sugerido } };
 }
 
 // Avisos de Telegram que corresponden a una reunión (solo los futuros). Ids deterministas = idempotentes.
@@ -155,23 +158,35 @@ function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
   const G = AVATAR_GENERO[out.genero];
   for (const k of ['cabello', 'superior', 'inferior', 'calzado']) if (!G[k].includes(out[k])) out[k] = G[k].includes(base[k]) ? base[k] : G[k][0];
   if (out.genero === 'mujer') out.barba = false;
+  out.nombre = limpiarNombreVisible(entrada && entrada.nombre); // R177 · "Nombre visible" ('' = su nombre de usuaria)
   return out;
 }
+// R177 · nombre que se ve sobre el personaje y en la tarjeta de participante: texto simple, 24 caracteres.
+function limpiarNombreVisible(t) { return String(t == null ? '' : t).replace(/[\u0000-\u001f\u007f<>{}`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); }
 // Miniatura generada por el editor: solo imagen WebP/JPEG/PNG en data URL y de tamaño acotado.
 function miniaturaValida(t) { return typeof t === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(t) && t.length <= 90000; }
 
 // ---------- R174 · Escenarios (Fase 6). Mismos ids que escenarios.js (lo revisa tests/r174-escenarios.test.mjs) ----------
 const ESCENARIOS = Object.freeze({
-  'sala-c': { paredes: ['madera', 'listones', 'grafito', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['beige-madera', 'rojo-grafito', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['calida', 'neutra', 'led', 'indirecta'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'calida' } },
-  socios: { paredes: ['madera', 'grafito', 'listones', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['rojo-grafito', 'beige-madera', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['anillo', 'led', 'indirecta', 'neutra'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'anillo' } },
-  aula: { paredes: ['madera', 'blanco', 'grafito', 'mixto'], asientos: ['pupitre', 'ejecutivo', 'butaca', 'mesas'], paleta: ['rojo-blanco', 'rojo-madera', 'blanco-gris', 'negro-rojo', 'beige-calido'], luz: ['calida', 'aula', 'led', 'auditorio'], base: { paredes: 'madera', asientos: 'pupitre', paleta: 'rojo-madera', luz: 'calida' } },
-  live: { paredes: ['led', 'negro', 'claro', 'modular'], asientos: ['talkshow', 'altas', 'lounge', 'entrevista'], paleta: ['rojo-negro', 'rojo-gris', 'rojo-blanco', 'negro-grafito', 'rojo-dorado'], luz: ['aro', 'estudio', 'led', 'calida'], base: { paredes: 'led', asientos: 'talkshow', paleta: 'rojo-negro', luz: 'estudio' } },
-  cinema: { paredes: ['acustica', 'rojo', 'madera', 'paneles'], asientos: ['butaca', 'sofa', 'reclinable', 'doble'], paleta: ['rojo-negro', 'grafito-dorado', 'negro-rojo', 'beige-oscuro', 'rojo-vino'], luz: ['pasillo', 'tenue', 'led', 'lounge'], base: { paredes: 'acustica', asientos: 'butaca', paleta: 'rojo-negro', luz: 'tenue' } },
+  'sala-c': { paredes: ['madera', 'listones', 'grafito', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['beige-madera', 'rojo-grafito', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['calida', 'neutra', 'led', 'indirecta'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'calida' , piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true }} },
+  socios: { paredes: ['madera', 'grafito', 'listones', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['rojo-grafito', 'beige-madera', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['anillo', 'led', 'indirecta', 'neutra'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'anillo' , piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: true, logos: false, utileria: true }} },
+  aula: { paredes: ['madera', 'blanco', 'grafito', 'mixto'], asientos: ['pupitre', 'ejecutivo', 'butaca', 'mesas'], paleta: ['rojo-blanco', 'rojo-madera', 'blanco-gris', 'negro-rojo', 'beige-calido'], luz: ['calida', 'aula', 'led', 'auditorio'], base: { paredes: 'madera', asientos: 'pupitre', paleta: 'rojo-madera', luz: 'calida' , piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true }} },
+  live: { paredes: ['led', 'negro', 'claro', 'modular'], asientos: ['talkshow', 'altas', 'lounge', 'entrevista'], paleta: ['rojo-negro', 'rojo-gris', 'rojo-blanco', 'negro-grafito', 'rojo-dorado'], luz: ['aro', 'estudio', 'led', 'calida'], base: { paredes: 'led', asientos: 'talkshow', paleta: 'rojo-negro', luz: 'estudio' , piso: 'madera', brillo: 'normal', deco: { plantas: false, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: true, utileria: true }} },
+  cinema: { paredes: ['acustica', 'rojo', 'madera', 'paneles'], asientos: ['butaca', 'sofa', 'reclinable', 'doble'], paleta: ['rojo-negro', 'grafito-dorado', 'negro-rojo', 'beige-oscuro', 'rojo-vino'], luz: ['pasillo', 'tenue', 'led', 'lounge'], base: { paredes: 'acustica', asientos: 'butaca', paleta: 'rojo-negro', luz: 'tenue' , piso: 'madera', brillo: 'normal', deco: { plantas: false, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true }} },
 });
 const MAX_PRESETS = 12;
+// R177 · tipos de sesión (la convocatoria sugiere escenario y estilo; se puede cambiar) y estilos sugeridos de escenarios.js
+const TIPOS_SESION = ['junta', 'revision', 'clase', 'presentacion', 'grabacion', 'otra'];
+const SUGERIDOS = ['junta', 'sobria', 'anuncio', 'presentacion', 'grabacion'];
+// R177 · ambiente editable (igual en escenarios.js · AMBIENTE): piso, brillo y objetos de decoración encendidos/apagados
+const AMBIENTE = Object.freeze({ piso: ['madera', 'neutro', 'oscuro', 'claro'], brillo: ['suave', 'normal', 'brillante'], deco: ['plantas', 'cuadros', 'lamparas', 'mesas', 'paneles', 'logos', 'utileria'] });
 function estiloEscenario(id, estilo = {}) {
-  const E = ESCENARIOS[id]; if (!E) return null; const out = {};
-  for (const k of ['paredes', 'asientos', 'paleta', 'luz']) out[k] = E[k].includes(estilo && estilo[k]) ? estilo[k] : E.base[k];
+  const E = ESCENARIOS[id]; if (!E) return null; const out = {}; const e = estilo && typeof estilo === 'object' ? estilo : {};
+  for (const k of ['paredes', 'asientos', 'paleta', 'luz']) out[k] = E[k].includes(e[k]) ? e[k] : E.base[k];
+  out.piso = AMBIENTE.piso.includes(e.piso) ? e.piso : E.base.piso;
+  out.brillo = AMBIENTE.brillo.includes(e.brillo) ? e.brillo : E.base.brillo;
+  const d = e.deco && typeof e.deco === 'object' ? e.deco : {};
+  out.deco = Object.fromEntries(AMBIENTE.deco.map((k) => [k, typeof d[k] === 'boolean' ? d[k] : E.base.deco[k]]));
   return out;
 }
 const escenarioValido = (id) => Object.prototype.hasOwnProperty.call(ESCENARIOS, id);
@@ -217,4 +232,5 @@ const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https
 // Ventana para entrar: desde 30 min antes del inicio hasta 60 min después del final previsto (tope de costo).
 function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
 
-module.exports = { ESCENARIOS, MAX_PRESETS, estiloEscenario, escenarioValido, validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+module.exports = {
+  limpiarNombreVisible, AMBIENTE, TIPOS_SESION, SUGERIDOS, ESCENARIOS, MAX_PRESETS, estiloEscenario, escenarioValido, validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
