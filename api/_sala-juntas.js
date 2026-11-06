@@ -21,6 +21,9 @@ function identidad(user = {}) {
   const k = claveUsuario(user);
   return FUNDADORAS.find((f) => f.cuentas.includes(k)) || null;
 }
+// R179 · usuario de Sublichat (no fundadora) con el módulo "Sala de Juntas" activado por Sublicuentas
+const nombreBonito = (k) => String(k || '').split(/[\s._-]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+function identidadInvitado(clave, etiqueta = '') { return { id: clave, nombre: nombreBonito(clave), cargo: etiqueta ? `Invitado · ${etiqueta}` : 'Invitado', cuentas: [clave], anfitriona: false, invitado: true, asiento: '' }; }
 const puede = {
   ver: (id) => !!id,
   crear: (id) => !!(id && id.anfitriona),
@@ -47,7 +50,8 @@ function partesHN(ms) {
 
 function limpiarTexto(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 // Valida lo que manda el formulario. `programar` exige fecha futura; un borrador puede quedar incompleto.
-function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() } = {}) {
+const MAX_PARTICIPANTES = 8;
+function validarConvocatoria(body = {}, { programar = true, ahora = Date.now(), miembros = null } = {}) {
   const titulo = limpiarTexto(body.titulo, 120);
   const agenda = (Array.isArray(body.agenda) ? body.agenda : String(body.agenda || '').split(/\n+/))
     .map((x) => limpiarTexto(String(x).replace(/^[\s•\-*]+/, ''), 200)).filter(Boolean).slice(0, 20);
@@ -55,7 +59,8 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() }
   const duracionMin = Math.max(15, Math.min(240, Math.round(Number(body.duracionMin) || 60)));
   const elegidas = new Set((Array.isArray(body.participantes) ? body.participantes : []).map(norm));
   elegidas.add('naara'); // la anfitriona siempre está
-  const participantes = FUNDADORAS.map((f) => f.id).filter((id) => elegidas.has(id));
+  // R179 · fundadoras + usuarios con el módulo Sala de Juntas activado (en el orden de la lista de miembros)
+  const participantes = (miembros || FUNDADORAS.map((f) => f.id)).filter((id) => elegidas.has(id)).slice(0, MAX_PARTICIPANTES);
   const rec = body.recordatorios && typeof body.recordatorios === 'object' ? body.recordatorios : {};
   const recordatorios = { h24: rec.h24 !== false, h1: rec.h1 !== false, m10: rec.m10 !== false };
   const errores = [];
@@ -65,7 +70,7 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() }
     // R178 · se puede programar para "ya" (hasta 10 min atrás cuenta como ahora); antes de eso, avisa la hora real de Honduras
     else if (inicioMs < ahora - 10 * 60000) { const h = partesHN(ahora); const [hh, mm] = h.hora.split(':').map(Number); errores.push(`Esa fecha y hora ya pasó: en Honduras son las ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'} del ${h.fecha.split('-').reverse().join('/')}. Revise si es a. m. o p. m.`); }
     if (!agenda.length) errores.push('Agregue al menos un tema en la agenda.');
-    if (participantes.length < 2) errores.push('Elija al menos una fundadora además de Naara.');
+    if (participantes.length < 2) errores.push('Elija al menos una persona además de Naara.');
   } else if (body.fecha || body.hora) {
     if (!Number.isFinite(inicioMs)) errores.push('La fecha u hora no es válida.');
   }
@@ -130,6 +135,7 @@ const AVATAR_OPC = Object.freeze({
   lentes: [false, true], aretes: [false, true], collar: [false, true], reloj: [false, true], barba: [false, true], logo: [false, true],
 });
 const AVATAR_BASE = Object.freeze({
+  invitado: { genero: 'hombre', piel: '#E2A982', cabello: 'clasico', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'traje', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: false, aretes: false, collar: false, reloj: false, barba: false, logo: true },
   naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'tacon', colorCalzado: '#1A1A1A', lentes: false, aretes: true, collar: true, reloj: false, barba: false, logo: false },
   libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: false, aretes: true, collar: false, reloj: true, barba: false, logo: false },
   geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'recogido', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: true, aretes: true, collar: false, reloj: false, barba: false, logo: false },
@@ -194,13 +200,13 @@ const escenarioValido = (id) => Object.prototype.hasOwnProperty.call(ESCENARIOS,
 
 // ---------- R173 · Acta y acuerdos ----------
 const limpiarTxt = (x, max) => String(x == null ? '' : x).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
-function validarActa(b = {}) {
+function validarActa(b = {}, permitidos = null) {
   const resumen = limpiarTxt(b.resumen, 4000);
   const decisiones = (Array.isArray(b.decisiones) ? b.decisiones : []).map((d) => limpiarTxt(d, 300)).filter(Boolean).slice(0, 30);
   const acuerdos = (Array.isArray(b.acuerdos) ? b.acuerdos : []).map((k, i) => ({
     id: /^[a-z0-9]{1,12}$/.test(String(k && k.id || '')) ? k.id : 'a' + (i + 1),
     texto: limpiarTxt(k && k.texto, 300),
-    responsable: POR_ID[k && k.responsable] ? k.responsable : '',
+    responsable: (permitidos ? permitidos.includes(k && k.responsable) : POR_ID[k && k.responsable]) ? k.responsable : '',
     fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(k && k.fecha || '')) ? k.fecha : '',
     estado: k && k.estado === 'cumplido' ? 'cumplido' : 'pendiente',
   })).filter((k) => k.texto).slice(0, 30);
@@ -234,4 +240,4 @@ const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https
 function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
 
 module.exports = {
-  limpiarNombreVisible, AMBIENTE, TIPOS_SESION, SUGERIDOS, ESCENARIOS, MAX_PRESETS, estiloEscenario, escenarioValido, validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+  identidadInvitado, nombreBonito, MAX_PARTICIPANTES, limpiarNombreVisible, AMBIENTE, TIPOS_SESION, SUGERIDOS, ESCENARIOS, MAX_PRESETS, estiloEscenario, escenarioValido, validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };

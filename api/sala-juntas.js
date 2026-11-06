@@ -7,6 +7,9 @@
 'use strict';
 const admin = require('firebase-admin');
 const S = require('./_sala-juntas.js');
+const P = require('./_permisos.js');
+const { usuariosConfigurados } = require('./permisos.js');
+const ETQ_ROL = { admin: 'Supervisor', finanzas: 'Operativo', auditor: 'Auditor', geisell_admin: 'Admin Control' };
 
 function getApp() {
   if (admin.apps.length) return admin.app();
@@ -46,13 +49,29 @@ async function anularPendientes(db, reunionId, ahoraIso) {
   const s = await db.collection(C.A).where('reunionId', '==', reunionId).where('estado', '==', 'pendiente').get();
   return s.docs.map((d) => ({ ref: d.ref, data: { estado: 'anulado', anuladoAt: ahoraIso } }));
 }
+// R179 · quién puede estar en la Sala: las fundadoras (si Sublicuentas no les quitó el módulo) + todo usuario de Sublichat
+// al que Sublicuentas le activó el módulo "Sala de Juntas" en Permisos. Naara siempre (anfitriona).
+async function miembrosDe(db, env) {
+  let config = {}; try { config = await P.leerConfig(db); } catch (_) { config = {}; }
+  const out = [];
+  for (const f of S.FUNDADORAS) if (f.anfitriona || f.cuentas.every((c) => P.efectivos({ usuario: c, role: 'asesor' }, config)['sala-juntas'] === true)) out.push(f);
+  const ya = new Set(S.FUNDADORAS.flatMap((f) => f.cuentas));
+  for (const u of usuariosConfigurados(env)) {
+    if (ya.has(u.usuario) || P.esSupervisor(u)) continue;
+    if (P.efectivos(u, config)['sala-juntas']) out.push(S.identidadInvitado(u.usuario, ETQ_ROL[P.rolDe(u)] || ''));
+  }
+  // usuarios con el módulo activado pero que no están en AUTH_USERS_JSON (ej.: creados aparte)
+  for (const [u, v] of Object.entries(config.usuarios || {})) { const k = P.claveUsuario({ usuario: u }); if (!ya.has(k) && !out.some((x) => x.id === k) && v && v.modulos && v.modulos['sala-juntas'] === true && /^[a-z0-9._-]{2,40}$/.test(k)) out.push(S.identidadInvitado(k)); }
+  return out;
+}
 // R169 · Personajes guardados de las 3 fundadoras (o el de base si aún no guardó el suyo).
-async function avataresDe(db) {
+async function avataresDe(db, miembros = S.FUNDADORAS) {
   const out = {};
-  for (const f of S.FUNDADORAS) {
+  for (const f of miembros) {
     let d = null; try { const s = await db.collection(C.AV).doc(f.id).get(); d = s.exists ? s.data() : null; } catch (_) {}
-    out[f.id] = d ? { config: S.limpiarAvatar(d.config, S.AVATAR_BASE[f.id]), version: Number(d.version) || 1, miniatura: S.miniaturaValida(d.miniatura) && d.config && d.config.colorCalzado ? d.miniatura : '', /* R172: miniaturas del muñeco anterior ya no se muestran */ guardado: true, actualizadoAt: d.actualizadoAt || '' }
-      : { config: { ...S.AVATAR_BASE[f.id] }, version: 0, miniatura: '', guardado: false };
+    const base = S.AVATAR_BASE[f.id] || S.AVATAR_BASE.invitado;
+    out[f.id] = d ? { config: S.limpiarAvatar(d.config, base), version: Number(d.version) || 1, miniatura: S.miniaturaValida(d.miniatura) && d.config && d.config.colorCalzado ? d.miniatura : '', /* R172: miniaturas del muñeco anterior ya no se muestran */ guardado: true, actualizadoAt: d.actualizadoAt || '' }
+      : { config: { ...base, nombre: '' }, version: 0, miniatura: '', guardado: false };
   }
   return out;
 }
@@ -75,12 +94,16 @@ async function handler(req, res, deps = {}) {
   if (!token) return res.status(401).json({ ok: false, error: 'Sesión requerida.' });
   let user;
   try { user = await auth().verifyIdToken(token); } catch (_) { return res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' }); }
-  const yo = S.identidad(user);
-  if (!yo) return res.status(403).json({ ok: false, error: 'La Sala de Juntas es solo para las socias fundadoras.' });
+  let db; try { db = dbOf(); } catch (_) { return res.status(500).json({ ok: false, error: 'No se pudo conectar con la base de datos.' }); }
+  // R179 · acceso = módulo "Sala de Juntas" en Permisos (fundadoras por defecto; Sublicuentas lo activa o quita a cualquiera)
+  const miembros = await miembrosDe(db, env);
+  const clave = S.claveUsuario(user);
+  const yo = S.identidad(user) ? miembros.find((m) => m.id === S.identidad(user).id) || null : miembros.find((m) => m.id === clave) || null;
+  if (!yo) return res.status(403).json({ ok: false, error: 'No tiene acceso a la Sala de Juntas. Sublicuentas lo activa en Permisos.' });
+  const idsMiembros = miembros.map((m) => m.id);
 
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const accion = String(body.accion || 'panel');
-  let db; try { db = dbOf(); } catch (_) { return res.status(500).json({ ok: false, error: 'No se pudo conectar con la base de datos.' }); }
   const iso = new Date(ahora).toISOString();
 
   const leerReunion = async (id, { paraEditar = false } = {}) => {
@@ -119,8 +142,8 @@ async function handler(req, res, deps = {}) {
       return res.status(200).json({
         ok: true, yo: { id: yo.id, nombre: yo.nombre, anfitriona: yo.anfitriona },
         permisos: { crear: S.puede.crear(yo), moderar: S.puede.moderar(yo) },
-        fundadoras: S.FUNDADORAS.map(({ id, nombre, cargo, anfitriona, asiento }) => ({ id, nombre, cargo, anfitriona, asiento })),
-        avatares: await avataresDe(db), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
+        fundadoras: miembros.map(({ id, nombre, cargo, anfitriona, asiento, invitado }) => ({ id, nombre, cargo, anfitriona, asiento, invitado: !!invitado })),
+        avatares: await avataresDe(db, miembros), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
         proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora,
       });
     }
@@ -170,7 +193,7 @@ async function handler(req, res, deps = {}) {
     if (accion === 'crear' || accion === 'editar') {
       if (!S.puede.crear(yo)) throw err(403, 'Solo Naara puede crear, reprogramar o cancelar reuniones.');
       const borrador = body.borrador === true;
-      const v = S.validarConvocatoria(body, { programar: !borrador, ahora });
+      const v = S.validarConvocatoria(body, { programar: !borrador, ahora, miembros: idsMiembros });
       if (!v.ok) return res.status(400).json({ ok: false, error: v.errores[0], errores: v.errores });
       const editar = accion === 'editar';
       const prev = editar ? await leerReunion(body.id, { paraEditar: true }) : null;
@@ -195,7 +218,7 @@ async function handler(req, res, deps = {}) {
           const conservar = anterior && anterior.exists && !cambioHora ? anterior.data() : null;
           escrituras.push({ ref: invRef, data: { reunionId: ref.id, usuario: u, estado: u === 'naara' ? 'aceptada' : (conservar?.estado || 'pendiente'), respondidoAt: conservar?.respondidoAt || (u === 'naara' ? iso : ''), canal: conservar?.canal || '', version, actualizadoAt: iso } });
         }
-        for (const a of S.planAvisos(ref.id, v.datos, version, ahora)) {
+        for (const a of S.planAvisos(ref.id, { ...v.datos, participantes: v.datos.participantes.filter((u) => S.POR_ID[u]) }, version, ahora)) { // R179 · Telegram solo a las fundadoras (el bot conoce sus chats); invitados lo ven en Sublichat
           if (a.usuario === 'naara' && a.tipo === 'invitacion') continue; // la anfitriona no se invita a sí misma
           escrituras.push({ ref: db.collection(C.A).doc(a.id), data: { reunionId: ref.id, usuario: a.usuario, tipo: a.tipo, version, programadoMs: a.programadoMs, estado: 'pendiente', intentos: 0, creadoAt: iso, reprogramada: !!prev } });
         }
@@ -210,7 +233,7 @@ async function handler(req, res, deps = {}) {
       if (['cancelada', 'finalizada'].includes(S.estadoVigente(r, ahora))) throw err(409, 'Esa reunión ya terminó o fue cancelada.');
       const escrituras = await anularPendientes(db, id, iso);
       escrituras.push({ ref: db.collection(C.R).doc(id), data: { estado: 'cancelada', salaAbierta: false, canceladaAt: iso, motivoCancelacion: String(body.motivo || '').slice(0, 200), actualizadoAt: iso } });
-      if (r.estado !== 'borrador') for (const u of (r.participantes || []).filter((x) => x !== 'naara')) {
+      if (r.estado !== 'borrador') for (const u of (r.participantes || []).filter((x) => x !== 'naara' && S.POR_ID[x])) {
         escrituras.push({ ref: db.collection(C.A).doc(`${id}_${u}_cancelacion`), data: { reunionId: id, usuario: u, tipo: 'cancelacion', version: r.version || 1, programadoMs: ahora, estado: 'pendiente', intentos: 0, creadoAt: iso } });
       }
       escrituras.push(auditoria(db, yo, 'cancelar', id, { titulo: r.titulo }));
@@ -250,7 +273,7 @@ async function handler(req, res, deps = {}) {
     // ---------- R173 · acta y acuerdos ----------
     async function datosActa(id, r) {
       const aud = await db.collection(C.AUD).where('objetivo', '==', id).get();
-      const asistentes = [...new Set(aud.docs.map((d) => d.data()).filter((x) => x.accion === 'entrar_sala').map((x) => x.actorUsuario))].filter((u) => S.POR_ID[u]);
+      const asistentes = [...new Set(aud.docs.map((d) => d.data()).filter((x) => x.accion === 'entrar_sala').map((x) => x.actorUsuario))].filter((u) => (r.participantes || []).includes(u));
       const ini = Date.parse(r.abiertaAt || '') || 0, fin = Date.parse(r.cerradaAt || '') || 0;
       const grab = aud.docs.map((d) => d.data()).filter((x) => x.accion === 'grabacion_fin');
       return { asistentes, duracionMin: ini && fin && fin > ini ? Math.round((fin - ini) / 60000) : null, grabada: grab.length > 0, grabacionSeg: grab.reduce((t, x) => t + (x.duracionSeg || 0), 0) };
@@ -272,7 +295,7 @@ async function handler(req, res, deps = {}) {
       if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona redacta el acta.');
       const { id, r } = await leerReunion(body.id);
       if (!['finalizada', 'en_curso'].includes(S.estadoVigente(r, ahora))) throw err(409, 'El acta se escribe cuando la reunión ya empezó o terminó.');
-      const v = S.validarActa(body);
+      const v = S.validarActa(body, r.participantes || []);
       const extra = await datosActa(id, r);
       const ref = db.collection(C.ACTAS).doc(id);
       const out = await db.runTransaction(async (tx) => {
@@ -312,10 +335,10 @@ async function handler(req, res, deps = {}) {
       return res.status(200).json({ ok: true, reunion: publica(id, r, invs, ahora), yo: { id: yo.id, nombre: yo.nombre }, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET) });
     }
 
-    if (accion === 'avatares') return res.status(200).json({ ok: true, avatares: await avataresDe(db), opciones: S.AVATAR_OPC });
+    if (accion === 'avatares') return res.status(200).json({ ok: true, avatares: await avataresDe(db, miembros), opciones: S.AVATAR_OPC });
 
     if (accion === 'avatar_guardar') { // cada fundadora SOLO guarda el suyo; control de versión para no pisar otro dispositivo
-      const cfg = S.limpiarAvatar(body.config, S.AVATAR_BASE[yo.id]);
+      const cfg = S.limpiarAvatar(body.config, S.AVATAR_BASE[yo.id] || S.AVATAR_BASE.invitado);
       const mini = S.miniaturaValida(body.miniatura) ? body.miniatura : '';
       const ref = db.collection(C.AV).doc(yo.id);
       let nueva = 0, conflicto = false;
@@ -355,7 +378,7 @@ async function handler(req, res, deps = {}) {
       if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede sacar a alguien de la sala.');
       const { id, r } = await leerReunion(body.id);
       const quien = String(body.usuario || '');
-      if (!S.POR_ID[quien] || quien === yo.id) throw err(400, 'Participante no válido.');
+      if (!(r.participantes || []).includes(quien) || quien === yo.id) throw err(400, 'Participante no válido.');
       if (!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET)) throw err(503, 'Falta configurar LiveKit.');
       const sala = r.roomId || `sj_${id}`;
       const f = deps.fetch || fetch;

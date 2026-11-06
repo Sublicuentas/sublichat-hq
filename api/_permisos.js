@@ -21,6 +21,7 @@ const MODULOS = Object.freeze([
   { id: 'control-maestro', label: 'Control Maestro', grupo: 'Principal', pantallas: ['control-cuentas'], servidor: true },
   { id: 'portal-cliente', label: 'Portal Cliente', grupo: 'Principal', pantallas: ['portal-cliente'], servidor: true },
   { id: 'catalogo', label: 'Catálogo', grupo: 'Principal', pantallas: ['catalogo-relojes'], servidor: true },
+  { id: 'sala-juntas', label: 'Sala de Juntas (SubliStudio 3D)', grupo: 'Principal', pantallas: ['sala-juntas'], servidor: true }, // R179 · antes ACL fija
   { id: 'sorteos', label: 'Sorteos', grupo: 'Principal', pantallas: ['sorteos'], servidor: true },
   { id: 'tickets', label: 'Tickets / Avisos', grupo: 'Principal', pantallas: ['tickets'] },
   { id: 'panel-socios', label: 'Panel de Socios', grupo: 'Principal', pantallas: ['revendedores'], servidor: true },
@@ -59,6 +60,7 @@ function rolDe(user = {}) {
 }
 function esSupervisor(user = {}) { return ['sublicuentas', 'naara'].includes(claveUsuario(user)) || rolDe(user) === 'admin'; }
 
+const SALA_DEFECTO = ['sublicuentas', 'naara', 'libni', 'relojes', 'geisell'];
 // Lo que cada usuario tiene HOY sin que Sublicuentas cambie nada (copia de las reglas de la web y de cada API).
 const MENU_ROL = {
   finanzas: ['inicio', 'clientes', 'portal-cliente', 'catalogo-relojes', 'sorteos', 'agenda', 'objetivos', 'importar', 'tickets', 'pelis', 'partidos', 'chat', 'perfil'],
@@ -79,6 +81,7 @@ function porDefecto(user = {}) {
     if (m.id === 'finanzas') v = rol === 'finanzas' && relojes;
     if (m.id === 'codigos') v = relojes || geisell;
     if (m.id === 'bodega') v = false;
+    if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
     out[m.id] = !!v;
   }
   return out;
@@ -131,17 +134,17 @@ function efectivos(user = {}, config = {}) {
 // agrega todas sus pantallas y uno desactivado las quita. Sublicuentas ve todos los módulos.
 function pantallasVisibles(user = {}, config = {}) {
   const mods = efectivos(user, config);
-  const sala = ['sublicuentas', 'naara', 'libni', 'relojes', 'geisell'].includes(claveUsuario(user)) ? ['sala-juntas'] : []; // R167 · ACL fija (api/_sala-juntas.js)
-  if (esSupervisor(user)) return [...MODULOS.flatMap((m) => m.pantallas), ...sala];
+  if (esSupervisor(user)) return MODULOS.flatMap((m) => m.pantallas);
   const base = porDefecto(user), ov = overridesDe(config, claveUsuario(user));
   const menu = new Set(MENU_ROL[rolDe(user)] || []);
   const out = [];
   for (const m of MODULOS) {
     if (!mods[m.id]) continue;
+    if (m.id === 'sala-juntas') { out.push('sala-juntas'); continue; } // R179 · módulo seleccionable: activo = se ve
     const todas = ov[m.id] === true && !base[m.id];
     for (const p of m.pantallas) if (todas || m.fijo || menu.has(p) || ov[m.id] === true) out.push(p);
   }
-  return [...out, ...sala];
+  return out;
 }
 // Normaliza lo que manda Sublicuentas al guardar: { id: true | false | null }. null = volver a lo de siempre.
 function limpiarCambios(cambios = {}) {
