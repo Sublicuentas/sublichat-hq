@@ -17,6 +17,16 @@ export const CATALOGO = {
 };
 
 const kits = {};
+const texLogo = {}; let logosListos = null;
+function texturaLogo(fondoClaro) { // fondo claro → logo con "Subli" oscuro; fondo oscuro → logo con "Subli" blanco
+  const k = fondoClaro ? 'claro' : 'oscuro';
+  if (!texLogo[k]) { texLogo[k] = new THREE.TextureLoader().load(`/assets/sublicuentas-logo-${k}-ui.webp`); texLogo[k].colorSpace = THREE.SRGBColorSpace; texLogo[k].anisotropy = 4; }
+  return texLogo[k];
+}
+function precargarLogos() { // se espera antes de armar el avatar: el logo nunca sale vacío en la primera imagen
+  if (!logosListos) logosListos = Promise.all(['claro', 'oscuro'].map((k) => new Promise((ok) => { const t = new THREE.TextureLoader().load(`/assets/sublicuentas-logo-${k}-ui.webp`, () => ok(), undefined, () => ok()); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; texLogo[k] = t; })));
+  return logosListos;
+}
 let cargador = null;
 function obtenerCargador() {
   if (!cargador) cargador = import('/vendor/three-gltf-0.160.0.js').then(async (m) => { await m.MeshoptDecoder.ready; const l = new m.GLTFLoader(); l.setMeshoptDecoder(m.MeshoptDecoder); return l; });
@@ -44,10 +54,11 @@ function apuntar(hueso, hijo, dir, raiz) {
 }
 
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
+const DEDO_EJE = new THREE.Vector3(1, 0, 0), DEDO_SIGNO = -1; // flexión de falanges (eje local X del rig Quaternius)
 // Posturas: direcciones de cada segmento (x = izquierda del avatar +, y = arriba, z = al frente)
 const POSTURA = {
-  pie: { brazo: [v(0.16, -1, 0.02), v(0.1, -1, 0.18)], pierna: [v(0.02, -1, 0.0), v(0, -1, -0.02)] },
-  sentado: { brazo: [v(0.12, -0.72, 0.62), v(-0.1, -0.12, 1)], pierna: [v(0.04, -0.05, 1), v(0.0, -1, 0.06)] },
+  pie: { brazo: [v(0.2, -1, -0.03), v(0.06, -1, 0.32)], pierna: [v(0.035, -1, 0.0), v(0.0, -1, -0.03)], dedos: 0.42 },
+  sentado: { brazo: [v(0.14, -0.86, 0.42), v(-0.22, -0.3, 1)], pierna: [v(0.07, -0.05, 1), v(0.02, -1, 0.06)], dedos: 0.5 },
 };
 
 class Avatar {
@@ -92,49 +103,89 @@ class Avatar {
     this.cfg = cfg; this.elegido = elegido;
     this.accesorios(cfg);
   }
-  // Accesorios pequeños unidos a los huesos (lentes, aretes de mujer, reloj, logo)
+  // R177 · Accesorios visibles y unidos al hueso con su transformación local (siguen la postura: de pie o sentada).
   accesorios(cfg) {
-    const h = this.h; const quitar = (k) => { if (this.acc[k]) { this.acc[k].parent?.remove(this.acc[k]); this.acc[k].traverse((o) => o.geometry?.dispose()); delete this.acc[k]; } };
-    const k = this.escalaHueso || 1;
-    const m = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? 0.4, metalness: o.m ?? 0.2 });
-    quitar('lentes'); quitar('aretes'); quitar('reloj'); quitar('logo'); quitar('collar');
-    if (cfg.lentes && h.cabeza) {
-      const g = new THREE.Group(); const marco = m('#1A1A1A', { m: 0.4, r: 0.3 });
-      for (const lado of [-1, 1]) { const aro = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0032, 8, 22), marco); aro.position.set(lado * 0.028, 0, 0); g.add(aro); const pat = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.09), marco); pat.position.set(lado * 0.047, 0.004, -0.045); g.add(pat); }
-      const puente = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.003, 0.003), marco); g.add(puente);
-      this.fijar(g, h.cabeza, this.ANCLA.lentes); this.acc.lentes = g;
+    const h = this.h; const quitar = (k) => { if (this.acc[k]) { this.acc[k].parent?.remove(this.acc[k]); this.acc[k].traverse((o) => { o.geometry?.dispose(); }); delete this.acc[k]; } };
+    const m = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? 0.4, metalness: o.m ?? 0.2, ...(o.t ? { transparent: true, opacity: o.t, depthWrite: false } : {}) });
+    ['lentes', 'aretes', 'reloj', 'logo', 'collar'].forEach(quitar);
+    if ((cfg.logo || cfg.collar) && !this.sentado && this.ANCLA) this.medirTorso();
+    const oro = () => m('#D9AE4F', { m: 0.85, r: 0.22 });
+    if (cfg.lentes && h.cabeza) { // montura ejecutiva rectangular redondeada, con micas
+      const g = new THREE.Group(); const marco = m('#151515', { m: 0.35, r: 0.28 });
+      const aro = (w, hh, e, r) => { const sh = new THREE.Shape(); const rr = (S, W, H, R) => { S.moveTo(-W / 2 + R, -H / 2); S.lineTo(W / 2 - R, -H / 2); S.quadraticCurveTo(W / 2, -H / 2, W / 2, -H / 2 + R); S.lineTo(W / 2, H / 2 - R); S.quadraticCurveTo(W / 2, H / 2, W / 2 - R, H / 2); S.lineTo(-W / 2 + R, H / 2); S.quadraticCurveTo(-W / 2, H / 2, -W / 2, H / 2 - R); S.lineTo(-W / 2, -H / 2 + R); S.quadraticCurveTo(-W / 2, -H / 2, -W / 2 + R, -H / 2); }; rr(sh, w, hh, r); const hole = new THREE.Path(); rr(hole, w - 2 * e, hh - 2 * e, Math.max(0.002, r - e)); sh.holes.push(hole); return new THREE.ExtrudeGeometry(sh, { depth: 0.004, bevelEnabled: false, curveSegments: 6 }); };
+      const W = 0.036, H = 0.026, sep = 0.0215;
+      for (const lado of [-1, 1]) {
+        const a = new THREE.Mesh(aro(W, H, 0.0045, 0.008), marco); a.position.set(lado * sep, 0, -0.002); g.add(a);
+        const mica = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.006, H - 0.006), m('#9FC3D9', { m: 0.1, r: 0.05, t: 0.22 })); mica.position.set(lado * sep, 0, 0); g.add(mica);
+        const pat = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.1), marco); pat.position.set(lado * (sep + W / 2 - 0.001), 0.005, -0.05); pat.rotation.y = lado * 0.06; g.add(pat);
+      }
+      const puente = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.0035, 0.004), marco); puente.position.set(0, 0.006, 0); g.add(puente);
+      this.acc.lentes = this.colgar(g, 'lentes');
     }
-    if (cfg.aretes && this.genero === 'mujer' && h.cabeza) {
-      const g = new THREE.Group(); const oro = m('#D4A64A', { m: 0.9, r: 0.25 });
-      for (const lado of [-1, 1]) { const a = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0025, 8, 18), oro); a.position.set(lado * this.ANCLA.oreja.x, 0, 0); a.rotation.y = Math.PI / 2; g.add(a); }
-      this.fijar(g, h.cabeza, { x: 0, y: this.ANCLA.oreja.y, z: this.ANCLA.oreja.z }); this.acc.aretes = g;
+    if (cfg.aretes && this.genero === 'mujer' && h.cabeza) { // aretes colgantes: aro + gota, visibles bajo el cabello
+      const g = new THREE.Group();
+      for (const lado of [-1, 1]) {
+        const e = new THREE.Group(); e.position.set(lado * this.ANCLA.oreja.ancho, 0, 0);
+        const boton = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 12, 10), oro()); e.add(boton);
+        const aro = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0028, 8, 22), oro()); aro.position.set(0, -0.017, 0); aro.rotation.y = Math.PI / 2; e.add(aro);
+        const gota = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 14, 12), m('#F2EEE6', { m: 0.25, r: 0.12 })); gota.scale.set(1, 1.35, 1); gota.position.set(0, -0.037, 0); e.add(gota);
+        g.add(e);
+      }
+      this.acc.aretes = this.colgar(g, 'oreja');
     }
-    if (cfg.reloj && h.manoI) {
-      const g = new THREE.Group(); const correa = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.007, 8, 20), m('#222222', { r: 0.6 })); correa.rotation.x = Math.PI / 2; g.add(correa);
-      const cara = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.006, 18), m('#C9CED6', { m: 0.8, r: 0.2 })); cara.position.set(0, 0, 0.032); cara.rotation.x = Math.PI / 2; g.add(cara);
-      this.fijar(g, h.manoI, this.ANCLA.reloj); this.acc.reloj = g;
+    if (cfg.reloj && h.antebrazoI) { // reloj en la muñeca izquierda, carátula hacia afuera
+      const g = new THREE.Group(); const r = this.ANCLA.reloj.r;
+      const correa = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 20, 1, true), m('#2A2420', { r: 0.7 })); correa.material.side = THREE.DoubleSide; g.add(correa);
+      const caja = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.008, 24), m('#C9CED6', { m: 0.85, r: 0.2 })); caja.rotation.z = Math.PI / 2; caja.position.set(r + 0.003, 0, 0); g.add(caja);
+      const cara = new THREE.Mesh(new THREE.CircleGeometry(0.0135, 24), m('#0F1B2D', { m: 0.2, r: 0.3 })); cara.rotation.y = Math.PI / 2; cara.position.set(r + 0.0075, 0, 0); g.add(cara);
+      for (const ang of [0, Math.PI / 2]) { const ag = new THREE.Mesh(new THREE.BoxGeometry(0.0012, 0.009, 0.0015), m('#F4F4F4', { m: 0.6 })); ag.rotation.x = ang; ag.position.set(r + 0.0082, 0.003 * Math.cos(ang), -0.003 * Math.sin(ang)); g.add(ag); }
+      this.acc.reloj = this.colgar(g, 'reloj');
     }
-    if (cfg.collar && (h.cuello || h.pecho)) { // R173 · collar fino con dije
-      const g = new THREE.Group(); const oro = m('#D4A64A', { m: 0.9, r: 0.25 });
-      const r = this.ANCLA.collar.r; const cad = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 6, 48), oro); cad.rotation.set(Math.PI / 2 + 0.3, 0, 0); g.add(cad);
-      const dije = new THREE.Mesh(new THREE.SphereGeometry(0.009, 12, 10), m('#E8E1D5', { m: 0.3, r: 0.15 })); dije.position.set(0, -r * Math.sin(0.3) - 0.01, r * Math.cos(0.3) + 0.004); g.add(dije);
-      this.fijar(g, h.cuello || h.pecho, this.ANCLA.collar); this.acc.collar = g;
+    if (cfg.collar && (h.pecho || h.cuello)) { // cadena que cae sobre el pecho con dije
+      const g = new THREE.Group(); const C = this.ANCLA.collarForma;
+      const curva = new THREE.CatmullRomCurve3(C.map((p) => v(p[0], p[1], p[2])), true, 'centripetal');
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(curva, 80, 0.0022, 6, true), oro()));
+      const fr = C[0]; const aro = new THREE.Mesh(new THREE.TorusGeometry(0.004, 0.0013, 6, 14), oro()); aro.position.set(fr[0], fr[1] - 0.004, fr[2]); g.add(aro);
+      const dije = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 14, 12), m('#F3EEE4', { m: 0.3, r: 0.12 })); dije.scale.set(1, 1.3, 0.8); dije.position.set(fr[0], fr[1] - 0.016, fr[2] + 0.002); g.add(dije);
+      this.acc.collar = this.colgar(g, 'collar');
     }
-    if (cfg.logo && h.pecho) {
-      const g = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.006), new THREE.MeshStandardMaterial({ color: '#E2231A', emissive: '#330000' }));
-      this.fijar(g, h.pecho, this.ANCLA.logo); this.acc.logo = g;
+    if (cfg.logo && h.pecho) { // logo real de Sublicuentas sobre el pecho (blazer, blusa, camisa o polo)
+      const claro = new THREE.Color(cfg.colorSuperior || '#222').getHSL({}).l > 0.55;
+      const tex = texturaLogo(claro); const W = this.genero === 'mujer' ? 0.09 : 0.1;
+      const g = new THREE.Mesh(new THREE.PlaneGeometry(W, W * 78 / 400), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.6, metalness: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+      g.renderOrder = 2; this.acc.logo = this.colgar(g, 'logo');
     }
   }
-  // Ubica un objeto en coordenadas del avatar (metros, de pie) y lo cuelga del hueso para que lo siga.
-  fijar(obj, hueso, pos) {
-    this.raiz.updateMatrixWorld(true);
-    const ref = this.refPie || {};
-    const mundo = this.raiz.localToWorld(v(pos.x, pos.y, pos.z));
-    obj.position.copy(mundo); obj.quaternion.copy(this.raiz.getWorldQuaternion(new THREE.Quaternion()));
-    obj.scale.setScalar(1);
-    hueso.attach(obj);
-    void ref;
+  // R177 · mide la superficie real de la prenda elegida (rayos de frente) para que logo y collar queden ENCIMA de la ropa.
+  medirTorso() {
+    const R = this.raiz; R.updateMatrixWorld(true);
+    const mallas = []; for (const [slot, ps] of Object.entries(this.piezas)) if (slot !== 'accesorio') for (const ms of Object.values(ps)) ms.forEach((o) => { if (o.visible) mallas.push(o); });
+    mallas.forEach((o) => { if (o.isSkinnedMesh) { o.boundingSphere = null; o.boundingBox = null; } });
+    const rc = new THREE.Raycaster(); const qR = R.getWorldQuaternion(new THREE.Quaternion()); const dir = v(0, 0, -1).applyQuaternion(qR);
+    const z = (x, y, def) => { rc.set(R.localToWorld(v(x, y, 0.7)), dir); const hit = rc.intersectObjects(mallas, false)[0]; return hit ? R.worldToLocal(hit.point.clone()).z : def; };
+    const A = this.ANCLA; const L = A.logoBase; const z0 = z(L.x, L.y, L.z);
+    const zt = z(L.x, L.y + 0.012, z0), zb = z(L.x, L.y - 0.012, z0), zl = z(L.x - 0.03, L.y, z0), zr = z(L.x + 0.03, L.y, z0);
+    A.logo = { x: L.x, y: L.y, z: Math.max(zt, zb, z0) + 0.004, q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.max(-0.35, Math.min(0.35, Math.atan2(zt - zb, 0.024))), Math.max(-0.3, Math.min(0.3, Math.atan2(zl - zr, 0.06))), 0)) };
+    const N = A.cuelloBase; const yN = N.y; const pts = [];
+    for (const [x, dy] of [[0, -0.095], [0.022, -0.082], [0.038, -0.052], [0.048, -0.02]]) pts.push([x, yN + dy, z(x, yN + dy, N.z + 0.08) + 0.005]);
+    const back = [[0.056, yN + 0.004, N.z - 0.004], [0.04, yN + 0.01, N.z - 0.045], [0, yN + 0.012, N.z - 0.058]];
+    A.collarForma = [...pts, ...back, ...back.slice(0, 2).reverse().map((p) => [-p[0], p[1], p[2]]), ...pts.slice(1).reverse().map((p) => [-p[0], p[1], p[2]])];
+    const lg = this.local?.logo; if (lg) { const mundo = new THREE.Matrix4().compose(v(A.logo.x, A.logo.y, A.logo.z), A.logo.q, v(1, 1, 1)).premultiply(R.matrixWorld); lg.m.copy(lg.hueso.matrixWorld).invert().multiply(mundo); }
   }
+  // Mide una vez (de pie) dónde va cada accesorio respecto de su hueso; luego se cuelga con esa transformación local.
+  calibrar() {
+    const R = this.raiz; R.updateMatrixWorld(true); const A = this.ANCLA; const h = this.h;
+    const huesos = { lentes: h.cabeza, oreja: h.cabeza, boca: h.cabeza, reloj: h.antebrazoI, collar: h.pecho || h.cuello, logo: h.pecho };
+    this.local = {};
+    for (const [k, hueso] of Object.entries(huesos)) {
+      const a = A[k]; if (!a || !hueso) continue;
+      const mundo = new THREE.Matrix4().compose(v(a.x, a.y, a.z), a.q || new THREE.Quaternion(), v(1, 1, 1)).premultiply(R.matrixWorld);
+      this.local[k] = { hueso, m: new THREE.Matrix4().copy(hueso.matrixWorld).invert().multiply(mundo) };
+    }
+  }
+  colgar(obj, k) { const L = this.local?.[k]; if (!L) return obj; const c = new THREE.Group(); c.name = 'acc__' + k; L.m.decompose(c.position, c.quaternion, c.scale); c.add(obj); L.hueso.add(c); return c; }
+  // compatibilidad R172
+  fijar(obj, hueso, pos) { this.raiz.updateMatrixWorld(true); obj.position.copy(this.raiz.localToWorld(v(pos.x, pos.y, pos.z))); hueso.attach(obj); }
   postura(nombre) {
     const P = POSTURA[nombre]; const h = this.h; const R = this.raiz;
     const lado = (s) => (s === 'I' ? 1 : -1);
@@ -142,6 +193,7 @@ class Avatar {
       const [b1, b2] = P.brazo; if (h['brazo' + s]) { apuntar(h['brazo' + s], h['antebrazo' + s], v(b1.x * lado(s), b1.y, b1.z), R); apuntar(h['antebrazo' + s], h['mano' + s], v(b2.x * lado(s), b2.y, b2.z), R); }
       const [p1, p2] = P.pierna; if (h['muslo' + s]) { apuntar(h['muslo' + s], h['pierna' + s], v(p1.x * lado(s), p1.y, p1.z), R); apuntar(h['pierna' + s], h['pie' + s], v(p2.x * lado(s), p2.y, p2.z), R); }
     }
+    this.curvarDedos(P.dedos || 0);
     this.sentado = nombre === 'sentado';
     // poses de la mano derecha (levantada y saludo) calculadas una vez
     if (h.brazoD) {
@@ -155,9 +207,15 @@ class Avatar {
     if (h.cabeza) this.base.cabeza = h.cabeza.quaternion.clone();
     if (h.pecho) this.base.pecho = h.pecho.quaternion.clone();
   }
+  // R177 · manos relajadas: flexiona cada falange (no dedos estirados tipo "bloque")
+  curvarDedos(k) {
+    if (!this.dedos) { this.dedos = []; this.modelo.traverse((o) => { const m = /^(Index|Middle|Ring|Pinky|Thumb)(\d)([LR])$/.exec(o.name); if (m) this.dedos.push({ o, q: o.quaternion.clone(), pulgar: m[1] === 'Thumb', lado: m[3], meñique: m[1] === 'Pinky' }); }); }
+    for (const d of this.dedos) { const a = k * (d.pulgar ? 0.35 : d.meñique ? 1.15 : 1) * DEDO_SIGNO; d.o.quaternion.copy(d.q).multiply(tmpQ.setFromAxisAngle(DEDO_EJE, a)); }
+  }
   // t: segundos; hablando: 0..1; u: userData del contenedor (mano, saludo)
   animar(t, hablando = 0, u = {}, reducido = false) {
     const h = this.h; if (!h.cabeza || !this.base.cabeza) return;
+    if (this.boca) { const ab = hablando > 0.04 ? hablando * (0.35 + 0.65 * Math.abs(Math.sin(t * 9.3) * Math.sin(t * 5.7 + 1))) : 0; this.boca.visible = ab > 0.05; this.boca.scale.y = 0.2 + 0.85 * ab; }
     const e = new THREE.Euler();
     if (!reducido) {
       e.set(Math.sin(t * 0.7) * 0.03 + hablando * Math.sin(t * 7.5) * 0.06, Math.sin(t * 0.45) * 0.12, hablando * Math.sin(t * 3.1) * 0.03);
@@ -178,8 +236,8 @@ class Avatar {
 
 export async function crearAvatar(cfg = {}, { sentado = false } = {}) {
   const genero = cfg.genero === 'hombre' ? 'hombre' : 'mujer';
-  const [L, buf] = await Promise.all([obtenerCargador(), cargarKit(genero)]);
-  const gltf = await L.parseAsync(buf, '');
+  const [cargadorGLTF, buf] = await Promise.all([obtenerCargador(), cargarKit(genero), precargarLogos()]);
+  const gltf = await cargadorGLTF.parseAsync(buf, '');
   const raiz = new THREE.Group(); raiz.name = 'avatar-' + genero;
   const modelo = gltf.scene; raiz.add(modelo);
   const av = new Avatar(raiz, modelo, genero);
@@ -199,15 +257,32 @@ export async function crearAvatar(cfg = {}, { sentado = false } = {}) {
   const alturaCabeza = Math.max(0.18, top - cab.y);
   const ojosY = cab.y + alturaCabeza * (genero === 'mujer' ? 0.49 : 0.46);
   const frente = cabezaCaja.isEmpty() ? 0.1 : (() => { let z = -1; raiz.updateMatrixWorld(true); for (const ms of Object.values(av.piezas.cabello || {})) ms.forEach((m) => { if (!m.visible) return; m.updateMatrixWorld(true); }); z = raiz.worldToLocal(cabezaCaja.max.clone()).z; return z; })();
-  const manoI = av.h.manoI ? raiz.worldToLocal(av.h.manoI.getWorldPosition(new THREE.Vector3())) : v(0.2, 0.8, 0);
-  const pecho = av.h.pecho ? raiz.worldToLocal(av.h.pecho.getWorldPosition(new THREE.Vector3())) : v(0, 1.3, 0);
+  const L = (o) => raiz.worldToLocal(o.getWorldPosition(new THREE.Vector3()));
+  const manoI = av.h.manoI ? L(av.h.manoI) : v(0.2, 0.8, 0); const codoI = av.h.antebrazoI ? L(av.h.antebrazoI) : v(0.2, 1.05, 0);
+  const pecho = av.h.pecho ? L(av.h.pecho) : v(0, 1.3, 0);
+  const cuello = av.h.cuello ? L(av.h.cuello) : v(0, pecho.y + 0.15, 0);
+  const mujer = genero === 'mujer';
+  const caraZ = cab.z + Math.min(0.12, Math.max(0.07, frente - cab.z - 0.01));
+  // reloj: 85 % del antebrazo, eje Y a lo largo del brazo y carátula (+X) hacia afuera del cuerpo
+  const dirAnte = manoI.clone().sub(codoI).normalize();
+  const fuera = v(1, 0, 0.35).normalize(); fuera.sub(dirAnte.clone().multiplyScalar(fuera.dot(dirAnte))).normalize();
+  const qReloj = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(fuera, dirAnte, fuera.clone().cross(dirAnte).normalize()));
+  const pReloj = codoI.clone().lerp(manoI, mujer ? 0.82 : 0.9);
+  // collar: cadena alrededor del cuello que baja en "U" sobre el pecho (coordenadas de la sala, de pie)
   av.ANCLA = {
-    lentes: { x: 0, y: ojosY, z: cab.z + Math.min(0.12, Math.max(0.07, frente - cab.z - 0.01)) },
-    oreja: { x: 0.072, y: ojosY - 0.045, z: cab.z + 0.005 },
-    reloj: { x: manoI.x, y: manoI.y + 0.06, z: manoI.z },
-    logo: { x: -0.08, y: pecho.y + 0.02, z: pecho.z + 0.12 },
-    collar: (() => { const c = av.h.cuello ? raiz.worldToLocal(av.h.cuello.getWorldPosition(new THREE.Vector3())) : v(0, pecho.y + 0.15, 0); return { x: c.x, y: c.y + 0.035, z: c.z + 0.006, r: genero === 'mujer' ? 0.043 : 0.051 }; })(),
+    lentes: { x: 0, y: ojosY - 0.01, z: caraZ },
+    oreja: { x: 0, y: ojosY - 0.06, z: cab.z + 0.004, ancho: mujer ? 0.074 : 0.08 },
+    boca: { x: 0, y: ojosY - (mujer ? 0.083 : 0.078), z: caraZ - (mujer ? 0.012 : 0.008) },
+    reloj: { x: pReloj.x, y: pReloj.y, z: pReloj.z, q: qReloj, r: mujer ? 0.026 : 0.03 },
+    logoBase: { x: mujer ? 0.072 : 0.082, y: pecho.y + (mujer ? 0.035 : 0.05), z: pecho.z + 0.12 },
+    logo: { x: mujer ? 0.072 : 0.082, y: pecho.y + (mujer ? 0.035 : 0.05), z: pecho.z + 0.12 },
+    cuelloBase: { y: cuello.y + (mujer ? 0.034 : 0.04), z: cuello.z },
+    collar: { x: 0, y: 0, z: 0 },
+    collarForma: [],
   };
+  av.calibrar(); if (typeof window !== 'undefined' && window.__labAvatar) window.__labAvatar.push({ genero, cuello, pecho, cab, ojosY, caraZ });
+  // boca: aparece solo al hablar (lip-sync sutil por volumen)
+  if (av.h.cabeza) { const boca = new THREE.Mesh(new THREE.CircleGeometry(0.01, 20), new THREE.MeshStandardMaterial({ color: '#4A1F22', roughness: 0.9 })); boca.scale.set(1.5, 0.15, 1); boca.visible = false; av.colgar(boca, 'boca'); av.boca = boca; }
   av.aplicar(cfg);
   if (sentado) av.postura('sentado');
   av.sentadoAltura = 0;

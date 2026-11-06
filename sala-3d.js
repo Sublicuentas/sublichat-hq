@@ -154,7 +154,7 @@ function ajustar(r, cam, el) { const w = el.clientWidth || 600, h = el.clientHei
 
 // ---------- R172 · avatares reales (GLB) con respaldo ----------
 let moduloGLB = null;
-const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r174'));
+const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r177'));
 // Crea el avatar 3D real; si el modelo no carga (sin red, equipo sin soporte) usa el personaje anterior y lo avisa.
 export async function crearAvatar3D(cfg = {}, opts = {}) {
   try { const M = await avatarGLB(); const g = await M.crearAvatar(cfg, opts); g.userData.glb = g.userData.avatar; g.userData.t0 = Math.random() * 10; return g; }
@@ -172,16 +172,16 @@ export function montarEditor(canvas, cfg) {
   const rim = new THREE.DirectionalLight(0xffd9b0, 0.8); rim.position.set(-2, 2, -2); escena.add(rim);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.06, 40), mat('#E9ECF1', { r: 0.4 })); base.position.y = -0.03; escena.add(base);
   let p = new THREE.Group(); escena.add(p); let ficha = 0; let cfgActual = cfg;
-  let giro = 0.35, objetivo = 0.35, vivo = true, t0 = performance.now(), arrastre = null;
+  let giro = 0.35, objetivo = 0.35, vivo = true, t0 = performance.now(), arrastre = null, vuelta = false;
   const reconstruir = async (c) => {
     const yo = ++ficha; const nuevo = await crearAvatar3D(c);
     if (!vivo || yo !== ficha) { liberar(nuevo); return; }
     escena.remove(p); liberar(p); p = nuevo; p.rotation.y = giro; escena.add(p);
   };
   const listo = reconstruir(cfg);
-  const loop = () => { if (!vivo) return; ajustar(r, cam, canvas); giro += (objetivo - giro) * (reducido ? 1 : 0.12); dist += (distObj - dist) * (reducido ? 1 : 0.15); ponerCam(); p.rotation.y = giro; animarPersonaje(p, (performance.now() - t0) / 1000); r.render(escena, cam); requestAnimationFrame(loop); };
+  const loop = () => { if (!vivo) return; ajustar(r, cam, canvas); if (vuelta && !arrastre) objetivo += reducido ? 0 : 0.012; giro += (objetivo - giro) * (reducido ? 1 : 0.12); dist += (distObj - dist) * (reducido ? 1 : 0.15); ponerCam(); p.rotation.y = giro; animarPersonaje(p, (performance.now() - t0) / 1000); r.render(escena, cam); requestAnimationFrame(loop); };
   loop();
-  const down = (e) => { arrastre = { x: e.clientX, g: objetivo }; canvas.setPointerCapture?.(e.pointerId); };
+  const down = (e) => { vuelta = false; canvas.dispatchEvent(new CustomEvent('sj-giro', { detail: false })); arrastre = { x: e.clientX, g: objetivo }; canvas.setPointerCapture?.(e.pointerId); };
   const move = (e) => { if (arrastre) objetivo = arrastre.g + (e.clientX - arrastre.x) * 0.012; };
   const up = () => { arrastre = null; };
   const rueda = (e) => { e.preventDefault(); distObj = Math.min(3.9, Math.max(1.6, distObj + Math.sign(e.deltaY) * 0.35)); };
@@ -196,11 +196,13 @@ export function montarEditor(canvas, cfg) {
       if (mismo) { ficha++; p.userData.glb.aplicar(nueva); return Promise.resolve(); }
       return reconstruir(nueva);
     },
-    rotar(d) { objetivo += d; },
+    rotar(d) { vuelta = false; objetivo += d; },
+    // R177 · giro 360° continuo (se detiene al arrastrar o al elegir una vista)
+    girar(on) { vuelta = on === undefined ? !vuelta : !!on; return vuelta; },
     // R172 · vistas fijas, acercar y restablecer cámara
-    vista(n) { const a = { frente: 0, tresCuartos: 0.8, lado: Math.PI / 2, espalda: Math.PI }[n]; if (a === undefined) return; const vueltas = Math.round((objetivo - a) / (Math.PI * 2)); objetivo = a + vueltas * Math.PI * 2; },
+    vista(n) { vuelta = false; const a = { frente: 0, tresCuartos: 0.8, lado: Math.PI / 2, espalda: Math.PI }[n]; if (a === undefined) return; const vueltas = Math.round((objetivo - a) / (Math.PI * 2)); objetivo = a + vueltas * Math.PI * 2; },
     zoom(d) { distObj = Math.min(3.9, Math.max(1.6, distObj - d)); },
-    reiniciar() { objetivo = 0.35; distObj = 3.9; },
+    reiniciar() { vuelta = false; objetivo = 0.35; distObj = 3.9; },
     // Miniatura (busto, 160×160 WebP) para mostrar el personaje en listas sin cargar 3D.
     miniatura() {
       const c2 = document.createElement('canvas'); c2.width = 160; c2.height = 160;
@@ -258,8 +260,11 @@ function laptop() {
 export const ASIENTOS = { naara: { x: 0, z: -1.55, ry: 0 }, libni: { x: -2.15, z: -0.1, ry: Math.PI / 2 * 0.82 }, geisell: { x: 2.15, z: -0.1, ry: -Math.PI / 2 * 0.82 } };
 const LIBRES = [{ x: -1.25, z: 1.6, ry: Math.PI * 0.92 }, { x: 0, z: 1.75, ry: Math.PI }, { x: 1.25, z: 1.6, ry: -Math.PI * 0.92 }];
 
-const MOD_ESC = '/escenarios.js?v=20261105-r174';
-const esBase = (e = {}) => !e || ((!e.paredes || e.paredes === 'madera') && (!e.asientos || e.asientos === 'ejecutiva') && (!e.paleta || e.paleta === 'beige-madera') && (!e.luz || e.luz === 'calida'));
+const MOD_ESC = '/escenarios.js?v=20261105-r177';
+// R177 · la Sala C original se usa solo si TODO el ambiente es el base (piso, brillo y decoración incluidos)
+const DECO_C = { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true };
+const esBase = (e = {}) => !e || ((!e.paredes || e.paredes === 'madera') && (!e.asientos || e.asientos === 'ejecutiva') && (!e.paleta || e.paleta === 'beige-madera') && (!e.luz || e.luz === 'calida')
+  && (!e.piso || e.piso === 'madera') && (!e.brillo || e.brillo === 'normal') && (!e.deco || Object.entries(DECO_C).every(([k, v]) => e.deco[k] === undefined || e.deco[k] === v)));
 export async function montarSala(contenedor, { avatares = {}, participantes = ['naara', 'libni', 'geisell'], alCambiarVista, escenario = 'sala-c', estilo = null } = {}) {
   const canvas = document.createElement('canvas'); canvas.className = 'sj3d-canvas'; contenedor.appendChild(canvas);
   const r = renderer(canvas); let calidad = movil ? 'baja' : 'alta';
@@ -294,11 +299,11 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   pantalla = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 2.05), new THREE.MeshBasicMaterial({ map: texturaPantalla(logo), toneMapped: false })); pantalla.position.set(0, 1.95, 0.17); fondo.add(pantalla);
   fondo.add(malla(new THREE.BoxGeometry(14, 0.06, 0.3), mat('#FFC27A', { e: 0xff9a3c, ei: 0.9 }), 0, 3.5, 0.1)); // tira de luz cálida
   for (const lado of [-1, 1]) { // libreros laterales
-    const lib = new THREE.Group(); lib.position.set(lado * 5.2, 0, -2.4); lib.rotation.y = -lado * 0.5; escena.add(lib);
+    const lib = new THREE.Group(); lib.position.set(lado * 5.2, 0, -2.4); lib.rotation.y = -lado * 0.5; lib.userData.secundario = true; escena.add(lib);
     lib.add(malla(new THREE.BoxGeometry(1.6, 3, 0.4), mat('#5E3B24', { r: 0.6 }), 0, 1.5, 0));
     for (let f = 0; f < 4; f++) { lib.add(malla(new THREE.BoxGeometry(1.5, 0.04, 0.38), mat('#7A4E2E'), 0, 0.5 + f * 0.7, 0.02)); for (let b = 0; b < 6; b++) lib.add(malla(new THREE.BoxGeometry(0.12, 0.3 + (b % 3) * 0.05, 0.25), mat(['#7A1F2B', '#2B4C7E', '#E8E1D5', '#1F2430', '#9E6B3C', '#3E6B47'][(b + f) % 6]), -0.55 + b * 0.2, 0.68 + f * 0.7, 0.05)); }
   }
-  [[-3.6, -3.4, 1.3], [3.6, -3.4, 1.3], [-5.4, 0.6, 1.1], [5.4, 0.6, 1.1]].forEach(([x, z, h]) => escena.add(planta(x, z, h)));
+  [[-3.6, -3.4, 1.3], [3.6, -3.4, 1.3], [-5.4, 0.6, 1.1], [5.4, 0.6, 1.1]].forEach(([x, z, h]) => { const pl = planta(x, z, h); pl.userData.secundario = true; escena.add(pl); });
   const techo = new THREE.Mesh(new THREE.PlaneGeometry(14, 12), mat('#3B2A20', { r: 0.9 })); techo.rotation.x = Math.PI / 2; techo.position.y = 3.6; escena.add(techo);
   for (const [x, z] of [[-2.5, -1], [0, -0.5], [2.5, -1], [-2.5, 1.8], [2.5, 1.8], [0, 2]]) { const f = new THREE.Mesh(new THREE.CircleGeometry(0.12, 20), mat('#FFF1D6', { e: 0xffd9a0, ei: 1.2 })); f.rotation.x = Math.PI / 2; f.position.set(x, 3.59, z); escena.add(f); }
 
@@ -323,6 +328,9 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   for (const id of ['naara', 'libni', 'geisell']) {
     const pos = A[id]; if (!pos || !participantes.includes(id)) continue;
     const p = new THREE.Group(); p.position.set(pos.x - Math.sin(pos.ry) * 0.05, pos.y || 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
+    // R177 · aro luminoso en la base: se enciende solo mientras la persona habla
+    const aro = new THREE.Mesh(new THREE.RingGeometry(0.46, 0.56, 56), new THREE.MeshBasicMaterial({ color: '#2FD27A', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    aro.rotation.x = -Math.PI / 2; aro.position.y = 0.02; aro.renderOrder = 3; aro.userData.sjMat = true; aro.name = 'aroVoz'; p.add(aro); p.userData.aro = aro;
     cargas.push(crearAvatar3D(avatares[id]?.config || {}, { sentado: true }).then((a) => {
       if (!vivo) { liberar(a); return; }
       p.add(a); Object.assign(p.userData, { glb: a.userData.glb || null, t0: a.userData.t0 || 0 });
@@ -339,6 +347,9 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   };
   const PAN = VIS0 ? { radio: VIS0.radio, alto: VIS0.alto } : { radio: 5.2, alto: 2.9 };
   const vistaDe = (id) => { const a = A[id]; const y0 = a.y || 0; const frente = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)); return { pos: new THREE.Vector3(a.x, 1.6 + y0, a.z).add(frente.multiplyScalar(2.3)), mira: new THREE.Vector3(a.x, 1.2 + y0, a.z) }; };
+  // R177 · Modo grabación: plano frontal de la anfitriona (o de quien graba)
+  const vistaGrab = () => { const id = A.naara ? 'naara' : Object.keys(A)[0]; const a = A[id]; const y0 = a.y || 0; const f = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)); return { pos: new THREE.Vector3(a.x, 1.32 + y0, a.z).add(f.multiplyScalar(2.1)), mira: new THREE.Vector3(a.x, 1.12 + y0, a.z) }; };
+  VISTAS.grabacion = vistaGrab();
   let actual = { pos: VISTAS.general.pos.clone(), mira: VISTAS.general.mira.clone() }, desde = null, hacia = null, tIni = 0, dur = 900, modo = 'general', panT = 0;
   cam.position.copy(actual.pos); cam.lookAt(actual.mira);
   try { contenedor.__sj3d = { cam, escena }; } catch (_) {}
@@ -365,7 +376,9 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   }
   // nombres sobre cada personaje
   const capa = document.createElement('div'); capa.className = 'sj3d-nombres'; contenedor.appendChild(capa);
-  for (const id of Object.keys(personajes)) { const e = document.createElement('span'); e.className = 'sj3d-nombre' + (id === 'naara' ? ' sj3d-anf' : ''); e.textContent = id === 'naara' ? '👑 Naara (Anfitriona)' : id.charAt(0).toUpperCase() + id.slice(1); capa.appendChild(e); etiquetas[id] = e; }
+  // R177 · "Nombre visible" elegido en Mi personaje (si no hay, el nombre de usuaria)
+  const nombreBase = (id) => { const n = String(avatares[id]?.config?.nombre || '').trim() || (id.charAt(0).toUpperCase() + id.slice(1)); return id === 'naara' ? `👑 ${n} (Anfitriona)` : n; };
+  for (const id of Object.keys(personajes)) { const e = document.createElement('span'); e.className = 'sj3d-nombre' + (id === 'naara' ? ' sj3d-anf' : ''); e.dataset.id = id; e.textContent = nombreBase(id); const o = document.createElement('i'); o.className = 'sj3d-ondas'; o.setAttribute('aria-hidden', 'true'); o.innerHTML = '<b></b><b></b><b></b>'; e.appendChild(o); capa.appendChild(e); etiquetas[id] = e; }
 
   let vivo = true, frames = 0, tMed = performance.now(), hablando = null; const t0 = performance.now(); const v3 = new THREE.Vector3();
   const loop = () => {
@@ -374,29 +387,29 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     else if (modo === 'libre') { cam.position.lerp(posLibre(), reducido ? 1 : 0.2); actual.mira.copy(VISTAS.libre.mira); }
     else if (modo === 'panoramica' && !reducido) { panT += 0.0018; cam.position.set(centro.x + Math.sin(panT) * PAN.radio, PAN.alto, centro.z + Math.cos(panT) * PAN.radio); actual.mira.copy(centro); }
     cam.lookAt(actual.mira);
-    const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) animarPersonaje(p, t, hablando === id ? 1 : 0);
+    const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) { const hb = hablando === id; animarPersonaje(p, t, hb ? 1 : 0); const a = p.userData.aro; if (a) { const meta = hb ? (reducido ? 0.7 : 0.55 + Math.sin(t * 6) * 0.25) : 0; a.material.opacity += (meta - a.material.opacity) * (reducido ? 1 : 0.2); a.visible = a.material.opacity > 0.02; } }
     r.render(escena, cam);
     const w = contenedor.clientWidth, h = contenedor.clientHeight;
-    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, (p.userData.glb ? 1.62 : 1.95) + p.position.y, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
+    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, (p.userData.glb ? 1.46 : 1.95) + p.position.y, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
     frames++; if (ahora - tMed > 3000) { const fps = frames / ((ahora - tMed) / 1000); frames = 0; tMed = ahora; if (fps < 28 && calidad === 'alta') { calidad = 'baja'; r.setPixelRatio(1); r.shadowMap.enabled = false; escena.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); } }
     requestAnimationFrame(loop);
   };
   loop();
   // R170 · presencia, micrófono, pantalla compartida y reacciones (Fase 4)
   const matLogo = pantalla.material.map; let texVideo = null;
-  const nombreBase = (id) => (id === 'naara' ? '👑 Naara (Anfitriona)' : id.charAt(0).toUpperCase() + id.slice(1));
   const est = {}; // id → { presente, mic }
   const pintarEtq = (id) => { const e = etiquetas[id]; if (!e) return; const x = est[id] || {}; const txt = (x.mano ? '✋ ' : '') + nombreBase(id) + (x.presente === false ? ' · no ha entrado' : x.mic === false ? ' 🔇' : ''); if (e.firstChild && e.firstChild.nodeType === 3) e.firstChild.nodeValue = txt; else e.prepend(txt); e.classList.toggle('sj3d-ausente', x.presente === false); };
   function setPresente(id, presente) {
     const p = personajes[id]; if (!p) return; (est[id] = est[id] || {}).presente = presente;
-    p.traverse((o) => { if (o.material && !o.userData.sjMat) { o.material = o.material.clone(); o.userData.sjMat = true; } if (o.material) { o.material.transparent = !presente; o.material.opacity = presente ? 1 : 0.22; o.material.depthWrite = presente; } });
+    p.traverse((o) => { if (o.name === 'aroVoz') return; if (o.material && !o.userData.sjMat) { o.material = o.material.clone(); o.userData.sjMat = true; } if (o.material) { o.material.transparent = !presente; o.material.opacity = presente ? 1 : 0.22; o.material.depthWrite = presente; } });
     pintarEtq(id);
   }
   const caer = []; // reacciones flotando
+  let expBase = 0;
   return {
     listo: Promise.all(cargas),
     setVista, vistas: ['general', 'presentacion', 'panoramica', 'libre'],
-    setHablante(id) { hablando = id; }, calidad: () => calidad,
+    setHablante(id) { if (hablando === id) return; if (etiquetas[hablando]) etiquetas[hablando].classList.remove('sj3d-hablando'); hablando = id; if (etiquetas[id]) etiquetas[id].classList.add('sj3d-hablando'); }, calidad: () => calidad,
     setMano(id, on) { const p = personajes[id]; if (!p) return; p.userData.mano = !!on; (est[id] = est[id] || {}).mano = !!on; pintarEtq(id); },
     saludar(id) { const p = personajes[id]; if (p) p.userData.saludo = performance.now(); },
     setPresente, setMicro(id, on) { (est[id] = est[id] || {}).mic = !!on; pintarEtq(id); },
@@ -409,6 +422,11 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     reaccion(id, emoji) {
       const e = etiquetas[id]; if (!e) return; const b = document.createElement('span'); b.className = 'sj3d-reac'; b.textContent = emoji;
       e.appendChild(b); caer.push(b); setTimeout(() => { b.remove(); caer.splice(caer.indexOf(b), 1); }, 2600);
+    },
+    modoGrabacion(on) {
+      escena.traverse((o) => { if (o.userData && o.userData.secundario) o.visible = !on; });
+      if (on && !expBase) expBase = r.toneMappingExposure; r.toneMappingExposure = on ? expBase * 1.12 : (expBase || r.toneMappingExposure); if (!on) expBase = 0;
+      capa.classList.toggle('sj3d-limpio', !!on); setVista(on ? 'grabacion' : 'general');
     },
     foto() { try { return canvas.toDataURL('image/jpeg', 0.85); } catch (_) { return ''; } },
     destruir() { vivo = false; if (texVideo) texVideo.dispose(); pantalla.material.map = matLogo; liberar(escena); r.dispose(); canvas.remove(); capa.remove(); },

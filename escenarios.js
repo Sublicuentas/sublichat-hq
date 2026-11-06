@@ -11,7 +11,7 @@ export const ESCENARIOS = {
     asientos: [['ejecutiva', 'Ejecutiva alta'], ['media', 'Ejecutiva media'], ['moderna', 'Moderna acolchada'], ['premium', 'Sillón premium']],
     paleta: [['beige-madera', 'Beige · Madera'], ['rojo-grafito', 'Rojo · Grafito'], ['negro-rojo', 'Negro · Rojo'], ['blanco-rojo', 'Blanco · Rojo'], ['gris-calido', 'Gris cálido']],
     luz: [['calida', 'Cálida'], ['neutra', 'Neutra'], ['led', 'LED'], ['indirecta', 'Indirecta suave']],
-    base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'calida' },
+    base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'calida', piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true } },
   },
   socios: {
     nombre: 'Sala de Socios', corto: 'Sala de Socios', uso: 'Estrategia, coordinación, seguimiento y junta mensual',
@@ -19,7 +19,7 @@ export const ESCENARIOS = {
     asientos: [['ejecutiva', 'Ejecutiva alta'], ['media', 'Ejecutiva media'], ['moderna', 'Moderna acolchada'], ['premium', 'Sillón premium']],
     paleta: [['rojo-grafito', 'Rojo · Grafito'], ['beige-madera', 'Beige · Madera'], ['negro-rojo', 'Negro · Rojo'], ['blanco-rojo', 'Blanco · Rojo'], ['gris-calido', 'Gris cálido']],
     luz: [['anillo', 'Anillo central'], ['led', 'Líneas LED'], ['indirecta', 'Luz cálida indirecta'], ['neutra', 'Luz corporativa neutra']],
-    base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'anillo' },
+    base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'anillo', piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: true, logos: false, utileria: true } },
   },
   aula: {
     nombre: 'Subli Aula', corto: 'Subli Aula', uso: 'Cursos, onboarding, formación interna y talleres',
@@ -27,7 +27,7 @@ export const ESCENARIOS = {
     asientos: [['pupitre', 'Pupitre clásico'], ['ejecutivo', 'Pupitre ejecutivo'], ['butaca', 'Butaca moderna'], ['mesas', 'Mesa de capacitación']],
     paleta: [['rojo-blanco', 'Rojo · Blanco'], ['rojo-madera', 'Rojo · Madera'], ['blanco-gris', 'Blanco · Gris'], ['negro-rojo', 'Negro · Rojo'], ['beige-calido', 'Beige cálido']],
     luz: [['calida', 'Cálida'], ['aula', 'Neutra de aula'], ['led', 'LED moderna'], ['auditorio', 'Auditorio suave']],
-    base: { paredes: 'madera', asientos: 'pupitre', paleta: 'rojo-madera', luz: 'calida' },
+    base: { paredes: 'madera', asientos: 'pupitre', paleta: 'rojo-madera', luz: 'calida', piso: 'madera', brillo: 'normal', deco: { plantas: true, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true } },
   },
   live: {
     nombre: 'Subli Live', corto: 'Subli Live', uso: 'Anuncios, lanzamientos, promociones y presentaciones en vivo',
@@ -35,7 +35,7 @@ export const ESCENARIOS = {
     asientos: [['talkshow', 'Butacas talk show'], ['altas', 'Sillas altas'], ['lounge', 'Sillones lounge'], ['entrevista', 'Mesa de entrevista']],
     paleta: [['rojo-negro', 'Rojo · Negro'], ['rojo-gris', 'Rojo · Gris'], ['rojo-blanco', 'Rojo · Blanco'], ['negro-grafito', 'Negro · Grafito'], ['rojo-dorado', 'Rojo · Dorado']],
     luz: [['aro', 'Aro de luz'], ['estudio', 'Spot de estudio'], ['led', 'LED perimetral'], ['calida', 'Luz cálida']],
-    base: { paredes: 'led', asientos: 'talkshow', paleta: 'rojo-negro', luz: 'estudio' },
+    base: { paredes: 'led', asientos: 'talkshow', paleta: 'rojo-negro', luz: 'estudio', piso: 'madera', brillo: 'normal', deco: { plantas: false, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: true, utileria: true } },
   },
   cinema: {
     nombre: 'Subli Cinema', corto: 'Subli Cinema', uso: 'Estrenos, recomendaciones, revisión de videos y contenido audiovisual',
@@ -43,10 +43,32 @@ export const ESCENARIOS = {
     asientos: [['butaca', 'Butaca de cine'], ['sofa', 'Sofá lounge'], ['reclinable', 'Sillón reclinable'], ['doble', 'Asiento premium doble']],
     paleta: [['rojo-negro', 'Rojo · Negro'], ['grafito-dorado', 'Grafito · Dorado'], ['negro-rojo', 'Negro · Rojo'], ['beige-oscuro', 'Beige oscuro'], ['rojo-vino', 'Rojo vino']],
     luz: [['pasillo', 'Luces de pasillo'], ['tenue', 'Tenue de cine'], ['led', 'LED lateral'], ['lounge', 'Ambiente lounge']],
-    base: { paredes: 'acustica', asientos: 'butaca', paleta: 'rojo-negro', luz: 'tenue' },
+    base: { paredes: 'acustica', asientos: 'butaca', paleta: 'rojo-negro', luz: 'tenue', piso: 'madera', brillo: 'normal', deco: { plantas: false, cuadros: false, lamparas: false, mesas: false, paneles: false, logos: false, utileria: true } },
   },
 };
 export const PARAMS = [['paredes', 'Paredes / fondo'], ['asientos', 'Asientos / set'], ['paleta', 'Paleta de color'], ['luz', 'Iluminación']];
+// R177 · ambiente editable (igual en api/_sala-juntas.js · AMBIENTE)
+export const AMBIENTE = {
+  piso: [['madera', 'Madera'], ['neutro', 'Neutro'], ['oscuro', 'Oscuro'], ['claro', 'Claro']],
+  brillo: [['suave', 'Suave'], ['normal', 'Normal'], ['brillante', 'Más brillante']],
+  deco: [['plantas', 'Plantas'], ['cuadros', 'Cuadros'], ['lamparas', 'Lámparas de pie'], ['mesas', 'Mesas auxiliares'], ['paneles', 'Paneles informativos'], ['utileria', 'Utilería del set']],
+  marca: [['logos', 'Logo Sublicuentas iluminado']],
+};
+const DECO = ['plantas', 'cuadros', 'lamparas', 'mesas', 'paneles', 'logos', 'utileria'];
+// Estilos sugeridos (se aplican al instante; se guardan solo si la persona pulsa Guardar)
+export const SUGERIDOS = [['junta', 'Junta mensual'], ['sobria', 'Reunión sobria'], ['anuncio', 'Anuncio'], ['presentacion', 'Presentación'], ['grabacion', 'Grabación limpia']];
+const LUZ_NEUTRA = { 'sala-c': 'neutra', socios: 'neutra', aula: 'aula', live: 'estudio', cinema: 'led' };
+export function sugerido(id, clave) {
+  const E = ESCENARIOS[id] || ESCENARIOS['sala-c']; const b = E.base; const no = Object.fromEntries(DECO.map((k) => [k, false]));
+  const T = {
+    junta: { ...b, deco: { ...b.deco, plantas: true, paneles: true, logos: true, cuadros: true } },
+    sobria: { ...b, piso: 'neutro', luz: LUZ_NEUTRA[id], deco: { ...no, plantas: true } },
+    anuncio: { ...b, piso: 'oscuro', brillo: 'brillante', deco: { ...no, logos: true, utileria: true, lamparas: true } },
+    presentacion: { ...b, luz: LUZ_NEUTRA[id], deco: { ...b.deco, paneles: true, logos: true } },
+    grabacion: { ...b, brillo: 'brillante', luz: LUZ_NEUTRA[id], deco: { ...no, logos: true } },
+  }[clave];
+  return estiloValido(id, T || b);
+}
 
 // Paletas: acento (marca), pared, piso, madera, tela de asientos, metal, cielo (fondo)
 const PALETAS = {
@@ -84,8 +106,12 @@ const LUCES = {
 };
 
 export function estiloValido(id, estilo = {}) {
-  const E = ESCENARIOS[id] || ESCENARIOS['sala-c']; const out = {};
+  const E = ESCENARIOS[id] || ESCENARIOS['sala-c']; const out = {}; estilo = estilo || {};
   for (const [k] of PARAMS) out[k] = E[k].some(([v]) => v === estilo[k]) ? estilo[k] : E.base[k];
+  out.piso = AMBIENTE.piso.some(([v]) => v === estilo.piso) ? estilo.piso : E.base.piso;
+  out.brillo = AMBIENTE.brillo.some(([v]) => v === estilo.brillo) ? estilo.brillo : E.base.brillo;
+  const d = estilo.deco && typeof estilo.deco === 'object' ? estilo.deco : {};
+  out.deco = Object.fromEntries(DECO.map((k) => [k, typeof d[k] === 'boolean' ? d[k] : E.base.deco[k]]));
   return out;
 }
 
@@ -150,27 +176,78 @@ function plantaSimple(x, z, h = 1.1) {
   return g;
 }
 
+
+// ---------- R177 · ambiente: piso, cuadros, lámparas, mesas auxiliares, paneles, logo ----------
+function pisoMaterial(tipo, P) {
+  if (tipo === 'neutro') { const t = textura((x, w, h) => { x.fillStyle = '#A39E96'; x.fillRect(0, 0, w, h); for (let i = 0; i < 2600; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); } }, 256, 256); t.repeat.set(6, 6); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.78 }); }
+  if (tipo === 'oscuro' || tipo === 'claro') { const os = tipo === 'oscuro'; const t = textura((x, w, h) => { x.fillStyle = os ? '#1A1B1F' : '#E6DFD3'; x.fillRect(0, 0, w, h); x.strokeStyle = os ? '#2A2C32' : '#CDC4B6'; x.lineWidth = 4; x.strokeRect(2, 2, w - 4, h - 4); }, 256, 256); t.repeat.set(9, 8); return new THREE.MeshStandardMaterial({ map: t, roughness: os ? 0.26 : 0.45, metalness: os ? 0.15 : 0 }); }
+  const t = maderaTex(P.piso, oscurecer(P.piso, 0.75)); t.repeat.set(7, 7); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.55 });
+}
+function cuadro(P, i, w = 1.1, h = 1.4) {
+  const g = new THREE.Group(); g.add(caja(w + 0.08, h + 0.08, 0.05, mat('#1C1C1E', { r: 0.4 }), 0, 0, 0));
+  const t = textura((x, W, H) => { x.fillStyle = i % 2 ? '#EFEAE2' : '#F4F1EC'; x.fillRect(0, 0, W, H); const c = [P.acento, P.madera, oscurecer(P.pared, 0.8), '#D9C9AE']; for (let k = 0; k < 4; k++) { x.fillStyle = c[(k + i) % 4]; x.globalAlpha = 0.85; if ((k + i) % 2) { x.beginPath(); x.arc(W * (0.3 + 0.15 * k), H * (0.3 + 0.12 * ((k * 3 + i) % 4)), W * (0.12 + 0.04 * k), 0, Math.PI * 2); x.fill(); } else x.fillRect(W * 0.12 * (k + 1), H * (0.15 + 0.17 * k), W * 0.45, H * 0.1); } x.globalAlpha = 1; }, 256, 320);
+  const lienzo = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.06, h - 0.06), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 })); lienzo.position.z = 0.03; g.add(lienzo); return g;
+}
+function lampara(L) {
+  const g = new THREE.Group(); const metal = mat('#1E1E21', { m: 0.6, r: 0.35 });
+  g.add(malla(new THREE.CylinderGeometry(0.17, 0.19, 0.03, 24), metal, 0, 0.015, 0)); g.add(malla(new THREE.CylinderGeometry(0.014, 0.014, 1.5, 8), metal, 0, 0.76, 0));
+  const pant = malla(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 24, 1, true), new THREE.MeshStandardMaterial({ color: '#F3E9D8', emissive: L.punto, emissiveIntensity: 0.55, side: THREE.DoubleSide, roughness: 0.9 }), 0, 1.58, 0); g.add(pant);
+  return g;
+}
+function mesaAux(P) {
+  const g = new THREE.Group(); const m = mat(P.madera, { r: 0.4 });
+  g.add(malla(new THREE.CylinderGeometry(0.28, 0.28, 0.035, 28), m, 0, 0.56, 0)); g.add(malla(new THREE.CylinderGeometry(0.03, 0.05, 0.54, 10), mat(P.metal, { m: 0.5 }), 0, 0.28, 0)); g.add(malla(new THREE.CylinderGeometry(0.18, 0.2, 0.03, 24), mat(P.metal, { m: 0.5 }), 0, 0.015, 0));
+  g.add(malla(new THREE.CylinderGeometry(0.06, 0.045, 0.2, 14), mat('#F2EEE6', { r: 0.3 }), 0.06, 0.68, 0)); for (let i = 0; i < 4; i++) { const h = malla(new THREE.SphereGeometry(0.05, 8, 6), mat('#3E8A47'), 0.06 + Math.cos(i * 1.6) * 0.04, 0.82 + (i % 2) * 0.04, Math.sin(i * 1.6) * 0.04); h.scale.set(0.6, 1.4, 0.4); g.add(h); }
+  g.add(caja(0.16, 0.035, 0.22, mat(P.acento, { r: 0.5 }), -0.1, 0.595, 0.02));
+  return g;
+}
+function panelInfo(P) {
+  const kpi = textura((x, w, h) => { x.fillStyle = '#0F1114'; x.fillRect(0, 0, w, h); x.fillStyle = P.acento; x.fillRect(0, 0, w, 8); x.fillStyle = '#fff'; x.font = '700 64px Inter, Arial'; x.fillText('+32%', 40, 140); x.font = '28px Inter, Arial'; x.fillStyle = '#AEB6C2'; x.fillText('crecimiento', 40, 185); x.fillStyle = '#fff'; x.font = '700 64px Inter, Arial'; x.fillText('125', 300, 140); x.font = '28px Inter, Arial'; x.fillStyle = '#AEB6C2'; x.fillText('nuevos', 300, 185); x.strokeStyle = P.acento; x.lineWidth = 6; x.beginPath(); [[40, 420], [140, 380], [240, 400], [340, 320], [440, 300]].forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.stroke(); }, 512, 512);
+  return new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), new THREE.MeshBasicMaterial({ map: kpi, toneMapped: false }));
+}
+function letrero(logo, w, h) {
+  const t = textura((x, W, H) => { x.clearRect(0, 0, W, H); if (logo) { const k = Math.min(W / logo.width, H / logo.height) * 0.92; x.drawImage(logo, (W - logo.width * k) / 2, (H - logo.height * k) / 2, logo.width * k, logo.height * k); } else { x.fillStyle = '#fff'; x.font = '800 150px Inter, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Sublicuentas', W / 2, H / 2); } }, 1024, 256);
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, toneMapped: false }));
+}
+const sec = (o) => { o.userData.secundario = true; return o; }; // R177 · se oculta en Modo grabación
+function laptop() { const g = new THREE.Group(); const m = mat('#2A2D33', { m: 0.5, r: 0.35 }); g.add(caja(0.34, 0.015, 0.24, m, 0, 0.008, 0)); const pa = caja(0.34, 0.22, 0.012, m, 0, 0.11, -0.12); pa.rotation.x = -0.25; g.add(pa); const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.18), mat('#0E1A2B', { e: 0x2a4a7a, ei: 0.5 })); sc.position.set(0, 0.11, -0.112); sc.rotation.x = -0.25; g.add(sc); return g; }
+
 /* Arma el escenario (sin la Sala C, que vive en sala-3d.js con su diseño aprobado original cuando su estilo es el base).
    Devuelve: pantalla (malla para la presentación), asientos {naara, libni, geisell} y libres, vistas y centro. */
 export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) {
-  const st = estiloValido(id, estiloIn); const P = PALETAS[st.paleta] || PALETAS['rojo-grafito']; const L = LUCES[st.luz] || LUCES.neutra;
+  const st = estiloValido(id, estiloIn); const P = PALETAS[st.paleta] || PALETAS['rojo-grafito']; const L0 = LUCES[st.luz] || LUCES.neutra;
+  const D = st.deco; const K = { suave: 0.7, normal: 1, brillante: 1.4 }[st.brillo] || 1; const L = { ...L0, hemi: L0.hemi * K, si: L0.si * K, pi: L0.pi * K };
   escena.background = new THREE.Color(P.cielo); escena.fog = new THREE.Fog(P.cielo, 14, 26);
   escena.add(new THREE.HemisphereLight(L.cielo, L.suelo, L.hemi));
   const sol = new THREE.DirectionalLight(L.sol, L.si); sol.position.set(3, 6, 5); sol.castShadow = true; sol.shadow.mapSize.set(1024, 1024); Object.assign(sol.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 }); escena.add(sol);
-  const piso = new THREE.Mesh(new THREE.PlaneGeometry(18, 16), new THREE.MeshStandardMaterial({ map: maderaTex(P.piso, oscurecer(P.piso, 0.75)), roughness: 0.55 })); piso.material.map.repeat.set(7, 7); piso.rotation.x = -Math.PI / 2; piso.receiveShadow = true; escena.add(piso);
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(18, 16), pisoMaterial(st.piso, P)); piso.rotation.x = -Math.PI / 2; piso.receiveShadow = true; escena.add(piso);
   const techo = new THREE.Mesh(new THREE.PlaneGeometry(18, 16), mat(oscurecer(P.cielo, 1.4), { r: 0.95 })); techo.rotation.x = Math.PI / 2; techo.position.y = 3.8; escena.add(techo);
   const puntos = (lista) => lista.forEach(([x, z, y = 3.3]) => { const l = new THREE.PointLight(L.punto, L.pi, 9, 1.5); l.position.set(x, y, z); escena.add(l); const f = new THREE.Mesh(new THREE.CircleGeometry(0.12, 18), mat('#fff', { e: L.punto, ei: 1.2 })); f.rotation.x = Math.PI / 2; f.position.set(x, 3.79, z); escena.add(f); });
   const pantallaMat = new THREE.MeshBasicMaterial({ map: texturaPantalla ? texturaPantalla(logo) : null, toneMapped: false });
-  const out = { estilo: st, asientos: {}, libres: [], vistas: {}, centro: new THREE.Vector3(0, 0.9, 0), exp: L.exp };
+  const out = { estilo: st, asientos: {}, libres: [], vistas: {}, centro: new THREE.Vector3(0, 0.9, 0), exp: L.exp * ({ suave: 0.9, brillante: 1.1 }[st.brillo] || 1) };
+  // utilería común del ambiente (posiciones por escenario)
+  const POS = {
+    'sala-c': { cuadros: [-5.4, 5.4], panel: 3.4, lamp: [[-4.9, -3.7], [4.9, -3.7]], mesas: [[-3.3, 2.2], [3.3, 2.2]], logoY: 3.42, plantas: [[-3.6, -3.4], [3.6, -3.4], [-5.4, 0.6], [5.4, 0.6]] },
+    socios: { cuadros: [-5.4, 5.4], panel: 3.4, lamp: [[-4.9, -3.7], [4.9, -3.7]], mesas: [[-3.3, 1.8], [3.3, 1.8]], logoY: 3.42, plantas: [[-3.6, -3.4], [3.6, -3.4], [-5.4, 0.6], [5.4, 0.6]] },
+    aula: { cuadros: [-5.3, 5.3], panel: 3.7, lamp: [[-4.2, -4.0], [4.2, -4.0]], mesas: [[-4.4, -2.4], [4.4, -2.4]], logoY: 3.52, plantas: [[-5.5, -3.8], [5.5, -3.8]] },
+    live: { cuadros: [-4.7, 4.7], panel: 3.2, lamp: [[-5.2, -3.0], [5.2, -3.0]], mesas: [[-2.5, -1.7, 0.12], [2.5, -1.7, 0.12]], logoY: null, plantas: [[-5.2, -3.2], [5.2, -3.2]] },
+    cinema: { cuadros: null, panel: 6.4, lamp: [[-6.8, 3.6], [6.8, 3.6]], mesas: [[-4.2, 0.6, 0.3], [4.2, 0.6, 0.3]], logoY: 0.42, plantas: [[-6.6, -5.4], [6.6, -5.4]] },
+  }[id];
+  const ambiente = (f) => {
+    if (D.plantas) POS.plantas.forEach(([x, z]) => escena.add(sec(plantaSimple(x, z, id === 'aula' ? 1.3 : 1.1))));
+    if (D.cuadros) { if (POS.cuadros) POS.cuadros.forEach((x, i) => { const c = cuadro(P, i); c.position.set(x, 1.95, 0.14); f.add(sec(c)); }); else for (const l of [-1, 1]) for (const [z, i] of [[-2.6, 0], [1.6, 1]]) { const c = cuadro(P, i + (l > 0 ? 2 : 0)); c.position.set(l * 7.45, 2.3, z); c.rotation.y = -l * Math.PI / 2; escena.add(sec(c)); } }
+    if (D.lamparas) POS.lamp.forEach(([x, z]) => { const l = lampara(L); l.position.set(x, 0, z); escena.add(sec(l)); });
+    if (D.mesas) POS.mesas.forEach(([x, z, y = 0]) => { const m = mesaAux(P); m.position.set(x, y, z); escena.add(sec(m)); });
+    if (D.paneles) { const m = panelInfo(P); m.position.set(POS.panel, id === 'cinema' ? 2.2 : 1.9, 0.17); f.add(sec(m)); }
+    if (D.logos && POS.logoY && st.paredes !== 'logo') { const m = letrero(logo, id === 'cinema' ? 2.4 : 2.0, id === 'cinema' ? 0.6 : 0.5); m.position.set(0, POS.logoY, 0.16); f.add(m); }
+  };
   const fondo = (z, ancho, alto) => { const g = pared(st.paredes, P, L, ancho, alto, logo); g.position.z = z; escena.add(g); return g; };
   const ponerAsiento = (pos, atras = 0.12) => { const s = asiento(st.asientos === 'butaca' && id === 'cinema' ? 'butaca-cine' : st.asientos, P); s.position.set(pos.x - Math.sin(pos.ry) * atras, pos.y || 0, pos.z - Math.cos(pos.ry) * atras); s.rotation.y = pos.ry; escena.add(s); return s; };
   const pantallaEn = (g, w, h, y, z = 0.17) => { g.add(caja(w + 0.2, h + 0.2, 0.08, mat('#111216', { r: 0.3 }), 0, y, z - 0.05)); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), pantallaMat); m.position.set(0, y, z); g.add(m); out.pantalla = m; return m; };
 
   if (id === 'socios' || id === 'sala-c') {
-    const f = fondo(-4.4, 14, 3.8); pantallaEn(f, 4.1, 2.05, 1.95);
-    if (id === 'socios') { // panel de indicadores junto a la pantalla
-      const kpi = textura((x, w, h) => { x.fillStyle = '#0F1114'; x.fillRect(0, 0, w, h); x.fillStyle = P.acento; x.fillRect(0, 0, w, 8); x.fillStyle = '#fff'; x.font = '700 64px Inter, Arial'; x.fillText('+32%', 40, 140); x.font = '28px Inter, Arial'; x.fillStyle = '#AEB6C2'; x.fillText('crecimiento', 40, 185); x.fillStyle = '#fff'; x.font = '700 64px Inter, Arial'; x.fillText('125', 300, 140); x.font = '28px Inter, Arial'; x.fillStyle = '#AEB6C2'; x.fillText('nuevos', 300, 185); x.strokeStyle = P.acento; x.lineWidth = 6; x.beginPath(); [[40, 420], [140, 380], [240, 400], [340, 320], [440, 300]].forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.stroke(); }, 512, 512);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), new THREE.MeshBasicMaterial({ map: kpi, toneMapped: false })); m.position.set(3.4, 1.9, 0.17); f.add(m);
+    const f = fondo(-4.4, 14, 3.8); pantallaEn(f, 4.1, 2.05, 1.95); ambiente(f);
+    if (id === 'socios') { // el panel de indicadores ahora es "Paneles informativos" del ambiente
       if (st.luz === 'anillo') { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.05, 10, 64), mat('#fff', { e: L.punto, ei: 1.6 })); ring.rotation.x = Math.PI / 2; ring.position.y = 3.5; escena.add(ring); }
     }
     if (st.luz === 'led') for (const x of [-2.5, 0, 2.5]) escena.add(caja(2, 0.04, 0.08, mat('#fff', { e: L.tira, ei: 1.6 }), x, 3.6, 0));
@@ -189,12 +266,12 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     for (const p of [...Object.values(A), ...libres]) p.ry = Math.atan2(-p.x, -p.z);
     Object.values(A).forEach((p) => ponerAsiento(p)); libres.forEach((p) => ponerAsiento(p));
     out.asientos = A; out.libres = libres;
-    [[-3.6, -3.4], [3.6, -3.4], [-5.4, 0.6], [5.4, 0.6]].forEach(([x, z]) => escena.add(plantaSimple(x, z)));
+    if (D.utileria) Object.values(A).forEach((p) => { const l = laptop(); const k = (Math.hypot(p.x, p.z) - 0.75) / Math.hypot(p.x, p.z); l.position.set(p.x * k, 0.82, p.z * k); l.rotation.y = p.ry + Math.PI; escena.add(sec(l)); });
     out.vistas = { general: { pos: [0, 3.05, 5.4], mira: [0, 1.05, -0.9] }, presentacion: { pos: [0, 1.85, 1.6], mira: [0, 1.85, -4.4] }, panoramica: { radio: 5.4, y: 2.9 } };
   } else if (id === 'aula') {
-    const f = fondo(-4.6, 14, 3.8); pantallaEn(f, 4.6, 2.3, 2.0);
+    const f = fondo(-4.6, 14, 3.8); pantallaEn(f, 4.6, 2.3, 2.0); ambiente(f);
     f.add(caja(14, 0.6, 0.05, mat(P.acento, { r: 0.5 }), 0, 0.3, 0.06));
-    const podio = new THREE.Group(); podio.position.set(-2.9, 0, -3.3); podio.add(caja(0.7, 1.1, 0.5, mat(P.madera, { r: 0.4 }), 0, 0.55, 0)); podio.add(caja(0.74, 0.06, 0.06, mat(P.acento), 0, 0.9, 0.26)); escena.add(podio);
+    if (D.utileria) { const podio = new THREE.Group(); podio.position.set(-2.9, 0, -3.3); podio.add(caja(0.7, 1.1, 0.5, mat(P.madera, { r: 0.4 }), 0, 0.55, 0)); podio.add(caja(0.74, 0.06, 0.06, mat(P.acento), 0, 0.9, 0.26)); escena.add(sec(podio)); }
     puntos([[-3, -1.5], [0, -1.5], [3, -1.5], [-3, 1.5], [0, 1.5], [3, 1.5]]);
     // Naara al frente (mesa de quien dirige) y las demás en la primera fila; resto de filas vacías
     const A = { naara: { x: 0, z: -2.7, ry: Math.PI }, libni: { x: -1.0, z: -0.6, ry: Math.PI }, geisell: { x: 1.0, z: -0.6, ry: Math.PI } };
@@ -206,11 +283,10 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     for (const p of [A.libni, A.geisell, ...filas]) { const s = asiento(st.asientos, P); s.position.set(p.x, 0, p.z + 0.12); s.rotation.y = Math.PI; escena.add(s); }
     out.asientos = { naara: { x: 0, z: -2.7, ry: 0 }, libni: { x: -1.0, z: -0.65, ry: Math.PI }, geisell: { x: 1.0, z: -0.65, ry: Math.PI } };
     out.vistas = { general: { pos: [1.2, 2.5, 5.6], mira: [0, 1.25, -3.2] }, presentacion: { pos: [0, 1.9, 1.2], mira: [0, 1.95, -4.6] }, panoramica: { radio: 5.8, y: 3.0 } };
-    [[-5.5, -3.8], [5.5, -3.8]].forEach(([x, z]) => escena.add(plantaSimple(x, z, 1.3)));
   } else if (id === 'live') {
-    const f = fondo(-3.8, 12, 3.8); pantallaEn(f, 3.6, 1.8, 2.05);
-    const marca = textura((x, w, h) => { x.fillStyle = P.acento; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.font = '800 120px Inter, Arial'; x.textAlign = 'center'; x.fillText('▶ Subli Live', w / 2, 160); }, 1024, 256);
-    const cartel = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: marca, toneMapped: false })); cartel.position.set(0, 3.35, 0.18); f.add(cartel);
+    const f = fondo(-3.8, 12, 3.8); pantallaEn(f, 3.6, 1.8, 2.05); ambiente(f);
+    if (D.logos) { const marca = textura((x, w, h) => { x.fillStyle = P.acento; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.font = '800 120px Inter, Arial'; x.textAlign = 'center'; x.fillText('▶ Subli Live', w / 2, 160); }, 1024, 256);
+    const cartel = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: marca, toneMapped: false })); cartel.position.set(0, 3.35, 0.18); f.add(cartel); }
     // tarima y mesa redonda baja
     const tarima = malla(new THREE.CylinderGeometry(3.2, 3.3, 0.12, 64), mat(oscurecer(P.piso, 0.8), { r: 0.4 }), 0, 0.06, -0.6); escena.add(tarima);
     { const _m = malla(new THREE.TorusGeometry(3.25, 0.025, 8, 80), mat('#fff', { e: P.acento, ei: 1.6 }), 0, 0.12, -0.6); _m.rotation.x = Math.PI / 2; escena.add(_m); }
@@ -221,16 +297,16 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     Object.values(A).forEach((p) => ponerAsiento({ ...p, y: 0.12 }, 0.12));
     out.asientos = Object.fromEntries(Object.entries(A).map(([k, p]) => [k, { ...p, y: 0.12 }]));
     // cámaras de estudio y aros de luz (utilería)
-    for (const [x, z, ry] of [[-3.6, 2.4, 0.7], [3.6, 2.4, -0.7]]) { const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = ry; for (let i = 0; i < 3; i++) { const p = caja(0.03, 1.4, 0.03, mat('#111'), Math.sin(i * 2.1) * 0.25, 0.7, Math.cos(i * 2.1) * 0.25); p.rotation.set(Math.cos(i * 2.1) * 0.18, 0, -Math.sin(i * 2.1) * 0.18); c.add(p); } c.add(caja(0.3, 0.22, 0.42, mat('#18191C', { r: 0.4 }), 0, 1.45, 0)); { const _m = malla(new THREE.CylinderGeometry(0.07, 0.08, 0.18, 16), mat('#0A0A0A'), 0, 1.45, -0.28); _m.rotation.x = Math.PI / 2; c.add(_m); } c.add(malla(new THREE.SphereGeometry(0.025, 8, 6), mat('#f00', { e: 0xff0000 }), 0.1, 1.58, -0.1)); escena.add(c); }
-    if (st.luz === 'aro' || st.luz === 'estudio') for (const x of [-4.2, 4.2]) { const a = new THREE.Group(); a.position.set(x, 0, -0.2); a.add(caja(0.03, 1.6, 0.03, mat('#111'), 0, 0.8, 0)); const ring = malla(new THREE.TorusGeometry(0.32, 0.03, 8, 40), mat('#fff', { e: 0xffffff, ei: 1.8 }), 0, 1.8, 0); ring.rotation.y = x < 0 ? -0.7 : 0.7; a.add(ring); escena.add(a); }
+    if (D.utileria) for (const [x, z, ry] of [[-3.6, 2.4, 0.7], [3.6, 2.4, -0.7]]) { const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = ry; for (let i = 0; i < 3; i++) { const p = caja(0.03, 1.4, 0.03, mat('#111'), Math.sin(i * 2.1) * 0.25, 0.7, Math.cos(i * 2.1) * 0.25); p.rotation.set(Math.cos(i * 2.1) * 0.18, 0, -Math.sin(i * 2.1) * 0.18); c.add(p); } c.add(caja(0.3, 0.22, 0.42, mat('#18191C', { r: 0.4 }), 0, 1.45, 0)); { const _m = malla(new THREE.CylinderGeometry(0.07, 0.08, 0.18, 16), mat('#0A0A0A'), 0, 1.45, -0.28); _m.rotation.x = Math.PI / 2; c.add(_m); } c.add(malla(new THREE.SphereGeometry(0.025, 8, 6), mat('#f00', { e: 0xff0000 }), 0.1, 1.58, -0.1)); escena.add(sec(c)); }
+    if (D.utileria && (st.luz === 'aro' || st.luz === 'estudio')) for (const x of [-4.2, 4.2]) { const a = new THREE.Group(); a.position.set(x, 0, -0.2); a.add(caja(0.03, 1.6, 0.03, mat('#111'), 0, 0.8, 0)); const ring = malla(new THREE.TorusGeometry(0.32, 0.03, 8, 40), mat('#fff', { e: 0xffffff, ei: 1.8 }), 0, 1.8, 0); ring.rotation.y = x < 0 ? -0.7 : 0.7; a.add(ring); escena.add(sec(a)); }
     if (st.luz === 'led') for (const x of [-5.8, 5.8]) escena.add(caja(0.05, 3.4, 0.05, mat('#fff', { e: L.tira, ei: 1.8 }), x, 1.7, -2));
     puntos([[-2, -1], [2, -1], [0, 1.5]]);
     const sp = new THREE.SpotLight(0xffffff, st.luz === 'estudio' ? 60 : 30, 12, 0.6, 0.5, 1.5); sp.position.set(0, 4.5, 3.5); sp.target.position.set(0, 0.8, -0.8); escena.add(sp); escena.add(sp.target);
     out.vistas = { general: { pos: [0, 2.2, 5.0], mira: [0, 1.15, -0.8] }, presentacion: { pos: [0, 2.0, 0.8], mira: [0, 2.05, -3.8] }, panoramica: { radio: 4.6, y: 2.4 } };
     out.centro.set(0, 0.9, -0.6);
   } else if (id === 'cinema') {
-    const f = fondo(-6.4, 16, 4.6); pantallaEn(f, 8.0, 3.4, 2.4, 0.2);
-    for (const l of [-1, 1]) { const tel = caja(1.2, 4.4, 0.25, mat(st.paleta === 'grafito-dorado' ? '#2A2B30' : '#7A0F14', { r: 0.95 }), l * 4.7, 2.2, -6.1); escena.add(tel); }
+    const f = fondo(-6.4, 16, 4.6); pantallaEn(f, 8.0, 3.4, 2.4, 0.2); ambiente(f);
+    if (D.utileria) for (const l of [-1, 1]) { const tel = caja(1.2, 4.4, 0.25, mat(st.paleta === 'grafito-dorado' ? '#2A2B30' : '#7A0F14', { r: 0.95 }), l * 4.7, 2.2, -6.1); escena.add(tel); }
     for (const l of [-1, 1]) { const lat = pared(st.paredes, P, L, 13, 4.6, null); lat.rotation.y = -l * Math.PI / 2; lat.position.set(l * 7.6, 0, 0); escena.add(lat); }
     // 3 filas escalonadas mirando a la pantalla (-z); las fundadoras en la segunda fila, al centro
     const filas = [{ z: -1.2, y: 0 }, { z: 0.6, y: 0.3 }, { z: 2.4, y: 0.6 }];

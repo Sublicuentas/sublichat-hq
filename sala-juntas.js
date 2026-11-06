@@ -38,6 +38,10 @@
     ojo: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     pantalla: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
     chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>', sonrisa: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    cuadro: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+    paleta: '<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.6-.75 1.6-1.7 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2Z"/>',
+    planta: '<path d="M7 20h10M10 20c5.5-2.5.8-6.4 3-10M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8zM14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
     atras: '<path d="m12 19-7-7 7-7M19 12H5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', puerta: '<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
   };
   const ico = (k, c = '') => `<svg class="sj-i ${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k] || ''}</svg>`;
@@ -61,6 +65,8 @@
   const pill = (e) => { const x = ESTADO[e] || [e, 'gris']; return `<span class="sj-pill sj-${x[1]}">${esc(x[0])}</span>`; };
   const RSVP = { aceptada: ['Confirmó', 'verde'], rechazada: ['No asistirá', 'rojo'], pendiente: ['Pendiente', 'ambar'] };
   const funda = (id) => (st.data?.fundadoras || []).find((f) => f.id === id) || { id, nombre: id };
+  // R177 · "Nombre visible" del personaje (si no lo eligió, su nombre de usuaria)
+  const nomVis = (id) => String((st.pers && id === st.data?.yo?.id && st.pers.config?.nombre) || st.data?.avatares?.[id]?.config?.nombre || '').trim() || funda(id).nombre;
   function cara(id, tam = 40) {
     const f = funda(id); let src = st.data?.avatares?.[id]?.miniatura || '';
     if (!src && st.data && id === st.data.yo.id) { try { src = window.SublichatRBAC?.avatar?.() || ''; } catch (_) {} }
@@ -70,23 +76,35 @@
   }
 
   // ---------- carga ----------
-  async function cargar(silencioso) {
+  async function cargar(silencioso, forzar) {
     if (st.cargando) return; st.cargando = true; if (!silencioso) { st.error = ''; pintar(); }
-    try { st.data = await api({ accion: 'panel' }); st.error = ''; if (!st.esc && !st.escCargando) { st.escCargando = true; cargarEscenarios().then(() => { st.escCargando = false; if (['inicio', 'form'].includes(st.vista) && !st.guardando) pintar(); }); } }
-    catch (e) { st.error = e.message; }
-    st.cargando = false; pintar();
+    try { st.data = await api({ accion: 'panel' }); st.error = ''; if (!st.esc && !st.escCargando) { st.escCargando = true; cargarEscenarios().then(() => { st.escCargando = false; const c = document.getElementById('sjEscCampos'); if (c && !c.innerHTML.trim()) c.innerHTML = escenarioCampos(st.editar || {}); else if (puedeRepintarSolo()) pintar(); }); } }
+    catch (e) { if (!silencioso) st.error = e.message; }
+    st.cargando = false;
+    // R176: la actualización automática NUNCA repinta si hay algo a medio llenar o con foco (antes borraba lo elegido)
+    if (silencioso && !forzar && !puedeRepintarSolo()) { st.pendienteRepintar = true; return; }
+    pintar();
+  }
+  function puedeRepintarSolo() {
+    if (!host || st.guardando || st.tocado) return false;
+    if (['form', 'personaje', 'sala3d', 'acta', 'escenarios'].includes(st.vista)) return false;
+    if (host.querySelector('form, textarea, input:not([type=hidden]), select')) return false; // formulario embebido en Inicio
+    if (host.contains(document.activeElement) && document.activeElement !== host) return false;
+    return true;
   }
   function open() {
     host = document.getElementById('rbac-sala-juntas'); if (!host) return;
     estilos();
     const sec = document.getElementById('screen-sala-juntas'); if (sec) sec.classList.add('sj-pantalla');
     st.vista = 'inicio'; st.editar = null; cargar();
+    if (!host.dataset.sjTocado) { host.dataset.sjTocado = '1'; ['input', 'change'].forEach((ev) => host.addEventListener(ev, () => { st.tocado = true; }, true)); }
     clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d', 'acta', 'escenarios'].includes(st.vista)) cargar(true); }, 30000);
   }
 
   // ---------- pintar ----------
   function pintar() {
     if (!host) return;
+    st.tocado = false; st.pendienteRepintar = false;
     if (!st.data) { host.innerHTML = cab() + (st.error ? `<div class="sj-card sj-vacio"><b>No se pudo abrir la Sala de Juntas.</b><p>${esc(st.error)}</p><button class="sj-btn sj-sec" data-sj="recargar">Reintentar</button></div>` : `<div class="sj-card sj-vacio sj-cargando">Cargando Sala de Juntas…</div>`); return; }
     let cuerpo = '';
     if (st.vista === 'form') cuerpo = formulario();
@@ -167,7 +185,8 @@
       <div class="sj-reu-a">${pill(r.estado)}${puedeResp ? `<span class="sj-pill sj-${x[1]}">Usted: ${x[0]}</span><div class="sj-fila-btn"><button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="aceptada"${mia.estado === 'aceptada' ? ' disabled' : ''}>Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${r.id}" data-r="rechazada"${mia.estado === 'rechazada' ? ' disabled' : ''}>No asistiré</button></div>` : ''}
         ${['programada', 'en_curso'].includes(r.estado) ? `<button class="sj-btn sj-rojo sj-mini" data-sj="antesala" data-id="${r.id}">Antesala</button>` : ''}
         ${st.data.permisos.crear && ['programada', 'borrador'].includes(r.estado) ? `<button class="sj-btn sj-sec sj-mini" data-sj="editar" data-id="${r.id}">Editar</button>` : ''}
-        ${r.estado === 'finalizada' ? `<button class="sj-btn sj-sec sj-mini" data-sj="verActa" data-id="${r.id}">${(st.actasIdx || {})[r.id] ? 'Ver acta' : (st.data.permisos.moderar ? 'Escribir acta' : 'Acta')}</button>` : ''}</div></div>`;
+        ${r.estado === 'finalizada' ? `<button class="sj-btn sj-sec sj-mini" data-sj="verActa" data-id="${r.id}">${(st.actasIdx || {})[r.id] ? 'Ver acta' : (st.data.permisos.moderar ? 'Escribir acta' : 'Acta')}</button>` : ''}
+        ${['finalizada', 'cancelada'].includes(r.estado) && st.data.permisos.crear ? `<button class="sj-btn sj-sec sj-mini" data-sj="repetir" data-id="${r.id}" title="Nueva convocatoria con el mismo escenario, estilo y participantes">Repetir con este escenario</button>` : ''}</div></div>`;
   }
   function listaReuniones(filtro, vacio) {
     const l = st.data.reuniones.filter(filtro);
@@ -176,20 +195,36 @@
 
   // ---------- R174 · escenarios y editor de estilos ----------
   let esc3 = null, escMod = null, escFicha = 0;
-  const modEsc = () => (escMod = escMod || import('/escenarios.js?v=20261105-r174'));
-  async function cargarEscenarios() { try { const [j, M] = await Promise.all([api({ accion: 'escenarios' }), modEsc()]); st.esc = j.escenarios; st.escCat = M.ESCENARIOS; st.escParams = M.PARAMS; } catch (e) { toast(e.message || 'No se pudieron cargar los escenarios.', true); } }
-  // estilo de una reunión: su preset; si no, el oficial del escenario; si no, el base
+  const modEsc = () => (escMod = escMod || import('/escenarios.js?v=20261105-r177'));
+  async function cargarEscenarios() { try { const [j, M] = await Promise.all([api({ accion: 'escenarios' }), modEsc()]); st.esc = j.escenarios; st.escCat = M.ESCENARIOS; st.escParams = M.PARAMS; st.escM = M; } catch (e) { toast(e.message || 'No se pudieron cargar los escenarios.', true); } }
+  // estilo de una reunión: su preset; si se borró, la copia guardada (R177); estilo sugerido; el oficial; el base
   function estiloDeReunion(r) {
     const id = r.escenario || 'sala-c'; const D = (st.esc || {})[id] || { presets: [] };
-    const p = D.presets.find((x) => x.id === r.presetId) || D.presets.find((x) => x.id === D.predeterminado);
-    return { escenario: id, estilo: p ? p.estilo : null, nombre: p ? p.nombre : '' };
+    const p = r.presetId && D.presets.find((x) => x.id === r.presetId);
+    if (p) return { escenario: id, estilo: p.estilo, nombre: p.nombre };
+    if (r.presetId && r.estiloUsado) return { escenario: id, estilo: r.estiloUsado, nombre: 'estilo usado' };
+    if (r.sugerido && st.escM) return { escenario: id, estilo: st.escM.sugerido(id, r.sugerido), nombre: ((st.escM.SUGERIDOS.find(([k]) => k === r.sugerido) || [])[1] || '') };
+    const of = D.presets.find((x) => x.id === D.predeterminado);
+    return { escenario: id, estilo: of ? of.estilo : null, nombre: of ? of.nombre : '' };
   }
   function escenariosHtml() {
     if (!st.esc || !st.escCat) return `<div class="sj-card sj-pn"><p class="sj-p">Cargando escenarios…</p></div>`;
     const C = st.escCat; if (!st.escSel) { const D = st.esc['sala-c']; const of = D.presets.find((x) => x.id === D.predeterminado); st.escSel = { id: 'sala-c', estilo: { ...(of ? of.estilo : C['sala-c'].base) }, presetId: of ? of.id : '' }; }
     const S = st.escSel, E = C[S.id], D = st.esc[S.id] || { presets: [] }, mod = st.data.permisos.moderar, yo = st.data.yo.id;
     const tabs = Object.entries(C).map(([id, x]) => `<button type="button" class="sj-chip-op${id === S.id ? ' on' : ''}" data-sj="escTab" data-e="${id}">${esc(x.corto)}</button>`).join('');
-    const filas = st.escParams.map(([k, t]) => `<div class="sj-op"><b>${t}</b><div class="sj-op-v">${E[k].map(([v, n]) => `<button type="button" class="sj-chip-op${S.estilo[k] === v ? ' on' : ''}" data-sj="escOp" data-k="${k}" data-v="${v}">${esc(n)}</button>`).join('')}</div></div>`).join('');
+    // R177 · editor de ambiente por secciones: Iluminación, Piso, Paredes, Asientos, Paleta, Decoración, Logo/branding
+    const AM = st.escM.AMBIENTE; const ES = st.escM.estiloValido(S.id, S.estilo); S.estilo = ES;
+    const chipsEsc = (k, lista) => `<div class="sj-op-v">${lista.map(([v, n]) => `<button type="button" class="sj-chip-op${ES[k] === v ? ' on' : ''}" data-sj="escOp" data-k="${k}" data-v="${v}" aria-pressed="${ES[k] === v}">${esc(n)}</button>`).join('')}</div>`;
+    const sw = (k, t) => `<label class="sj-rec sj-acc-op sj-esc-sw"><span>${esc(t)}</span><input type="checkbox" role="switch" class="sj-sw" data-sj="escDeco" data-d="${k}" ${ES.deco[k] ? 'checked' : ''}></label>`;
+    const sec = (t, i, html) => `<section class="sj-esc-sec"><h4>${ico(i)}${t}</h4>${html}</section>`;
+    const filas = `<div class="sj-esc-sug"><b>Estilos sugeridos</b><div class="sj-op-v">${st.escM.SUGERIDOS.map(([k, n]) => `<button type="button" class="sj-chip-op" data-sj="escSug" data-s="${k}">${esc(n)}</button>`).join('')}</div></div>`
+      + sec('Iluminación', 'sol', `<small class="sj-hint">Tipo de luz</small>${chipsEsc('luz', E.luz)}<small class="sj-hint">Intensidad</small>${chipsEsc('brillo', AM.brillo)}`)
+      + sec('Piso', 'cuadro', chipsEsc('piso', AM.piso))
+      + sec('Paredes / fondo', 'pantalla', chipsEsc('paredes', E.paredes))
+      + sec('Asientos / set', 'grupo', chipsEsc('asientos', E.asientos))
+      + sec('Paleta de color', 'paleta', chipsEsc('paleta', E.paleta))
+      + sec('Decoración', 'planta', `<div class="sj-esc-sws">${AM.deco.map(([k, t]) => sw(k, t)).join('')}</div>`)
+      + sec('Logo / branding', 'check', `<div class="sj-esc-sws">${AM.marca.map(([k, t]) => sw(k, t)).join('')}</div><small class="sj-hint">También puede elegir la pared "${esc((E.paredes.find(([v]) => /logo|led/.test(v)) || ['', 'con logo'])[1])}" en Paredes.</small>`);
     const pres = D.presets.length ? D.presets.map((p) => `<div class="sj-esc-p${p.id === S.presetId ? ' on' : ''}"><button type="button" class="sj-esc-pn" data-sj="escPreset" data-p="${p.id}"><b>${esc(p.nombre)}</b><small>${p.id === D.predeterminado ? '⭐ Oficial · ' : ''}${esc(funda(p.creadoPor).nombre)}</small></button>
         ${mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escOficial" data-p="${p.id === D.predeterminado ? '' : p.id}">${p.id === D.predeterminado ? 'Quitar oficial' : 'Hacer oficial'}</button>` : ''}
         ${p.creadoPor === yo || mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escBorrar" data-p="${p.id}" aria-label="Borrar ${esc(p.nombre)}">${ico('x')}</button>` : ''}</div>`).join('') : '<p class="sj-hint">Todavía no hay estilos guardados en este escenario.</p>';
@@ -230,6 +265,8 @@
     const S = st.escSel, C = st.escCat;
     if (a === 'escTab') { const id = b.dataset.e; const D = st.esc[id]; const of = D.presets.find((x) => x.id === D.predeterminado); st.escSel = { id, estilo: { ...(of ? of.estilo : C[id].base) }, presetId: of ? of.id : '' }; repintarEscOps(); return remontarEsc(); }
     if (a === 'escOp') { S.estilo = { ...S.estilo, [b.dataset.k]: b.dataset.v }; repintarEscOps(); return remontarEsc(); }
+    if (a === 'escDeco') { S.estilo = { ...S.estilo, deco: { ...(S.estilo.deco || {}), [b.dataset.d]: !!b.checked } }; return remontarEsc(); }
+    if (a === 'escSug') { S.estilo = st.escM.sugerido(S.id, b.dataset.s); S.presetId = ''; repintarEscOps(); const i = host.querySelector('#sjEscF [name=nombre]'); if (i && !i.value) i.value = (st.escM.SUGERIDOS.find(([k]) => k === b.dataset.s) || [])[1] || ''; return remontarEsc(); }
     if (a === 'escPreset') { const p = st.esc[S.id].presets.find((x) => x.id === b.dataset.p); if (p) { S.estilo = { ...p.estilo }; S.presetId = p.id; } repintarEscOps(); return remontarEsc(); }
     if (a === 'escReset') { S.estilo = { ...C[S.id].base }; S.presetId = ''; repintarEscOps(); return remontarEsc(); }
     if (a === 'escNuevo') { S.presetId = ''; repintarEscOps(); const i = host.querySelector('#sjEscF [name=nombre]'); if (i) { i.value = ''; i.focus(); } return; }
@@ -307,7 +344,7 @@
   function formulario(embebido) {
     const r = st.editar || { titulo: '', fecha: '', hora: '', agenda: [], participantes: ['naara', 'libni', 'geisell'], recordatorios: { h24: true, h1: true, m10: true }, duracionMin: 60 };
     const ed = !!r.id;
-    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Super Admin' : 'Fundadora')}</small></span></label>`).join('');
+    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Anfitriona · Super Admin' : 'Socia fundadora')}</small><small class="sj-perm">${f.anfitriona ? 'Modera, da la palabra, graba y cierra la sala' : 'Voz, cámara, chat, mano y presentar'}</small></span></label>`).join('');
     const rec = [['h24', '24 horas antes'], ['h1', '1 hora antes'], ['m10', '10 minutos antes']].map(([k, t]) => `<label class="sj-rec">${ico('campana')}<span>${t}</span><input type="checkbox" role="switch" class="sj-sw" name="sjRec" value="${k}" ${r.recordatorios[k] !== false ? 'checked' : ''}></label>`).join('');
     return `<form class="sj-card sj-pn sj-form" id="sjForm" novalidate>
       <div class="sj-ph">${ico('calPlus')}<b>${ed ? 'Editar convocatoria' : 'Crear nueva convocatoria'}</b>${ed ? pill(r.estado) : ''}</div>
@@ -317,11 +354,12 @@
           <label class="sj-f"><span>Título de la reunión *</span><input name="titulo" maxlength="120" required value="${esc(r.titulo)}" placeholder="Ej.: Revisión mensual y próximos objetivos"></label>
           <div class="sj-f2"><label class="sj-f"><span>Fecha *</span><input type="date" name="fecha" value="${esc(r.fecha)}" required></label>
             <label class="sj-f"><span>Hora (Honduras) *</span><input type="time" name="hora" value="${esc(r.hora)}" step="300" required></label></div>
-          <label class="sj-f"><span>Duración</span><select name="duracionMin">${[30, 45, 60, 90, 120].map((m) => `<option value="${m}"${Number(r.duracionMin) === m ? ' selected' : ''}>${m < 60 ? m + ' minutos' : (m / 60) + (m === 60 ? ' hora' : ' horas')}</option>`).join('')}</select></label>
-          ${escenarioCampos(r)}
+          <label class="sj-f"><span>Tipo de sesión</span><select name="tipo" data-sj-tipo="1">${TIPOS.map(([k, t]) => `<option value="${k}"${(r.tipo || 'junta') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label class="sj-f"><span>Duración</span><select name="duracionMin">${[15, 30, 45, 60, 90, 120].map((m) => `<option value="${m}"${Number(r.duracionMin) === m ? ' selected' : ''}>${m < 60 ? m + ' minutos' : (m / 60) + (m === 60 ? ' hora' : ' horas')}</option>`).join('')}</select></label>
+          <div id="sjEscCampos">${escenarioCampos(r)}</div>
           <label class="sj-f"><span>Agenda / Temas a tratar * <small>(un tema por línea)</small></span><textarea name="agenda" rows="4" placeholder="Resultados de ventas del mes&#10;Campañas y promociones&#10;Objetivos y responsables">${esc((r.agenda || []).join('\n'))}</textarea></label>
         </div>
-        <div class="sj-form-d"><b class="sj-sub">Participantes (Socias fundadoras)</b>${parts}
+        <div class="sj-form-d"><b class="sj-sub">¿Con quién es la reunión?</b><p class="sj-hint">Marque a quién invita. Naara siempre entra como anfitriona.</p>${parts}<p class="sj-hint">Otras personas autorizadas se podrán agregar cuando se habiliten sus permisos de Sala.</p>
           <b class="sj-sub">Recordatorios automáticos (Telegram)</b>${rec}
           <p class="sj-hint">Hora de Honduras (UTC-6). Al programar, cada invitada recibe la convocatoria por Telegram con botones Confirmar / No asistiré.</p></div>
       </div>
@@ -333,19 +371,26 @@
       </div></form>`;
   }
   // R174 · escenario y estilo de la convocatoria
+  // R177 · tipo de sesión: sugiere escenario y estilo (se pueden cambiar)
+  const TIPOS = [['junta', 'Junta', 'socios', 'junta'], ['revision', 'Revisión', 'sala-c', 'sobria'], ['clase', 'Clase / capacitación', 'aula', ''], ['presentacion', 'Presentación', 'sala-c', 'presentacion'], ['grabacion', 'Grabación de anuncio', 'live', 'grabacion'], ['otra', 'Otra', '', '']];
   function escenarioCampos(r) {
     const C = st.escCat; if (!C) return '';
     const id = st.formEsc || r.escenario || 'sala-c'; const D = (st.esc || {})[id] || { presets: [] };
-    const presets = D.presets.map((p) => `<option value="${p.id}"${p.id === (r.escenario === id ? r.presetId : '') ? ' selected' : ''}>${esc(p.nombre)}${p.id === D.predeterminado ? ' (oficial)' : ''}</option>`).join('');
+    const elegido = st.formSug !== undefined && st.formSug !== null ? st.formSug : (r.escenario === id || !r.escenario ? (r.presetId || (r.sugerido ? 's:' + r.sugerido : '')) : '');
+    const presets = D.presets.map((p) => `<option value="${p.id}"${p.id === elegido ? ' selected' : ''}>${esc(p.nombre)}${p.id === D.predeterminado ? ' (oficial)' : ''}</option>`).join('');
+    const sug = (st.escM?.SUGERIDOS || []).map(([k, n]) => `<option value="s:${k}"${'s:' + k === elegido ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    const tipo = TIPOS.find(([k]) => k === (st.formTipo || r.tipo)) || null;
+    const nota = tipo && tipo[2] ? `<p class="sj-hint sj-sug-nota">${ico('check')}Para <b>${esc(tipo[1])}</b> se sugiere <b>${esc(C[tipo[2]].corto)}</b>${tipo[3] ? ` con estilo <b>${esc((st.escM.SUGERIDOS.find(([k]) => k === tipo[3]) || [])[1] || '')}</b>` : ''}. Puede cambiarlo.</p>` : '';
     return `<div class="sj-f2"><label class="sj-f"><span>Escenario</span><select name="escenario" data-sj-esc="1">${Object.entries(C).map(([k, x]) => `<option value="${k}"${k === id ? ' selected' : ''}>${esc(x.corto)}</option>`).join('')}</select></label>
-      <label class="sj-f"><span>Estilo</span><select name="presetId"><option value="">${D.predeterminado ? 'Oficial del escenario' : 'Estilo base aprobado'}</option>${presets}</select></label></div>`;
+      <label class="sj-f"><span>Estilo</span><select name="presetId"><option value="">${D.predeterminado ? 'Oficial del escenario' : 'Estilo base aprobado'}</option>${presets ? `<optgroup label="Estilos guardados">${presets}</optgroup>` : ''}${sug ? `<optgroup label="Estilos sugeridos">${sug}</optgroup>` : ''}</select></label></div>${nota}`;
   }
   function leerForm() {
     const f = document.getElementById('sjForm'); const q = (n) => f.querySelector(`[name="${n}"]`);
     const rec = {}; f.querySelectorAll('[name="sjRec"]').forEach((x) => { rec[x.value] = x.checked; });
     return { titulo: q('titulo').value, fecha: q('fecha').value, hora: q('hora').value, duracionMin: Number(q('duracionMin').value), agenda: q('agenda').value,
       participantes: ['naara', ...[...f.querySelectorAll('[name="sjPart"]:checked')].map((x) => x.value)], recordatorios: rec,
-      escenario: q('escenario') ? q('escenario').value : 'sala-c', presetId: q('presetId') ? q('presetId').value : '' };
+      escenario: q('escenario') ? q('escenario').value : 'sala-c', ...(() => { const v = q('presetId') ? q('presetId').value : ''; return v.startsWith('s:') ? { presetId: '', sugerido: v.slice(2) } : { presetId: v, sugerido: '' }; })(),
+      tipo: q('tipo') ? q('tipo').value : 'junta' };
   }
   async function guardar(borrador) {
     if (st.guardando) return; // evita doble clic
@@ -354,7 +399,7 @@
     try {
       const r = await api({ ...datos, accion: ed ? 'editar' : 'crear', id: ed || undefined, borrador });
       toast(borrador ? 'Borrador guardado.' : (ed ? 'Reunión reprogramada. Las invitadas deben confirmar de nuevo si cambió la hora.' : 'Convocatoria programada. Quedó lista para enviarse por Telegram.'));
-      st.editar = null; st.vista = 'inicio'; st.guardando = ''; await cargar(true);
+      st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; st.vista = 'inicio'; st.guardando = ''; await cargar(true, true);
       return r;
     } catch (e) { st.guardando = ''; marcarOcupado(false); toast(e.message, true); }
   }
@@ -456,7 +501,7 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r174');
+    M3 = await import('/sala-3d.js?v=20261105-r177');
     return M3;
   }
   function desmontar3D() { if (esc3) { try { esc3.destruir(); } catch (_) {} esc3 = null; } if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -470,7 +515,8 @@
     const chips = (k) => opcDe(k, c).map((v) => `<button type="button" class="sj-chip-op${c[k] === v ? ' on' : ''}" data-op="${k}" data-v="${v}" aria-pressed="${c[k] === v}">${esc((ETQ[k] || {})[v] || v)}</button>`).join('');
     const colores = (k) => OPC[k].map((v) => `<button type="button" class="sj-sw-col${c[k] === v ? ' on' : ''}" style="--c:${v}" data-op="${k}" data-v="${v}" aria-label="Color ${v}" aria-pressed="${c[k] === v}"></button>`).join('');
     let panel = '';
-    if (tab === 'apariencia') panel = fila('Género', chips('genero')) + fila('Tono de piel', colores('piel')) + fila('Estilo de cabello', chips('cabello')) + fila('Color de cabello', colores('colorCabello')) + fila('Color de ojos', colores('ojos'));
+    const nomDef = funda(yo).nombre || yo;
+    if (tab === 'apariencia') panel = `<label class="sj-op sj-op-nom"><b>Nombre visible</b><input type="text" id="sjNomVis" maxlength="24" autocomplete="off" placeholder="${esc(nomDef)}" value="${esc(c.nombre || '')}" aria-describedby="sjNomAyuda"><small id="sjNomAyuda">Se ve sobre su personaje y en la lista de participantes. Vacío = ${esc(nomDef)}.</small></label>` + fila('Género', chips('genero')) + fila('Tono de piel', colores('piel')) + fila('Estilo de cabello', chips('cabello')) + fila('Color de cabello', colores('colorCabello')) + fila('Color de ojos', colores('ojos'));
     if (tab === 'ropa') panel = fila('Parte de arriba', chips('superior')) + fila('Color', colores('colorSuperior')) + (CON_INTERIOR.includes(c.superior) ? fila('Camisa interior', colores('colorInterior')) : '') + fila('Parte de abajo', chips('inferior')) + fila('Color', colores('colorInferior')) + fila('Calzado', chips('calzado')) + fila('Color del calzado', colores('colorCalzado'));
     if (tab === 'accesorios') panel = ACC.filter(([k]) => k !== 'barba' || c.genero === 'hombre').map(([k, t]) => `<label class="sj-rec sj-acc-op"><span>${t}</span><input type="checkbox" role="switch" class="sj-sw" data-op="${k}" ${c[k] ? 'checked' : ''}></label>`).join('');
     const tabs = [['apariencia', 'Apariencia', 'persona'], ['ropa', 'Ropa', 'lista'], ['accesorios', 'Accesorios', 'check']].map(([k, t, i]) => `<button type="button" class="sj-tab${tab === k ? ' on' : ''}" data-sj="tabPers" data-t="${k}" role="tab" aria-selected="${tab === k}">${ico(i)}${t}</button>`).join('');
@@ -479,9 +525,9 @@
       <div class="sj-ed-g">
         <div class="sj-ed-mini">${av.miniatura ? `<img src="${esc(av.miniatura)}" alt="Personaje guardado">` : '<div class="sj-ed-vacio">Aún no ha guardado su personaje</div>'}<small>${av.guardado ? `Guardado · versión ${av.version}` : 'Sin guardar'}</small></div>
         <div class="sj-ed-op" id="sjOps">${panel}</div>
-        <div class="sj-ed-3d"><canvas id="sjEdCanvas" aria-label="Vista 360° de su personaje. Arrastre para girar."></canvas>
+        <div class="sj-ed-3d"><canvas id="sjEdCanvas" aria-label="Vista 360° de su personaje. Arrastre para girar."></canvas><span class="sj-ed-nom" id="sjEdNom">${esc((c.nombre || '').trim() || nomDef)}</span>
           <button type="button" class="sj-rot sj-rot-i" data-sj="rotar" data-d="-0.6" aria-label="Girar a la izquierda">‹</button><button type="button" class="sj-rot sj-rot-d" data-sj="rotar" data-d="0.6" aria-label="Girar a la derecha">›</button>
-          <div class="sj-ed-cam" role="group" aria-label="Cámara del personaje">${[['frente', 'Frente'], ['tresCuartos', '3/4'], ['espalda', 'Espalda']].map(([v, t]) => `<button type="button" data-sj="vistaPers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="zoomPers" data-d="0.6" aria-label="Acercar">+</button><button type="button" data-sj="zoomPers" data-d="-0.6" aria-label="Alejar">−</button><button type="button" data-sj="camReset" aria-label="Restablecer cámara">↺</button></div>
+          <div class="sj-ed-cam" role="group" aria-label="Cámara del personaje">${[['frente', 'Frente'], ['lado', 'Lateral'], ['tresCuartos', '3/4'], ['espalda', 'Espalda']].map(([v, t]) => `<button type="button" data-sj="vistaPers" data-v="${v}">${t}</button>`).join('')}<button type="button" data-sj="giro360" aria-pressed="false">360°</button><button type="button" data-sj="zoomPers" data-d="0.6" aria-label="Acercar">+</button><button type="button" data-sj="zoomPers" data-d="-0.6" aria-label="Alejar">−</button><button type="button" data-sj="camReset" aria-label="Restablecer cámara">↺</button></div>
           <div class="sj-ed-carga" id="sjEdCarga">Cargando 3D…</div></div>
       </div>
       <div class="sj-form-acc sj-ed-acc">
@@ -534,7 +580,7 @@
       : [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
       .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Disponible al entrar a la reunión en vivo">${ico(i)}<span>${t}</span></button>`).join('');
     const terminar = V && st.data.permisos.moderar ? `<button type="button" class="sj3d-ctl sj3d-salir sj3d-fin" data-sj="lkTerminar">${ico('x')}<span>Terminar</span></button>` : '';
-    const vistas = [...(V ? [['auto', 'Automática', 'Sigue a quien habla']] : []), ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${funda(u).nombre}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
+    const vistas = [...(V ? [['auto', 'Automática', 'Sigue a quien habla']] : []), ['general', 'Vista general', 'Toda la sala'], ...parts.map((u) => [u, `Plano de ${nomVis(u)}`, 'Enfoca a quien habla']), ['presentacion', 'Vista presentación', 'Prioriza la pantalla'], ['panoramica', 'Vista panorámica', 'Recorrido lento de la sala']]
       .map(([v, t, d]) => `<button type="button" class="sj3d-vista${v === (V ? 'auto' : 'general') ? ' on' : ''}" data-sj="vista3d" data-v="${v}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('');
     return `<div class="sj3d${V ? ' sj3d-vivo' : ''}" id="sj3dRaiz">
       <div class="sj3d-top"><img src="/assets/sublicuentas-logo-oscuro-ui.webp" alt="Sublicuentas"><span class="sj3d-sep"></span><b>SubliStudio <i>3D</i></b><span class="sj3d-sala">${ico('grupo')}Sala de Juntas</span>
@@ -580,7 +626,7 @@
       V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
         estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
         presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
-        hablantes: (ids) => { if (st.vivo !== V) return; V.hablantes = ids; if (sala3) sala3.setHablante(ids[0] || null); camaraAuto(); },
+        hablantes: (ids) => { if (st.vivo !== V) return; const antes = (V.hablantes || []).join(); V.hablantes = ids; if (sala3) sala3.setHablante(ids[0] || null); camaraAuto(); if (V.panel === 'part' && antes !== ids.join()) pintarPanel(); },
         pantalla: (track, de) => { if (st.vivo !== V) return; ponerPantalla(track, de); },
         video: (quien, track) => { if (st.vivo !== V) return; ponerVideo(quien, track); },
         chat: (m) => { if (st.vivo !== V) return; V.chat.push(m); if (V.chat.length > 200) V.chat.shift(); if (V.panel !== 'chat' && !m.mio) V.noLeidos++; pintarPanel(); pintarBarra(); },
@@ -622,6 +668,7 @@
   }
   function aplicarVivo3D() {
     const V = st.vivo; if (!V || !sala3) return;
+    if (V.modoGrab) sala3.modoGrabacion(true);
     (st.sala3dReu?.participantes || []).forEach((u) => { sala3.setPresente(u, V.presentes.has(u)); sala3.setMicro(u, V.mics[u] !== false); sala3.setMano(u, (V.manos?.cola || []).some((x) => x.id === u)); });
     pintarPres();
     pintarPanel(); pintarBarra();
@@ -687,7 +734,7 @@
   async function alternarGrabacion() {
     const V = st.vivo; if (!V?.ctl || !st.data.permisos.moderar) return;
     if (V.grab) { V.grab.g.detener(); return; }
-    if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. El video se descarga solo en este equipo al detener (no se sube a internet).')) return;
+    if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. El video se descarga solo en este equipo al detener (no se sube a internet).' + (V.modoGrab ? '' : '\n\nPara anuncios: active "Modo grabación" en Ajustes (plano frontal y escena limpia).'))) return;
     const lienzo = document.querySelector('#sj3dEscena canvas.sj3d-canvas'); if (!lienzo) return toast('La sala 3D todavía no está lista.', true);
     try {
       const M = await import('/sala-grabar.js?v=20261105-r175');
@@ -787,21 +834,23 @@
     const cab = (t) => `<div class="sj3d-pcab"><b>${t}</b><button type="button" class="sj3d-px" data-sj="lkCerrarPanel" aria-label="Cerrar">${ico('x')}</button></div>`;
     if (V.panel === 'part') {
       const M = V.manos || { cola: [], turno: '' }, mod = st.data.permisos.moderar, yo = st.data.yo.id;
-      const cola = `<div class="sj3d-cola"><b>${ico('manoI')}Pedir la palabra</b>${M.turno ? `<div class="sj3d-turno">🎙️ Tiene la palabra: <b>${esc(funda(M.turno).nombre)}</b>${mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkFinTurno">Terminar turno</button>` : ''}</div>` : ''}
-        ${M.cola.length ? `<ol>${M.cola.map((x) => `<li><span>${esc(funda(x.id).nombre)}${x.id === yo ? ' (Tú)' : ''}${M.turno === x.id ? ' · con la palabra' : ''}</span>${mod && M.turno !== x.id ? `<button type="button" class="sj-btn sj-rojo sj-mini" data-sj="lkDarTurno" data-u="${x.id}">Dar la palabra</button>` : ''}${x.id === yo ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkMano">Retirar</button>` : ''}</li>`).join('')}</ol>` : '<p class="sj-hint">Nadie ha pedido la palabra.</p>'}
+      const cola = `<div class="sj3d-cola"><b>${ico('manoI')}Pedir la palabra</b>${M.turno ? `<div class="sj3d-turno">🎙️ Tiene la palabra: <b>${esc(nomVis(M.turno))}</b>${mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkFinTurno">Terminar turno</button>` : ''}</div>` : ''}
+        ${M.cola.length ? `<ol>${M.cola.map((x) => `<li><span>${esc(nomVis(x.id))}${x.id === yo ? ' (Tú)' : ''}${M.turno === x.id ? ' · con la palabra' : ''}</span>${mod && M.turno !== x.id ? `<button type="button" class="sj-btn sj-rojo sj-mini" data-sj="lkDarTurno" data-u="${x.id}">Dar la palabra</button>` : ''}${x.id === yo ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkMano">Retirar</button>` : ''}</li>`).join('')}</ol>` : '<p class="sj-hint">Nadie ha pedido la palabra.</p>'}
         ${mod && (M.cola.length || M.turno) ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkLimpiarCola">Limpiar cola</button>` : ''}<p class="sj-hint">La cola no apaga micrófonos: todas se siguen escuchando.</p></div>`;
       p.innerHTML = cab('Participantes') + cola + (st.sala3dReu?.participantes || []).map((u) => { const en = V.presentes.has(u), mic = V.mics[u] !== false;
-        return `<div class="sj3d-pp">${cara(u, 32)}<span><b>${esc(funda(u).nombre)}${u === st.data.yo.id ? ' (Tú)' : ''}${u === 'naara' ? ' 👑' : ''}</b><small>${en ? (mic ? 'En la sala' : 'En la sala · silenciada') : 'No ha entrado'}</small></span>
+        const habla = en && (V.hablantes || []).includes(u), mano = (M.cola || []).some((x) => x.id === u);
+        const est = [en ? ['verde', 'En la sala'] : ['gris', 'No ha entrado'], habla && ['habla', 'Hablando'], mano && ['ambar', '✋ Mano levantada'], en && !mic && ['rojo', '🔇 Micrófono apagado']].filter(Boolean).map(([c, t]) => `<i class="sj3d-est sj3d-est-${c}">${t}</i>`).join('');
+        return `<div class="sj3d-pp${habla ? ' sj3d-pp-habla' : ''}" data-u="${u}">${cara(u, 32)}<span><b>${esc(nomVis(u))}${u === st.data.yo.id ? ' (Tú)' : ''}${u === 'naara' ? ' 👑' : ''}</b><small class="sj3d-ests">${est}</small></span>
           ${en ? ico(mic ? 'mic' : 'micOff', 'sj3d-pmic') : ''}${st.data.permisos.moderar && en && u !== st.data.yo.id ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="lkSacar" data-u="${u}">Sacar</button>` : ''}</div>`; }).join('');
     } else if (V.panel === 'chat') {
       const yo = st.data.yo.id;
-      p.innerHTML = cab('Chat de la reunión') + `<div class="sj3d-msgs" id="sj3dMsgs">${V.chat.length ? V.chat.map((m) => `<div class="sj3d-msg${m.de === yo ? ' sj3d-mio' : ''}"><small>${esc(funda(m.de).nombre)} · ${new Date(m.ms).toLocaleTimeString('es-HN', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Tegucigalpa' })}</small><p>${enlazar(m.t)}</p></div>`).join('') : '<p class="sj-hint">Todavía no hay mensajes. El chat no se guarda al terminar.</p>'}</div>
+      p.innerHTML = cab('Chat de la reunión') + `<div class="sj3d-msgs" id="sj3dMsgs">${V.chat.length ? V.chat.map((m) => `<div class="sj3d-msg${m.de === yo ? ' sj3d-mio' : ''}"><small>${esc(nomVis(m.de))} · ${new Date(m.ms).toLocaleTimeString('es-HN', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Tegucigalpa' })}</small><p>${enlazar(m.t)}</p></div>`).join('') : '<p class="sj-hint">Todavía no hay mensajes. El chat no se guarda al terminar.</p>'}</div>
         <form class="sj3d-chatf" id="sj3dChatF"><input id="sj3dChatT" maxlength="500" autocomplete="off" placeholder="Escriba un mensaje…" aria-label="Mensaje"><button type="submit" class="sj-btn sj-rojo sj-mini" aria-label="Enviar">${ico('enviar')}</button></form>`;
       const m = document.getElementById('sj3dMsgs'); if (m) m.scrollTop = m.scrollHeight;
     } else if (V.panel === 'reac') {
       p.innerHTML = cab('Reacciones') + `<div class="sj3d-reacs">${REAC.map(([e, n], i) => `<button type="button" class="sj3d-re" data-sj="lkReaccion" data-e="${e}" aria-label="${n} (tecla ${i + 1})" title="${n} · tecla ${i + 1}">${e}<small>${n}</small></button>`).join('')}</div><p class="sj-hint">Aparece 2-3 segundos sobre su personaje. Atajos: teclas 1 a 6.</p>`;
     } else if (V.panel === 'aju') {
-      p.innerHTML = cab('Ajustes') + `<div class="sj3d-aju" id="sj3dAju"><p class="sj-hint">Buscando dispositivos…</p></div>`;
+      p.innerHTML = cab('Ajustes') + `<div class="sj3d-aju sj3d-modo"><label class="sj-rec"><span><b>Modo grabación (anuncios)</b><small>Cámara frontal, luz más limpia y sin plantas, cuadros, utilería ni nombres en pantalla. Solo cambia su vista.</small></span><input type="checkbox" role="switch" class="sj-sw" id="sj3dModoGrab" ${V.modoGrab ? 'checked' : ''}></label></div><div class="sj3d-aju" id="sj3dAju"><p class="sj-hint">Buscando dispositivos…</p></div>`;
       V.ctl?.dispositivos().then((d) => { const c = document.getElementById('sj3dAju'); if (!c || V.panel !== 'aju') return;
         const sel = (tipo, l, act, t) => `<label class="sj-f"><span>${t}</span><select data-aju="${tipo}">${l.map((x) => `<option value="${esc(x.id)}"${x.id === act ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('') || '<option>Predeterminado</option>'}</select></label>`;
         c.innerHTML = sel('audioinput', d.mic, d.micActual, 'Micrófono') + (d.salida.length ? sel('audiooutput', d.salida, d.salidaActual, 'Escuchar por') : '<p class="sj-hint">Este navegador usa la salida de audio del sistema.</p>') + `<p class="sj-hint">Si no la escuchan, revise que el micrófono correcto esté elegido y que el botón Micrófono no esté en rojo.</p>`; });
@@ -856,7 +905,7 @@
         await api({ accion: 'expulsar', id: V.id, usuario: b.dataset.u }); toast(`${funda(b.dataset.u).nombre} salió de la sala.`);
       } else if (a === 'lkTerminar') {
         if (!confirm('¿Terminar la reunión para todas? Se cierra la sala.')) return;
-        const rid = V.id; await api({ accion: 'cerrar_sala', id: rid }); toast('Reunión terminada. Escriba el acta.'); salirVivo(false); await cargar(true); return abrirActa(rid, true);
+        const rid = V.id; await api({ accion: 'cerrar_sala', id: rid }); toast('Reunión terminada. Escriba el acta.'); salirVivo(false); await cargar(true, true); return abrirActa(rid, true);
       }
     } catch (e) {
       const m = String(e && e.message || '');
@@ -881,9 +930,12 @@
     if (a === 'acuQuitar') { const c = document.getElementById('sjAcuerdos'); const fila = b.closest('.sj-acu-f'); if (c.children.length > 1) fila.remove(); else fila.querySelectorAll('input').forEach((x) => { x.value = ''; }); return; }
     if (a === 'escenarios') { await cargarEscenarios(); }
     if (['calendario', 'mis', 'historial', 'config', 'personaje', 'escenarios'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
-    if (a === 'nueva') { st.editar = null; st.formEsc = ''; if (!st.esc) await cargarEscenarios(); st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
-    if (a === 'limpiar') { st.editar = null; return pintar(); }
-    if (a === 'editar') { st.formEsc = ''; if (!st.esc) await cargarEscenarios(); st.editar = { ...reu() }; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'nueva') { st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; if (!st.esc) await cargarEscenarios(); st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'repetir') { const o = reu(); if (!o) return; if (!st.esc) await cargarEscenarios(); st.formEsc = ''; st.formSug = null; st.formTipo = '';
+      st.editar = { titulo: o.titulo, agenda: o.agenda || [], participantes: o.participantes || ['naara'], duracionMin: o.duracionMin, recordatorios: o.recordatorios || {}, tipo: o.tipo, escenario: o.escenario, presetId: o.presetId, sugerido: o.sugerido, fecha: '', hora: '' };
+      st.vista = 'form'; pintar(); toast('Elija la nueva fecha y hora. Se usará el mismo escenario y estilo.'); return window.scrollTo({ top: 0 }); }
+    if (a === 'limpiar') { st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; return pintar(); }
+    if (a === 'editar') { st.formEsc = ''; st.formSug = null; st.formTipo = ''; if (!st.esc) await cargarEscenarios(); st.editar = { ...reu() }; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'borrador') return guardar(true);
     if (a === 'mesAnt' || a === 'mesSig') { const d = new Date(Date.UTC(st.mesCal.y, st.mesCal.m + (a === 'mesSig' ? 1 : -1), 1)); st.mesCal = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; return pintar(); }
     if (a === 'detalle' || a === 'antesala') {
@@ -902,7 +954,7 @@
         if (a === 'rsvp') { await api({ accion: 'rsvp', id, respuesta: b.dataset.r }); toast(b.dataset.r === 'aceptada' ? 'Asistencia confirmada.' : 'Se registró que no asistirá.'); }
         else if (a === 'cancelarReu') { await api({ accion: 'cancelar', id }); toast('Reunión cancelada.'); st.vista = 'inicio'; st.editar = null; }
         else { await api({ accion: a === 'abrir' ? 'abrir_sala' : 'cerrar_sala', id }); toast(a === 'abrir' ? 'Sala abierta.' : 'Sala cerrada.'); }
-        st.guardando = ''; await cargar(true);
+        st.guardando = ''; await cargar(true, true);
         if (st.vista === 'antesala' && st.ante) { try { const j = await api({ accion: 'antesala', id: st.ante.id }); st.ante = j.reunion; pintar(); } catch (_) { st.vista = 'inicio'; pintar(); } }
       } catch (err) { st.guardando = ''; b.disabled = false; toast(err.message, true); }
       return;
@@ -912,7 +964,8 @@
     if (a === 'tabPers') { st.pers.tab = b.dataset.t; const ed = ed3; ed3 = null; const cfg = st.pers; const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; host.querySelectorAll('.sj-tab').forEach((x) => { const on = x.dataset.t === cfg.tab; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }); ed3 = ed; return; }
     if (a === 'rotar') { if (ed3) ed3.rotar(Number(b.dataset.d)); return; }
     if (a === 'guardarPers') return guardarPersonaje();
-    if (a === 'vistaPers') { if (ed3) ed3.vista(b.dataset.v); return; }
+    if (a === 'vistaPers') { if (ed3) ed3.vista(b.dataset.v); host.querySelector('[data-sj="giro360"]')?.setAttribute('aria-pressed', 'false'); return; }
+    if (a === 'giro360') { if (ed3) b.setAttribute('aria-pressed', String(ed3.girar())); return; }
     if (a === 'zoomPers') { if (ed3) ed3.zoom(Number(b.dataset.d)); return; }
     if (a === 'camReset') { if (ed3) ed3.reiniciar(); return; }
     if (a === 'restablecer') { const av = st.data.avatares[st.data.yo.id]; st.pers.config = { ...av.config }; if (ed3) ed3.set(st.pers.config); const t = document.createElement('div'); t.innerHTML = personaje(); host.querySelector('#sjOps').innerHTML = t.querySelector('#sjOps').innerHTML; return toast('Se restableció el último personaje guardado.'); }
@@ -927,6 +980,7 @@
     if (a === 'salirSala') { if (st.vivo) { salirVivo(false); st.vista = 'antesala'; return pintar(); } st.vista = st.volver3d || 'inicio'; return pintar(); }
   });
   document.addEventListener('click', (e) => { const b = host && host.contains(e.target) && e.target.closest('[data-op]'); if (!b || b.type === 'checkbox' || !st.pers) return; cambiarOpcion(b.dataset.op, b.dataset.v); });
+  document.addEventListener('input', (e) => { if (!st.pers || !host || e.target.id !== 'sjNomVis') return; st.pers.config.nombre = e.target.value.replace(/[<>{}`\\]/g, '').slice(0, 24); const n = document.getElementById('sjEdNom'); if (n) n.textContent = st.pers.config.nombre.trim() || funda(st.data.yo.id).nombre; });
   document.addEventListener('change', (e) => { const b = host && host.contains(e.target) && e.target.closest('input[data-op]'); if (!b || !st.pers) return; cambiarOpcion(b.dataset.op, b.checked); });
   document.addEventListener('submit', (e) => {
     if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); }
@@ -937,7 +991,9 @@
   window.addEventListener('pagehide', () => { if (st.vivo) salirVivo(false); });
   document.addEventListener('change', async (e) => {
     if (e.target && e.target.id === 'sj3dArchivo') empezarPresentacion(e.target.files);
-    if (e.target && e.target.dataset && e.target.dataset.sjEsc) { st.formEsc = e.target.value; const lab = e.target.closest('.sj-f2'); const tmp = document.createElement('div'); tmp.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); lab.replaceWith(tmp.firstElementChild); }
+    if (e.target && e.target.dataset && e.target.dataset.sjEsc) { st.formEsc = e.target.value; st.formSug = ''; const c = document.getElementById('sjEscCampos'); if (c) c.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); }
+    if (e.target && e.target.dataset && e.target.dataset.sjTipo) { const T = TIPOS.find(([k]) => k === e.target.value); st.formTipo = e.target.value; if (T && T[2]) { st.formEsc = T[2]; st.formSug = T[3] ? 's:' + T[3] : ''; } const c = document.getElementById('sjEscCampos'); if (c) c.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); }
+    if (e.target && e.target.id === 'sj3dModoGrab' && st.vivo) { const V = st.vivo; V.modoGrab = e.target.checked; V.auto = !V.modoGrab; if (sala3) sala3.modoGrabacion(V.modoGrab); host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', V.modoGrab ? false : b.dataset.v === 'auto')); toast(V.modoGrab ? 'Modo grabación activo: plano frontal y escena limpia.' : 'Modo grabación apagado.'); return; }
     if (e.target && e.target.dataset && e.target.dataset.aju && st.vivo?.ctl) { try { await st.vivo.ctl.usarDispositivo(e.target.dataset.aju, e.target.value); toast('Listo, cambiado.'); } catch (err) { toast('No se pudo cambiar: ' + (err.message || ''), true); } }
     if (e.target && e.target.dataset && e.target.dataset.sj === 'acuEstado' && st.acta) {
       const cb = e.target; cb.disabled = true;
@@ -1095,7 +1151,18 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj3d-reac{position:absolute;left:50%;bottom:100%;font-size:30px;animation:sj3dSube 2.6s ease-out forwards;pointer-events:none}
 @keyframes sj3dSube{0%{transform:translate(-50%,0) scale(.6);opacity:0}15%{transform:translate(-50%,-10px) scale(1.1);opacity:1}100%{transform:translate(-50%,-90px) scale(1);opacity:0}}
 @media (prefers-reduced-motion:reduce){.sj3d-reac{animation-duration:1.4s}}
+.sj-esc-sec{border-top:1px solid #EEF0F3;padding:10px 0 4px}.sj-esc-sec h4{display:flex;align-items:center;gap:6px;margin:0 0 6px;font:700 13px Inter,sans-serif;color:#1F2430}.sj-esc-sec h4 .sj-i{width:16px;height:16px;color:#E2231A}.sj-esc-sec .sj-hint{display:block;margin:4px 0 2px}
+.sj-esc-sws{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px}.sj-esc-sug{padding:4px 0 10px}.sj-esc-sug b{display:block;font:700 13px Inter,sans-serif;margin-bottom:6px}
+.sj3d-limpio{display:none!important}.sj3d-modo{border-bottom:1px solid #EEF0F3}.sj3d-modo .sj-rec span{display:flex;flex-direction:column;gap:2px}.sj3d-modo small{color:#6B7280;font-size:12px;font-weight:400}
+.sj-perm{display:block;color:#8A919C;font-size:11px;margin-top:1px}
+.sj-sug-nota{display:flex;gap:6px;align-items:flex-start;background:#F6F7F9;border-radius:10px;padding:8px 10px;margin:2px 0 6px}.sj-sug-nota .sj-i{width:15px;height:15px;color:#1C7C45;flex:none;margin-top:1px}
+.sj-ed-nom{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(20,25,32,.88);color:#fff;font:600 13px Inter,sans-serif;padding:5px 12px;border-radius:999px;white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis;z-index:2;pointer-events:none}
+.sj-op-nom{display:grid;gap:6px}.sj-op-nom input{font:500 14px Inter,sans-serif;padding:9px 11px;border:1px solid #D5D9E0;border-radius:10px;background:#fff;color:#1F2430;width:100%;box-sizing:border-box}.sj-op-nom input:focus{outline:2px solid #E2231A;outline-offset:1px}.sj-op-nom small{color:#6B7280;font-size:12px}
 .sj3d-nombre.sj3d-ausente{opacity:.55!important;font-style:italic}
+.sj3d-ests{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.sj3d-est{font:600 11px Inter,sans-serif;font-style:normal;padding:2px 7px;border-radius:999px;background:#EEF0F3;color:#58616D}.sj3d-est-verde{background:#E6F6EC;color:#1C7C45}.sj3d-est-habla{background:#2FD27A;color:#0B3B20}.sj3d-est-ambar{background:#FFF3D6;color:#8A5A00}.sj3d-est-rojo{background:#FDE8E7;color:#B42318}.sj3d-pp-habla{box-shadow:inset 3px 0 0 #2FD27A}
+.sj3d-ondas{display:none;align-items:flex-end;gap:2px;height:12px;margin-left:6px;vertical-align:-1px}.sj3d-ondas b{display:block;width:3px;height:4px;border-radius:2px;background:#2FD27A;animation:sjOnda .9s ease-in-out infinite}.sj3d-ondas b:nth-child(2){animation-delay:.15s}.sj3d-ondas b:nth-child(3){animation-delay:.3s}
+.sj3d-nombre.sj3d-hablando{box-shadow:0 0 0 2px #2FD27A,0 0 14px rgba(47,210,122,.55)}.sj3d-nombre.sj3d-hablando .sj3d-ondas{display:inline-flex}
+@keyframes sjOnda{0%,100%{height:4px}50%{height:12px}}@media (prefers-reduced-motion:reduce){.sj3d-ondas b{animation:none;height:9px}}
 .sj3d-audio{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-on{background:#2B3340!important}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-ctl.sj3d-mute{color:#FF8A80!important}
@@ -1110,7 +1177,7 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-ante-esc{display:flex;align-items:center;gap:6px;color:#5E6B7A;font-size:13px;margin:2px 0 6px}.sj-ante-esc .sj-i{width:15px;height:15px}
 .sj-esc-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
 .sj-esc-g{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:18px;align-items:start}
-.sj-esc-3d{position:relative;aspect-ratio:16/10;border-radius:14px;overflow:hidden;background:#1B1F26}.sj-esc-3d canvas{width:100%;height:100%;display:block}
+.sj-esc-3d{position:relative;aspect-ratio:16/10;border-radius:14px;overflow:hidden;background:#1B1F26}@media (min-width:901px){.sj-esc-3d{position:sticky;top:84px}}.sj-esc-3d canvas{width:100%;height:100%;display:block}
 .sj-esc-ops{display:flex;flex-direction:column;gap:12px}.sj-esc-ps{display:flex;flex-direction:column;gap:6px}
 .sj-esc-p{display:flex;align-items:center;gap:6px;border:1px solid #ECEEF2;border-radius:12px;padding:4px 6px 4px 4px}.sj-esc-p.on{border-color:#E2231A;background:#FDF2F2}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-esc-pn{all:unset;cursor:pointer;flex:1;display:flex;flex-direction:column;padding:6px 8px;border-radius:9px}.sj-esc-pn small{color:#6B7380;font-size:12px}
@@ -1122,6 +1189,9 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-ed-cam{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.92);border:1px solid #E3E6EB;border-radius:999px;padding:4px;z-index:2}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{all:unset;cursor:pointer;font:600 12px Inter,sans-serif;color:#1F2430;padding:6px 10px;border-radius:999px;min-width:16px;text-align:center}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button:hover{background:#F2F3F6}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button[aria-pressed=true]{background:#E2231A;color:#fff}
+.sj-ed-cam{max-width:calc(100% - 16px);overflow-x:auto;scrollbar-width:none}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{flex:none;white-space:nowrap}
+@media (max-width:520px){#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{padding:6px 7px;font-size:11px}}
 /* R171 · Fase 5: pantalla completa, mano/turnos, reacciones, modo presentación */
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font:600 13px Inter,sans-serif;color:#fff;background:#222833;border:1px solid #2F3744;border-radius:999px;padding:7px 13px}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj3d-full.sj3d-full-on{background:#C62828;border-color:#C62828}.sj3d-full .sj-i{width:16px;height:16px}
