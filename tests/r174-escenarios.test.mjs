@@ -34,7 +34,7 @@ test('presets: guardar con nombre, editar solo quien lo creó o Naara, oficial s
   const db = crearFakeDb();
   let r = await llamar(db, 'libni', { accion: 'preset_guardar', escenario: 'aula', nombre: 'Clase onboarding', estilo: { paredes: 'blanco', asientos: 'mesas', paleta: 'blanco-gris', luz: 'led', extra: 'x' } });
   assert.equal(r.code, 200, JSON.stringify(r.body)); const p = r.body.presets[0];
-  assert.deepEqual(p.estilo, { paredes: 'blanco', asientos: 'mesas', paleta: 'blanco-gris', luz: 'led' }); assert.equal(p.creadoPor, 'libni');
+  assert.deepEqual(p.estilo, { paredes: 'blanco', asientos: 'mesas', paleta: 'blanco-gris', luz: 'led', piso: 'madera', brillo: 'normal', deco: S.ESCENARIOS.aula.base.deco }, 'R177: + ambiente base'); assert.equal(p.creadoPor, 'libni');
   r = await llamar(db, 'libni', { accion: 'preset_guardar', escenario: 'aula', nombre: 'Raro', estilo: { paredes: 'no-existe' } });
   assert.equal(r.body.presets[1].estilo.paredes, 'madera', 'valor fuera de catálogo → base');
   assert.equal((await llamar(db, 'libni', { accion: 'preset_guardar', escenario: 'aula', nombre: 'clase ONBOARDING' })).code, 409, 'nombre repetido');

@@ -59,5 +59,5 @@ test('las piezas siempre corresponden a la base elegida; mujer sin bigote', () =
   const c = S.limpiarAvatar({ genero: 'mujer', cabello: 'conBarba', superior: 'traje', calzado: 'tenis', barba: true }, S.AVATAR_BASE.libni);
   assert.ok(S.AVATAR_GENERO.mujer.cabello.includes(c.cabello)); assert.ok(S.AVATAR_GENERO.mujer.superior.includes(c.superior));
   assert.ok(S.AVATAR_GENERO.mujer.calzado.includes(c.calzado)); assert.equal(c.barba, false);
-  for (const id of ['naara', 'libni', 'geisell']) assert.deepEqual(S.limpiarAvatar(S.AVATAR_BASE[id], S.AVATAR_BASE[id]), S.AVATAR_BASE[id], 'base válida tal cual');
+  for (const id of ['naara', 'libni', 'geisell']) assert.deepEqual(S.limpiarAvatar(S.AVATAR_BASE[id], S.AVATAR_BASE[id]), { ...S.AVATAR_BASE[id], nombre: '' }, 'base válida tal cual (R177: + nombre visible vacío)');
 });
