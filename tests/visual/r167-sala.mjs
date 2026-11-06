@@ -1,5 +1,5 @@
 // R167 · Sala de Juntas en navegador (datos ficticios, API real con Firestore en memoria):
-// Naara programa desde el formulario → Libni la ve, confirma y entra a la antesala → Magdiel no ve el botón.
+// Naara programa desde el formulario → Libni la ve, confirma y entra a la antesala → Prueba no ve el botón.
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -54,10 +54,10 @@ console.log('ok celular sin desborde · errores JS:', h.errores.length);
 assert.deepEqual(h.errores, []);
 await h.cerrar();
 
-h = await abrir({ usuario: 'magdiel', ui: 'v2', ancho: 1440, salaDb: db });
-assert.equal(await h.page.$('#v2Fila [data-s="sala-juntas"]'), null, 'Magdiel no ve el botón');
+h = await abrir({ usuario: 'prueba', ui: 'v2', ancho: 1440, salaDb: db });
+assert.equal(await h.page.$('#v2Fila [data-s="sala-juntas"]'), null, 'Prueba no ve el botón');
 const forzado = await h.page.evaluate(async () => { const r = await fetch('/api/sala-juntas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"accion":"panel"}' }); return r.status; });
-assert.equal(forzado, 403); console.log('ok Magdiel: sin botón y 403 si llama la API directo');
+assert.equal(forzado, 403); console.log('ok Prueba: sin botón y 403 si llama la API directo');
 await h.cerrar();
 console.log('R167 Sala de Juntas: 5/5 recorridos OK');
 
@@ -69,7 +69,7 @@ console.log('R167 Sala de Juntas: 5/5 recorridos OK');
   let k = await abrir({ usuario: 'naara', ui: 'v2', ancho: 1440, alto: 1000, salaDb: db });
   await k.page.click('#v2Fila [data-s="sala-juntas"]'); await k.page.waitForSelector('.sj-avisos'); await k.page.waitForTimeout(400);
   const txt = await k.page.evaluate(() => document.querySelector('.sj-prox').innerText);
-  assert.match(txt, /Telegram: 1 enviado/); assert.match(txt, /no ha iniciado el bot/);
+  assert.match(txt, /Telegram: envío incompleto · 1 enviado/); assert.match(txt, /Libni: ENVIADO/); assert.match(txt, /Geisell: NO ENTREGADO/); assert.match(txt, /bloqueó al bot o no lo ha iniciado/); // R182: estado por persona
   await foto(k.page, 'naara-1440-avisos.png');
   await k.page.goto(k.base + '/?sala=' + id); await k.page.waitForSelector('.sj-ante-acc', { timeout: 20000 });
   assert.ok(!k.page.url().includes('sala='), 'el enlace se limpia de la barra');
