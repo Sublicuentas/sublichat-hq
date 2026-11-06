@@ -155,11 +155,25 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - Todas ven **"● Grabando 0:00"** mientras dura (atributo de la anfitriona; un aviso falso de otra no cuenta). Se registra inicio/fin y duración en auditoría y el acta dice "Grabada".
 - Límites: 120 minutos o ~1.8 GB por grabación. Funciona en Chrome/Edge de computadora; en iPhone no.
 
+## R176 — sin borrado automático + 15 minutos
+- La actualización cada 30 s ya no repinta si hay un formulario, un campo con foco o algo escrito sin guardar. Después de guardar sí se actualiza.
+- Duración de reunión: 15, 30, 45, 60, 90 y 120 minutos.
+
+## R177 — Correcciones avanzadas (PDF de correcciones)
+- **Avatar:** pose de descanso (brazos separados del torso, codo flexionado, dedos relajados), sentado con manos juntas. Lentes rectangulares con micas, aretes colgantes, collar que cae en "U" sobre la ropa con dije, reloj en la muñeca con carátula visible, logo real de Sublicuentas sobre el pecho (versión clara u oscura según el color de la ropa; se ajusta a la superficie de cada prenda).
+- **Editor:** vistas Frente, Lateral, 3/4, Espalda y giro 360° continuo. Campo **Nombre visible** (24 caracteres) con vista previa inmediata; se guarda con el personaje y se ve sobre el avatar y en la lista de participantes.
+- **Voz:** quien habla tiene aro verde luminoso en la base, etiqueta con ondas animadas y boca que se mueve (sutil). Respeta "reducir movimiento".
+- **Ambiente:** por escenario, secciones Iluminación (tipo + intensidad suave/normal/más brillante), Piso (madera/neutro/oscuro/claro), Paredes, Asientos, Paleta, Decoración (plantas, cuadros, lámparas de pie, mesas auxiliares, paneles informativos, utilería) y Logo/branding. Estilos sugeridos: Junta mensual, Reunión sobria, Anuncio, Presentación, Grabación limpia. Todo se guarda en los presets.
+- **Convocatoria:** Tipo de sesión (Junta, Revisión, Clase, Presentación, Grabación de anuncio, Otra) que sugiere escenario y estilo. Participantes con rol y permisos. La reunión guarda tipo, escenario, preset/sugerido y una copia del estilo; "Repetir con este escenario" desde el historial.
+- **Durante la reunión:** estados por asistente (En la sala, Hablando, Mano levantada, Micrófono apagado, No ha entrado). **Modo grabación** en Ajustes: plano frontal, luz más limpia, sin plantas/cuadros/utilería ni nombres.
+- Pendiente de decidir: invitar a usuarios autorizados además de las 3 fundadoras (requiere permisos de Sala por usuario y asientos extra).
+
 ## Riesgos conocidos
 - Escenarios hechos con geometría simple: la distribución, colores, luces y mobiliario siguen el PDF, pero no el detalle de ilustración (personas en la sala, ventanas, libreros completos).
 - Grabar consume CPU en el equipo de Naara; si la máquina es lenta, la sala 3D baja de calidad sola.
 - Presentar video depende del formato que el navegador sepa reproducir (MP4 H.264 o WebM).
 
 ## Cómo revertir (rollback)
+- R177: volver a subir 53 deja todo como antes de las correcciones (los campos nuevos `nombre`, `tipo`, `sugerido`, `estiloUsado`, `piso`, `brillo`, `deco` se ignoran).
 - Volver a subir el zip anterior encima: 49 (Fase 5) deja todo como antes de escenarios y grabación; 47 (avatares) deja todo como antes de la Fase 5. Los datos nuevos (`sala_escenarios`, campos `escenario`/`presetId` en reuniones, actas) quedan guardados y las versiones anteriores simplemente los ignoran.
 - Apagar todo el módulo sin tocar código: variable `SALA_JUNTAS_ENABLED=0` en Vercel.
