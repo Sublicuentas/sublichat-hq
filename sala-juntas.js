@@ -146,7 +146,7 @@
     const prox = p ? `<div class="sj-card sj-prox">
         <div class="sj-prox-t"><div class="sj-prox-h">${ico('cal')}<b>Próxima reunión</b>${pill(p.estado)}</div>
           <h4>${esc(p.titulo)}</h4>
-          <div class="sj-meta"><span>${ico('cal')}${esc(fechaLarga(p))}</span><span>${ico('reloj')}${esc(horaHN(p))} (Honduras)</span><span>${ico('grupo')}Socias fundadoras (${p.participantes.length})</span></div>
+          <div class="sj-meta"><span>${ico('cal')}${esc(fechaLarga(p))}</span><span>${ico('reloj')}${esc(horaHN(p))} (Honduras)</span><span>${ico('grupo')}Participantes (${p.participantes.length})</span></div>
           ${avisosTxt(st.data.reuniones.find((x) => x.id === p.id) || {})}
           ${mia && mia.estado === 'pendiente' && p.estado === 'programada' ? `<div class="sj-rsvp-mini">¿Asistirá? <button class="sj-btn sj-ok sj-mini" data-sj="rsvp" data-id="${p.id}" data-r="aceptada">Confirmar</button><button class="sj-btn sj-sec sj-mini" data-sj="rsvp" data-id="${p.id}" data-r="rechazada">No asistiré</button></div>` : ''}
         </div>
@@ -344,7 +344,7 @@
   function formulario(embebido) {
     const r = st.editar || { titulo: '', fecha: '', hora: '', agenda: [], participantes: ['naara', 'libni', 'geisell'], recordatorios: { h24: true, h1: true, m10: true }, duracionMin: 60 };
     const ed = !!r.id;
-    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Anfitriona · Super Admin' : 'Socia fundadora')}</small><small class="sj-perm">${f.anfitriona ? 'Modera, da la palabra, graba y cierra la sala' : 'Voz, cámara, chat, mano y presentar'}</small></span></label>`).join('');
+    const parts = st.data.fundadoras.map((f) => `<label class="sj-part"><input type="checkbox" name="sjPart" value="${f.id}" ${r.participantes.includes(f.id) ? 'checked' : ''} ${f.anfitriona ? 'disabled' : ''}>${cara(f.id, 34)}<span><b>${esc(f.nombre)} ${f.anfitriona ? ico('corona', 'sj-corona') : ''}</b><small>${esc(f.anfitriona ? 'Anfitriona · Super Admin' : f.invitado ? (f.cargo || 'Invitado') : 'Socia fundadora')}</small><small class="sj-perm">${f.anfitriona ? 'Modera, da la palabra, graba y cierra la sala' : 'Voz, cámara, chat, mano y presentar'}</small></span></label>`).join('');
     const rec = [['h24', '24 horas antes'], ['h1', '1 hora antes'], ['m10', '10 minutos antes']].map(([k, t]) => `<label class="sj-rec">${ico('campana')}<span>${t}</span><input type="checkbox" role="switch" class="sj-sw" name="sjRec" value="${k}" ${r.recordatorios[k] !== false ? 'checked' : ''}></label>`).join('');
     return `<form class="sj-card sj-pn sj-form" id="sjForm" novalidate>
       <div class="sj-ph">${ico('calPlus')}<b>${ed ? 'Editar convocatoria' : 'Crear nueva convocatoria'}</b>${ed ? pill(r.estado) : ''}</div>
@@ -359,7 +359,7 @@
           <div id="sjEscCampos">${escenarioCampos(r)}</div>
           <label class="sj-f"><span>Agenda / Temas a tratar * <small>(un tema por línea)</small></span><textarea name="agenda" rows="4" placeholder="Resultados de ventas del mes&#10;Campañas y promociones&#10;Objetivos y responsables">${esc((r.agenda || []).join('\n'))}</textarea></label>
         </div>
-        <div class="sj-form-d"><b class="sj-sub">¿Con quién es la reunión?</b><p class="sj-hint">Marque a quién invita. Naara siempre entra como anfitriona.</p>${parts}<p class="sj-hint">Otras personas autorizadas se podrán agregar cuando se habiliten sus permisos de Sala.</p>
+        <div class="sj-form-d"><b class="sj-sub">¿Con quién es la reunión?</b><p class="sj-hint">Marque a quién invita. Naara siempre entra como anfitriona.</p>${parts}<p class="sj-hint">${st.data.fundadoras.some((f) => f.invitado) ? 'Las personas marcadas "Invitado" tienen el módulo Sala de Juntas activado; reciben la convocatoria en Sublichat (Telegram solo llega a las fundadoras).' : '¿Falta alguien? Sublicuentas activa el módulo "Sala de Juntas" a cualquier usuario en Permisos y aparece aquí.'}</p>
           <b class="sj-sub">Recordatorios automáticos (Telegram)</b>${rec}
           <p class="sj-hint">Hora de Honduras (UTC-6). Al programar, cada invitada recibe la convocatoria por Telegram con botones Confirmar / No asistiré.</p></div>
       </div>
@@ -434,7 +434,7 @@
       <div class="sj-ante-g">
         <div class="sj-ante-av${miAv.guardado ? ' sj-ante-ok' : ''}">${avatar ? `<img src="${esc(avatar)}" alt="Su personaje">` : ''}<span>${miAv.guardado ? 'Su personaje 3D está listo.' : 'Todavía no ha creado su personaje 3D.'} <button class="sj-btn sj-sec sj-mini" data-sj="personajeAnte">${miAv.guardado ? 'Cambiar' : 'Crear mi personaje'}</button></span></div>
         <div class="sj-ante-c"><b class="sj-ante-tit">Reunión: ${esc(r.titulo)}</b>${st.escCat ? `<small class="sj-ante-esc">${ico('pantalla')}${esc(st.escCat[r.escenario || 'sala-c']?.nombre || '')}${(() => { const e = estiloDeReunion(r); return e.nombre ? ' · ' + esc(e.nombre) : ''; })()}</small>` : ''}
-          <div class="sj-meta sj-meta-col"><span>${ico('cal')}${esc(fechaLarga(r))}</span><span>${ico('reloj')}${esc(horaHN(r))} (Honduras)</span><span>${ico('grupo')}Socias fundadoras (${r.participantes.length})</span></div>
+          <div class="sj-meta sj-meta-col"><span>${ico('cal')}${esc(fechaLarga(r))}</span><span>${ico('reloj')}${esc(horaHN(r))} (Honduras)</span><span>${ico('grupo')}Participantes (${r.participantes.length})</span></div>
           <div class="sj-listo ${todoOk ? 'sj-listo-ok' : ''}"><b>${todoOk ? ico('check') + 'Todo listo para ingresar' : 'Revise su micrófono y audio'}</b><div class="sj-disps">${dispo}</div>
             ${st.mic.estado === 'activo' ? '<div class="sj-nivel" aria-label="Nivel del micrófono"><i id="sjNivel"></i></div>' : ''}
             ${st.mic.estado === 'denegado' ? '<p class="sj-hint">El navegador bloqueó el micrófono. Toque el candado junto a la dirección, permita "Micrófono" y vuelva a probar. Puede entrar como oyente.</p>' : ''}
@@ -487,8 +487,8 @@
   }
   function configuracion() {
     const d = st.data;
-    return `<div class="sj-dos"><div class="sj-card sj-pn"><div class="sj-ph">${ico('grupo')}<b>Acceso</b></div><p class="sj-p">Solo las tres socias fundadoras entran a la Sala. Nadie más puede abrirla aunque tenga rol de administrador o un enlace reenviado.</p>
-        ${d.fundadoras.map((f) => `<div class="sj-pp">${cara(f.id, 36)}<span><b>${esc(f.nombre)}</b><small>${esc(f.cargo)} · asiento ${esc(f.asiento)}</small></span>${f.anfitriona ? ico('corona', 'sj-corona') : ''}</div>`).join('')}</div>
+    return `<div class="sj-dos"><div class="sj-card sj-pn"><div class="sj-ph">${ico('grupo')}<b>Acceso</b></div><p class="sj-p">Entran las socias fundadoras y los usuarios a quienes Sublicuentas les active el módulo "Sala de Juntas" en Permisos. Nadie más puede abrirla aunque tenga un enlace reenviado; solo ven las reuniones a las que están invitados.</p>
+        ${d.fundadoras.map((f) => `<div class="sj-pp">${cara(f.id, 36)}<span><b>${esc(f.nombre)}</b><small>${esc(f.cargo)}${f.asiento ? ' · asiento ' + esc(f.asiento) : ''}</small></span>${f.anfitriona ? ico('corona', 'sj-corona') : ''}</div>`).join('')}</div>
       <div class="sj-card sj-pn"><div class="sj-ph">${ico('config')}<b>Estado de la sala</b></div>
         <div class="sj-estado"><span>Escenario</span><b>C · Cálida Ejecutiva</b></div>
         <div class="sj-estado"><span>Zona horaria</span><b>Honduras (UTC-6)</b></div>

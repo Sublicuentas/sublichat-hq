@@ -275,11 +275,12 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = '/assets/sublicuentas-logo.png'; });
   // R174: Sala C con su estilo base = el diseño original aprobado; cualquier otro escenario/estilo lo arma escenarios.js
   const original = escenario === 'sala-c' && esBase(estilo);
+  let libresEsc = null; // R179 · asientos libres para invitados (usuarios con el módulo activado)
   let A = ASIENTOS, pantalla = null, VIS0 = null, centro = new THREE.Vector3(0, 1.0, -0.4), mesa = null;
   if (!original) {
     const M = await import(MOD_ESC);
-    const E = M.construir(escena, escenario, estilo || {}, { logo, texturaPantalla });
-    A = E.asientos; pantalla = E.pantalla; centro = E.centro; r.toneMappingExposure = E.exp || 1.05;
+    const E = M.construir(escena, escenario, estilo || {}, { logo, texturaPantalla, extras: participantes.filter((x) => !['naara', 'libni', 'geisell'].includes(x)).length });
+    A = E.asientos; libresEsc = E.libres || []; pantalla = E.pantalla; centro = E.centro; r.toneMappingExposure = E.exp || 1.05;
     const v3a = (a) => new THREE.Vector3(a[0], a[1], a[2]);
     VIS0 = { general: { pos: v3a(E.vistas.general.pos), mira: v3a(E.vistas.general.mira) }, presentacion: { pos: v3a(E.vistas.presentacion.pos), mira: v3a(E.vistas.presentacion.mira) }, panoramica: { pos: v3a(E.vistas.general.pos), mira: centro.clone() }, radio: E.vistas.panoramica.radio, alto: E.vistas.panoramica.y };
   } else {
@@ -325,8 +326,13 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
 
   // personajes en sus asientos
   const personajes = {}; const etiquetas = {}; const cargas = [];
-  for (const id of ['naara', 'libni', 'geisell']) {
-    const pos = A[id]; if (!pos || !participantes.includes(id)) continue;
+  { // R179 · cada invitado ocupa un asiento libre del escenario (en orden); si no hay más asientos, participa sin personaje
+    const libres = libresEsc || LIBRES.map((p) => ({ ...p, x: p.x + Math.sin(p.ry) * 0.07, z: p.z + Math.cos(p.ry) * 0.07 }));
+    let i = 0; A = { ...A };
+    for (const id of participantes) if (!A[id] && libres[i]) A[id] = libres[i++];
+  }
+  for (const id of participantes) {
+    const pos = A[id]; if (!pos) continue;
     const p = new THREE.Group(); p.position.set(pos.x - Math.sin(pos.ry) * 0.05, pos.y || 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
     // R177 · aro luminoso en la base: se enciende solo mientras la persona habla
     const aro = new THREE.Mesh(new THREE.RingGeometry(0.46, 0.56, 56), new THREE.MeshBasicMaterial({ color: '#2FD27A', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));

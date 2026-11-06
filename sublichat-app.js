@@ -7280,7 +7280,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil'],
     permisos:['🛡️','Usuarios y permisos'], // R162 · solo Sublicuentas
-    'sala-juntas':['🎥','Sala de Juntas'] // R167 · solo las 3 fundadoras
+    'sala-juntas':['🎥','Sala de Juntas'] // R179 · módulo de Permisos (fundadoras por defecto)
   };
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   const currentUser=()=>{
@@ -7343,8 +7343,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   function esFundadoraSala(){return ['sublicuentas','naara','libni','relojes','geisell','geissel'].includes(norm(currentUser()));}
   function can(screen){
     if(screen==='permisos')return isSublicuentasAccount();
-    if(screen==='sala-juntas')return esFundadoraSala(); // R167 · solo Naara/Libni/Geisell (el servidor lo vuelve a validar)
     const pv=permisosVigentes();
+    if(screen==='sala-juntas')return pv?pv.pantallas.includes('sala-juntas'):esFundadoraSala(); // R179 · módulo seleccionable en Permisos (el servidor lo vuelve a validar)
     if(pv)return pv.pantallas.includes(screen);
     return canHoy(screen);
   }

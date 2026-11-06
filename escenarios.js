@@ -214,7 +214,7 @@ function laptop() { const g = new THREE.Group(); const m = mat('#2A2D33', { m: 0
 
 /* Arma el escenario (sin la Sala C, que vive en sala-3d.js con su diseño aprobado original cuando su estilo es el base).
    Devuelve: pantalla (malla para la presentación), asientos {naara, libni, geisell} y libres, vistas y centro. */
-export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) {
+export function construir(escena, id, estiloIn, { logo, texturaPantalla, extras = 0 } = {}) {
   const st = estiloValido(id, estiloIn); const P = PALETAS[st.paleta] || PALETAS['rojo-grafito']; const L0 = LUCES[st.luz] || LUCES.neutra;
   const D = st.deco; const K = { suave: 0.7, normal: 1, brillante: 1.4 }[st.brillo] || 1; const L = { ...L0, hemi: L0.hemi * K, si: L0.si * K, pi: L0.pi * K };
   escena.background = new THREE.Color(P.cielo); escena.fog = new THREE.Fog(P.cielo, 14, 26);
@@ -282,6 +282,7 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     escena.add(caja(1.4, 0.05, 0.6, mat(P.madera, { r: 0.4 }), 0, 0.76, -2.15)); escena.add(caja(1.4, 0.72, 0.05, mat(oscurecer(P.madera, 0.7)), 0, 0.38, -1.88));
     for (const p of [A.libni, A.geisell, ...filas]) { const s = asiento(st.asientos, P); s.position.set(p.x, 0, p.z + 0.12); s.rotation.y = Math.PI; escena.add(s); }
     out.asientos = { naara: { x: 0, z: -2.7, ry: 0 }, libni: { x: -1.0, z: -0.65, ry: Math.PI }, geisell: { x: 1.0, z: -0.65, ry: Math.PI } };
+    out.libres = filas.map((p) => ({ x: p.x, z: p.z - 0.05, ry: Math.PI })); // R179 · invitados en los pupitres de las filas
     out.vistas = { general: { pos: [1.2, 2.5, 5.6], mira: [0, 1.25, -3.2] }, presentacion: { pos: [0, 1.9, 1.2], mira: [0, 1.95, -4.6] }, panoramica: { radio: 5.8, y: 3.0 } };
   } else if (id === 'live') {
     const f = fondo(-3.8, 12, 3.8); pantallaEn(f, 3.6, 1.8, 2.05); ambiente(f);
@@ -296,6 +297,9 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     if (st.asientos === 'entrevista') { A.naara = { x: 0, z: -1.25, ry: 0 }; A.libni = { x: -0.75, z: 0.4, ry: Math.PI }; A.geisell = { x: 0.75, z: 0.4, ry: Math.PI }; }
     Object.values(A).forEach((p) => ponerAsiento({ ...p, y: 0.12 }, 0.12));
     out.asientos = Object.fromEntries(Object.entries(A).map(([k, p]) => [k, { ...p, y: 0.12 }]));
+    // R179 · invitados: butacas extra en la tarima (se arman solo si hay invitados)
+    out.libres = [{ x: -2.45, z: 0.25, ry: Math.PI * 0.62 }, { x: 2.45, z: 0.25, ry: -Math.PI * 0.62 }, { x: -1.1, z: 1.25, ry: Math.PI * 0.86 }, { x: 1.1, z: 1.25, ry: -Math.PI * 0.86 }, { x: 0, z: 1.55, ry: Math.PI }].slice(0, Math.max(0, extras)).map((p) => ({ ...p, y: 0.12 }));
+    out.libres.forEach((p) => ponerAsiento(p, 0.12));
     // cámaras de estudio y aros de luz (utilería)
     if (D.utileria) for (const [x, z, ry] of [[-3.6, 2.4, 0.7], [3.6, 2.4, -0.7]]) { const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = ry; for (let i = 0; i < 3; i++) { const p = caja(0.03, 1.4, 0.03, mat('#111'), Math.sin(i * 2.1) * 0.25, 0.7, Math.cos(i * 2.1) * 0.25); p.rotation.set(Math.cos(i * 2.1) * 0.18, 0, -Math.sin(i * 2.1) * 0.18); c.add(p); } c.add(caja(0.3, 0.22, 0.42, mat('#18191C', { r: 0.4 }), 0, 1.45, 0)); { const _m = malla(new THREE.CylinderGeometry(0.07, 0.08, 0.18, 16), mat('#0A0A0A'), 0, 1.45, -0.28); _m.rotation.x = Math.PI / 2; c.add(_m); } c.add(malla(new THREE.SphereGeometry(0.025, 8, 6), mat('#f00', { e: 0xff0000 }), 0.1, 1.58, -0.1)); escena.add(sec(c)); }
     if (D.utileria && (st.luz === 'aro' || st.luz === 'estudio')) for (const x of [-4.2, 4.2]) { const a = new THREE.Group(); a.position.set(x, 0, -0.2); a.add(caja(0.03, 1.6, 0.03, mat('#111'), 0, 0.8, 0)); const ring = malla(new THREE.TorusGeometry(0.32, 0.03, 8, 40), mat('#fff', { e: 0xffffff, ei: 1.8 }), 0, 1.8, 0); ring.rotation.y = x < 0 ? -0.7 : 0.7; a.add(ring); escena.add(sec(a)); }
@@ -315,6 +319,7 @@ export function construir(escena, id, estiloIn, { logo, texturaPantalla } = {}) 
     Object.values(A).forEach((p) => ponerAsiento(p, 0.12));
     // las fundadoras miran a la pantalla: su "frente" es -z
     out.asientos = Object.fromEntries(Object.entries(A).map(([k, p]) => [k, { ...p, ry: Math.PI, mira: -1 }]));
+    out.libres = [[1, 2], [1, -2], [1, 3], [1, -3], [2, 0], [2, -1], [2, 1], [0, 0]].map(([f, k]) => ({ x: k * 1.05, z: filas[f].z, y: filas[f].y, ry: Math.PI, mira: -1 }));
     puntos(st.luz === 'tenue' ? [[0, 1], [0, -3]] : [[-4, 0], [4, 0], [0, 2.5], [0, -3]]);
     if (st.luz === 'led') for (const l of [-1, 1]) escena.add(caja(0.05, 0.05, 11, mat('#fff', { e: L.tira, ei: 1.6 }), l * 7.4, 3.2, 0));
     out.vistas = { general: { pos: [0, 3.3, 5.6], mira: [0, 1.7, -6.0] }, presentacion: { pos: [0, 2.2, 3.4], mira: [0, 2.3, -6.2] }, panoramica: { radio: 6.4, y: 3.4 } };
