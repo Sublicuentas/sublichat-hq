@@ -352,8 +352,8 @@
         <img class="sj-form-img" src="/assets/sala/sala-escenario-c.webp" alt="" loading="lazy">
         <div class="sj-form-c">
           <label class="sj-f"><span>Título de la reunión *</span><input name="titulo" maxlength="120" required value="${esc(r.titulo)}" placeholder="Ej.: Revisión mensual y próximos objetivos"></label>
-          <div class="sj-f2"><label class="sj-f"><span>Fecha *</span><input type="date" name="fecha" value="${esc(r.fecha)}" required></label>
-            <label class="sj-f"><span>Hora (Honduras) *</span><input type="time" name="hora" value="${esc(r.hora)}" step="300" required></label></div>
+          <div class="sj-f2"><label class="sj-f"><span>Fecha *</span><input type="date" name="fecha" value="${esc(r.fecha || ahoraHN().fecha)}" required></label>
+            <div class="sj-f"><span>Hora (Honduras) *</span>${campoHora(r.hora)}</div></div>
           <label class="sj-f"><span>Tipo de sesión</span><select name="tipo" data-sj-tipo="1">${TIPOS.map(([k, t]) => `<option value="${k}"${(r.tipo || 'junta') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
           <label class="sj-f"><span>Duración</span><select name="duracionMin">${[15, 30, 45, 60, 90, 120].map((m) => `<option value="${m}"${Number(r.duracionMin) === m ? ' selected' : ''}>${m < 60 ? m + ' minutos' : (m / 60) + (m === 60 ? ' hora' : ' horas')}</option>`).join('')}</select></label>
           <div id="sjEscCampos">${escenarioCampos(r)}</div>
@@ -371,6 +371,18 @@
       </div></form>`;
   }
   // R174 · escenario y estilo de la convocatoria
+  // R178 · hora sin confusión: hora 1–12, minutos 00–59 y a. m./p. m. explícito (el reloj nativo mostraba 24 h en algunos navegadores)
+  const ahoraHN = () => { const d = new Date(Date.now() - 6 * 3600000); const p = (n) => String(n).padStart(2, '0'); return { fecha: `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`, h: d.getUTCHours(), m: d.getUTCMinutes() }; };
+  function campoHora(hhmm) {
+    let h, m; if (/^\d{2}:\d{2}$/.test(hhmm || '')) [h, m] = hhmm.split(':').map(Number); else { const a = ahoraHN(); h = a.h; m = a.m; } // nueva: sugiere la hora actual (se puede cambiar)
+    const h12 = ((h + 11) % 12) + 1, pm = h >= 12; const p = (n) => String(n).padStart(2, '0');
+    return `<div class="sj-hora" role="group" aria-label="Hora de la reunión"><select name="h12" aria-label="Hora">${Array.from({ length: 12 }, (_, i) => i + 1).map((x) => `<option value="${x}"${x === h12 ? ' selected' : ''}>${x}</option>`).join('')}</select><b>:</b>
+      <select name="min" aria-label="Minutos">${Array.from({ length: 60 }, (_, i) => i).map((x) => `<option value="${x}"${x === m ? ' selected' : ''}>${p(x)}</option>`).join('')}</select>
+      <select name="ampm" aria-label="a. m. o p. m."><option value="am"${pm ? '' : ' selected'}>a. m.</option><option value="pm"${pm ? ' selected' : ''}>p. m.</option></select>
+      <button type="button" class="sj-btn sj-sec sj-mini" data-sj="horaAhora" title="Poner fecha y hora de este momento">Ahora</button>
+      <input type="hidden" name="hora" value="${p(h)}:${p(m)}"></div>`;
+  }
+  function syncHora(f) { const q = (n) => f.querySelector(`[name="${n}"]`); if (!q('h12')) return; let h = Number(q('h12').value) % 12; if (q('ampm').value === 'pm') h += 12; q('hora').value = `${String(h).padStart(2, '0')}:${String(q('min').value).padStart(2, '0')}`; }
   // R177 · tipo de sesión: sugiere escenario y estilo (se pueden cambiar)
   const TIPOS = [['junta', 'Junta', 'socios', 'junta'], ['revision', 'Revisión', 'sala-c', 'sobria'], ['clase', 'Clase / capacitación', 'aula', ''], ['presentacion', 'Presentación', 'sala-c', 'presentacion'], ['grabacion', 'Grabación de anuncio', 'live', 'grabacion'], ['otra', 'Otra', '', '']];
   function escenarioCampos(r) {
@@ -387,6 +399,7 @@
   function leerForm() {
     const f = document.getElementById('sjForm'); const q = (n) => f.querySelector(`[name="${n}"]`);
     const rec = {}; f.querySelectorAll('[name="sjRec"]').forEach((x) => { rec[x.value] = x.checked; });
+    syncHora(f);
     return { titulo: q('titulo').value, fecha: q('fecha').value, hora: q('hora').value, duracionMin: Number(q('duracionMin').value), agenda: q('agenda').value,
       participantes: ['naara', ...[...f.querySelectorAll('[name="sjPart"]:checked')].map((x) => x.value)], recordatorios: rec,
       escenario: q('escenario') ? q('escenario').value : 'sala-c', ...(() => { const v = q('presetId') ? q('presetId').value : ''; return v.startsWith('s:') ? { presetId: '', sugerido: v.slice(2) } : { presetId: v, sugerido: '' }; })(),
@@ -931,6 +944,7 @@
     if (a === 'escenarios') { await cargarEscenarios(); }
     if (['calendario', 'mis', 'historial', 'config', 'personaje', 'escenarios'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'nueva') { st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; if (!st.esc) await cargarEscenarios(); st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'horaAhora') { const f = document.getElementById('sjForm'); if (!f) return; const n = ahoraHN(); f.querySelector('[name=fecha]').value = n.fecha; f.querySelector('[name=h12]').value = String(((n.h + 11) % 12) + 1); f.querySelector('[name=min]').value = String(n.m); f.querySelector('[name=ampm]').value = n.h >= 12 ? 'pm' : 'am'; syncHora(f); st.tocado = true; return; }
     if (a === 'repetir') { const o = reu(); if (!o) return; if (!st.esc) await cargarEscenarios(); st.formEsc = ''; st.formSug = null; st.formTipo = '';
       st.editar = { titulo: o.titulo, agenda: o.agenda || [], participantes: o.participantes || ['naara'], duracionMin: o.duracionMin, recordatorios: o.recordatorios || {}, tipo: o.tipo, escenario: o.escenario, presetId: o.presetId, sugerido: o.sugerido, fecha: '', hora: '' };
       st.vista = 'form'; pintar(); toast('Elija la nueva fecha y hora. Se usará el mismo escenario y estilo.'); return window.scrollTo({ top: 0 }); }
@@ -992,6 +1006,7 @@
   document.addEventListener('change', async (e) => {
     if (e.target && e.target.id === 'sj3dArchivo') empezarPresentacion(e.target.files);
     if (e.target && e.target.dataset && e.target.dataset.sjEsc) { st.formEsc = e.target.value; st.formSug = ''; const c = document.getElementById('sjEscCampos'); if (c) c.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); }
+    if (e.target && ['h12', 'min', 'ampm'].includes(e.target.name)) { const f = e.target.closest('form'); if (f) syncHora(f); }
     if (e.target && e.target.dataset && e.target.dataset.sjTipo) { const T = TIPOS.find(([k]) => k === e.target.value); st.formTipo = e.target.value; if (T && T[2]) { st.formEsc = T[2]; st.formSug = T[3] ? 's:' + T[3] : ''; } const c = document.getElementById('sjEscCampos'); if (c) c.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); }
     if (e.target && e.target.id === 'sj3dModoGrab' && st.vivo) { const V = st.vivo; V.modoGrab = e.target.checked; V.auto = !V.modoGrab; if (sala3) sala3.modoGrabacion(V.modoGrab); host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', V.modoGrab ? false : b.dataset.v === 'auto')); toast(V.modoGrab ? 'Modo grabación activo: plano frontal y escena limpia.' : 'Modo grabación apagado.'); return; }
     if (e.target && e.target.dataset && e.target.dataset.aju && st.vivo?.ctl) { try { await st.vivo.ctl.usarDispositivo(e.target.dataset.aju, e.target.value); toast('Listo, cambiado.'); } catch (err) { toast('No se pudo cambiar: ' + (err.message || ''), true); } }
@@ -1154,6 +1169,7 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-esc-sec{border-top:1px solid #EEF0F3;padding:10px 0 4px}.sj-esc-sec h4{display:flex;align-items:center;gap:6px;margin:0 0 6px;font:700 13px Inter,sans-serif;color:#1F2430}.sj-esc-sec h4 .sj-i{width:16px;height:16px;color:#E2231A}.sj-esc-sec .sj-hint{display:block;margin:4px 0 2px}
 .sj-esc-sws{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px}.sj-esc-sug{padding:4px 0 10px}.sj-esc-sug b{display:block;font:700 13px Inter,sans-serif;margin-bottom:6px}
 .sj3d-limpio{display:none!important}.sj3d-modo{border-bottom:1px solid #EEF0F3}.sj3d-modo .sj-rec span{display:flex;flex-direction:column;gap:2px}.sj3d-modo small{color:#6B7280;font-size:12px;font-weight:400}
+.sj-hora{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.sj-hora b{font-weight:700;color:#1F2430}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-hora select{width:auto;min-width:64px;padding:9px 8px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-hora select[name=ampm]{min-width:96px}
 .sj-perm{display:block;color:#8A919C;font-size:11px;margin-top:1px}
 .sj-sug-nota{display:flex;gap:6px;align-items:flex-start;background:#F6F7F9;border-radius:10px;padding:8px 10px;margin:2px 0 6px}.sj-sug-nota .sj-i{width:15px;height:15px;color:#1C7C45;flex:none;margin-top:1px}
 .sj-ed-nom{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(20,25,32,.88);color:#fff;font:600 13px Inter,sans-serif;padding:5px 12px;border-radius:999px;white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis;z-index:2;pointer-events:none}
