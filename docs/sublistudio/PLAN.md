@@ -143,3 +143,23 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - **Acta y acuerdos**: al pulsar Terminar, Naara pasa directo a escribir el acta (resumen, decisiones, acuerdos con responsable y fecha). Asistentes y duración salen del registro real de entradas (no se pueden inventar). Cada responsable marca su acuerdo como cumplido; Naara puede marcar cualquiera y editar el acta (control de versión). Historial muestra "Ver acta" y avisa de acuerdos pendientes.
 - **Cámara libre** (arrastrar para girar, rueda o pellizco para acercar), **Ajustes** (elegir micrófono y salida de audio), **enlaces en el chat** (solo http/https, se abren aparte, sin HTML), **collar** en accesorios.
 - Pruebas: `tests/r173-acta-acuerdos.test.mjs` (3) y `tests/visual/r173-presentar-acta.mjs` (8 recorridos).
+
+## Fase 6 · Hecha (R174) — escenarios y editor común de estilos
+- **5 escenarios**: Sala de Juntas Cálida Ejecutiva (la aprobada; con su estilo base se ve exactamente igual que antes), Sala de Socios, Subli Aula, Subli Live y Subli Cinema (`escenarios.js`, geometría ligera, sin descargas).
+- **Editor común** (Sala de Juntas → "Escenarios y estilos"): 4 paredes/fondos, 4 asientos/sets, 5 paletas y 4 iluminaciones por escenario, vista previa 3D con los avatares, **Restablecer** al estilo base, **estilos guardados con nombre** ("Junta mensual", "Anuncio promo"…). Cualquier fundadora guarda los suyos; solo quien lo creó o Naara lo cambia/borra; **solo Naara marca el oficial**. Colección `sala_escenarios/{escenario}`.
+- **Convocatoria** elige escenario y estilo; la antesala lo muestra y la reunión en vivo se arma con ese estilo (si no eligió, el oficial; si no hay, el base).
+- Cambiar estilos no toca reuniones, avatares, actas ni grabaciones.
+
+## Fase 7 · Hecha (R175) — grabación
+- Botón **Grabar** (solo Naara): graba la sala 3D (incluye pantalla/presentación) con el audio de todas mezclado en su navegador. Al **Detener**, el video (.webm) se descarga en su equipo. **No se sube a ningún servidor** y no usa la grabación de LiveKit (que se cobra aparte).
+- Todas ven **"● Grabando 0:00"** mientras dura (atributo de la anfitriona; un aviso falso de otra no cuenta). Se registra inicio/fin y duración en auditoría y el acta dice "Grabada".
+- Límites: 120 minutos o ~1.8 GB por grabación. Funciona en Chrome/Edge de computadora; en iPhone no.
+
+## Riesgos conocidos
+- Escenarios hechos con geometría simple: la distribución, colores, luces y mobiliario siguen el PDF, pero no el detalle de ilustración (personas en la sala, ventanas, libreros completos).
+- Grabar consume CPU en el equipo de Naara; si la máquina es lenta, la sala 3D baja de calidad sola.
+- Presentar video depende del formato que el navegador sepa reproducir (MP4 H.264 o WebM).
+
+## Cómo revertir (rollback)
+- Volver a subir el zip anterior encima: 49 (Fase 5) deja todo como antes de escenarios y grabación; 47 (avatares) deja todo como antes de la Fase 5. Los datos nuevos (`sala_escenarios`, campos `escenario`/`presetId` en reuniones, actas) quedan guardados y las versiones anteriores simplemente los ignoran.
+- Apagar todo el módulo sin tocar código: variable `SALA_JUNTAS_ENABLED=0` en Vercel.
