@@ -15,7 +15,7 @@ function getApp() {
   if (!projectId || !clientEmail || !privateKey) throw new Error('Faltan credenciales Firebase.');
   return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
 }
-const C = { R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AV: 'sala_avatares', AUD: 'auditoria_eventos' };
+const C = { ESC: 'sala_escenarios', R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AV: 'sala_avatares', AUD: 'auditoria_eventos' };
 const err = (status, msg) => Object.assign(new Error(msg), { status, publico: msg });
 
 function publica(id, r, invs = {}, ahora = Date.now()) {
@@ -24,7 +24,7 @@ function publica(id, r, invs = {}, ahora = Date.now()) {
     id, titulo: r.titulo || '', agenda: r.agenda || [], inicioMs: r.inicioMs || null, fecha: p.fecha, hora: p.hora, tz: S.TZ,
     duracionMin: r.duracionMin || 60, estado: S.estadoVigente(r, ahora), participantes: r.participantes || [],
     recordatorios: r.recordatorios || {}, salaAbierta: !!r.salaAbierta, version: r.version || 1, anfitrion: r.anfitrion || 'naara',
-    invitaciones: invs, actualizadoAt: r.actualizadoAt || '',
+    invitaciones: invs, actualizadoAt: r.actualizadoAt || '', escenario: r.escenario || 'sala-c', presetId: r.presetId || '',
   };
 }
 async function invitacionesDe(db, ids) {
@@ -119,6 +119,48 @@ async function handler(req, res, deps = {}) {
       });
     }
 
+    // ---------- R174 · escenarios y presets de estilo ----------
+    if (accion === 'escenarios') {
+      if (!S.puede.ver(yo)) throw err(403, 'Sin acceso.');
+      const docs = {}; for (const id of Object.keys(S.ESCENARIOS)) { const d = await db.collection(C.ESC).doc(id).get(); const x = d.exists ? d.data() : {}; docs[id] = { presets: x.presets || [], predeterminado: x.predeterminado || '', version: x.version || 0 }; }
+      return res.status(200).json({ ok: true, escenarios: docs });
+    }
+    if (accion === 'preset_guardar' || accion === 'preset_borrar' || accion === 'preset_oficial') {
+      if (!S.puede.ver(yo)) throw err(403, 'Sin acceso.');
+      const esc = String(body.escenario || ''); if (!S.escenarioValido(esc)) throw err(400, 'Escenario no válido.');
+      const ref = db.collection(C.ESC).doc(esc);
+      const out = await db.runTransaction(async (tx) => {
+        const d = await tx.get(ref); const x = d.exists ? d.data() : { presets: [], predeterminado: '', version: 0 };
+        const presets = [...(x.presets || [])]; let pred = x.predeterminado || '';
+        const pid = String(body.presetId || ''); const i = presets.findIndex((p) => p.id === pid);
+        if (accion === 'preset_guardar') {
+          const nombre = String(body.nombre || '').replace(/[ -]/g, '').trim().slice(0, 40);
+          if (nombre.length < 2) throw err(400, 'Póngale un nombre al estilo (por ejemplo "Junta mensual").');
+          const estilo = S.estiloEscenario(esc, body.estilo || {});
+          if (i >= 0) {
+            if (presets[i].creadoPor !== yo.id && !S.puede.moderar(yo)) throw err(403, 'Solo quien lo creó o la anfitriona pueden cambiar este estilo.');
+            presets[i] = { ...presets[i], nombre, estilo, actualizadoAt: iso, actualizadoPor: yo.id };
+          } else {
+            if (presets.filter((p) => p.creadoPor === yo.id).length >= S.MAX_PRESETS) throw err(409, `Ya tiene ${S.MAX_PRESETS} estilos guardados en este escenario. Borre alguno.`);
+            if (presets.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase())) throw err(409, 'Ya hay un estilo con ese nombre.');
+            presets.push({ id: require('crypto').randomBytes(5).toString('hex'), nombre, estilo, creadoPor: yo.id, creadoAt: iso, actualizadoAt: iso, actualizadoPor: yo.id });
+          }
+        } else if (accion === 'preset_borrar') {
+          if (i < 0) throw err(404, 'Ese estilo ya no existe.');
+          if (presets[i].creadoPor !== yo.id && !S.puede.moderar(yo)) throw err(403, 'Solo quien lo creó o la anfitriona pueden borrarlo.');
+          presets.splice(i, 1); if (pred === pid) pred = '';
+        } else {
+          if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona aprueba el estilo oficial.');
+          if (pid && i < 0) throw err(404, 'Ese estilo ya no existe.');
+          pred = pid;
+        }
+        const nuevo = { presets, predeterminado: pred, version: (x.version || 0) + 1, actualizadoAt: iso, actualizadoPor: yo.id };
+        tx.set(ref, nuevo); const a = auditoria(db, yo, accion, esc, { preset: pid || (presets[presets.length - 1] || {}).id || '' }); tx.set(a.ref, a.data);
+        return nuevo;
+      });
+      return res.status(200).json({ ok: true, escenario: esc, ...out });
+    }
+
     if (accion === 'crear' || accion === 'editar') {
       if (!S.puede.crear(yo)) throw err(403, 'Solo Naara puede crear, reprogramar o cancelar reuniones.');
       const borrador = body.borrador === true;
@@ -134,7 +176,7 @@ async function handler(req, res, deps = {}) {
       if (prev) escrituras.push(...await anularPendientes(db, prev.id, iso));
       const r = {
         titulo: v.datos.titulo, agenda: v.datos.agenda, inicioMs: v.datos.inicioMs, inicioISO: v.datos.inicioMs ? new Date(v.datos.inicioMs).toISOString() : '',
-        tz: S.TZ, duracionMin: v.datos.duracionMin, participantes: v.datos.participantes, recordatorios: v.datos.recordatorios,
+        tz: S.TZ, duracionMin: v.datos.duracionMin, participantes: v.datos.participantes, recordatorios: v.datos.recordatorios, escenario: v.datos.escenario, presetId: v.datos.presetId,
         estado: borrador ? 'borrador' : 'programada', anfitrion: 'naara', salaAbierta: false, roomId: prev?.r.roomId || S.roomIdOpaco(),
         version, actualizadoAt: iso, actualizadoPor: yo.id, ...(prev ? {} : { creadoAt: iso, creadoPor: yo.id }),
       };
@@ -203,7 +245,15 @@ async function handler(req, res, deps = {}) {
       const aud = await db.collection(C.AUD).where('objetivo', '==', id).get();
       const asistentes = [...new Set(aud.docs.map((d) => d.data()).filter((x) => x.accion === 'entrar_sala').map((x) => x.actorUsuario))].filter((u) => S.POR_ID[u]);
       const ini = Date.parse(r.abiertaAt || '') || 0, fin = Date.parse(r.cerradaAt || '') || 0;
-      return { asistentes, duracionMin: ini && fin && fin > ini ? Math.round((fin - ini) / 60000) : null };
+      const grab = aud.docs.map((d) => d.data()).filter((x) => x.accion === 'grabacion_fin');
+      return { asistentes, duracionMin: ini && fin && fin > ini ? Math.round((fin - ini) / 60000) : null, grabada: grab.length > 0, grabacionSeg: grab.reduce((t, x) => t + (x.duracionSeg || 0), 0) };
+    }
+    if (accion === 'grabacion') { // R175 · solo registro: el archivo queda en el equipo de la anfitriona, no se sube
+      if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede grabar.');
+      const { id } = await leerReunion(body.id);
+      const estado = body.estado === 'fin' ? 'fin' : 'inicio';
+      const a = auditoria(db, yo, 'grabacion_' + estado, id, estado === 'fin' ? { duracionSeg: Math.max(0, Math.min(6 * 3600, Math.round(Number(body.duracionSeg) || 0))) } : {});
+      await a.ref.set(a.data); return res.status(200).json({ ok: true });
     }
     if (accion === 'acta') {
       const { id, r } = await leerReunion(body.id);

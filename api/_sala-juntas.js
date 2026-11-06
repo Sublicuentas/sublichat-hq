@@ -68,7 +68,9 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() }
   } else if (body.fecha || body.hora) {
     if (!Number.isFinite(inicioMs)) errores.push('La fecha u hora no es válida.');
   }
-  return { ok: !errores.length, errores, datos: { titulo, agenda, inicioMs: Number.isFinite(inicioMs) ? inicioMs : null, duracionMin, participantes, recordatorios } };
+  const escenario = escenarioValido(body.escenario) ? body.escenario : 'sala-c';
+  const presetId = /^[a-z0-9]{4,16}$/.test(String(body.presetId || '')) ? String(body.presetId) : '';
+  return { ok: !errores.length, errores, datos: { titulo, agenda, inicioMs: Number.isFinite(inicioMs) ? inicioMs : null, duracionMin, participantes, recordatorios, escenario, presetId } };
 }
 
 // Avisos de Telegram que corresponden a una reunión (solo los futuros). Ids deterministas = idempotentes.
@@ -158,6 +160,22 @@ function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
 // Miniatura generada por el editor: solo imagen WebP/JPEG/PNG en data URL y de tamaño acotado.
 function miniaturaValida(t) { return typeof t === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(t) && t.length <= 90000; }
 
+// ---------- R174 · Escenarios (Fase 6). Mismos ids que escenarios.js (lo revisa tests/r174-escenarios.test.mjs) ----------
+const ESCENARIOS = Object.freeze({
+  'sala-c': { paredes: ['madera', 'listones', 'grafito', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['beige-madera', 'rojo-grafito', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['calida', 'neutra', 'led', 'indirecta'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'calida' } },
+  socios: { paredes: ['madera', 'grafito', 'listones', 'logo'], asientos: ['ejecutiva', 'media', 'moderna', 'premium'], paleta: ['rojo-grafito', 'beige-madera', 'negro-rojo', 'blanco-rojo', 'gris-calido'], luz: ['anillo', 'led', 'indirecta', 'neutra'], base: { paredes: 'madera', asientos: 'ejecutiva', paleta: 'beige-madera', luz: 'anillo' } },
+  aula: { paredes: ['madera', 'blanco', 'grafito', 'mixto'], asientos: ['pupitre', 'ejecutivo', 'butaca', 'mesas'], paleta: ['rojo-blanco', 'rojo-madera', 'blanco-gris', 'negro-rojo', 'beige-calido'], luz: ['calida', 'aula', 'led', 'auditorio'], base: { paredes: 'madera', asientos: 'pupitre', paleta: 'rojo-madera', luz: 'calida' } },
+  live: { paredes: ['led', 'negro', 'claro', 'modular'], asientos: ['talkshow', 'altas', 'lounge', 'entrevista'], paleta: ['rojo-negro', 'rojo-gris', 'rojo-blanco', 'negro-grafito', 'rojo-dorado'], luz: ['aro', 'estudio', 'led', 'calida'], base: { paredes: 'led', asientos: 'talkshow', paleta: 'rojo-negro', luz: 'estudio' } },
+  cinema: { paredes: ['acustica', 'rojo', 'madera', 'paneles'], asientos: ['butaca', 'sofa', 'reclinable', 'doble'], paleta: ['rojo-negro', 'grafito-dorado', 'negro-rojo', 'beige-oscuro', 'rojo-vino'], luz: ['pasillo', 'tenue', 'led', 'lounge'], base: { paredes: 'acustica', asientos: 'butaca', paleta: 'rojo-negro', luz: 'tenue' } },
+});
+const MAX_PRESETS = 12;
+function estiloEscenario(id, estilo = {}) {
+  const E = ESCENARIOS[id]; if (!E) return null; const out = {};
+  for (const k of ['paredes', 'asientos', 'paleta', 'luz']) out[k] = E[k].includes(estilo && estilo[k]) ? estilo[k] : E.base[k];
+  return out;
+}
+const escenarioValido = (id) => Object.prototype.hasOwnProperty.call(ESCENARIOS, id);
+
 // ---------- R173 · Acta y acuerdos ----------
 const limpiarTxt = (x, max) => String(x == null ? '' : x).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 function validarActa(b = {}) {
@@ -199,4 +217,4 @@ const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https
 // Ventana para entrar: desde 30 min antes del inicio hasta 60 min después del final previsto (tope de costo).
 function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
 
-module.exports = { validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+module.exports = { ESCENARIOS, MAX_PRESETS, estiloEscenario, escenarioValido, validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
