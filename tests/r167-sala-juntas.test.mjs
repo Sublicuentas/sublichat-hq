@@ -46,7 +46,7 @@ test('acceso: otro admin o sin sesión no entra; Libni/Geisell no convocan', asy
 test('Naara programa: invitaciones + avisos 24h/1h/10min/inicio, idempotentes; validación de fecha pasada', async () => {
   const db = crearFakeDb();
   let r = await llamar(db, 'naara', conv({ fecha: '2026-11-05', hora: '10:00' }));
-  assert.equal(r.code, 400); assert.match(r.body.error, /ya pasaron/);
+  assert.equal(r.code, 400); assert.match(r.body.error, /ya pasó: en Honduras son las .* (a|p)\. m\./);
   r = await llamar(db, 'sublicuentas', conv());
   assert.equal(r.code, 200); const id = r.body.id;
   const invs = db.todos('sala_invitaciones');
