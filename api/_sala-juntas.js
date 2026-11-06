@@ -62,7 +62,8 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now() }
   if (programar || titulo) { if (titulo.length < 3) errores.push('Escriba el título de la reunión.'); }
   if (programar) {
     if (!Number.isFinite(inicioMs)) errores.push('Elija fecha y hora válidas.');
-    else if (inicioMs < ahora + 2 * 60000) errores.push('La fecha y hora ya pasaron (hora de Honduras).');
+    // R178 · se puede programar para "ya" (hasta 10 min atrás cuenta como ahora); antes de eso, avisa la hora real de Honduras
+    else if (inicioMs < ahora - 10 * 60000) { const h = partesHN(ahora); const [hh, mm] = h.hora.split(':').map(Number); errores.push(`Esa fecha y hora ya pasó: en Honduras son las ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'} del ${h.fecha.split('-').reverse().join('/')}. Revise si es a. m. o p. m.`); }
     if (!agenda.length) errores.push('Agregue al menos un tema en la agenda.');
     if (participantes.length < 2) errores.push('Elija al menos una fundadora además de Naara.');
   } else if (body.fecha || body.hora) {
