@@ -198,6 +198,55 @@ async function handler(req, res, deps = {}) {
       return res.status(200).json({ ok: true, id, salaAbierta: abrir });
     }
 
+    // ---------- R173 · acta y acuerdos ----------
+    async function datosActa(id, r) {
+      const aud = await db.collection(C.AUD).where('objetivo', '==', id).get();
+      const asistentes = [...new Set(aud.docs.map((d) => d.data()).filter((x) => x.accion === 'entrar_sala').map((x) => x.actorUsuario))].filter((u) => S.POR_ID[u]);
+      const ini = Date.parse(r.abiertaAt || '') || 0, fin = Date.parse(r.cerradaAt || '') || 0;
+      return { asistentes, duracionMin: ini && fin && fin > ini ? Math.round((fin - ini) / 60000) : null };
+    }
+    if (accion === 'acta') {
+      const { id, r } = await leerReunion(body.id);
+      if (!(r.participantes || []).includes(yo.id) && !S.puede.moderar(yo)) throw err(403, 'No participó en esa reunión.');
+      const d = await db.collection(C.ACTAS).doc(id).get();
+      return res.status(200).json({ ok: true, acta: d.exists ? d.data() : null, ...(await datosActa(id, r)), reunion: { id, titulo: r.titulo, inicioMs: r.inicioMs, participantes: r.participantes, estado: S.estadoVigente(r, ahora) } });
+    }
+    if (accion === 'acta_guardar') {
+      if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona redacta el acta.');
+      const { id, r } = await leerReunion(body.id);
+      if (!['finalizada', 'en_curso'].includes(S.estadoVigente(r, ahora))) throw err(409, 'El acta se escribe cuando la reunión ya empezó o terminó.');
+      const v = S.validarActa(body);
+      const extra = await datosActa(id, r);
+      const ref = db.collection(C.ACTAS).doc(id);
+      const out = await db.runTransaction(async (tx) => {
+        const d = await tx.get(ref); const prev = d.exists ? d.data() : null;
+        const ver = prev ? Number(prev.version || 1) : 0;
+        if (prev && Number(body.version) !== ver) throw err(409, 'Alguien cambió el acta mientras la editaba. Vuelva a abrirla.');
+        const doc = { reunionId: id, titulo: r.titulo, inicioMs: r.inicioMs, participantes: r.participantes, ...extra, ...v, version: ver + 1, creadoPor: prev ? prev.creadoPor : yo.id, creadoAt: prev ? prev.creadoAt : iso, actualizadoPor: yo.id, actualizadoAt: iso };
+        tx.set(ref, doc); const a = auditoria(db, yo, prev ? 'acta_editar' : 'acta_crear', id, { acuerdos: v.acuerdos.length }); tx.set(a.ref, a.data);
+        return doc;
+      });
+      return res.status(200).json({ ok: true, acta: out });
+    }
+    if (accion === 'acuerdo_estado') { // la responsable o la anfitriona marcan un acuerdo como cumplido
+      const { id, r } = await leerReunion(body.id);
+      const ref = db.collection(C.ACTAS).doc(id); const kid = String(body.acuerdo || ''); const estado = body.estado === 'cumplido' ? 'cumplido' : 'pendiente';
+      const out = await db.runTransaction(async (tx) => {
+        const d = await tx.get(ref); if (!d.exists) throw err(404, 'Esa reunión no tiene acta.');
+        const acta = d.data(); const k = (acta.acuerdos || []).find((x) => x.id === kid); if (!k) throw err(404, 'Acuerdo no encontrado.');
+        if (k.responsable !== yo.id && !S.puede.moderar(yo)) throw err(403, 'Solo la responsable o la anfitriona pueden marcarlo.');
+        k.estado = estado; k.cambiadoPor = yo.id; k.cambiadoAt = iso;
+        tx.set(ref, { acuerdos: acta.acuerdos, actualizadoAt: iso }, { merge: true }); const a = auditoria(db, yo, 'acuerdo_' + estado, id, { acuerdo: kid }); tx.set(a.ref, a.data);
+        return acta.acuerdos;
+      });
+      void r; return res.status(200).json({ ok: true, acuerdos: out });
+    }
+    if (accion === 'actas') {
+      const q = S.puede.moderar(yo) ? db.collection(C.ACTAS) : db.collection(C.ACTAS).where('participantes', 'array-contains', yo.id);
+      const l = (await q.get()).docs.map((d) => { const x = d.data(); return { reunionId: x.reunionId, titulo: x.titulo, inicioMs: x.inicioMs, acuerdos: (x.acuerdos || []).length, pendientes: (x.acuerdos || []).filter((k) => k.estado !== 'cumplido').length, misPendientes: (x.acuerdos || []).filter((k) => k.estado !== 'cumplido' && k.responsable === yo.id).length }; });
+      return res.status(200).json({ ok: true, actas: l });
+    }
+
     if (accion === 'antesala') {
       const { id, r } = await leerReunion(body.id);
       const estado = S.estadoVigente(r, ahora);

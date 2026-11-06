@@ -121,12 +121,12 @@ const AVATAR_OPC = Object.freeze({
   colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'],
   calzado: unir('calzado'),
   colorCalzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'],
-  lentes: [false, true], aretes: [false, true], reloj: [false, true], barba: [false, true], logo: [false, true],
+  lentes: [false, true], aretes: [false, true], collar: [false, true], reloj: [false, true], barba: [false, true], logo: [false, true],
 });
 const AVATAR_BASE = Object.freeze({
-  naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'tacon', colorCalzado: '#1A1A1A', lentes: false, aretes: true, reloj: false, barba: false, logo: false },
-  libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: false, aretes: true, reloj: true, barba: false, logo: false },
-  geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'recogido', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: true, aretes: true, reloj: false, barba: false, logo: false },
+  naara: { genero: 'mujer', piel: '#EFC3A4', cabello: 'largo', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#C62828', colorInterior: '#1F2430', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'tacon', colorCalzado: '#1A1A1A', lentes: false, aretes: true, collar: true, reloj: false, barba: false, logo: false },
+  libni: { genero: 'mujer', piel: '#E2A982', cabello: 'melena', colorCabello: '#1E1A18', ojos: '#4A2E1F', superior: 'blazer', colorSuperior: '#1F2430', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#1F2430', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: false, aretes: true, collar: false, reloj: true, barba: false, logo: false },
+  geisell: { genero: 'mujer', piel: '#EFC3A4', cabello: 'recogido', colorCabello: '#3B2A20', ojos: '#4A2E1F', superior: 'blusa', colorSuperior: '#FFFFFF', colorInterior: '#FFFFFF', inferior: 'pantalon', colorInferior: '#3E4A5C', calzado: 'formal', colorCalzado: '#1A1A1A', lentes: true, aretes: true, collar: false, reloj: false, barba: false, logo: false },
 });
 // Personajes guardados con el editor anterior (R169): se traducen a las piezas nuevas sin perder colores.
 const MIGRA = {
@@ -158,6 +158,23 @@ function limpiarAvatar(cfg = {}, base = AVATAR_BASE.naara) {
 // Miniatura generada por el editor: solo imagen WebP/JPEG/PNG en data URL y de tamaño acotado.
 function miniaturaValida(t) { return typeof t === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(t) && t.length <= 90000; }
 
+// ---------- R173 · Acta y acuerdos ----------
+const limpiarTxt = (x, max) => String(x == null ? '' : x).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
+function validarActa(b = {}) {
+  const resumen = limpiarTxt(b.resumen, 4000);
+  const decisiones = (Array.isArray(b.decisiones) ? b.decisiones : []).map((d) => limpiarTxt(d, 300)).filter(Boolean).slice(0, 30);
+  const acuerdos = (Array.isArray(b.acuerdos) ? b.acuerdos : []).map((k, i) => ({
+    id: /^[a-z0-9]{1,12}$/.test(String(k && k.id || '')) ? k.id : 'a' + (i + 1),
+    texto: limpiarTxt(k && k.texto, 300),
+    responsable: POR_ID[k && k.responsable] ? k.responsable : '',
+    fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(k && k.fecha || '')) ? k.fecha : '',
+    estado: k && k.estado === 'cumplido' ? 'cumplido' : 'pendiente',
+  })).filter((k) => k.texto).slice(0, 30);
+  if (!resumen && !decisiones.length && !acuerdos.length) { const m = 'Escriba al menos un resumen, una decisión o un acuerdo.'; throw Object.assign(new Error(m), { status: 400, publico: m }); }
+  for (const k of acuerdos) if (!k.responsable) { const m = `El acuerdo "${k.texto.slice(0, 40)}" necesita responsable.`; throw Object.assign(new Error(m), { status: 400, publico: m }); }
+  return { resumen, decisiones, acuerdos };
+}
+
 // ---------- R170 · Fase 4: tokens de LiveKit (firmados en el servidor; nunca viajan por Telegram) ----------
 const crypto = require('crypto');
 const b64u = (x) => Buffer.from(typeof x === 'string' ? x : JSON.stringify(x)).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -182,4 +199,4 @@ const httpDeLiveKit = (url) => String(url || '').trim().replace(/^wss:/i, 'https
 // Ventana para entrar: desde 30 min antes del inicio hasta 60 min después del final previsto (tope de costo).
 function ventanaSala(r = {}) { const ini = Number(r.inicioMs || 0), fin = ini + (Number(r.duracionMin) || 60) * 60000; return { desde: ini - 30 * 60000, hasta: fin + 60 * 60000 }; }
 
-module.exports = { AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
+module.exports = { validarActa, AVATAR_GENERO, migrarAvatar, jwtHS256, tokenParticipante, tokenServidor, httpDeLiveKit, ventanaSala, AVATAR_OPC, AVATAR_BASE, limpiarAvatar, miniaturaValida, FUNDADORAS, POR_ID, TZ, ESTADOS, RECORDATORIOS, claveUsuario, identidad, puede, aUTC, partesHN, validarConvocatoria, planAvisos, estadoVigente, roomIdOpaco };
