@@ -59,7 +59,7 @@ await foto(P, 'r170-3-chat.png');
 // participantes + silenciada
 await P.evaluate(() => window.__lk.sim.silencia('geisell', true));
 await P.click('#sj3d-lkPart'); await P.waitForTimeout(200);
-assert.match(await P.textContent('#sj3dPanel'), /Geisell.*silenciada/s);
+assert.match(await P.textContent('#sj3dPanel'), /Geisell.*Micrófono apagado/s);
 assert.equal(await P.$$eval('#sj3dPanel [data-sj="lkSacar"]', (x) => x.length), 2, 'Naara puede sacar a las otras dos');
 await foto(P, 'r170-4-participantes.png');
 // pantalla compartida → vista presentación

@@ -38,7 +38,7 @@ const hn = new Date(Date.now() - 6 * 3600000 + 15 * 60000); hn.setUTCMinutes(Mat
 await P.fill('#sjForm [name=titulo]', 'Lanzamiento promo de diciembre (prueba)');
 await P.fill('#sjForm [name=fecha]', hn.toISOString().slice(0, 10)); await P.fill('#sjForm [name=hora]', hn.toISOString().slice(11, 16));
 await P.fill('#sjForm [name=agenda]', 'Guion del anuncio');
-await P.selectOption('#sjForm [name=escenario]', 'live'); await P.waitForFunction(() => document.querySelectorAll('#sjForm [name=presetId] option').length === 2);
+await P.selectOption('#sjForm [name=escenario]', 'live'); await P.waitForFunction(() => document.querySelectorAll('#sjForm [name=presetId] optgroup[label="Estilos guardados"] option').length === 1);
 assert.match(await P.textContent('#sjForm [name=presetId]'), /Anuncio promo \(oficial\)/);
 await P.selectOption('#sjForm [name=presetId]', doc.presets[0].id);
 await P.check('#sjForm [name=sjPart][value=libni]'); await P.check('#sjForm [name=sjPart][value=geisell]');
