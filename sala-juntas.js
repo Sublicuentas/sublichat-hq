@@ -72,7 +72,7 @@
   // ---------- carga ----------
   async function cargar(silencioso) {
     if (st.cargando) return; st.cargando = true; if (!silencioso) { st.error = ''; pintar(); }
-    try { st.data = await api({ accion: 'panel' }); st.error = ''; }
+    try { st.data = await api({ accion: 'panel' }); st.error = ''; if (!st.esc && !st.escCargando) { st.escCargando = true; cargarEscenarios().then(() => { st.escCargando = false; if (['inicio', 'form'].includes(st.vista) && !st.guardando) pintar(); }); } }
     catch (e) { st.error = e.message; }
     st.cargando = false; pintar();
   }
@@ -81,7 +81,7 @@
     estilos();
     const sec = document.getElementById('screen-sala-juntas'); if (sec) sec.classList.add('sj-pantalla');
     st.vista = 'inicio'; st.editar = null; cargar();
-    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d', 'acta'].includes(st.vista)) cargar(true); }, 30000);
+    clearInterval(poll); poll = setInterval(() => { const a = document.getElementById('screen-sala-juntas'); if (!a || !a.classList.contains('active')) { clearInterval(poll); detenerMic(); if (st.vivo) salirVivo(); return; } if (!st.guardando && !['form', 'personaje', 'sala3d', 'acta', 'escenarios'].includes(st.vista)) cargar(true); }, 30000);
   }
 
   // ---------- pintar ----------
@@ -95,6 +95,7 @@
     else if (st.vista === 'mis') cuerpo = volver('Mis reuniones') + listaReuniones((r) => ['programada', 'en_curso'].includes(r.estado), 'No tiene reuniones próximas.');
     else if (st.vista === 'historial') cuerpo = volver('Historial y acuerdos') + historial();
     else if (st.vista === 'acta') cuerpo = volver('Acta de la reunión') + actaHtml();
+    else if (st.vista === 'escenarios') cuerpo = volver('Escenarios y estilos') + escenariosHtml();
     else if (st.vista === 'config') cuerpo = volver('Configuración de la sala') + configuracion();
     else if (st.vista === 'personaje') cuerpo = volver('Mi personaje (Avatar)') + personaje();
     else if (st.vista === 'sala3d') cuerpo = sala3dHtml();
@@ -108,6 +109,7 @@
     if (st.vista === 'antesala') pintarMedidor();
     if (st.vista === 'personaje') montarEditor3D();
     if (st.vista === 'sala3d') montarSala3D();
+    if (st.vista === 'escenarios') montarEsc3D();
   }
   function cab() {
     return `<div class="sj-cab"><span class="sj-cab-ico">${ico('sala')}</span><div><h2>Sala de Juntas</h2><p>SubliStudio 3D · Reuniones, convocatorias y acuerdos del equipo</p></div></div>`;
@@ -136,7 +138,7 @@
     const acc = [
       puedeCrear ? ['nueva', 'calPlus', 'Crear<br>convocatoria', true] : null,
       ['calendario', 'cal', 'Calendario<br>de reuniones'], ['mis', 'grupo', 'Mis reuniones<br><small>(agenda)</small>'], ['personaje', 'persona', 'Mi personaje<br><small>(Avatar)</small>'],
-      ['historial', 'lista', 'Historial y<br>acuerdos'], puedeCrear ? ['config', 'config', 'Configuración<br>de la sala'] : null,
+      ['historial', 'lista', 'Historial y<br>acuerdos'], ['escenarios', 'pantalla', 'Escenarios<br>y estilos'], puedeCrear ? ['config', 'config', 'Configuración<br>de la sala'] : null,
     ].filter(Boolean).map(([v, i, t, rojo]) => `<button class="sj-acc${rojo ? ' sj-acc-rojo' : ''}" data-sj="${v}">${ico(i)}<span>${t}</span></button>`).join('');
     const borradores = puedeCrear ? d.reuniones.filter((r) => r.estado === 'borrador') : [];
     return `<div class="sj-top"><div class="sj-hero"><img src="/assets/sala/sala-hero.webp" alt="SubliStudio 3D · Nuestra sala virtual de fundadores"></div>
@@ -172,6 +174,81 @@
     return `<div class="sj-card sj-pn">${l.length ? l.map(filaReunion).join('') : `<p class="sj-p">${esc(vacio)}</p>`}</div>`;
   }
 
+  // ---------- R174 · escenarios y editor de estilos ----------
+  let esc3 = null, escMod = null, escFicha = 0;
+  const modEsc = () => (escMod = escMod || import('/escenarios.js?v=20261105-r174'));
+  async function cargarEscenarios() { try { const [j, M] = await Promise.all([api({ accion: 'escenarios' }), modEsc()]); st.esc = j.escenarios; st.escCat = M.ESCENARIOS; st.escParams = M.PARAMS; } catch (e) { toast(e.message || 'No se pudieron cargar los escenarios.', true); } }
+  // estilo de una reunión: su preset; si no, el oficial del escenario; si no, el base
+  function estiloDeReunion(r) {
+    const id = r.escenario || 'sala-c'; const D = (st.esc || {})[id] || { presets: [] };
+    const p = D.presets.find((x) => x.id === r.presetId) || D.presets.find((x) => x.id === D.predeterminado);
+    return { escenario: id, estilo: p ? p.estilo : null, nombre: p ? p.nombre : '' };
+  }
+  function escenariosHtml() {
+    if (!st.esc || !st.escCat) return `<div class="sj-card sj-pn"><p class="sj-p">Cargando escenarios…</p></div>`;
+    const C = st.escCat; if (!st.escSel) { const D = st.esc['sala-c']; const of = D.presets.find((x) => x.id === D.predeterminado); st.escSel = { id: 'sala-c', estilo: { ...(of ? of.estilo : C['sala-c'].base) }, presetId: of ? of.id : '' }; }
+    const S = st.escSel, E = C[S.id], D = st.esc[S.id] || { presets: [] }, mod = st.data.permisos.moderar, yo = st.data.yo.id;
+    const tabs = Object.entries(C).map(([id, x]) => `<button type="button" class="sj-chip-op${id === S.id ? ' on' : ''}" data-sj="escTab" data-e="${id}">${esc(x.corto)}</button>`).join('');
+    const filas = st.escParams.map(([k, t]) => `<div class="sj-op"><b>${t}</b><div class="sj-op-v">${E[k].map(([v, n]) => `<button type="button" class="sj-chip-op${S.estilo[k] === v ? ' on' : ''}" data-sj="escOp" data-k="${k}" data-v="${v}">${esc(n)}</button>`).join('')}</div></div>`).join('');
+    const pres = D.presets.length ? D.presets.map((p) => `<div class="sj-esc-p${p.id === S.presetId ? ' on' : ''}"><button type="button" class="sj-esc-pn" data-sj="escPreset" data-p="${p.id}"><b>${esc(p.nombre)}</b><small>${p.id === D.predeterminado ? '⭐ Oficial · ' : ''}${esc(funda(p.creadoPor).nombre)}</small></button>
+        ${mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escOficial" data-p="${p.id === D.predeterminado ? '' : p.id}">${p.id === D.predeterminado ? 'Quitar oficial' : 'Hacer oficial'}</button>` : ''}
+        ${p.creadoPor === yo || mod ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escBorrar" data-p="${p.id}" aria-label="Borrar ${esc(p.nombre)}">${ico('x')}</button>` : ''}</div>`).join('') : '<p class="sj-hint">Todavía no hay estilos guardados en este escenario.</p>';
+    const sel = D.presets.find((p) => p.id === S.presetId);
+    return `<div class="sj-card sj-pn sj-esc">
+      <div class="sj-ph">${ico('pantalla')}<b>${esc(E.nombre)}</b></div><p class="sj-hint">${esc(E.uso)}</p>
+      <div class="sj-esc-tabs" role="tablist">${tabs}</div>
+      <div class="sj-esc-g"><div class="sj-esc-3d" id="sjEsc3d"><div class="sj-ed-carga" id="sjEscCarga">Armando el escenario…</div></div>
+        <div class="sj-esc-ops">${filas}
+          <div class="sj-op"><b>Estilos guardados</b><div class="sj-esc-ps">${pres}</div></div>
+          <form class="sj-esc-guardar" id="sjEscF"><input name="nombre" maxlength="40" placeholder="Nombre del estilo (ej.: Junta mensual)" value="${esc(sel && (sel.creadoPor === yo || mod) ? sel.nombre : '')}" aria-label="Nombre del estilo">
+            <button type="submit" class="sj-btn sj-rojo sj-mini">${sel && (sel.creadoPor === yo || mod) ? 'Actualizar estilo' : 'Guardar estilo'}</button>${sel ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escNuevo">Guardar como nuevo</button>` : ''}
+            <button type="button" class="sj-btn sj-sec sj-mini" data-sj="escReset">Restablecer</button></form>
+          <p class="sj-hint">Cambiar el estilo no borra reuniones, personajes ni actas. ${mod ? 'El estilo marcado como oficial es el que se usa si la convocatoria no elige otro.' : 'Naara aprueba el estilo oficial de cada escenario.'}</p>
+        </div></div></div>`;
+  }
+  async function montarEsc3D() {
+    const cont = document.getElementById('sjEsc3d'); if (!cont || !st.escSel) return;
+    const yo = ++escFicha;
+    if (esc3) { try { esc3.destruir(); } catch (_) {} esc3 = null; }
+    cont.querySelectorAll('canvas,.sj3d-nombres').forEach((x) => x.remove());
+    let c = document.getElementById('sjEscCarga'); if (!c) { c = document.createElement('div'); c.className = 'sj-ed-carga'; c.id = 'sjEscCarga'; cont.appendChild(c); } c.textContent = 'Armando el escenario…';
+    try {
+      const M = await modulo3D(); if (yo !== escFicha || !document.getElementById('sjEsc3d')) return;
+      if (!M.soportaWebGL()) throw new Error('Este equipo no puede mostrar escenas 3D (WebGL).');
+      const s3 = await M.montarSala(cont, { avatares: st.data.avatares || {}, escenario: st.escSel.id, estilo: st.escSel.estilo, participantes: ['naara', 'libni', 'geisell'] });
+      if (yo !== escFicha) { s3.destruir(); return; }
+      esc3 = s3; await s3.listo; const cc = document.getElementById('sjEscCarga'); if (cc && yo === escFicha) cc.remove();
+    } catch (e) { const cc = document.getElementById('sjEscCarga'); if (cc) cc.textContent = e.message || 'No se pudo armar el escenario.'; }
+  }
+  let escTimer = null; const remontarEsc = () => { clearTimeout(escTimer); escTimer = setTimeout(montarEsc3D, 250); };
+  function repintarEscOps() { // repinta solo los controles; la escena se rearma aparte
+    const g = host.querySelector('.sj-esc'); if (!g) return pintar(); const tmp = document.createElement('div'); tmp.innerHTML = escenariosHtml();
+    g.querySelector('.sj-esc-ops').replaceWith(tmp.querySelector('.sj-esc-ops')); g.querySelector('.sj-esc-tabs').replaceWith(tmp.querySelector('.sj-esc-tabs'));
+    g.querySelector('.sj-ph').replaceWith(tmp.querySelector('.sj-ph')); g.querySelector('.sj-hint').replaceWith(tmp.querySelector('.sj-hint'));
+  }
+  async function accionEsc(a, b) {
+    const S = st.escSel, C = st.escCat;
+    if (a === 'escTab') { const id = b.dataset.e; const D = st.esc[id]; const of = D.presets.find((x) => x.id === D.predeterminado); st.escSel = { id, estilo: { ...(of ? of.estilo : C[id].base) }, presetId: of ? of.id : '' }; repintarEscOps(); return remontarEsc(); }
+    if (a === 'escOp') { S.estilo = { ...S.estilo, [b.dataset.k]: b.dataset.v }; repintarEscOps(); return remontarEsc(); }
+    if (a === 'escPreset') { const p = st.esc[S.id].presets.find((x) => x.id === b.dataset.p); if (p) { S.estilo = { ...p.estilo }; S.presetId = p.id; } repintarEscOps(); return remontarEsc(); }
+    if (a === 'escReset') { S.estilo = { ...C[S.id].base }; S.presetId = ''; repintarEscOps(); return remontarEsc(); }
+    if (a === 'escNuevo') { S.presetId = ''; repintarEscOps(); const i = host.querySelector('#sjEscF [name=nombre]'); if (i) { i.value = ''; i.focus(); } return; }
+    try {
+      if (a === 'escBorrar') { if (!confirm('¿Borrar este estilo guardado?')) return; const j = await api({ accion: 'preset_borrar', escenario: S.id, presetId: b.dataset.p }); st.esc[S.id] = j; if (S.presetId === b.dataset.p) S.presetId = ''; toast('Estilo borrado.'); }
+      if (a === 'escOficial') { const j = await api({ accion: 'preset_oficial', escenario: S.id, presetId: b.dataset.p }); st.esc[S.id] = j; toast(b.dataset.p ? 'Ahora es el estilo oficial de este escenario.' : 'Se quitó el estilo oficial.'); }
+    } catch (e) { toast(e.message, true); }
+    repintarEscOps();
+  }
+  async function guardarEsc(f) {
+    if (st.guardando) return; const S = st.escSel; const D = st.esc[S.id]; const sel = D.presets.find((p) => p.id === S.presetId);
+    const editar = sel && (sel.creadoPor === st.data.yo.id || st.data.permisos.moderar);
+    st.guardando = 'esc';
+    try { const j = await api({ accion: 'preset_guardar', escenario: S.id, nombre: f.nombre.value, estilo: S.estilo, presetId: editar ? sel.id : '' }); st.esc[S.id] = j; S.presetId = editar ? sel.id : j.presets[j.presets.length - 1].id; toast('Estilo guardado.'); }
+    catch (e) { toast(e.message, true); }
+    finally { st.guardando = ''; }
+    repintarEscOps();
+  }
+
   // ---------- R173 · historial, acta y acuerdos ----------
   function historial() {
     const idx = st.actasIdx || {};
@@ -194,7 +271,7 @@
     const cabA = `<div class="sj-ph">${ico('doc')}<b>${esc(r.titulo)}</b>${pill(r.estado)}</div>
       <div class="sj-acta-meta"><span>${ico('cal')}${esc(new Date(r.inicioMs).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Tegucigalpa' }))}</span>
       <span>${ico('reloj')}${A.duracionMin != null ? `Duración ${A.duracionMin} min` : 'Duración no registrada'}</span>
-      <span>${ico('grupo')}Asistieron: ${A.asistentes.length ? A.asistentes.map((u) => esc(funda(u).nombre)).join(', ') : 'sin registro de entrada'}</span></div>`;
+      <span>${ico('grupo')}Asistieron: ${A.asistentes.length ? A.asistentes.map((u) => esc(funda(u).nombre)).join(', ') : 'sin registro de entrada'}</span>${A.grabada ? `<span>${ico('reloj')}Grabada (${Math.round(A.grabacionSeg / 60)} min) · el video quedó en el equipo de Naara</span>` : ''}</div>`;
     if (A.editar && mod) {
       const k = (a && a.acuerdos && a.acuerdos.length ? a.acuerdos : [{ id: 'a1', texto: '', responsable: '', fecha: '' }]);
       const opR = (sel) => `<option value="">Responsable…</option>` + (r.participantes || []).map((u) => `<option value="${u}"${u === sel ? ' selected' : ''}>${esc(funda(u).nombre)}</option>`).join('');
@@ -241,6 +318,7 @@
           <div class="sj-f2"><label class="sj-f"><span>Fecha *</span><input type="date" name="fecha" value="${esc(r.fecha)}" required></label>
             <label class="sj-f"><span>Hora (Honduras) *</span><input type="time" name="hora" value="${esc(r.hora)}" step="300" required></label></div>
           <label class="sj-f"><span>Duración</span><select name="duracionMin">${[30, 45, 60, 90, 120].map((m) => `<option value="${m}"${Number(r.duracionMin) === m ? ' selected' : ''}>${m < 60 ? m + ' minutos' : (m / 60) + (m === 60 ? ' hora' : ' horas')}</option>`).join('')}</select></label>
+          ${escenarioCampos(r)}
           <label class="sj-f"><span>Agenda / Temas a tratar * <small>(un tema por línea)</small></span><textarea name="agenda" rows="4" placeholder="Resultados de ventas del mes&#10;Campañas y promociones&#10;Objetivos y responsables">${esc((r.agenda || []).join('\n'))}</textarea></label>
         </div>
         <div class="sj-form-d"><b class="sj-sub">Participantes (Socias fundadoras)</b>${parts}
@@ -254,11 +332,20 @@
         <button type="submit" class="sj-btn sj-rojo sj-grande">${ico('enviar')}${ed && r.estado !== 'borrador' ? 'Guardar y reprogramar' : 'Programar y enviar convocatoria'}</button>
       </div></form>`;
   }
+  // R174 · escenario y estilo de la convocatoria
+  function escenarioCampos(r) {
+    const C = st.escCat; if (!C) return '';
+    const id = st.formEsc || r.escenario || 'sala-c'; const D = (st.esc || {})[id] || { presets: [] };
+    const presets = D.presets.map((p) => `<option value="${p.id}"${p.id === (r.escenario === id ? r.presetId : '') ? ' selected' : ''}>${esc(p.nombre)}${p.id === D.predeterminado ? ' (oficial)' : ''}</option>`).join('');
+    return `<div class="sj-f2"><label class="sj-f"><span>Escenario</span><select name="escenario" data-sj-esc="1">${Object.entries(C).map(([k, x]) => `<option value="${k}"${k === id ? ' selected' : ''}>${esc(x.corto)}</option>`).join('')}</select></label>
+      <label class="sj-f"><span>Estilo</span><select name="presetId"><option value="">${D.predeterminado ? 'Oficial del escenario' : 'Estilo base aprobado'}</option>${presets}</select></label></div>`;
+  }
   function leerForm() {
     const f = document.getElementById('sjForm'); const q = (n) => f.querySelector(`[name="${n}"]`);
     const rec = {}; f.querySelectorAll('[name="sjRec"]').forEach((x) => { rec[x.value] = x.checked; });
     return { titulo: q('titulo').value, fecha: q('fecha').value, hora: q('hora').value, duracionMin: Number(q('duracionMin').value), agenda: q('agenda').value,
-      participantes: ['naara', ...[...f.querySelectorAll('[name="sjPart"]:checked')].map((x) => x.value)], recordatorios: rec };
+      participantes: ['naara', ...[...f.querySelectorAll('[name="sjPart"]:checked')].map((x) => x.value)], recordatorios: rec,
+      escenario: q('escenario') ? q('escenario').value : 'sala-c', presetId: q('presetId') ? q('presetId').value : '' };
   }
   async function guardar(borrador) {
     if (st.guardando) return; // evita doble clic
@@ -288,7 +375,7 @@
       <div class="sj-ph">${ico('grupo')}<b>Antesala virtual</b>${embebido ? '' : `<button class="sj-btn sj-sec sj-mini sj-der-btn" data-sj="inicio">${ico('atras')}Volver</button>`}</div>
       <div class="sj-ante-g">
         <div class="sj-ante-av${miAv.guardado ? ' sj-ante-ok' : ''}">${avatar ? `<img src="${esc(avatar)}" alt="Su personaje">` : ''}<span>${miAv.guardado ? 'Su personaje 3D está listo.' : 'Todavía no ha creado su personaje 3D.'} <button class="sj-btn sj-sec sj-mini" data-sj="personajeAnte">${miAv.guardado ? 'Cambiar' : 'Crear mi personaje'}</button></span></div>
-        <div class="sj-ante-c"><b class="sj-ante-tit">Reunión: ${esc(r.titulo)}</b>
+        <div class="sj-ante-c"><b class="sj-ante-tit">Reunión: ${esc(r.titulo)}</b>${st.escCat ? `<small class="sj-ante-esc">${ico('pantalla')}${esc(st.escCat[r.escenario || 'sala-c']?.nombre || '')}${(() => { const e = estiloDeReunion(r); return e.nombre ? ' · ' + esc(e.nombre) : ''; })()}</small>` : ''}
           <div class="sj-meta sj-meta-col"><span>${ico('cal')}${esc(fechaLarga(r))}</span><span>${ico('reloj')}${esc(horaHN(r))} (Honduras)</span><span>${ico('grupo')}Socias fundadoras (${r.participantes.length})</span></div>
           <div class="sj-listo ${todoOk ? 'sj-listo-ok' : ''}"><b>${todoOk ? ico('check') + 'Todo listo para ingresar' : 'Revise su micrófono y audio'}</b><div class="sj-disps">${dispo}</div>
             ${st.mic.estado === 'activo' ? '<div class="sj-nivel" aria-label="Nivel del micrófono"><i id="sjNivel"></i></div>' : ''}
@@ -369,10 +456,10 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261105-r173');
+    M3 = await import('/sala-3d.js?v=20261105-r174');
     return M3;
   }
-  function desmontar3D() { if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
+  function desmontar3D() { if (esc3) { try { esc3.destruir(); } catch (_) {} esc3 = null; } if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
   const OPC = { genero: ['mujer', 'hombre'], piel: ['#F6D7C3', '#EFC3A4', '#E2A982', '#C98E66', '#A86F4C', '#7E5136', '#5A3825'], colorCabello: ['#1E1A18', '#3B2A20', '#6B4226', '#A0703F', '#D8B26E', '#8C8C8C', '#9E2B25'], ojos: ['#4A2E1F', '#2F5D3A', '#2F4E7A', '#1E1A18'], colorSuperior: ['#C62828', '#1F2430', '#FFFFFF', '#2B4C7E', '#5E6B7A', '#7A1F2B', '#E8E1D5'], colorInterior: ['#FFFFFF', '#1F2430', '#E8E1D5', '#C62828'], colorInferior: ['#1F2430', '#3E4A5C', '#5E4A3A', '#2B2B2B', '#C7B9A3'], colorCalzado: ['#1A1A1A', '#5E3B24', '#FFFFFF', '#7A1F2B'] };
   const opcDe = (k, c) => (PIEZAS[c.genero === 'hombre' ? 'hombre' : 'mujer'][k] || OPC[k]);
   function personaje() {
@@ -443,7 +530,7 @@
     const r = st.sala3dReu, parts = r ? r.participantes : ['naara', 'libni', 'geisell'];
     const V = st.vivo;
     const ctr = V ? [['lkMic', 'mic', 'Micrófono'], ['lkCam', 'cam', 'Cámara'], ['lkVer', 'ojo', 'Ver'], ['lkPant', 'pantalla', 'Compartir'], ['lkPresentar', 'doc', 'Presentar'], ['lkMano', 'manoI', 'Mano'], ['lkReac', 'sonrisa', 'Reacciones'], ['lkPart', 'grupo', 'Participantes'], ['lkChat', 'chat', 'Chat'], ['lkAju', 'config', 'Ajustes']]
-      .map(([a, i, t]) => `<button type="button" class="sj3d-ctl" data-sj="${a}" id="sj3d-${a}">${ico(i)}<span>${t}</span></button>`).join('') + `<button type="button" class="sj3d-ctl" disabled title="La grabación necesita aprobación aparte (tiene costo).">${ico('reloj')}<span>Grabar</span></button>`
+      .map(([a, i, t]) => `<button type="button" class="sj3d-ctl" data-sj="${a}" id="sj3d-${a}">${ico(i)}<span>${t}</span></button>`).join('') + (st.data.permisos.moderar ? `<button type="button" class="sj3d-ctl" data-sj="lkGrabar" id="sj3d-lkGrabar" title="Graba en este equipo; se avisa a todas">${ico('reloj')}<span>Grabar</span></button>` : `<button type="button" class="sj3d-ctl" disabled title="Solo la anfitriona puede grabar">${ico('reloj')}<span>Grabar</span></button>`)
       : [['mic', 'Micrófono'], ['cam', 'Cámara'], ['doc', 'Compartir'], ['grupo', `Participantes (${parts.length})`], ['lista', 'Chat'], ['check', 'Reacciones'], ['reloj', 'Grabar']]
       .map(([i, t]) => `<button type="button" class="sj3d-ctl" disabled title="Disponible al entrar a la reunión en vivo">${ico(i)}<span>${t}</span></button>`).join('');
     const terminar = V && st.data.permisos.moderar ? `<button type="button" class="sj3d-ctl sj3d-salir sj3d-fin" data-sj="lkTerminar">${ico('x')}<span>Terminar</span></button>` : '';
@@ -454,7 +541,7 @@
         <span class="sj3d-chip" id="sj3dChip">${r ? esc(r.titulo) : 'Vista previa'} · ${V ? '<i class="sj3d-led"></i>En vivo' : 'vista previa sin audio'}</span>
         <button type="button" class="sj3d-full" data-sj="pantallaCompleta" id="sj3dFull" title="Pantalla completa (tecla F)">${ico('expandir')}<span>Pantalla completa</span></button></div>
       <div class="sj3d-g"><div class="sj3d-escena" id="sj3dEscena"><div class="sj-ed-carga" id="sj3dCarga">Cargando Escenario C…</div>
-        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><div class="sj3d-pres" id="sj3dPres" hidden></div><input type="file" id="sj3dArchivo" accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/webm" multiple hidden><button type="button" class="sj3d-verpres" data-sj="lkVerPres" id="sj3dVerPres" hidden>' + ico('pantalla') + 'Ver presentación en grande</button><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
+        ${V ? '<div class="sj3d-estado" id="sj3dEstado" hidden></div><div class="sj3d-rec" id="sj3dRec" role="status" aria-live="polite" hidden><i></i>Grabando <b id="sj3dRecT">0:00</b></div><div class="sj3d-videos" id="sj3dVideos"></div><div class="sj3d-panel" id="sj3dPanel" hidden></div><div class="sj3d-pres" id="sj3dPres" hidden></div><input type="file" id="sj3dArchivo" accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/webm" multiple hidden><button type="button" class="sj3d-verpres" data-sj="lkVerPres" id="sj3dVerPres" hidden>' + ico('pantalla') + 'Ver presentación en grande</button><button type="button" class="sj-btn sj-rojo sj3d-audio" data-sj="lkAudio" id="sj3dAudio" hidden>Toque aquí para escuchar la reunión</button>' : ''}</div>
         <aside class="sj3d-vistas"><b>${ico('cam')}Vistas de cámara</b>${vistas}</aside></div>
       <div class="sj3d-barra">${ctr}<button type="button" class="sj3d-ctl sj3d-salir" data-sj="salirSala">${ico('salir')}<span>Salir</span></button>${terminar}</div>
     </div>`;
@@ -466,7 +553,9 @@
       if (!M.soportaWebGL()) throw new Error('Este equipo no puede mostrar la sala 3D (WebGL). Puede seguir la reunión con audio cuando se habilite.');
       const avatares = { ...(st.data.avatares || {}) };
       if (st.pers) avatares[st.data.yo.id] = { config: st.pers.config }; // vista previa del personaje sin guardar
-      sala3 = await M.montarSala(cont, { avatares, participantes: st.sala3dReu ? st.sala3dReu.participantes : ['naara', 'libni', 'geisell'],
+      if (st.sala3dReu && st.sala3dReu.escenario && st.sala3dReu.escenario !== 'sala-c' && !st.esc) await cargarEscenarios();
+      const E = st.sala3dReu ? estiloDeReunion(st.sala3dReu) : { escenario: 'sala-c', estilo: null };
+      sala3 = await M.montarSala(cont, { avatares, escenario: E.escenario, estilo: E.estilo, participantes: st.sala3dReu ? st.sala3dReu.participantes : ['naara', 'libni', 'geisell'],
         alCambiarVista: (v) => host.querySelectorAll('.sj3d-vista').forEach((b) => b.classList.toggle('on', b.dataset.v === v)) });
       await sala3.listo;
       const c = document.getElementById('sj3dCarga'); if (c) c.remove();
@@ -487,7 +576,7 @@
     st.sala3dReu = r; st.volver3d = 'antesala'; st.vista = 'sala3d'; pintar(); window.scrollTo({ top: 0 });
     const V = st.vivo;
     try {
-      const L = await import('/sala-vivo.js?v=20261105-r173');
+      const L = await import('/sala-vivo.js?v=20261105-r175');
       V.ctl = await L.conectar({ url: j.url, token: j.token, yo: st.data.yo.id, on: {
         estado: (e, m) => { if (st.vivo !== V) return; V.estado = e; pintarEstado(); if (e === 'desconectado') { toast(m || 'Salió de la sala.', true); salirVivo(true); } },
         presencia: (set, mics) => { if (st.vivo !== V) return; V.presentes = set; V.mics = mics; aplicarVivo3D(); },
@@ -500,6 +589,7 @@
           if (st.data.permisos.moderar) m.cola.filter((x) => !antes.has(x.id) && x.id !== st.data.yo.id).forEach((x) => toast(`✋ ${funda(x.id).nombre} pidió la palabra.`));
           if (sala3) (st.sala3dReu?.participantes || []).forEach((u) => sala3.setMano(u, m.cola.some((x) => x.id === u)));
           pintarPanel(); pintarBarra(); pintarPres(); },
+        grabacion: (desde) => { if (st.vivo !== V) return; const antes = V.grabandoDesde; V.grabandoDesde = desde || 0; pintarRec(); if (desde && !antes && !V.grab) toast('Naara empezó a grabar la reunión.'); if (!desde && antes && !V.grab) toast('Terminó la grabación.'); },
         turno: (quien) => { if (st.vivo !== V) return; if (sala3) sala3.saludar(quien); toast(quien === st.data.yo.id ? 'Naara le dio la palabra.' : `${funda(quien).nombre} tiene la palabra.`); },
         aviso: (t) => toast(t),
         audioBloqueado: (b) => { const x = document.getElementById('sj3dAudio'); if (x) x.hidden = !b; },
@@ -525,6 +615,8 @@
     if (V.ctl) V.ctl.salir();
     if (V.presEl) V.presEl.remove();
     if (V.presentador) { try { V.presentador.detener(); } catch (_) {} V.presentador = null; }
+    if (V.grab) { try { V.grab.g.detener(); } catch (_) {} }
+    clearInterval(V.recReloj);
     salirPantallaCompleta();
     if (volver && st.vista === 'sala3d') { st.vista = 'antesala'; pintar(); }
   }
@@ -583,6 +675,37 @@
     const band = o.querySelector('.sj3d-presb'); const habla = new Set(V.hablantes || []), cola = (V.manos?.cola || []).map((x) => x.id);
     band.innerHTML = `<b>Participantes (${V.presentes.size})</b>` + (st.sala3dReu?.participantes || []).map((u) => `<div class="sj3d-presp${habla.has(u) ? ' sj3d-habla' : ''}${V.presentes.has(u) ? '' : ' sj3d-ausente'}">${cara(u, 36)}<span><b>${esc(funda(u).nombre)}</b><small>${!V.presentes.has(u) ? 'No ha entrado' : V.manos?.turno === u ? 'Tiene la palabra' : cola.includes(u) ? `✋ Turno ${cola.indexOf(u) + 1}` : u === 'naara' ? 'Anfitriona' : 'Fundadora'}</small></span>${V.presentes.has(u) ? ico(V.mics[u] !== false ? 'mic' : 'micOff', 'sj3d-pmic') : ''}</div>`).join('');
   }
+  // R175 · grabación local (Fase 7)
+  function pintarRec() {
+    const V = st.vivo, e = document.getElementById('sj3dRec'); if (!V || !e) return;
+    const desde = V.grab ? V.grab.desde : V.grabandoDesde; e.hidden = !desde;
+    clearInterval(V.recReloj); if (!desde) return;
+    const tic = () => { const s2 = Math.max(0, Math.round((Date.now() - desde) / 1000)); const t = document.getElementById('sj3dRecT'); if (t) t.textContent = `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`; };
+    tic(); V.recReloj = setInterval(tic, 1000);
+    const b = document.getElementById('sj3d-lkGrabar'); if (b) { b.classList.toggle('sj3d-on', !!V.grab); b.innerHTML = `${ico('reloj')}<span>${V.grab ? 'Detener' : 'Grabar'}</span>`; }
+  }
+  async function alternarGrabacion() {
+    const V = st.vivo; if (!V?.ctl || !st.data.permisos.moderar) return;
+    if (V.grab) { V.grab.g.detener(); return; }
+    if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. El video se descarga solo en este equipo al detener (no se sube a internet).')) return;
+    const lienzo = document.querySelector('#sj3dEscena canvas.sj3d-canvas'); if (!lienzo) return toast('La sala 3D todavía no está lista.', true);
+    try {
+      const M = await import('/sala-grabar.js?v=20261105-r175');
+      const titulo = (st.sala3dReu && st.sala3dReu.titulo) || 'reunion';
+      const g = M.crearGrabadora(lienzo, { pistasAudio: () => (V.ctl ? V.ctl.pistasAudio() : []), alAvisar: (t) => toast(t, true),
+        alTerminar: async (r) => {
+          const nombre = M.descargar(r, `${titulo} ${new Date().toLocaleDateString('es-HN', { timeZone: 'America/Tegucigalpa' }).replace(/\//g, '-')}`);
+          toast(`Grabación lista: ${nombre} (${(r.bytes / 1048576).toFixed(1)} MB). Quedó en Descargas.`);
+          try { await api({ accion: 'grabacion', id: V.id, estado: 'fin', duracionSeg: r.duracionSeg }); } catch (_) {}
+        } });
+      V.grab = { g, desde: Date.now() };
+      try { await V.ctl.setGrabando(true); } catch (_) {}
+      try { await api({ accion: 'grabacion', id: V.id, estado: 'inicio' }); } catch (_) {}
+      const fin = g.detener; g.detener = () => { if (!V.grab) return; V.grab = null; fin(); V.ctl && V.ctl.setGrabando(false).catch(() => {}); pintarRec(); };
+      pintarRec(); toast('Grabando. Todas ven el aviso.');
+    } catch (e) { toast(e.message || 'No se pudo empezar a grabar.', true); }
+  }
+
   // R173 · controles de quien presenta un archivo (páginas o reproducción)
   function pintarCtlPres() {
     const V = st.vivo, c = document.getElementById('sj3dPresCtl'); if (!V || !c) return;
@@ -696,6 +819,7 @@
   }
   async function accionVivo(a, b) {
     const V = st.vivo; if (!V) return;
+    if (a === 'lkGrabar') return alternarGrabacion();
     if (a === 'lkVerPres') { V.verPres = true; return pintarPres(); }
     if (a === 'lkPresentar') { if (V.presentador) return terminarPresentacion(); const f = document.getElementById('sj3dArchivo'); if (f) { f.value = ''; f.click(); } return; }
     if (a === 'lkPresFin') return terminarPresentacion();
@@ -749,15 +873,17 @@
     if (a === 'recargar') return cargar();
     if (a === 'inicio' || a === 'salirAnte') { detenerMic(); if (st.vista === 'personaje' && st.volverAnte && st.ante) { st.volverAnte = false; st.vista = 'antesala'; return pintar(); } st.vista = 'inicio'; st.editar = null; return pintar(); }
     if (a === 'historial') cargarActas();
+    if (/^esc[A-Z]/.test(a)) return accionEsc(a, b);
     if (a === 'verActa') return abrirActa(id);
     if (a === 'actaEditar') { st.acta.editar = true; return pintar(); }
     if (a === 'actaCancelar') { st.acta.editar = false; return pintar(); }
     if (a === 'acuMas') { const c = document.getElementById('sjAcuerdos'); if (c && c.children.length < 30) { const n = c.firstElementChild.cloneNode(true); n.dataset.k = 'a' + Date.now().toString(36).slice(-6); n.dataset.e = 'pendiente'; n.querySelectorAll('input').forEach((x) => { x.value = ''; }); n.querySelector('select').value = ''; c.appendChild(n); n.querySelector('input').focus(); } return; }
     if (a === 'acuQuitar') { const c = document.getElementById('sjAcuerdos'); const fila = b.closest('.sj-acu-f'); if (c.children.length > 1) fila.remove(); else fila.querySelectorAll('input').forEach((x) => { x.value = ''; }); return; }
-    if (['calendario', 'mis', 'historial', 'config', 'personaje'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
-    if (a === 'nueva') { st.editar = null; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'escenarios') { await cargarEscenarios(); }
+    if (['calendario', 'mis', 'historial', 'config', 'personaje', 'escenarios'].includes(a)) { if (a === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = a; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'nueva') { st.editar = null; st.formEsc = ''; if (!st.esc) await cargarEscenarios(); st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'limpiar') { st.editar = null; return pintar(); }
-    if (a === 'editar') { st.editar = { ...reu() }; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
+    if (a === 'editar') { st.formEsc = ''; if (!st.esc) await cargarEscenarios(); st.editar = { ...reu() }; st.vista = 'form'; pintar(); return window.scrollTo({ top: 0 }); }
     if (a === 'borrador') return guardar(true);
     if (a === 'mesAnt' || a === 'mesSig') { const d = new Date(Date.UTC(st.mesCal.y, st.mesCal.m + (a === 'mesSig' ? 1 : -1), 1)); st.mesCal = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; return pintar(); }
     if (a === 'detalle' || a === 'antesala') {
@@ -805,11 +931,13 @@
   document.addEventListener('submit', (e) => {
     if (e.target && e.target.id === 'sjForm') { e.preventDefault(); guardar(false); }
     if (e.target && e.target.id === 'sjActaF') { e.preventDefault(); guardarActa(e.target); }
+    if (e.target && e.target.id === 'sjEscF') { e.preventDefault(); guardarEsc(e.target); }
     if (e.target && e.target.id === 'sj3dChatF') { e.preventDefault(); const t = document.getElementById('sj3dChatT'); const v = t ? t.value : ''; if (t) t.value = ''; if (st.vivo?.ctl && v.trim()) st.vivo.ctl.chat(v).catch(() => toast('No se pudo enviar el mensaje.', true)); }
   });
   window.addEventListener('pagehide', () => { if (st.vivo) salirVivo(false); });
   document.addEventListener('change', async (e) => {
     if (e.target && e.target.id === 'sj3dArchivo') empezarPresentacion(e.target.files);
+    if (e.target && e.target.dataset && e.target.dataset.sjEsc) { st.formEsc = e.target.value; const lab = e.target.closest('.sj-f2'); const tmp = document.createElement('div'); tmp.innerHTML = escenarioCampos({ escenario: '', presetId: '' }); lab.replaceWith(tmp.firstElementChild); }
     if (e.target && e.target.dataset && e.target.dataset.aju && st.vivo?.ctl) { try { await st.vivo.ctl.usarDispositivo(e.target.dataset.aju, e.target.value); toast('Listo, cambiado.'); } catch (err) { toast('No se pudo cambiar: ' + (err.message || ''), true); } }
     if (e.target && e.target.dataset && e.target.dataset.sj === 'acuEstado' && st.acta) {
       const cb = e.target; cb.disabled = true;
@@ -979,6 +1107,17 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 .sj-acu span{display:flex;flex-direction:column}.sj-acu small{color:#6B7380}.sj-acu-ok b{text-decoration:line-through;color:#6B7380}
 .sj-acu-f{display:grid;grid-template-columns:minmax(0,1fr) 150px 150px auto;gap:8px;margin-bottom:8px}.sj-acu-f input,.sj-acu-f select{border:1px solid #DADDE3;border-radius:10px;padding:9px 10px;font:14px Inter,sans-serif;min-width:0;background:#fff}
 @media (max-width:760px){.sj-acu-f{grid-template-columns:1fr 1fr auto}.sj-acu-f [name=kt]{grid-column:1/-1}}
+.sj-ante-esc{display:flex;align-items:center;gap:6px;color:#5E6B7A;font-size:13px;margin:2px 0 6px}.sj-ante-esc .sj-i{width:15px;height:15px}
+.sj-esc-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.sj-esc-g{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:18px;align-items:start}
+.sj-esc-3d{position:relative;aspect-ratio:16/10;border-radius:14px;overflow:hidden;background:#1B1F26}.sj-esc-3d canvas{width:100%;height:100%;display:block}
+.sj-esc-ops{display:flex;flex-direction:column;gap:12px}.sj-esc-ps{display:flex;flex-direction:column;gap:6px}
+.sj-esc-p{display:flex;align-items:center;gap:6px;border:1px solid #ECEEF2;border-radius:12px;padding:4px 6px 4px 4px}.sj-esc-p.on{border-color:#E2231A;background:#FDF2F2}
+#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-esc-pn{all:unset;cursor:pointer;flex:1;display:flex;flex-direction:column;padding:6px 8px;border-radius:9px}.sj-esc-pn small{color:#6B7380;font-size:12px}
+.sj-esc-guardar{display:flex;gap:8px;flex-wrap:wrap}.sj-esc-guardar input{flex:1 1 200px;min-width:0;border:1px solid #DADDE3;border-radius:10px;padding:9px 11px;font:14px Inter,sans-serif}
+@media (max-width:900px){.sj-esc-g{grid-template-columns:1fr}}
+.sj3d-rec{position:absolute;top:12px;right:12px;z-index:5;display:flex;align-items:center;gap:7px;background:#C62828;color:#fff;font:700 12.5px Inter,sans-serif;padding:6px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.sj3d-rec i{width:9px;height:9px;border-radius:50%;background:#fff;animation:sj3dLat 1.2s infinite}@keyframes sj3dLat{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.sj3d-rec i{animation:none}}
 /* R172 · cámara del editor */
 .sj-ed-cam{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.92);border:1px solid #E3E6EB;border-radius:999px;padding:4px;z-index:2}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) .sj-ed-cam button{all:unset;cursor:pointer;font:600 12px Inter,sans-serif;color:#1F2430;padding:6px 10px;border-radius:999px;min-width:16px;text-align:center}

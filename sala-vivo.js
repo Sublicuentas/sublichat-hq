@@ -18,7 +18,7 @@ export function colaManos(parts) { // parts: [{identity, attributes}]
   const host = parts.find((p) => p.identity === ANFITRIONA);
   const turno = host?.attributes?.turno || '';
   const cola = parts.filter((p) => Number(p.attributes?.mano) > 0).map((p) => ({ id: p.identity, ms: Number(p.attributes.mano) })).sort((a, b) => a.ms - b.ms);
-  return { cola, turno, limpia: Number(host?.attributes?.limpia || 0) };
+  return { cola, turno, limpia: Number(host?.attributes?.limpia || 0), grabando: Number(host?.attributes?.grabando || 0) };
 }
 
 export async function conectar({ url, token, yo, on = {} }) {
@@ -32,7 +32,7 @@ export async function conectar({ url, token, yo, on = {} }) {
   });
   const audios = new Map(); // sid → <audio>
   let cerrado = false; let pres = null; const limEnvio = limitador(); const limRecibe = {};
-  let ultimoTurno = '';
+  let ultimoTurno = ''; let ultimaGrab = 0;
   const presentes = () => { const s = new Set([yo]); room.remoteParticipants.forEach((p) => s.add(p.identity)); return s; };
   const micDe = (p) => !!p && p.isMicrophoneEnabled;
   const avisarPresencia = () => {
@@ -85,6 +85,7 @@ export async function conectar({ url, token, yo, on = {} }) {
     if (mia && ((ultimoTurno === yo && est.turno !== yo) || (est.limpia && est.limpia >= mia))) lp.setAttributes({ mano: '' }).catch(() => {});
     if (est.turno && est.turno !== ultimoTurno) emitir('turno', est.turno);
     ultimoTurno = est.turno;
+    if (est.grabando !== ultimaGrab) { ultimaGrab = est.grabando; emitir('grabacion', est.grabando); }
     emitir('manos', est);
   }
   function limpiar() { audios.forEach((el) => el.remove()); audios.clear(); }
@@ -128,6 +129,15 @@ export async function conectar({ url, token, yo, on = {} }) {
     },
     async usarDispositivo(tipo, id) { if (!['audioinput', 'audiooutput'].includes(tipo)) return false; return room.switchActiveDevice(tipo, String(id)); },
     get presentando() { return !!pres; },
+    // R175 · grabación: aviso para todas (atributo de la anfitriona) y pistas de audio para mezclar
+    async setGrabando(v) { if (yo !== ANFITRIONA) return; await lp.setAttributes({ grabando: v ? String(Date.now()) : '' }); revisarManos(); },
+    pistasAudio() {
+      const l = []; const mst = (t) => t && (t.mediaStreamTrack || t.mst);
+      room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.track && pub.track.kind === Track.Kind.Audio && pub.isSubscribed !== false) l.push(mst(pub.track)); }));
+      const mic = lp.getTrackPublication(Track.Source.Microphone); if (mic && mic.track && !mic.isMuted) l.push(mst(mic.track));
+      if (pres && pres.pubA && pres.pubA.track) l.push(mst(pres.pubA.track));
+      return l.filter(Boolean);
+    },
     async presentar(p) {
       if (pres) await this.dejarDePresentar();
       if (lp.isScreenShareEnabled) await lp.setScreenShareEnabled(false);

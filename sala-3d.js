@@ -154,7 +154,7 @@ function ajustar(r, cam, el) { const w = el.clientWidth || 600, h = el.clientHei
 
 // ---------- R172 · avatares reales (GLB) con respaldo ----------
 let moduloGLB = null;
-const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r173'));
+const avatarGLB = () => (moduloGLB = moduloGLB || import('/avatar-glb.js?v=20261105-r174'));
 // Crea el avatar 3D real; si el modelo no carga (sin red, equipo sin soporte) usa el personaje anterior y lo avisa.
 export async function crearAvatar3D(cfg = {}, opts = {}) {
   try { const M = await avatarGLB(); const g = await M.crearAvatar(cfg, opts); g.userData.glb = g.userData.avatar; g.userData.t0 = Math.random() * 10; return g; }
@@ -258,13 +258,26 @@ function laptop() {
 export const ASIENTOS = { naara: { x: 0, z: -1.55, ry: 0 }, libni: { x: -2.15, z: -0.1, ry: Math.PI / 2 * 0.82 }, geisell: { x: 2.15, z: -0.1, ry: -Math.PI / 2 * 0.82 } };
 const LIBRES = [{ x: -1.25, z: 1.6, ry: Math.PI * 0.92 }, { x: 0, z: 1.75, ry: Math.PI }, { x: 1.25, z: 1.6, ry: -Math.PI * 0.92 }];
 
-export async function montarSala(contenedor, { avatares = {}, participantes = ['naara', 'libni', 'geisell'], alCambiarVista } = {}) {
+const MOD_ESC = '/escenarios.js?v=20261105-r174';
+const esBase = (e = {}) => !e || ((!e.paredes || e.paredes === 'madera') && (!e.asientos || e.asientos === 'ejecutiva') && (!e.paleta || e.paleta === 'beige-madera') && (!e.luz || e.luz === 'calida'));
+export async function montarSala(contenedor, { avatares = {}, participantes = ['naara', 'libni', 'geisell'], alCambiarVista, escenario = 'sala-c', estilo = null } = {}) {
   const canvas = document.createElement('canvas'); canvas.className = 'sj3d-canvas'; contenedor.appendChild(canvas);
   const r = renderer(canvas); let calidad = movil ? 'baja' : 'alta';
   r.shadowMap.enabled = calidad === 'alta'; r.shadowMap.type = THREE.PCFSoftShadowMap;
   const escena = new THREE.Scene(); escena.background = new THREE.Color('#2A1C14'); escena.fog = new THREE.Fog('#2A1C14', 12, 22);
   const cam = new THREE.PerspectiveCamera(42, 1, 0.1, 60);
 
+  const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = '/assets/sublicuentas-logo.png'; });
+  // R174: Sala C con su estilo base = el diseño original aprobado; cualquier otro escenario/estilo lo arma escenarios.js
+  const original = escenario === 'sala-c' && esBase(estilo);
+  let A = ASIENTOS, pantalla = null, VIS0 = null, centro = new THREE.Vector3(0, 1.0, -0.4), mesa = null;
+  if (!original) {
+    const M = await import(MOD_ESC);
+    const E = M.construir(escena, escenario, estilo || {}, { logo, texturaPantalla });
+    A = E.asientos; pantalla = E.pantalla; centro = E.centro; r.toneMappingExposure = E.exp || 1.05;
+    const v3a = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+    VIS0 = { general: { pos: v3a(E.vistas.general.pos), mira: v3a(E.vistas.general.mira) }, presentacion: { pos: v3a(E.vistas.presentacion.pos), mira: v3a(E.vistas.presentacion.mira) }, panoramica: { pos: v3a(E.vistas.general.pos), mira: centro.clone() }, radio: E.vistas.panoramica.radio, alto: E.vistas.panoramica.y };
+  } else {
   // luces cálidas
   escena.add(new THREE.HemisphereLight(0xffe2bf, 0x5a4030, 1.15));
   const sol = new THREE.DirectionalLight(0xffe6c8, 1.3); sol.position.set(3, 6, 5); sol.castShadow = true; sol.shadow.mapSize.set(1024, 1024); sol.shadow.camera.left = -5; sol.shadow.camera.right = 5; sol.shadow.camera.top = 5; sol.shadow.camera.bottom = -5; escena.add(sol);
@@ -278,8 +291,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   fondo.add(malla(new THREE.BoxGeometry(14, 3.6, 0.2), new THREE.MeshStandardMaterial({ map: madera, roughness: 0.6 }), 0, 1.8, -0.1));
   for (let i = -26; i <= 26; i++) fondo.add(malla(new THREE.BoxGeometry(0.1, 3.4, 0.08), mat(i % 2 ? '#7A4E2E' : '#8A5A36', { r: 0.6 }), i * 0.26, 1.8, 0.03));
   const marco = malla(new THREE.BoxGeometry(4.3, 2.25, 0.08), mat('#111216', { r: 0.3 }), 0, 1.95, 0.12); fondo.add(marco);
-  const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = '/assets/sublicuentas-logo.png'; });
-  const pantalla = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 2.05), new THREE.MeshBasicMaterial({ map: texturaPantalla(logo), toneMapped: false })); pantalla.position.set(0, 1.95, 0.17); fondo.add(pantalla);
+  pantalla = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 2.05), new THREE.MeshBasicMaterial({ map: texturaPantalla(logo), toneMapped: false })); pantalla.position.set(0, 1.95, 0.17); fondo.add(pantalla);
   fondo.add(malla(new THREE.BoxGeometry(14, 0.06, 0.3), mat('#FFC27A', { e: 0xff9a3c, ei: 0.9 }), 0, 3.5, 0.1)); // tira de luz cálida
   for (const lado of [-1, 1]) { // libreros laterales
     const lib = new THREE.Group(); lib.position.set(lado * 5.2, 0, -2.4); lib.rotation.y = -lado * 0.5; escena.add(lib);
@@ -291,21 +303,26 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   for (const [x, z] of [[-2.5, -1], [0, -0.5], [2.5, -1], [-2.5, 1.8], [2.5, 1.8], [0, 2]]) { const f = new THREE.Mesh(new THREE.CircleGeometry(0.12, 20), mat('#FFF1D6', { e: 0xffd9a0, ei: 1.2 })); f.rotation.x = Math.PI / 2; f.position.set(x, 3.59, z); escena.add(f); }
 
   // mesa ovalada
-  const mesa = new THREE.Group(); escena.add(mesa);
+  mesa = new THREE.Group(); escena.add(mesa);
   const tablero = malla(new THREE.CylinderGeometry(1.0, 1.0, 0.08, 64), new THREE.MeshStandardMaterial({ map: texturaMadera('#7B4A2A', '#5A331C'), roughness: 0.35, metalness: 0.05 }), 0, 0.78, 0); tablero.scale.set(1.95, 1, 1.2); mesa.add(tablero);
   const pie = malla(new THREE.CylinderGeometry(0.5, 0.6, 0.72, 32), mat('#3A2416', { r: 0.5 }), 0, 0.38, 0); pie.scale.set(1.8, 1, 0.9); mesa.add(pie);
   const centro = planta(0, 0, 0.2, 0.42); centro.position.y = 0.8; mesa.add(centro);
   for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; mesa.add(malla(new THREE.SphereGeometry(0.05, 10, 8), mat('#C62828', { r: 0.5 }), Math.cos(a) * 0.14, 1.02 + (i % 3) * 0.03, Math.sin(a) * 0.1)); }
   const tazaG = new THREE.Group(); tazaG.position.set(-1.25, 0.82, -0.15); tazaG.add(malla(new THREE.CylinderGeometry(0.045, 0.04, 0.09, 16), mat('#FFFFFF', { r: 0.2 }), 0, 0.045, 0)); mesa.add(tazaG);
 
-  // asientos y personajes
-  const personajes = {}; const etiquetas = {}; const cargas = [];
   const colocar = (pos, atras = 0) => { const s = silla(); s.position.set(pos.x - Math.sin(pos.ry) * atras, 0, pos.z - Math.cos(pos.ry) * atras); s.rotation.y = pos.ry; escena.add(s); return s; };
   for (const id of ['naara', 'libni', 'geisell']) {
     const pos = ASIENTOS[id]; colocar(pos, 0.12);
     const lap = laptop(); lap.position.set(pos.x * 0.7 + Math.cos(pos.ry) * 0.28, 0.82, pos.z * 0.66 - Math.sin(pos.ry) * 0.28); lap.rotation.y = pos.ry; lap.scale.setScalar(0.85); mesa.add(lap);
-    if (!participantes.includes(id)) continue;
-    const p = new THREE.Group(); p.position.set(pos.x, 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
+  }
+  LIBRES.forEach((pos) => colocar(pos));
+  }
+
+  // personajes en sus asientos
+  const personajes = {}; const etiquetas = {}; const cargas = [];
+  for (const id of ['naara', 'libni', 'geisell']) {
+    const pos = A[id]; if (!pos || !participantes.includes(id)) continue;
+    const p = new THREE.Group(); p.position.set(pos.x - Math.sin(pos.ry) * 0.05, pos.y || 0, pos.z - Math.cos(pos.ry) * 0.05); p.rotation.y = pos.ry; escena.add(p); personajes[id] = p;
     cargas.push(crearAvatar3D(avatares[id]?.config || {}, { sentado: true }).then((a) => {
       if (!vivo) { liberar(a); return; }
       p.add(a); Object.assign(p.userData, { glb: a.userData.glb || null, t0: a.userData.t0 || 0 });
@@ -313,21 +330,23 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
       if (est[id] && est[id].presente === false) setPresente(id, false);
     }));
   }
-  LIBRES.forEach((pos) => colocar(pos));
 
   // cámaras virtuales
-  const VISTAS = {
+  const VISTAS = VIS0 ? { general: VIS0.general, presentacion: VIS0.presentacion, panoramica: VIS0.panoramica } : {
     general: { pos: new THREE.Vector3(0, 3.05, 5.2), mira: new THREE.Vector3(0, 1.05, -0.9) },
     presentacion: { pos: new THREE.Vector3(0, 1.85, 1.6), mira: new THREE.Vector3(0, 1.85, -4) },
     panoramica: { pos: new THREE.Vector3(0, 3.0, 5.6), mira: new THREE.Vector3(0, 1.0, -0.5) },
   };
-  const vistaDe = (id) => { const a = ASIENTOS[id]; const frente = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)); return { pos: new THREE.Vector3(a.x, 1.6, a.z).add(frente.multiplyScalar(2.3)), mira: new THREE.Vector3(a.x, 1.2, a.z) }; };
+  const PAN = VIS0 ? { radio: VIS0.radio, alto: VIS0.alto } : { radio: 5.2, alto: 2.9 };
+  const vistaDe = (id) => { const a = A[id]; const y0 = a.y || 0; const frente = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)); return { pos: new THREE.Vector3(a.x, 1.6 + y0, a.z).add(frente.multiplyScalar(2.3)), mira: new THREE.Vector3(a.x, 1.2 + y0, a.z) }; };
   let actual = { pos: VISTAS.general.pos.clone(), mira: VISTAS.general.mira.clone() }, desde = null, hacia = null, tIni = 0, dur = 900, modo = 'general', panT = 0;
   cam.position.copy(actual.pos); cam.lookAt(actual.mira);
+  try { contenedor.__sj3d = { cam, escena }; } catch (_) {}
   // R173 · cámara libre: arrastrar para girar alrededor de la mesa, rueda o pellizco para acercar
   const libre = { az: 0, el: 0.42, dist: 5.4 };
-  const posLibre = () => new THREE.Vector3(Math.sin(libre.az) * Math.cos(libre.el) * libre.dist, 0.9 + Math.sin(libre.el) * libre.dist, Math.cos(libre.az) * Math.cos(libre.el) * libre.dist);
-  VISTAS.libre = { get pos() { return posLibre(); }, mira: new THREE.Vector3(0, 0.9, 0) };
+  void mesa;
+  const posLibre = () => new THREE.Vector3(centro.x + Math.sin(libre.az) * Math.cos(libre.el) * libre.dist, 0.9 + Math.sin(libre.el) * libre.dist, centro.z + Math.cos(libre.az) * Math.cos(libre.el) * libre.dist);
+  VISTAS.libre = { get pos() { return posLibre(); }, mira: new THREE.Vector3(centro.x, 0.9, centro.z) };
   let arr = null; const pts = new Map();
   canvas.style.touchAction = 'none';
   canvas.addEventListener('pointerdown', (e) => { if (modo !== 'libre') return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); arr = { x: e.clientX, y: e.clientY, d: null }; canvas.setPointerCapture(e.pointerId); });
@@ -340,7 +359,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   canvas.addEventListener('pointerup', soltar); canvas.addEventListener('pointercancel', soltar);
   canvas.addEventListener('wheel', (e) => { if (modo !== 'libre') return; e.preventDefault(); libre.dist = Math.min(8, Math.max(2.2, libre.dist + Math.sign(e.deltaY) * 0.4)); }, { passive: false });
   function setVista(v) {
-    modo = v; const dest = VISTAS[v] || (ASIENTOS[v] ? vistaDe(v) : VISTAS.general);
+    modo = v; const dest = VISTAS[v] || (A[v] ? vistaDe(v) : VISTAS.general);
     desde = { pos: cam.position.clone(), mira: actual.mira.clone() }; hacia = { pos: dest.pos.clone(), mira: dest.mira.clone() }; tIni = performance.now(); if (reducido) tIni -= dur;
     alCambiarVista && alCambiarVista(v);
   }
@@ -353,12 +372,12 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
     if (!vivo) return; ajustar(r, cam, contenedor); const ahora = performance.now();
     if (hacia) { const k = Math.min(1, (ahora - tIni) / dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; cam.position.lerpVectors(desde.pos, hacia.pos, e); actual.mira.lerpVectors(desde.mira, hacia.mira, e); if (k >= 1) hacia = null; }
     else if (modo === 'libre') { cam.position.lerp(posLibre(), reducido ? 1 : 0.2); actual.mira.copy(VISTAS.libre.mira); }
-    else if (modo === 'panoramica' && !reducido) { panT += 0.0018; cam.position.set(Math.sin(panT) * 5.2, 2.9, Math.cos(panT) * 5.2); actual.mira.set(0, 1.0, -0.4); }
+    else if (modo === 'panoramica' && !reducido) { panT += 0.0018; cam.position.set(centro.x + Math.sin(panT) * PAN.radio, PAN.alto, centro.z + Math.cos(panT) * PAN.radio); actual.mira.copy(centro); }
     cam.lookAt(actual.mira);
     const t = (ahora - t0) / 1000; for (const [id, p] of Object.entries(personajes)) animarPersonaje(p, t, hablando === id ? 1 : 0);
     r.render(escena, cam);
     const w = contenedor.clientWidth, h = contenedor.clientHeight;
-    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, p.userData.glb ? 1.62 : 1.95, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
+    for (const [id, p] of Object.entries(personajes)) { v3.set(p.position.x, (p.userData.glb ? 1.62 : 1.95) + p.position.y, p.position.z).project(cam); const e = etiquetas[id]; e.style.transform = `translate(-50%,-100%) translate(${(v3.x * 0.5 + 0.5) * w}px,${(-v3.y * 0.5 + 0.5) * h}px)`; e.style.opacity = v3.z < 1 ? 1 : 0; }
     frames++; if (ahora - tMed > 3000) { const fps = frames / ((ahora - tMed) / 1000); frames = 0; tMed = ahora; if (fps < 28 && calidad === 'alta') { calidad = 'baja'; r.setPixelRatio(1); r.shadowMap.enabled = false; escena.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); } }
     requestAnimationFrame(loop);
   };
