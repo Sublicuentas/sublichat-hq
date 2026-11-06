@@ -11,6 +11,7 @@ function crearFakeDb() {
       get: async () => { const d = tabla(c).get(id); return { id, ref, exists: !!d, data: () => clonar(d) }; },
       set: async (data, o = {}) => { const prev = tabla(c).get(id); tabla(c).set(id, o.merge && prev ? { ...prev, ...clonar(data) } : clonar(data)); },
       update: async (data) => { const prev = tabla(c).get(id); if (!prev) throw new Error('not-found'); tabla(c).set(id, { ...prev, ...clonar(data) }); },
+      delete: async () => { tabla(c).delete(id); }, // R180
     };
     return ref;
   }
@@ -28,7 +29,9 @@ function crearFakeDb() {
     _tablas: tablas,
     collection: (c) => ({ doc: (id) => docRef(c, id || `auto${++n}x${Math.random().toString(36).slice(2, 8)}`), where: (f, op, v) => query(c, [[f, op, v]]), get: () => query(c).get() }),
     batch: () => { const ops = []; return { set: (r, d, o) => ops.push(() => r.set(d, o)), update: (r, d) => ops.push(() => r.update(d)), commit: async () => { for (const op of ops) await op(); } }; },
-    runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o), update: (r, d) => r.update(d) }),
+    // Transacciones en serie (como Firestore ante escrituras en conflicto: una gana y la otra relee).
+    _cola: Promise.resolve(),
+    runTransaction(fn) { const r = this._cola.then(() => fn({ get: (x) => x.get(), set: (x, d, o) => x.set(d, o), update: (x, d) => x.update(d) })); this._cola = r.catch(() => {}); return r; },
     todos: (c) => [...tabla(c).entries()].map(([id, d]) => ({ id, ...d })),
   };
   return db;
