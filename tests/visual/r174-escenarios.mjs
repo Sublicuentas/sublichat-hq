@@ -11,6 +11,7 @@ const out = process.argv[2] || ''; if (out) fs.mkdirSync(out, { recursive: true 
 const foto = async (p, n, el) => { if (!out) return; if (el) await (await p.$(el)).screenshot({ path: path.join(out, n) }); else await p.screenshot({ path: path.join(out, n) }); };
 const ENV = { LIVEKIT_URL: 'wss://prueba.livekit.cloud', LIVEKIT_API_KEY: 'APIprueba', LIVEKIT_API_SECRET: 'secreto-de-prueba-no-real-0123456789' };
 const db = crearFakeDb();
+const ponerHora = async (P, hhmm) => { const [h, m] = hhmm.split(':').map(Number); await P.selectOption('#sjForm [name=h12]', String(((h + 11) % 12) + 1)); await P.selectOption('#sjForm [name=min]', String(m)); await P.selectOption('#sjForm [name=ampm]', h >= 12 ? 'pm' : 'am'); };
 const listo = async (P) => { await P.waitForTimeout(400); await P.waitForFunction(() => !document.getElementById('sjEscCarga'), null, { timeout: 60000 }); await P.waitForTimeout(800); };
 
 // 1) Naara: recorre los 5 escenarios, ajusta Subli Live y lo guarda como "Anuncio promo" oficial
@@ -36,7 +37,7 @@ assert.ok(await P.$('[data-sj="escOp"][data-k="paleta"][data-v="rojo-negro"].on'
 await P.click('[data-sj="inicio"]').catch(() => {}); await P.click('[data-sj="nueva"]'); await P.waitForSelector('#sjForm [name=escenario]');
 const hn = new Date(Date.now() - 6 * 3600000 + 15 * 60000); hn.setUTCMinutes(Math.ceil(hn.getUTCMinutes() / 5) * 5);
 await P.fill('#sjForm [name=titulo]', 'Lanzamiento promo de diciembre (prueba)');
-await P.fill('#sjForm [name=fecha]', hn.toISOString().slice(0, 10)); await P.fill('#sjForm [name=hora]', hn.toISOString().slice(11, 16));
+await P.fill('#sjForm [name=fecha]', hn.toISOString().slice(0, 10)); await ponerHora(P, hn.toISOString().slice(11, 16));
 await P.fill('#sjForm [name=agenda]', 'Guion del anuncio');
 await P.selectOption('#sjForm [name=escenario]', 'live'); await P.waitForFunction(() => document.querySelectorAll('#sjForm [name=presetId] optgroup[label="Estilos guardados"] option').length === 1);
 assert.match(await P.textContent('#sjForm [name=presetId]'), /Anuncio promo \(oficial\)/);

@@ -11,6 +11,7 @@ const out = process.argv[2] || ''; if (out) fs.mkdirSync(out, { recursive: true 
 const foto = async (p, n, el) => { if (!out) return; if (el) { await p.evaluate((s) => document.querySelector(s)?.scrollIntoView({ block: 'center' }), el); await p.waitForTimeout(300); } if (el) await (await p.$(el)).screenshot({ path: path.join(out, n) }); else await p.screenshot({ path: path.join(out, n) }); };
 const ENV = { LIVEKIT_URL: 'wss://prueba.livekit.cloud', LIVEKIT_API_KEY: 'APIprueba', LIVEKIT_API_SECRET: 'secreto-de-prueba-no-real-0123456789' };
 const db = crearFakeDb();
+const ponerHora = async (P, hhmm) => { const [h, m] = hhmm.split(':').map(Number); await P.selectOption('#sjForm [name=h12]', String(((h + 11) % 12) + 1)); await P.selectOption('#sjForm [name=min]', String(m)); await P.selectOption('#sjForm [name=ampm]', h >= 12 ? 'pm' : 'am'); };
 const editor = async (P) => { await P.click('[data-sj="personaje"]'); await P.waitForFunction(() => !document.getElementById('sjEdCarga'), null, { timeout: 60000 }); await P.waitForTimeout(800); };
 const escListo = async (P) => { await P.waitForTimeout(400); await P.waitForFunction(() => !document.getElementById('sjEscCarga'), null, { timeout: 60000 }); await P.waitForTimeout(800); };
 const secundarios = (P) => P.evaluate(() => { let n = 0; document.getElementById('sjEsc3d').__sj3d.escena.traverse((o) => { if (o.userData.secundario && o.visible) n++; }); return n; });
@@ -88,7 +89,7 @@ await P.selectOption('#sjForm [name=tipo]', 'grabacion');
 assert.equal(await P.inputValue('#sjForm [name=escenario]'), 'live'); assert.equal(await P.inputValue('#sjForm [name=presetId]'), 's:grabacion');
 assert.match(await P.textContent('.sj-sug-nota'), /Grabación de anuncio.*Subli Live.*Grabación limpia/s);
 const hn = new Date(Date.now() - 6 * 3600000 + 15 * 60000); hn.setUTCMinutes(Math.ceil(hn.getUTCMinutes() / 5) * 5);
-await P.fill('#sjForm [name=titulo]', 'Anuncio promo diciembre (prueba)'); await P.fill('#sjForm [name=fecha]', hn.toISOString().slice(0, 10)); await P.fill('#sjForm [name=hora]', hn.toISOString().slice(11, 16));
+await P.fill('#sjForm [name=titulo]', 'Anuncio promo diciembre (prueba)'); await P.fill('#sjForm [name=fecha]', hn.toISOString().slice(0, 10)); await ponerHora(P, hn.toISOString().slice(11, 16));
 await P.selectOption('#sjForm [name=duracionMin]', '15'); await P.fill('#sjForm [name=agenda]', 'Guion del anuncio');
 await P.check('#sjForm [name=sjPart][value=libni]'); await P.uncheck('#sjForm [name=sjPart][value=geisell]').catch(() => {});
 assert.match(await P.textContent('.sj-form-d'), /Modera, da la palabra, graba/);

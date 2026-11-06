@@ -18,7 +18,7 @@ assert.equal(tabs[6], 'Sala de Juntas', 'después de Catálogo: ' + tabs.join(' 
 await h.page.click('#v2Fila [data-s="sala-juntas"]'); await h.page.waitForSelector('.sj-top'); await h.page.waitForTimeout(400);
 await foto(h.page, 'naara-1440-panel-vacio.png');
 await h.page.fill('#sjForm [name="titulo"]', 'Revisión mensual y próximos objetivos');
-await h.page.fill('#sjForm [name="fecha"]', manana); await h.page.fill('#sjForm [name="hora"]', '19:00');
+await h.page.fill('#sjForm [name="fecha"]', manana); await h.page.selectOption('#sjForm [name="h12"]', '7'); await h.page.selectOption('#sjForm [name="min"]', '0'); await h.page.selectOption('#sjForm [name="ampm"]', 'pm'); /* R178: hora con a. m./p. m. */
 await h.page.fill('#sjForm [name="agenda"]', 'Resultados de ventas de octubre\nCampañas de noviembre\nProyectos: Sublichat, Catálogo y SubliStudio');
 await h.page.click('#sjForm button[type="submit"]'); await h.page.click('#sjForm button[type="submit"]').catch(() => {}); // doble clic
 await h.page.waitForSelector('.sj-prox h4'); await h.page.waitForTimeout(3600); // deja pasar el aviso del 2.º clic
@@ -60,3 +60,20 @@ const forzado = await h.page.evaluate(async () => { const r = await fetch('/api/
 assert.equal(forzado, 403); console.log('ok Magdiel: sin botón y 403 si llama la API directo');
 await h.cerrar();
 console.log('R167 Sala de Juntas: 5/5 recorridos OK');
+
+// R168 · enlace de Telegram (?sala=<id>) abre la antesala de esa reunión; Naara ve el estado de los avisos
+{
+  const id = db.todos('sala_reuniones')[0].id;
+  await db.collection('sala_avisos').doc(`${id}_libni_invitacion_v1`).set({ estado: 'enviado' }, { merge: true });
+  await db.collection('sala_avisos').doc(`${id}_geisell_invitacion_v1`).set({ estado: 'fallido', error: '403 Forbidden: bot was blocked by the user' }, { merge: true });
+  let k = await abrir({ usuario: 'naara', ui: 'v2', ancho: 1440, alto: 1000, salaDb: db });
+  await k.page.click('#v2Fila [data-s="sala-juntas"]'); await k.page.waitForSelector('.sj-avisos'); await k.page.waitForTimeout(400);
+  const txt = await k.page.evaluate(() => document.querySelector('.sj-prox').innerText);
+  assert.match(txt, /Telegram: 1 enviado/); assert.match(txt, /no ha iniciado el bot/);
+  await foto(k.page, 'naara-1440-avisos.png');
+  await k.page.goto(k.base + '/?sala=' + id); await k.page.waitForSelector('.sj-ante-acc', { timeout: 20000 });
+  assert.ok(!k.page.url().includes('sala='), 'el enlace se limpia de la barra');
+  await foto(k.page, 'naara-1440-enlace-telegram.png');
+  console.log('ok R168: estado de avisos para Naara y enlace de Telegram abre la antesala');
+  await k.cerrar();
+}
