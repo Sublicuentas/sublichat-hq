@@ -109,22 +109,30 @@ function overridesDe(config = {}, clave = '') {
 async function contexto(db, user = {}) {
   const clave = claveUsuario(user);
   if (esSupervisor(user)) return { clave, supervisor: true, overrides: {} };
-  let overrides = {};
-  try { overrides = overridesDe(await leerConfig(db), clave); } catch (_) { overrides = {}; } // si Firestore falla: reglas de siempre
-  return { clave, supervisor: false, overrides };
+  let overrides = {}, retirado = false;
+  try { const cfg = await leerConfig(db); overrides = overridesDe(cfg, clave); retirado = esRetirado(cfg, user); } catch (_) { overrides = {}; } // si Firestore falla: reglas de siempre
+  return { clave, supervisor: false, overrides, retirado };
 }
 // permitidoHoy = la regla que la API ya tenía. Sublicuentas: sin cambios. Otros: manda lo que eligió Sublicuentas.
 function aplicar(ctx, modulo, permitidoHoy) {
   if (!ctx || ctx.supervisor) return !!permitidoHoy;
+  if (ctx.retirado) return false; // R180 · retirado: ningún módulo en ninguna API que use decidir()
   const v = ctx.overrides?.[modulo];
   return typeof v === 'boolean' ? v : !!permitidoHoy;
 }
 async function decidir(db, user, modulo, permitidoHoy) { return aplicar(await contexto(db, user), modulo, permitidoHoy); }
 
 // Para la web: mapa final de módulos del usuario y de pantallas visibles.
+// R180 · usuario retirado por Sublicuentas (config.retirados[clave]): pierde TODO acceso, aunque siga en AUTH_USERS_JSON.
+// Se identifica por la clave de usuario + UID de Firebase guardado al retirarlo; nunca por coincidencia de nombre.
+function esRetirado(config = {}, user = {}) {
+  const r = config && config.retirados ? config.retirados[claveUsuario(user)] : null;
+  return !!(r && !r.reactivadoAt) && !esSupervisor(user);
+}
 function efectivos(user = {}, config = {}) {
   const base = porDefecto(user);
   if (esSupervisor(user)) return base;
+  if (esRetirado(config, user)) return Object.fromEntries(MODULOS.map((m) => [m.id, false]));
   const ov = overridesDe(config, claveUsuario(user));
   const out = { ...base, ...ov };
   for (const m of MODULOS) if (m.fijo) out[m.id] = true;
@@ -135,6 +143,7 @@ function efectivos(user = {}, config = {}) {
 function pantallasVisibles(user = {}, config = {}) {
   const mods = efectivos(user, config);
   if (esSupervisor(user)) return MODULOS.flatMap((m) => m.pantallas);
+  if (esRetirado(config, user)) return [];
   const base = porDefecto(user), ov = overridesDe(config, claveUsuario(user));
   const menu = new Set(MENU_ROL[rolDe(user)] || []);
   const out = [];
@@ -158,4 +167,4 @@ function limpiarCambios(cambios = {}) {
   return out;
 }
 
-module.exports = { MODULOS, DOC, claveUsuario, rolDe, esSupervisor, porDefecto, leerConfig, invalidar, overridesDe, contexto, aplicar, decidir, efectivos, pantallasVisibles, limpiarCambios };
+module.exports = { esRetirado, MODULOS, DOC, claveUsuario, rolDe, esSupervisor, porDefecto, leerConfig, invalidar, overridesDe, contexto, aplicar, decidir, efectivos, pantallasVisibles, limpiarCambios };

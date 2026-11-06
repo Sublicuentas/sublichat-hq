@@ -18,6 +18,12 @@ const LOGIN_ALLOWED_ORIGINS = new Set([
   "https://sublicuentas.com",
   "https://www.sublicuentas.com",
 ]);
+// R162 · Migración a Render: orígenes extra sin tocar código (ej. https://sublichat-hq.onrender.com,
+// https://app.sublicuentas.com). Variable LOGIN_EXTRA_ORIGINS separada por comas; solo https.
+for (const o of String(process.env.LOGIN_EXTRA_ORIGINS || "").split(",")) {
+  const v = o.trim().replace(/\/+$/, "");
+  if (/^https:\/\/[a-z0-9.-]+$/i.test(v)) LOGIN_ALLOWED_ORIGINS.add(v);
+}
 
 function applyLoginCors(req, res){
   const origin = String((req.headers && req.headers.origin) || "");
@@ -163,6 +169,12 @@ module.exports = async function handler(req, res){
     }
 
     await clearThrottle(db, key);
+    // R180 · usuario retirado por Sublicuentas (Permisos → Retirar): no vuelve a entrar aunque siga en AUTH_USERS_JSON.
+    try {
+      const cfg = await db.collection('config').doc('sublichat_permisos').get();
+      const ret = cfg.exists ? ((cfg.data() || {}).retirados || {})[key] : null;
+      if(ret && !ret.reactivadoAt && !['sublicuentas','naara'].includes(key)) return res.status(403).json({ error:"Este usuario fue dado de baja. Consulte con Sublicuentas." });
+    }catch(e){ console.error("LOGIN_RETIRADO_CHECK", e && e.message || e); }
     const uid = record.uid || `asesor-${key}`;
     const token = await admin.auth().createCustomToken(uid, {
       usuario:key,

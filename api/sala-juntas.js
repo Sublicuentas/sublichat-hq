@@ -18,7 +18,8 @@ function getApp() {
   if (!projectId || !clientEmail || !privateKey) throw new Error('Faltan credenciales Firebase.');
   return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
 }
-const C = { ESC: 'sala_escenarios', R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AV: 'sala_avatares', AUD: 'auditoria_eventos' };
+const C = { ESC: 'sala_escenarios', R: 'sala_reuniones', I: 'sala_invitaciones', A: 'sala_avisos', ACTAS: 'sala_actas', AV: 'sala_avatares', AUD: 'auditoria_eventos',
+  SOL: 'sala_solicitudes', /* R181 ingreso tardío */ TG: 'sala_telegram', TGTOK: 'sala_tg_tokens' /* R182 vínculo de Telegram */ };
 const err = (status, msg) => Object.assign(new Error(msg), { status, publico: msg });
 
 function publica(id, r, invs = {}, ahora = Date.now()) {
@@ -46,22 +47,63 @@ async function invitacionesDe(db, ids) {
   return out;
 }
 async function anularPendientes(db, reunionId, ahoraIso) {
-  const s = await db.collection(C.A).where('reunionId', '==', reunionId).where('estado', '==', 'pendiente').get();
-  return s.docs.map((d) => ({ ref: d.ref, data: { estado: 'anulado', anuladoAt: ahoraIso } }));
+  const out = [];
+  for (const e of ['pendiente', 'sin_vinculo']) { const s = await db.collection(C.A).where('reunionId', '==', reunionId).where('estado', '==', e).get(); s.docs.forEach((d) => out.push({ ref: d.ref, data: { estado: 'anulado', anuladoAt: ahoraIso } })); }
+  return out;
+}
+// R182 · estado de Telegram por usuario: 'listo' (vinculado y verificado por el bot, o fundadora con chat configurado
+// en Vercel), 'pendiente' (generó enlace, falta /start), 'bloqueado' (bloqueó al bot), 'sin_vincular'.
+const ENV_TG = { naara: ['TELEGRAM_CHAT_ID_SUBLICUENTAS', 'SUPER_ADMIN'], libni: ['TELEGRAM_CHAT_ID_RELOJES'], geisell: ['TELEGRAM_CHAT_ID_GEISELL', 'TELEGRAM_CHAT_ID_GEISSEL'] };
+async function telegramDe(db, env, usuarios) {
+  const out = {};
+  for (const u of usuarios) {
+    let d = null; try { const s = await db.collection(C.TG).doc(u).get(); d = s.exists ? s.data() : null; } catch (_) {}
+    const porEnv = (ENV_TG[u] || []).some((k) => String(env[k] || '').trim());
+    if (d && d.estado === 'listo') out[u] = { estado: 'listo', fuente: 'bot', verificadoAt: d.verificadoAt || '' };
+    else if (d && d.estado === 'bloqueado') out[u] = { estado: 'bloqueado', fuente: 'bot', error: d.error || '' };
+    else if (porEnv) out[u] = { estado: 'listo', fuente: 'vercel' };
+    else out[u] = { estado: d ? (d.estado || 'pendiente') : 'sin_vincular', fuente: '' };
+  }
+  return out;
 }
 // R179 · quién puede estar en la Sala: las fundadoras (si Sublicuentas no les quitó el módulo) + todo usuario de Sublichat
 // al que Sublicuentas le activó el módulo "Sala de Juntas" en Permisos. Naara siempre (anfitriona).
 async function miembrosDe(db, env) {
-  let config = {}; try { config = await P.leerConfig(db); } catch (_) { config = {}; }
+  let config = {}; try { config = await P.leerConfig(db, { fresco: true }); } catch (_) { config = {}; } // R180: fresco = el retiro aplica al instante
   const out = [];
-  for (const f of S.FUNDADORAS) if (f.anfitriona || f.cuentas.every((c) => P.efectivos({ usuario: c, role: 'asesor' }, config)['sala-juntas'] === true)) out.push(f);
+  for (const f of S.FUNDADORAS) if (f.anfitriona || (!f.cuentas.some((c) => P.esRetirado(config, { usuario: c })) && f.cuentas.every((c) => P.efectivos({ usuario: c, role: 'asesor' }, config)['sala-juntas'] === true))) out.push(f);
   const ya = new Set(S.FUNDADORAS.flatMap((f) => f.cuentas));
   for (const u of usuariosConfigurados(env)) {
-    if (ya.has(u.usuario) || P.esSupervisor(u)) continue;
+    if (ya.has(u.usuario) || P.esSupervisor(u) || P.esRetirado(config, u)) continue;
     if (P.efectivos(u, config)['sala-juntas']) out.push(S.identidadInvitado(u.usuario, ETQ_ROL[P.rolDe(u)] || ''));
   }
   // usuarios con el módulo activado pero que no están en AUTH_USERS_JSON (ej.: creados aparte)
-  for (const [u, v] of Object.entries(config.usuarios || {})) { const k = P.claveUsuario({ usuario: u }); if (!ya.has(k) && !out.some((x) => x.id === k) && v && v.modulos && v.modulos['sala-juntas'] === true && /^[a-z0-9._-]{2,40}$/.test(k)) out.push(S.identidadInvitado(k)); }
+  for (const [u, v] of Object.entries(config.usuarios || {})) { const k = P.claveUsuario({ usuario: u }); if (!ya.has(k) && !out.some((x) => x.id === k) && !P.esRetirado(config, { usuario: k }) && v && v.modulos && v.modulos['sala-juntas'] === true && /^[a-z0-9._-]{2,40}$/.test(k)) out.push(S.identidadInvitado(k)); }
+  return out;
+}
+// R180 · baja de un usuario en la Sala (la llama api/permisos.js → retirar). No toca reuniones pasadas ni actas (historial).
+async function retirarDeSala(db, usuario, { borrarDatos = false, env = process.env, fetch: f = null } = {}) {
+  const u = String(usuario || ''); const ahora = new Date().toISOString(); const out = { reuniones: 0, invitaciones: 0, avisos: 0, solicitudes: 0, telegram: false, personaje: false, expulsado: 0 };
+  if (!u || u === 'naara') return out;
+  const rs = await db.collection(C.R).where('participantes', 'array-contains', u).get();
+  for (const d of rs.docs) {
+    const r = d.data() || {}; const est = S.estadoVigente(r, Date.now());
+    if (!['programada', 'borrador', 'en_curso'].includes(est)) continue; // finalizadas / canceladas: historial intacto
+    await d.ref.set({ participantes: (r.participantes || []).filter((x) => x !== u), retiradosSala: [...new Set([...(r.retiradosSala || []), u])], actualizadoAt: ahora }, { merge: true }); out.reuniones++;
+    const iRef = db.collection(C.I).doc(`${d.id}_${u}`); const is = await iRef.get(); if (is.exists) { await iRef.set({ estado: 'retirado', actualizadoAt: ahora }, { merge: true }); out.invitaciones++; }
+    if (est === 'en_curso' && r.salaAbierta && env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET) { // si está dentro, sale ya
+      try { await (f || fetch)(`${S.httpDeLiveKit(env.LIVEKIT_URL)}/twirp/livekit.RoomService/RemoveParticipant`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${S.tokenServidor({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, sala: r.roomId || `sj_${d.id}` })}` }, body: JSON.stringify({ room: r.roomId || `sj_${d.id}`, identity: u }) }); out.expulsado++; } catch (_) {}
+    }
+  }
+  const av = await db.collection(C.A).where('usuario', '==', u).get();
+  for (const d of av.docs) if (['pendiente', 'enviando', 'sin_vinculo'].includes((d.data() || {}).estado)) { await d.ref.set({ estado: 'anulado', motivo: 'usuario_retirado', anuladoAt: ahora }, { merge: true }); out.avisos++; }
+  const so = await db.collection(C.SOL).where('usuario', '==', u).get();
+  for (const d of so.docs) if ((d.data() || {}).estado === 'pendiente') { await d.ref.set({ estado: 'cancelada', motivo: 'usuario_retirado', resueltaAt: ahora }, { merge: true }); out.solicitudes++; }
+  const tg = db.collection(C.TG).doc(u); if ((await tg.get()).exists) { await tg.delete(); out.telegram = true; }
+  const tk = await db.collection(C.TGTOK).where('usuario', '==', u).get(); for (const d of tk.docs) await d.ref.delete();
+  if (borrarDatos) { const a = db.collection(C.AV).doc(u); if ((await a.get()).exists) { await a.delete(); out.personaje = true; } }
+  const a = { tipo: 'sala_juntas', modulo: 'sala-juntas', accion: 'retirar_usuario_sala', actorUsuario: 'sublicuentas', objetivo: u, detalle: out, resultado: 'ok', createdAt: ahora };
+  await db.collection(C.AUD).doc().set(a);
   return out;
 }
 // R169 · Personajes guardados de las 3 fundadoras (o el de base si aún no guardó el suyo).
@@ -93,7 +135,7 @@ async function handler(req, res, deps = {}) {
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return res.status(401).json({ ok: false, error: 'Sesión requerida.' });
   let user;
-  try { user = await auth().verifyIdToken(token); } catch (_) { return res.status(401).json({ ok: false, error: 'Sesión inválida o vencida.' }); }
+  try { user = await auth().verifyIdToken(token, true); } catch (_) { return res.status(401).json({ ok: false, error: 'Sesión inválida, vencida o dada de baja.' }); } // R180: rechaza sesiones revocadas
   let db; try { db = dbOf(); } catch (_) { return res.status(500).json({ ok: false, error: 'No se pudo conectar con la base de datos.' }); }
   // R179 · acceso = módulo "Sala de Juntas" en Permisos (fundadoras por defecto; Sublicuentas lo activa o quita a cualquiera)
   const miembros = await miembrosDe(db, env);
@@ -128,6 +170,9 @@ async function handler(req, res, deps = {}) {
       if (S.puede.moderar(yo)) { // R168 · Naara ve qué avisos de Telegram salieron, cuáles faltan y cuáles fallaron
         for (const r of reuniones.filter((x) => ['programada', 'en_curso', 'cancelada'].includes(x.estado)).slice(0, 12)) {
           const a = await db.collection(C.A).where('reunionId', '==', r.id).get(); const res = { enviado: 0, pendiente: 0, fallido: 0, fallas: [] };
+          res.porUsuario = {}; // R182 · estado de la convocatoria por persona (lo que respondió la API de Telegram)
+          a.docs.forEach((d) => { const x = d.data() || {}; if ((x.tipo === 'invitacion' || x.tipo === 'cancelacion') && (Number(x.version || 1) === Number(r.version || 1) || x.tipo === 'cancelacion')) res.porUsuario[x.usuario] = { estado: x.estado, error: String(x.error || '').slice(0, 120), enviadoAt: x.enviadoAt || '' }; });
+          a.docs.forEach((d) => { const x = d.data() || {}; if (x.estado === 'sin_vinculo' && Number(x.version || 1) === Number(r.version || 1)) { res.sinVinculo = (res.sinVinculo || 0) + 1; } });
           a.docs.forEach((d) => { const x = d.data() || {}; if (Number(x.version || 1) !== Number(r.version || 1) && x.tipo !== 'cancelacion') return;
             if (x.estado === 'enviado') res.enviado++; else if (x.estado === 'pendiente' || x.estado === 'enviando') res.pendiente++; else if (x.estado === 'fallido') { res.fallido++; res.fallas.push({ usuario: x.usuario, tipo: x.tipo, error: String(x.error || '').slice(0, 120) }); } });
           r.avisos = res;
@@ -145,6 +190,7 @@ async function handler(req, res, deps = {}) {
         fundadoras: miembros.map(({ id, nombre, cargo, anfitriona, asiento, invitado }) => ({ id, nombre, cargo, anfitriona, asiento, invitado: !!invitado })),
         avatares: await avataresDe(db, miembros), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
         proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora,
+        telegram: S.puede.moderar(yo) ? await telegramDe(db, env, idsMiembros) : { [yo.id]: (await telegramDe(db, env, [yo.id]))[yo.id] }, botTelegram: !!String(env.TELEGRAM_BOT_USERNAME || '').trim(),
       });
     }
 
@@ -211,6 +257,7 @@ async function handler(req, res, deps = {}) {
         version, actualizadoAt: iso, actualizadoPor: yo.id, ...(prev ? {} : { creadoAt: iso, creadoPor: yo.id }),
       };
       escrituras.push({ ref, data: r, merge: true });
+      let sinVinculo = [];
       if (!borrador) {
         for (const u of v.datos.participantes) {
           const invRef = db.collection(C.I).doc(`${ref.id}_${u}`);
@@ -218,14 +265,17 @@ async function handler(req, res, deps = {}) {
           const conservar = anterior && anterior.exists && !cambioHora ? anterior.data() : null;
           escrituras.push({ ref: invRef, data: { reunionId: ref.id, usuario: u, estado: u === 'naara' ? 'aceptada' : (conservar?.estado || 'pendiente'), respondidoAt: conservar?.respondidoAt || (u === 'naara' ? iso : ''), canal: conservar?.canal || '', version, actualizadoAt: iso } });
         }
-        for (const a of S.planAvisos(ref.id, { ...v.datos, participantes: v.datos.participantes.filter((u) => S.POR_ID[u]) }, version, ahora)) { // R179 · Telegram solo a las fundadoras (el bot conoce sus chats); invitados lo ven en Sublichat
+        // R182 · Telegram para TODOS los invitados. Quien no tiene Telegram vinculado queda "sin_vinculo" (el bot no lo toma);
+        // al vincularse, el bot reactiva sus avisos. Nunca se marca "enviado" sin respuesta real de la API de Telegram.
+        const tg = await telegramDe(db, env, v.datos.participantes); sinVinculo = v.datos.participantes.filter((u) => u !== 'naara' && tg[u].estado !== 'listo');
+        for (const a of S.planAvisos(ref.id, v.datos, version, ahora)) {
           if (a.usuario === 'naara' && a.tipo === 'invitacion') continue; // la anfitriona no se invita a sí misma
-          escrituras.push({ ref: db.collection(C.A).doc(a.id), data: { reunionId: ref.id, usuario: a.usuario, tipo: a.tipo, version, programadoMs: a.programadoMs, estado: 'pendiente', intentos: 0, creadoAt: iso, reprogramada: !!prev } });
+          escrituras.push({ ref: db.collection(C.A).doc(a.id), data: { reunionId: ref.id, usuario: a.usuario, tipo: a.tipo, version, programadoMs: a.programadoMs, estado: tg[a.usuario].estado === 'listo' ? 'pendiente' : 'sin_vinculo', intentos: 0, creadoAt: iso, reprogramada: !!prev } });
         }
       }
       escrituras.push(auditoria(db, yo, borrador ? 'guardar_borrador' : (prev ? 'reprogramar' : 'programar'), ref.id, { titulo: r.titulo, inicioISO: r.inicioISO, version }));
       const b = db.batch(); escrituras.forEach((w) => (w.merge ? b.set(w.ref, w.data, { merge: true }) : b.set(w.ref, w.data, { merge: true }))); await b.commit();
-      return res.status(200).json({ ok: true, id: ref.id, estado: r.estado, version });
+      return res.status(200).json({ ok: true, id: ref.id, estado: r.estado, version, envioIncompleto: sinVinculo });
     }
 
     if (accion === 'cancelar') {
@@ -233,7 +283,7 @@ async function handler(req, res, deps = {}) {
       if (['cancelada', 'finalizada'].includes(S.estadoVigente(r, ahora))) throw err(409, 'Esa reunión ya terminó o fue cancelada.');
       const escrituras = await anularPendientes(db, id, iso);
       escrituras.push({ ref: db.collection(C.R).doc(id), data: { estado: 'cancelada', salaAbierta: false, canceladaAt: iso, motivoCancelacion: String(body.motivo || '').slice(0, 200), actualizadoAt: iso } });
-      if (r.estado !== 'borrador') for (const u of (r.participantes || []).filter((x) => x !== 'naara' && S.POR_ID[x])) {
+      if (r.estado !== 'borrador') for (const u of (r.participantes || []).filter((x) => x !== 'naara')) { // R182: también invitados (si no tienen Telegram queda sin_vinculo)
         escrituras.push({ ref: db.collection(C.A).doc(`${id}_${u}_cancelacion`), data: { reunionId: id, usuario: u, tipo: 'cancelacion', version: r.version || 1, programadoMs: ahora, estado: 'pendiente', intentos: 0, creadoAt: iso } });
       }
       escrituras.push(auditoria(db, yo, 'cancelar', id, { titulo: r.titulo }));
@@ -363,15 +413,112 @@ async function handler(req, res, deps = {}) {
       if (ahora > v.hasta) throw err(409, 'Se pasó el tiempo de esta reunión.');
       const inv = await db.collection(C.I).doc(`${id}_${yo.id}`).get();
       if (!inv.exists) throw err(403, 'No está invitada a esa reunión.');
+      const solRef = db.collection(C.SOL).doc(`${id}_${yo.id}`);
       if (!r.salaAbierta) {
-        if (!S.puede.moderar(yo)) throw err(409, 'Esperando que la anfitriona abra la sala.');
+        if (!S.puede.moderar(yo)) { // R181 · quien espera ANTES de la hora queda registrado como "a tiempo"
+          if (ahora < Number(r.inicioMs || 0)) { const x = (await solRef.get()).data(); if (!x || x.estado !== 'a_tiempo') await solRef.set({ reunionId: id, usuario: yo.id, estado: 'a_tiempo', esperaAt: iso, actualizadoAt: iso }, { merge: true }); }
+          throw err(409, 'Esperando que la anfitriona abra la sala.');
+        }
         await db.collection(C.R).doc(id).set({ salaAbierta: true, estado: 'en_curso', abiertaAt: iso, actualizadoAt: iso }, { merge: true }); // Naara entra = abre
+        r.abiertaAt = iso; r.salaAbierta = true;
+      }
+      // R181 · ADMISIÓN TARDÍA: si la reunión ya empezó (sala abierta y pasó la hora), nadie más que la anfitriona entra
+      // sin aprobación. No se entrega token de LiveKit hasta que Sublicuentas acepte. La aprobación vale para ESTA sesión.
+      const sesion = r.abiertaAt || '';
+      if (!S.puede.moderar(yo)) {
+        const x = (await solRef.get()).data() || null;
+        const aTiempo = x && x.estado === 'a_tiempo' && Date.parse(x.esperaAt || '') < Number(r.inicioMs || 0);
+        const admitido = x && x.estado === 'aprobada' && x.sesion === sesion;
+        const iniciada = ahora >= Number(r.inicioMs || 0);
+        if (iniciada && !admitido && !aTiempo) {
+          const vigente = x && x.estado === 'pendiente' && Number(x.expiraMs || 0) > ahora;
+          return res.status(200).json({ ok: true, espera: true, solicitud: x ? { estado: vigente ? 'pendiente' : (x.estado === 'pendiente' ? 'vencida' : x.estado), requestId: x.requestId || '', expiraMs: x.expiraMs || 0, motivo: x.motivo || '' } : null });
+        }
+        if (!admitido) await solRef.set({ reunionId: id, usuario: yo.id, estado: 'aprobada', motivo: aTiempo || !iniciada ? 'a_tiempo' : 'aprobada', sesion, resueltaAt: iso, actualizadoAt: iso }, { merge: true }); // reconexión breve en la misma sesión
       }
       const sala = r.roomId || `sj_${id}`;
-      const ttlSeg = Math.min(2 * 3600, Math.floor((v.hasta - ahora) / 1000));
+      const ttlSeg = Math.min(S.puede.moderar(yo) ? 2 * 3600 : 3600, Math.floor((v.hasta - ahora) / 1000)); // R181: invitados, credencial corta
       const token = S.tokenParticipante({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, identidad: yo.id, nombre: yo.nombre, sala, ttlSeg, anfitriona: S.puede.moderar(yo), ahora });
       const a = auditoria(db, yo, 'entrar_sala', id); await a.ref.set(a.data);
       return res.status(200).json({ ok: true, url: String(env.LIVEKIT_URL).trim(), token, identidad: yo.id, expiraMs: ahora + ttlSeg * 1000 });
+    }
+
+    // ---------- R182 · vincular Telegram (enlace de un solo uso al bot existente de Render) ----------
+    if (accion === 'telegram_vincular') {
+      const bot = String(env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '');
+      if (!/^[A-Za-z0-9_]{5,40}$/.test(bot)) throw err(503, 'Falta configurar TELEGRAM_BOT_USERNAME (nombre del bot de Sublicuentas) en Vercel.');
+      const token = require('crypto').randomBytes(18).toString('base64url');
+      const viejos = await db.collection(C.TGTOK).where('usuario', '==', yo.id).get(); for (const d of viejos.docs) await d.ref.delete(); // un enlace vivo por persona
+      await db.collection(C.TGTOK).doc(token).set({ usuario: yo.id, expiraMs: ahora + 15 * 60000, creadoAt: iso, usado: false });
+      const ref = db.collection(C.TG).doc(yo.id); const prev = (await ref.get()).data();
+      if (!prev || prev.estado !== 'listo') await ref.set({ usuario: yo.id, estado: 'pendiente', solicitadoAt: iso }, { merge: true });
+      const a = auditoria(db, yo, 'telegram_enlace', yo.id); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true, url: `https://t.me/${bot}?start=sj_${token}`, expiraMs: ahora + 15 * 60000 });
+    }
+    if (accion === 'telegram_estado') return res.status(200).json({ ok: true, telegram: (await telegramDe(db, env, [yo.id]))[yo.id] });
+    if (accion === 'telegram_desvincular') {
+      await db.collection(C.TG).doc(yo.id).delete(); const a = auditoria(db, yo, 'telegram_desvincular', yo.id); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true });
+    }
+    if (accion === 'reintentar_avisos') { // Naara: reactiva los avisos "sin_vinculo" de quienes ya vincularon su Telegram
+      if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona.');
+      const { id, r } = await leerReunion(body.id);
+      const q = await db.collection(C.A).where('reunionId', '==', id).where('estado', '==', 'sin_vinculo').get();
+      const tg = await telegramDe(db, env, [...new Set(q.docs.map((d) => d.data().usuario))]); let n = 0, faltan = new Set();
+      for (const d of q.docs) { const x = d.data(); if (tg[x.usuario]?.estado === 'listo') { await d.ref.set({ estado: 'pendiente', ...(x.tipo === 'invitacion' || x.tipo === 'cancelacion' ? { programadoMs: Math.max(Number(x.programadoMs || 0), ahora) } : {}), reactivadoAt: iso }, { merge: true }); n++; /* recordatorios conservan su hora (el bot vence los viejos) */ } else faltan.add(x.usuario); }
+      return res.status(200).json({ ok: true, reactivados: n, faltan: [...faltan], version: r.version || 1 });
+    }
+
+    // ---------- R181 · solicitudes de ingreso tardío ----------
+    const SOL_VENCE_MS = 2 * 60000;
+    if (accion === 'solicitar_ingreso') {
+      if (S.puede.moderar(yo)) throw err(400, 'La anfitriona entra directo.');
+      const { id, r } = await leerReunion(body.id);
+      if (S.estadoVigente(r, ahora) !== 'en_curso' || !r.salaAbierta) throw err(409, 'La reunión no está en curso.');
+      const inv = await db.collection(C.I).doc(`${id}_${yo.id}`).get(); if (!inv.exists || (inv.data() || {}).estado === 'retirado') throw err(403, 'No está invitada a esa reunión.');
+      const ref = db.collection(C.SOL).doc(`${id}_${yo.id}`);
+      const out = await db.runTransaction(async (tx) => {
+        const d = await tx.get(ref); const x = d.exists ? d.data() : null;
+        if (x && x.estado === 'pendiente' && Number(x.expiraMs || 0) > ahora) return { ...x, nueva: false }; // recargas: no duplica
+        if (x && x.estado === 'expulsado' && x.sesion === r.abiertaAt) throw err(403, 'La anfitriona lo sacó de esta reunión.');
+        const sol = { reunionId: id, usuario: yo.id, nombre: yo.nombre, estado: 'pendiente', requestId: require('crypto').randomBytes(9).toString('base64url'), creadaMs: ahora, expiraMs: ahora + SOL_VENCE_MS, sesion: r.abiertaAt || '', actualizadoAt: iso };
+        tx.set(ref, sol);
+        tx.set(db.collection(C.A).doc(`${id}_naara_solicitud_${sol.requestId}`), { reunionId: id, usuario: 'naara', tipo: 'solicitud', solicitante: yo.id, solicitanteNombre: yo.nombre, requestId: sol.requestId, version: r.version || 1, programadoMs: ahora, estado: 'pendiente', intentos: 0, creadoAt: iso });
+        return { ...sol, nueva: true };
+      });
+      if (out.nueva) { const a = auditoria(db, yo, 'solicitar_ingreso', id, { requestId: out.requestId }); await a.ref.set(a.data); }
+      return res.status(200).json({ ok: true, solicitud: { estado: 'pendiente', requestId: out.requestId, expiraMs: out.expiraMs } });
+    }
+    if (accion === 'solicitud_estado') {
+      const { id } = await leerReunion(body.id);
+      const x = (await db.collection(C.SOL).doc(`${id}_${yo.id}`).get()).data() || null;
+      if (!x || (body.requestId && x.requestId && x.requestId !== body.requestId && x.estado === 'pendiente')) return res.status(200).json({ ok: true, solicitud: null });
+      const estado = x.estado === 'pendiente' && Number(x.expiraMs || 0) <= ahora ? 'vencida' : x.estado;
+      return res.status(200).json({ ok: true, solicitud: { estado, requestId: x.requestId || '', expiraMs: x.expiraMs || 0 } });
+    }
+    if (accion === 'solicitudes') { // panel de la anfitriona: solicitudes vigentes de una reunión
+      if (!S.puede.moderar(yo)) throw err(403, 'Solo Sublicuentas ve las solicitudes de ingreso.');
+      const { id } = await leerReunion(body.id);
+      const q = await db.collection(C.SOL).where('reunionId', '==', id).get();
+      const lista = q.docs.map((d) => d.data() || {}).filter((x) => x.estado === 'pendiente' && Number(x.expiraMs || 0) > ahora).map((x) => ({ usuario: x.usuario, nombre: x.nombre || x.usuario, requestId: x.requestId, expiraMs: x.expiraMs, creadaMs: x.creadaMs }));
+      return res.status(200).json({ ok: true, solicitudes: lista });
+    }
+    if (accion === 'resolver_solicitud') { // EXCLUSIVO de Sublicuentas / Naara (anfitriona); validado aquí, no en la pantalla
+      if (!S.puede.moderar(yo) || yo.id !== 'naara') throw err(403, 'Solo Sublicuentas puede aceptar o rechazar el ingreso.');
+      const { id, r } = await leerReunion(body.id);
+      const quien = String(body.usuario || ''); const aprobar = body.aprobar === true;
+      const ref = db.collection(C.SOL).doc(`${id}_${quien}`);
+      const res2 = await db.runTransaction(async (tx) => {
+        const d = await tx.get(ref); const x = d.exists ? d.data() : null;
+        if (!x || x.estado !== 'pendiente' || x.requestId !== String(body.requestId || '')) return 'no_existe';
+        if (Number(x.expiraMs || 0) <= ahora) { tx.set(ref, { estado: 'vencida', actualizadoAt: iso }, { merge: true }); return 'vencida'; }
+        tx.set(ref, { estado: aprobar ? 'aprobada' : 'rechazada', sesion: r.abiertaAt || '', resueltaPor: yo.id, resueltaAt: iso, actualizadoAt: iso }, { merge: true });
+        return 'ok';
+      });
+      if (res2 === 'no_existe') throw err(409, 'Esa solicitud ya no está pendiente.');
+      if (res2 === 'vencida') throw err(409, 'La solicitud venció (2 minutos). La persona debe pedir de nuevo.');
+      const a = auditoria(db, yo, aprobar ? 'aprobar_ingreso' : 'rechazar_ingreso', id, { usuario: quien, requestId: String(body.requestId) }); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true, estado: aprobar ? 'aprobada' : 'rechazada' });
     }
 
     if (accion === 'expulsar') { // solo la anfitriona; lo hace el servidor con la API de LiveKit
@@ -384,6 +531,7 @@ async function handler(req, res, deps = {}) {
       const f = deps.fetch || fetch;
       const resp = await f(`${S.httpDeLiveKit(env.LIVEKIT_URL)}/twirp/livekit.RoomService/RemoveParticipant`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${S.tokenServidor({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, sala, ahora })}` }, body: JSON.stringify({ room: sala, identity: quien }) });
       if (!resp.ok && resp.status !== 404) throw err(502, 'LiveKit no pudo sacar a esa persona. Intente de nuevo.');
+      await db.collection(C.SOL).doc(`${id}_${quien}`).set({ reunionId: id, usuario: quien, estado: 'expulsado', sesion: r.abiertaAt || '', resueltaPor: yo.id, resueltaAt: iso, actualizadoAt: iso }, { merge: true }); // R181: no vuelve a entrar sin nueva aprobación
       const a = auditoria(db, yo, 'expulsar', id, { usuario: quien }); await a.ref.set(a.data);
       return res.status(200).json({ ok: true });
     }
@@ -397,3 +545,4 @@ async function handler(req, res, deps = {}) {
 
 module.exports = handler;
 module.exports.handler = handler;
+module.exports.retirarDeSala = retirarDeSala;
