@@ -137,3 +137,9 @@ No hecho todavía (y la pantalla lo dice así, sin fingir): envío por Telegram 
 - **Polo con cuello**: no viene en el paquete; está "camiseta". **Suéter de mujer**: no viene.
 - Estilo **low-poly facetado** (caras planas): es el estilo del autor; no es igual a las ilustraciones aprobadas.
 - Tipos de cuerpo (delgada/media/curvilínea) no incluidos: una sola complexión por base.
+
+## Fase 5 · Cierre (R173) — según el documento maestro "Ecosistema completo"
+- **Presentar imágenes, PDF y video sin subir archivos**: botón "Presentar". El archivo se abre en el equipo de quien presenta, se dibuja en un lienzo y se transmite por LiveKit como pantalla compartida (PDF con pdf.js, página por página; video MP4/WebM con su audio; varias imágenes = páginas). Controles: Anterior/Siguiente (o flechas del teclado), Reproducir/Pausa, ±10 s, Dejar de presentar. No se guarda nada en servidores (costo cero, como se decidió).
+- **Acta y acuerdos**: al pulsar Terminar, Naara pasa directo a escribir el acta (resumen, decisiones, acuerdos con responsable y fecha). Asistentes y duración salen del registro real de entradas (no se pueden inventar). Cada responsable marca su acuerdo como cumplido; Naara puede marcar cualquiera y editar el acta (control de versión). Historial muestra "Ver acta" y avisa de acuerdos pendientes.
+- **Cámara libre** (arrastrar para girar, rueda o pellizco para acercar), **Ajustes** (elegir micrófono y salida de audio), **enlaces en el chat** (solo http/https, se abren aparte, sin HTML), **collar** en accesorios.
+- Pruebas: `tests/r173-acta-acuerdos.test.mjs` (3) y `tests/visual/r173-presentar-acta.mjs` (8 recorridos).
