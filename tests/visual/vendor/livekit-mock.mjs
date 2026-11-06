@@ -41,7 +41,7 @@ export class Room extends Emisor {
     this.sim = {
       entra: (id, nombre) => { const p = new Participante(id, nombre); this.remoteParticipants.set(id, p); this.emit(RoomEvent.ParticipantConnected, p); const t = pista('audio'); const pub = { source: 'microphone', track: t, isSubscribed: true }; p.trackPublications.set('mic', pub); this.emit(RoomEvent.TrackSubscribed, t, pub, p); },
       sale: (id) => { const p = this.remoteParticipants.get(id); this.remoteParticipants.delete(id); this.emit(RoomEvent.ParticipantDisconnected, p); },
-      habla: (ids) => this.emit(RoomEvent.ActiveSpeakersChanged, ids.map((i) => this.remoteParticipants.get(i) || this.localParticipant)),
+      habla: (ids) => { [this.localParticipant, ...this.remoteParticipants.values()].forEach((p) => { const on = ids.includes(p.identity); p.isSpeaking = on; p.audioLevel = on ? 0.4 : 0; }); this.emit(RoomEvent.ActiveSpeakersChanged, ids.map((i) => this.remoteParticipants.get(i) || this.localParticipant)); },
       silencia: (id, v) => { const p = this.remoteParticipants.get(id); p.isMicrophoneEnabled = !v; this.emit(v ? RoomEvent.TrackMuted : RoomEvent.TrackUnmuted, {}, p); },
       chat: (id, t) => this.emit(RoomEvent.DataReceived, new TextEncoder().encode(JSON.stringify({ t })), this.remoteParticipants.get(id), 0, 'chat'),
       reaccion: (id, e) => this.emit(RoomEvent.DataReceived, new TextEncoder().encode(JSON.stringify({ e })), this.remoteParticipants.get(id), 0, 'reaccion'),
