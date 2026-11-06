@@ -18,7 +18,7 @@ function dbFalsa(inicial = {}) {
     }),
   };
 }
-const ENV = { AUTH_USERS_JSON: JSON.stringify({ naara: { role: 'admin', hash: 'x' }, relojes: { role: 'asesor', hash: 'y' }, magdiel: { role: 'asesor' }, nuevo: { role: 'asesor' } }), GEISELL_PASSWORD_HASH: 'z' };
+const ENV = { AUTH_USERS_JSON: JSON.stringify({ naara: { role: 'admin', hash: 'x' }, relojes: { role: 'asesor', hash: 'y' }, prueba: { role: 'asesor' }, nuevo: { role: 'asesor' } }), GEISELL_PASSWORD_HASH: 'z' };
 function llamar(handler, { usuario, body, db }) {
   return new Promise((resolve) => {
     const res = { code: 200, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.code = c; return this; }, json(b) { resolve({ code: this.code, body: b }); } };
@@ -65,7 +65,7 @@ test('API: mis_permisos, listar y guardar (solo Sublicuentas) con auditoría', a
   r = await llamar(handler, { usuario: 'naara', db, body: { accion: 'listar' } });
   assert.equal(r.code, 200);
   const usuarios = r.body.usuarios.map((u) => u.usuario);
-  assert.deepEqual(usuarios.slice(0, 1), ['naara']); for (const u of ['geisell', 'magdiel', 'nuevo', 'relojes']) assert.ok(usuarios.includes(u), u);
+  assert.deepEqual(usuarios.slice(0, 1), ['naara']); for (const u of ['geisell', 'prueba', 'nuevo', 'relojes']) assert.ok(usuarios.includes(u), u);
   assert.ok(!JSON.stringify(r.body).includes('"hash"'), 'no se devuelven hashes');
   r = await llamar(handler, { usuario: 'naara', db, body: { accion: 'guardar', usuario: 'naara', modulos: { clientes: false } } });
   assert.equal(r.code, 400, 'a Sublicuentas no se le quita nada');

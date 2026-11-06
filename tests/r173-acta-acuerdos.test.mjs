@@ -15,7 +15,10 @@ async function reunionTerminada(db, parts = ['naara', 'libni', 'geisell']) {
   AHORA = Date.UTC(2026, 10, 5, 17, 0);
   const r = await llamar(db, 'naara', { accion: 'crear', titulo: 'Junta mensual de prueba', fecha: '2026-11-05', hora: '12:00', agenda: 'x', participantes: parts, duracionMin: 60 }); const id = r.body.id;
   AHORA = Date.UTC(2026, 10, 5, 18, 0); await llamar(db, 'naara', { accion: 'token_tiempo_real', id });
-  AHORA = Date.UTC(2026, 10, 5, 18, 2); await llamar(db, 'libni', { accion: 'token_tiempo_real', id });
+  AHORA = Date.UTC(2026, 10, 5, 18, 2); // R181: llega tarde → solicita y Naara la admite
+  const sol = await llamar(db, 'libni', { accion: 'solicitar_ingreso', id });
+  await llamar(db, 'naara', { accion: 'resolver_solicitud', id, usuario: 'libni', requestId: sol.body.solicitud.requestId, aprobar: true });
+  await llamar(db, 'libni', { accion: 'token_tiempo_real', id });
   AHORA = Date.UTC(2026, 10, 5, 18, 47); await llamar(db, 'naara', { accion: 'cerrar_sala', id });
   return id;
 }
@@ -32,7 +35,7 @@ test('Naara escribe el acta; asistentes y duración vienen del registro (no se p
   assert.equal(a.acuerdos.length, 2); assert.equal(a.acuerdos[0].estado, 'pendiente'); assert.equal(a.version, 1);
   const g = await llamar(db, 'geisell', { accion: 'acta', id });
   assert.equal(g.code, 200); assert.equal(g.body.acta.resumen, 'Revisamos ventas de octubre.');
-  assert.equal((await llamar(db, 'magdiel', { accion: 'acta', id })).code, 403);
+  assert.equal((await llamar(db, 'prueba', { accion: 'acta', id })).code, 403);
 });
 
 test('acta: validaciones y edición con control de versión', async () => {

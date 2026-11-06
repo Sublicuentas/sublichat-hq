@@ -23,7 +23,7 @@ test('identidad: solo las 3 fundadoras, por usuario y no por rol', () => {
   assert.equal(S.identidad({ usuario: 'naara' }).id, 'naara');
   assert.equal(S.identidad({ usuario: 'relojes' }).id, 'libni');
   assert.equal(S.identidad({ usuario: 'Geissel' }).id, 'geisell');
-  assert.equal(S.identidad({ usuario: 'magdiel', role: 'admin' }), null);
+  assert.equal(S.identidad({ usuario: 'prueba', role: 'admin' }), null);
   assert.equal(S.identidad({ usuario: 'daniela' }), null);
 });
 
@@ -37,7 +37,7 @@ test('hora de Honduras (UTC-6) sin conversiones raras', () => {
 test('acceso: otro admin o sin sesión no entra; Libni/Geisell no convocan', async () => {
   const db = crearFakeDb();
   assert.equal((await llamar(db, '', { accion: 'panel' })).code, 401);
-  assert.equal((await llamar(db, 'magdiel', { accion: 'panel' })).code, 403);
+  assert.equal((await llamar(db, 'prueba', { accion: 'panel' })).code, 403);
   assert.equal((await llamar(db, 'libni', conv())).code, 403);
   assert.equal((await llamar(db, 'geisell', conv())).code, 403);
   assert.equal((await llamar(db, 'libni', { accion: 'panel' })).code, 200);
@@ -54,14 +54,14 @@ test('Naara programa: invitaciones + avisos 24h/1h/10min/inicio, idempotentes; v
   const av = db.todos('sala_avisos');
   assert.equal(av.filter((x) => x.usuario === 'libni').map((x) => x.tipo).sort().join(','), 'h1,h24,inicio,invitacion,m10');
   assert.ok(!av.some((x) => x.usuario === 'naara' && x.tipo === 'invitacion'));
-  assert.ok(av.every((x) => x.estado === 'pendiente'));
+  assert.ok(av.every((x) => ['pendiente', 'sin_vinculo'].includes(x.estado)), 'R182: sin Telegram vinculado queda sin_vinculo');
   // reprogramar: los avisos anteriores se anulan y se generan nuevos (versión 2); RSVP vuelve a pendiente si cambia la hora
   await llamar(db, 'libni', { accion: 'rsvp', id, respuesta: 'aceptada' });
   r = await llamar(db, 'naara', { ...conv({ hora: '20:00' }), accion: 'editar', id });
   assert.equal(r.code, 200); assert.equal(r.body.version, 2);
   const av2 = db.todos('sala_avisos');
   assert.ok(av2.filter((x) => x.version === 1).every((x) => x.estado === 'anulado'));
-  assert.equal(av2.filter((x) => x.version === 2 && x.estado === 'pendiente' && x.usuario === 'libni').length, 5);
+  assert.equal(av2.filter((x) => x.version === 2 && ['pendiente', 'sin_vinculo'].includes(x.estado) && x.usuario === 'libni').length, 5);
   assert.equal(db.todos('sala_invitaciones').find((x) => x.usuario === 'libni').estado, 'pendiente');
 });
 
@@ -104,7 +104,7 @@ test('web: botón Sala de Juntas después de Catálogo y pantalla separada', () 
   assert.match(html, /sala-juntas\.js\?v=/);
   const P = require('../api/_permisos.js');
   assert.ok(P.pantallasVisibles({ usuario: 'relojes' }, {}).includes('sala-juntas'));
-  assert.ok(!P.pantallasVisibles({ usuario: 'magdiel' }, {}).includes('sala-juntas'));
+  assert.ok(!P.pantallasVisibles({ usuario: 'prueba' }, {}).includes('sala-juntas'));
 });
 
 test('R168 · Naara ve el estado de los avisos de Telegram; Libni no', async () => {
@@ -133,6 +133,6 @@ test('R169 · Mi personaje: cada fundadora guarda SOLO el suyo, opciones permiti
   assert.equal(r.body.config.barba, false, 'mujer sin barba'); assert.equal(db.todos('sala_avatares')[0].miniatura, '', 'miniatura no válida se descarta');
   p = (await llamar(db, 'geisell', { accion: 'panel' })).body;
   assert.equal(p.avatares.libni.guardado, true); assert.equal(p.avatares.libni.version, 2);
-  assert.equal((await llamar(db, 'magdiel', { accion: 'avatar_guardar', config: {} })).code, 403);
+  assert.equal((await llamar(db, 'prueba', { accion: 'avatar_guardar', config: {} })).code, 403);
   assert.ok(db.todos('auditoria_eventos').some((x) => x.accion === 'avatar_guardar' && x.actorUsuario === 'libni'));
 });

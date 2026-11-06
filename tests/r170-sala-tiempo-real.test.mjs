@@ -46,7 +46,7 @@ test('token: sin LiveKit configurado → 503; no invitada → 403; antes de tiem
   const db = crearFakeDb(); const id = await reunion(db);
   assert.equal((await llamar(db, 'libni', { accion: 'token_tiempo_real', id }, {})).code, 503);
   assert.equal((await llamar(db, 'geisell', { accion: 'token_tiempo_real', id })).code, 403);
-  assert.equal((await llamar(db, 'magdiel', { accion: 'token_tiempo_real', id })).code, 403);
+  assert.equal((await llamar(db, 'prueba', { accion: 'token_tiempo_real', id })).code, 403);
   const r = await llamar(db, 'libni', { accion: 'token_tiempo_real', id });
   assert.equal(r.code, 409); assert.match(r.body.error, /30 minutos/);
 });

@@ -43,7 +43,7 @@ test('presets: guardar con nombre, editar solo quien lo creó o Naara, oficial s
   assert.equal((await llamar(db, 'libni', { accion: 'preset_oficial', escenario: 'aula', presetId: p.id })).code, 403);
   r = await llamar(db, 'naara', { accion: 'preset_oficial', escenario: 'aula', presetId: p.id }); assert.equal(r.body.predeterminado, p.id);
   assert.equal((await llamar(db, 'naara', { accion: 'preset_guardar', escenario: 'otro', nombre: 'x' })).code, 400);
-  assert.equal((await llamar(db, 'magdiel', { accion: 'escenarios' })).code, 403);
+  assert.equal((await llamar(db, 'prueba', { accion: 'escenarios' })).code, 403);
   r = await llamar(db, 'geisell', { accion: 'escenarios' }); assert.equal(r.body.escenarios.aula.presets.length, 2); assert.equal(r.body.escenarios.aula.predeterminado, p.id);
   r = await llamar(db, 'libni', { accion: 'preset_borrar', escenario: 'aula', presetId: p.id }); assert.equal(r.code, 200); assert.equal(r.body.predeterminado, '', 'al borrar el oficial se quita');
   assert.ok(db.todos('auditoria_eventos').some((x) => x.accion === 'preset_oficial'));
