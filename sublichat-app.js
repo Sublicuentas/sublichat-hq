@@ -328,7 +328,7 @@ const PLAT_LABELS = {
   latintv:"LatinTV", latintv1:"LatinTV (1 dispositivo)", latintv2:"LatinTV (2 dispositivos)", latintv3:"LatinTV (3 dispositivos)", latintv4:"LatinTV (4 dispositivos)",
   liontv:"LionTV", liontv1:"LionTV (1 dispositivo)", liontv2:"LionTV (2 dispositivos)", liontv3:"LionTV (3 dispositivos)", liontv5:"LionTV (5 dispositivos)",
   evoutouch:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
-  icomplay:"ICOMPLAY MAX", icomplay1:"ICOMPLAY MAX (1 pantalla)", icomplay3:"ICOMPLAY MAX (3 pantallas)", icomplay5:"ICOMPLAY MAX (5 pantallas)", icomplay7:"ICOMPLAY MAX (7 pantallas)",
+  icomplay:"ICOMPLAY", icomplay1:"ICOMPLAY (1 pantalla)", icomplay2:"ICOMPLAY (2 pantallas)", icomplay3:"ICOMPLAY (3 pantallas)", icomplay5:"ICOMPLAY (5 pantallas)", icomplay7:"ICOMPLAY (7 pantallas)",
   iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
   canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
   viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32"
@@ -1449,27 +1449,75 @@ async function invEditarUrl(c){
 async function invCargarUrlsTv(){
   try{const j=await invPost({accion:"tvUrls"});if(j&&j.ok&&j.urls&&typeof window.sublichatAplicarUrlsTv==="function")window.sublichatAplicarUrlsTv(j.urls);return j&&j.urls||null;}catch(_){return null;}
 }
+// R187 · URLs de conexión por proveedor: editar, agregar, desactivar (no se ofrece para nuevas; las entregas actuales siguen),
+// eliminar (solo agregados, desactivados y sin clientes) e historial. Separadas del Baúl de APKs (descargas de apps).
 async function invEditarUrlsTv(){
   const box=document.getElementById("invAuditBox");if(!box)return;
   box.style.display="block";box.innerHTML="Cargando URLs…";
-  const urls=await invCargarUrlsTv();
+  let j=null;try{j=await invPost({accion:"tvUrlsHistorial"});}catch(_){}
+  const urls=j&&j.ok?j.urls:await invCargarUrlsTv();
   if(!urls){box.innerHTML="⚠️ No pude leer las URLs.";return;}
-  box.innerHTML=`<div class="cr-label">URLs de TV Digital (por proveedor)</div>`+Object.entries(urls).map(([k,v])=>`
-    <div class="iv-row" style="gap:8px;align-items:center"><span class="k" style="min-width:110px">${clienteEsc(v.nombre||k)}</span>
-    <input class="serv-input" data-tv-url="${clienteEsc(k)}" value="${clienteEsc(v.url||"")}" style="flex:1;margin:0">
-    <button class="cobro-btn" data-tv-url-save="${clienteEsc(k)}" type="button" style="width:auto;margin:0">Guardar</button></div>`).join("")+
-    `<div class="cr-hint">Se acepta http:// (ICOMPLAY usa http y puerto 80). Al guardar, todas las entregas de ese proveedor muestran la URL nueva.</div>`;
+  const hist=(j&&j.historial)||[];
+  const fila=([k,v])=>`<div class="iv-row" style="gap:8px;align-items:center;flex-wrap:wrap;${v.activo===false?"opacity:.6":""}"><span class="k" style="min-width:110px">${clienteEsc(v.nombre||k)}${v.activo===false?" · <b style='color:#b91c1c'>desactivada</b>":""}</span>
+    <input class="serv-input" data-tv-url="${clienteEsc(k)}" value="${clienteEsc(v.url||"")}" style="flex:1;min-width:200px;margin:0">
+    <button class="cobro-btn" data-tv-url-save="${clienteEsc(k)}" type="button" style="width:auto;margin:0">Guardar</button>
+    <button class="cobro-btn" data-tv-url-act="${clienteEsc(k)}" data-on="${v.activo===false?"1":"0"}" type="button" style="width:auto;margin:0">${v.activo===false?"Activar":"Desactivar"}</button>
+    ${v.activo===false?`<button class="cobro-btn" data-tv-url-del="${clienteEsc(k)}" type="button" style="width:auto;margin:0;color:#b91c1c">Eliminar</button>`:""}</div>`;
+  box.innerHTML=`<div class="cr-label">URLs de conexión de TV Digital (por proveedor)</div>`+Object.entries(urls).map(fila).join("")+
+    `<div class="iv-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><input class="serv-input" id="tvNuevoNombre" placeholder="Proveedor nuevo (ej. LatinTV 3)" style="flex:1;min-width:160px;margin:0"><input class="serv-input" id="tvNuevaUrl" placeholder="http://…" style="flex:1;min-width:200px;margin:0"><button class="cobro-btn" id="tvNuevaBtn" type="button" style="width:auto;margin:0">＋ Agregar</button></div>
+    <div class="cr-hint">Se acepta http:// (ICOMPLAY usa http y puerto 80). Al guardar, todas las entregas de ese proveedor muestran la URL nueva. Desactivar no rompe a los clientes que ya la tienen. Solo se elimina una URL agregada, desactivada y sin clientes.</div>
+    ${hist.length?`<details style="margin-top:8px"><summary class="cr-label" style="cursor:pointer">Historial (${hist.length})</summary>${hist.map(h=>`<div class="cr-hint">${clienteEsc((h.at||"").slice(0,16).replace("T"," "))} · ${clienteEsc(h.por||"")} · ${clienteEsc(h.accion||"")} ${clienteEsc(h.proveedor||"")}: ${clienteEsc(h.urlAnterior||h.url||"")}${h.urlNueva?" → "+clienteEsc(h.urlNueva):""}</div>`).join("")}</details>`:""}`;
+  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok);await invCargarUrlsTv();invEditarUrlsTv();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
   box.querySelectorAll("[data-tv-url-save]").forEach(b=>b.addEventListener("click",async()=>{
     const k=b.dataset.tvUrlSave,inp=box.querySelector(`[data-tv-url="${k}"]`);
     if(!confirm(`¿Cambiar la URL de ${urls[k]?.nombre||k}?\n\n${urls[k]?.url||"—"} → ${inp.value.trim()}`))return;
-    b.disabled=true;b.textContent="Guardando…";
-    try{const j=await invPost({accion:"guardarTvUrl",proveedor:k,url:inp.value.trim()});
-      if(j.ok){mostrarToast(`✅ URL de ${urls[k]?.nombre||k} actualizada`);await invCargarUrlsTv();b.textContent="Guardado";}
-      else{mostrarToast("⚠️ "+(j.error||"Error"));b.textContent="Guardar";}
-    }catch(_){mostrarToast("⚠️ No pude conectar.");b.textContent="Guardar";}
-    finally{b.disabled=false;}
+    b.disabled=true;b.textContent="Guardando…";await post({accion:"guardarTvUrl",proveedor:k,url:inp.value.trim()},`✅ URL de ${urls[k]?.nombre||k} actualizada`);
   }));
+  box.querySelectorAll("[data-tv-url-act]").forEach(b=>b.addEventListener("click",()=>{const k=b.dataset.tvUrlAct,on=b.dataset.on==="1";if(!on&&!confirm(`¿Desactivar ${urls[k]?.nombre||k}?\n\nYa no se ofrecerá para configuraciones nuevas. Los clientes que ya la tienen siguen igual.`))return;post({accion:"activarTvUrl",proveedor:k,activo:on},on?"✅ Activada":"✅ Desactivada");}));
+  box.querySelectorAll("[data-tv-url-del]").forEach(b=>b.addEventListener("click",()=>{const k=b.dataset.tvUrlDel;if(!confirm(`¿Eliminar ${urls[k]?.nombre||k}? Queda en el historial.`))return;post({accion:"eliminarTvUrl",proveedor:k},"✅ Eliminada");}));
+  box.querySelector("#tvNuevaBtn")?.addEventListener("click",()=>{const n=box.querySelector("#tvNuevoNombre").value.trim(),u=box.querySelector("#tvNuevaUrl").value.trim();if(n.length<2||!u){mostrarToast("Escriba el proveedor y la URL.");return;}post({accion:"guardarTvUrl",proveedor:n,nombre:n,url:u},"✅ Proveedor agregado");});
 }
+// R187 · Baúl de APKs (descargas de apps por plataforma y dispositivo) + tarifas ICOMPLAY. Misma fuente que APK y bot.
+async function invBaulApks(){
+  const box=document.getElementById("invAuditBox");if(!box)return;
+  box.style.display="block";box.innerHTML="Cargando Baúl de APKs…";
+  let j=null,pl=null;try{[j,pl]=await Promise.all([invPost({accion:"baulApks"}),invPost({accion:"planesTv"})]);}catch(_){}
+  if(!j||!j.ok){box.innerHTML="⚠️ "+clienteEsc(j&&j.error||"No pude leer el Baúl.");return;}
+  const st=window._baulSt=window._baulSt||{plat:"liontv",edit:null};
+  const vista=j.vistas.find(v=>v.plataforma===st.plat)||j.vistas[0];
+  const enlHtml=e=>`<div class="iv-row" style="gap:8px;align-items:flex-start;flex-wrap:wrap;${e.activo===false?"opacity:.55":""}"><div style="flex:1;min-width:220px"><b>${clienteEsc(e.app)}</b> · ${clienteEsc(e.metodoTxt)}${e.activo===false?" · <b style='color:#b91c1c'>desactivado</b>":""}<br>
+    ${e.url?`<a href="${clienteEsc(e.url)}" target="_blank" rel="noopener noreferrer">${clienteEsc(e.url)}</a>`:"<i>Tienda del TV (sin URL exacta)</i>"}${e.codigo?` · Código Downloader <b>${clienteEsc(e.codigo)}</b>`:""}${e.codigoPendiente?` · <span style="color:#b45309">${clienteEsc(e.codigoPendiente)} pendiente de confirmar</span>`:""}
+    ${e.nota?`<div class="cr-hint">${clienteEsc(e.nota)}</div>`:""}${e.costoExterno?`<div class="cr-hint" style="color:#b45309">💲 ${clienteEsc(e.costoExterno.texto)}</div>`:""}${e.compartidaCon.length?`<div class="cr-hint">También en: ${clienteEsc(e.compartidaCon.map(x=>(j.plataformas.find(p=>p.id===x)||{}).nombre||x).join(", "))}</div>`:""}</div>
+    ${j.editor?`<button class="cobro-btn" data-be="${clienteEsc(e.id)}" type="button" style="width:auto;margin:0">Editar</button><button class="cobro-btn" data-ba="${clienteEsc(e.id)}" data-on="${e.activo===false?"1":"0"}" type="button" style="width:auto;margin:0">${e.activo===false?"Activar":"Desactivar"}</button>${e.activo===false?`<button class="cobro-btn" data-bd="${clienteEsc(e.id)}" type="button" style="width:auto;margin:0;color:#b91c1c">Eliminar</button>`:""}`:""}</div>`;
+  const ed=st.edit, opt=(o,sel)=>Object.entries(o).map(([k,v])=>`<option value="${k}" ${k===sel?"selected":""}>${clienteEsc(v)}</option>`).join("");
+  const form=ed?`<div class="cr-label" style="margin-top:12px">${ed.id?"Editar enlace":"Agregar aplicación / enlace"}</div>
+    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><select class="serv-input" id="bfApp" style="flex:1;min-width:150px;margin:0"><option value="">— App nueva —</option>${j.apps.map(a=>`<option value="${a.id}" ${a.id===ed.appId?"selected":""}>${clienteEsc(a.nombre)}</option>`).join("")}</select><input class="serv-input" id="bfAppNombre" placeholder="Nombre de app nueva" style="flex:1;min-width:150px;margin:0"></div>
+    <div class="iv-row" style="gap:8px;flex-wrap:wrap">${j.plataformas.map(p=>`<label style="font-size:13px"><input type="checkbox" data-bfp="${p.id}" ${(ed.plataformas||[]).includes(p.id)?"checked":""}> ${clienteEsc(p.nombre)}</label>`).join(" ")}</div>
+    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><select class="serv-input" id="bfDisp" style="flex:1;margin:0">${opt(j.dispositivos,ed.dispositivo)}</select><select class="serv-input" id="bfMet" style="flex:1;margin:0">${opt(j.metodos,ed.metodo)}</select></div>
+    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><input class="serv-input" id="bfUrl" placeholder="https://… (vacío solo para Tienda del TV)" value="${clienteEsc(ed.url||"")}" style="flex:2;min-width:220px;margin:0"><input class="serv-input" id="bfCod" placeholder="Código Downloader" value="${clienteEsc(ed.codigo||"")}" style="flex:1;min-width:120px;margin:0" inputmode="numeric"></div>
+    <input class="serv-input" id="bfNota" placeholder="Nota (requisitos, costo externo…)" value="${clienteEsc(ed.nota||"")}" style="margin:6px 0">
+    <div class="iv-row" style="gap:8px"><button class="cobro-btn renew" id="bfSave" type="button" style="flex:1;margin:0">Guardar</button><button class="cobro-btn" id="bfCancel" type="button" style="flex:1;margin:0">Cancelar</button></div>`:"";
+  const P=pl&&pl.ok?pl.planes.icomplay:null;
+  const tarifas=P?`<details style="margin-top:12px"><summary class="cr-label" style="cursor:pointer">Tarifas ICOMPLAY (${P.variantes.length} variantes · solo ventas futuras)</summary>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tr><th style="text-align:left">Pantallas</th>${P.meses.map(m=>`<th>${m} mes${m===1?"":"es"}</th>`).join("")}</tr>
+    ${P.pantallas.map(p=>`<tr><td>${p}</td>${P.meses.map(m=>`<td style="text-align:center">${j.editor?`<input class="serv-input" data-tp="${p}x${m}" value="${P.precios[p][m]}" inputmode="decimal" style="width:80px;margin:2px;text-align:right">`:`L${Number(P.precios[p][m]).toLocaleString("en-US")}`}</td>`).join("")}</tr>`).join("")}</table>
+    <div class="cr-hint">Cambiar una tarifa archiva la anterior con fecha y usuario. Las ventas ya hechas conservan su precio.</div></details>`:"";
+  box.innerHTML=`<div class="cr-label">🧰 Baúl de APKs · ${j.vistas.length} plataformas</div>
+    <div class="iv-row" style="gap:6px;flex-wrap:wrap">${j.vistas.map(v=>`<button class="cobro-btn" data-bp="${v.plataforma}" type="button" style="width:auto;margin:0;${v.plataforma===vista.plataforma?"background:#e2231a;color:#fff;border-color:#e2231a":""}">${clienteEsc(v.nombre)}</button>`).join("")}</div>
+    ${vista.dispositivos.length?vista.dispositivos.map(d=>`<div class="cr-label" style="margin-top:10px">${clienteEsc(d.nombre)}</div>${d.enlaces.map(enlHtml).join("")}`).join(""):`<p class="cr-hint">Sin aplicaciones registradas para ${clienteEsc(vista.nombre)}.</p>`}
+    <div class="cr-hint" style="margin-top:8px">${clienteEsc(j.aviso)}</div>
+    ${j.editor&&!ed?`<button class="cobro-btn renew" id="bfNew" type="button" style="width:100%;margin-top:10px">＋ Agregar aplicación (autorizado)</button>`:""}${form}${tarifas}`;
+  box.querySelectorAll("[data-bp]").forEach(b=>b.addEventListener("click",()=>{st.plat=b.dataset.bp;st.edit=null;invBaulApks();}));
+  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok);st.edit=null;invBaulApks();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
+  box.querySelector("#bfNew")?.addEventListener("click",()=>{st.edit={plataformas:[vista.plataforma],dispositivo:"android_tv",metodo:"downloader"};invBaulApks();});
+  box.querySelectorAll("[data-be]").forEach(b=>b.addEventListener("click",()=>{st.edit={...(j.enlaces||[]).find(e=>e.id===b.dataset.be)};invBaulApks();}));
+  box.querySelectorAll("[data-ba]").forEach(b=>b.addEventListener("click",()=>post({accion:"baulActivarEnlace",id:b.dataset.ba,activo:b.dataset.on==="1"},b.dataset.on==="1"?"✅ Activado":"✅ Desactivado")));
+  box.querySelectorAll("[data-bd]").forEach(b=>b.addEventListener("click",()=>{if(confirm("¿Eliminar este enlace? Queda en la auditoría."))post({accion:"baulEliminarEnlace",id:b.dataset.bd},"✅ Eliminado");}));
+  box.querySelector("#bfCancel")?.addEventListener("click",()=>{st.edit=null;invBaulApks();});
+  box.querySelector("#bfSave")?.addEventListener("click",()=>{const q=id=>box.querySelector(id);post({accion:"baulGuardarEnlace",enlace:{id:ed.id||"",appId:q("#bfApp").value,appNombre:q("#bfAppNombre").value.trim(),plataformas:[...box.querySelectorAll("[data-bfp]:checked")].map(x=>x.dataset.bfp),dispositivo:q("#bfDisp").value,metodo:q("#bfMet").value,url:q("#bfUrl").value.trim(),codigo:q("#bfCod").value.trim(),nota:q("#bfNota").value.trim(),prioridad:ed.prioridad||50}},"✅ Enlace guardado");});
+  box.querySelectorAll("[data-tp]").forEach(inp=>inp.addEventListener("change",()=>{const [p,m]=inp.dataset.tp.split("x");if(!confirm(`¿Cambiar ICOMPLAY ${p} pantalla(s) · ${m} mes(es) a L${inp.value}?\n\nSolo para ventas futuras.`)){invBaulApks();return;}post({accion:"guardarPrecioPlanTv",pantallas:Number(p),meses:Number(m),precio:Number(inp.value)},"✅ Tarifa actualizada");}));
+}
+async function invCargarPlanesTv(){try{const j=await invPost({accion:"planesTv"});if(j&&j.ok&&typeof window.sublichatAplicarPlanesTv==="function")window.sublichatAplicarPlanesTv(j.planes);}catch(_){}}
 // Validar (solo lee) y Reparar (idempotente) Bodega ↔ fichas.
 async function invAuditar(aplicar){
   const box=document.getElementById("invAuditBox");if(!box)return;
@@ -1505,7 +1553,8 @@ async function invAuditar(aplicar){
 (function invHerramientasInit(){
   const v=document.getElementById("invValidarBtn");if(v&&!v._w){v._w=true;v.addEventListener("click",()=>invAuditar(false));}
   const u=document.getElementById("invUrlsTvBtn");if(u&&!u._w){u._w=true;u.addEventListener("click",invEditarUrlsTv);}
-  setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);
+  const bz=document.getElementById("invBaulBtn");if(bz&&!bz._w){bz._w=true;bz.addEventListener("click",invBaulApks);} // R187
+  setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);setTimeout(invCargarPlanesTv,3000); // R187: tarifas centrales
 })();
 
 /* ===== FINANZAS (reportes con gráficos interactivos) ===== */
@@ -4554,7 +4603,7 @@ function gCaminoBombas(){
     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
     ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
     ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
-    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY MAX"]
+    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
   const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", sublicuentas2:"89464328", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
@@ -4712,7 +4761,7 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, stellatv:0, oleada:90, evoutouch:0, evoutouch1:0, evoutouch2:0, evoutouch3:0, iptv:130,
-    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399,
+    icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399,
     office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
   };
   const FICHA_PRECIOS_ESPECIALES={
@@ -4722,10 +4771,12 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
     oleada1:90, oleada3:200,
     latintv1:99, latintv2:149, latintv3:199, latintv4:249,
     liontv1:250, liontv2:275, liontv3:300, liontv5:350, evoutouch1:0, evoutouch2:0, evoutouch3:0, evoutouch4:0, evoutouch:0,
-    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399
+    icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399
   };
-  // ICOMPLAY MAX (oct-2026) · precio por pantallas × meses (Max Player incluido).
-  const ICOMPLAY_PRECIOS={1:{1:179,3:499,6:949,12:1799},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
+  // R187 · ICOMPLAY (nombre oficial) · 1, 2, 3, 5 y 7 pantallas × 1, 3, 6 y 12 meses = 20 tarifas. Respaldo local:
+  // las tarifas vigentes llegan del catálogo central (api/_planes-tv.js → inventario «planesTv») y reemplazan esta tabla.
+  const ICOMPLAY_PRECIOS={1:{1:179,3:499,6:949,12:1799},2:{1:219,3:599,6:1149,12:2149},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
+  window.sublichatAplicarPlanesTv=(pl)=>{try{const t=pl&&pl.icomplay&&pl.icomplay.precios;if(t)for(const p of Object.keys(t))ICOMPLAY_PRECIOS[p]={...t[p]};}catch(_){}};
   const FICHA_VENDEDORES_TARIFA_ESPECIAL=new Set(["sublicuentas","sublicuentas2","relojes","geisell","geissel"]);
   // Reglas reales de entrega por plataforma. Se separan de la pregunta de
   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
@@ -5395,7 +5446,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(/^latintv[1234]$/.test(p))return "latintv";
     if(/^liontv[1235]$/.test(p))return "liontv";
     if(/^evoutouch[1-4]?$/.test(p))return "evoutouch";
-    if(/^icomplay(max)?[1357]?$/.test(p))return "icomplay";
+    if(/^icomplay(max)?[12357]?$/.test(p))return "icomplay";
     if(/^iptv[1234]$/.test(p))return "iptv";
     return p;
   };
@@ -5906,13 +5957,13 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   }
   function fichaCantidadDesdePlataforma(raw, fallback="1"){
     const n=fichaNorm(raw);
-    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/)||n.match(/icomplay(?:max)?([1357])$/);
+    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/)||n.match(/icomplay(?:max)?([12357])$/);
     return m?m[1]:String(fallback||"1");
   }
   function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
     const plat=fichaBaseRegla(fichaGetVal("fichaPlat"));
     const pantallas=fichaQ("fichaIptvPantallas"), proveedor=fichaQ("fichaIptvProveedor");
-    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:(plat==="icomplay"?[1,3,5,7]:[1,2,3,4]));
+    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:(plat==="icomplay"?[1,2,3,5,7]:[1,2,3,4]));
     if(pantallas){
       const deseada=String(cantidadPreferida||pantallas.value||"1");
       pantallas.innerHTML=permitidas.map(n=>`<option value="${n}">${n} dispositivo${n===1?"":"s"}</option>`).join("");
@@ -5927,7 +5978,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
           : plat==="evoutouch"
             ? [["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]]
           : plat==="icomplay"
-            ? [["icomplay","ICOMPLAY MAX (URL vigente de Bodega)"]]
+            ? [["icomplay","ICOMPLAY (URL vigente de Bodega)"]]
             : [["latintv","LatinTV (latgt.com:8080)"],["latintv2","LatinTV (enlatv.com)"],["liontv","LionTV (liontv.es)"],["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]];
       proveedor.innerHTML=opciones.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
       proveedor.value=opciones.some(([v])=>v===anterior)?anterior:opciones[0][0];
@@ -5968,7 +6019,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       return `evoutouch${n}`;
     }
     if(p==="icomplay"){
-      const n=["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
+      const n=["1","2","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
       return `icomplay${n}`;
     }
     if(p==="iptv") return `iptv${fichaGetVal("fichaIptvPantallas")||"1"}`;
@@ -5980,7 +6031,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(p==="oleada")return `oleada${fichaGetVal("fichaOleadaDispositivos")||"1"}`;
     if(p==="latintv"||p==="liontv")return `${p}${fichaGetVal("fichaIptvPantallas")||"1"}`;
     if(p==="evoutouch")return `evoutouch${["1","2","3"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
-    if(p==="icomplay")return `icomplay${["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
+    if(p==="icomplay")return `icomplay${["1","2","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
     return p;
   }
   const fichaPrecioDefault=plat=>{
@@ -6034,7 +6085,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
   // R83 · Respaldo para el grupo de WhatsApp: con Max Player se agregan SUS credenciales (además de la lista).
   function fichaMaxPlayerTexto(plat){
-    // ICOMPLAY MAX trae Max Player incluido: se informa el reproductor aunque no tenga credenciales aparte.
+    // ICOMPLAY trae Max Player incluido (Max Player es el reproductor, no el nombre del servicio): se informa el reproductor aunque no tenga credenciales aparte.
     if(fichaBaseRegla(plat)==="icomplay"&&fichaGetVal("fichaMaxPlayer")!=="si")return "\n*📱 Reproductor: Max Player (incluido)*";
     if(!fichaEsIptv(plat)||fichaGetVal("fichaMaxPlayer")!=="si")return "";
     return `\n\n*📱 App: Max Player*\n*👤 Usuario Max Player: ${fichaGetVal("fichaMpUsuario")||"—"}*\n*🔒 Contraseña Max Player: ${fichaGetVal("fichaMpClave")||"—"}*`;
@@ -6060,7 +6111,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const cuentaBodega=fichaCuentaBodegaPara(plat,correo);
     const iptvurl=(cuentaBodega&&cuentaBodega.url)||(fichaBaseRegla(plat)==="icomplay"?IPTV_URLS.icomplay:"")||IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
     const urlcuentaLine=cuentaBodega&&cuentaBodega.url?`\n*🌐 URL: ${cuentaBodega.url}*`:"";
-    const iptvlista=fichaGetVal("fichaIptvLista")||(fichaBaseRegla(plat)==="icomplay"?"ICOMPLAY MAX":"—");
+    const iptvlista=fichaGetVal("fichaIptvLista")||(fichaBaseRegla(plat)==="icomplay"?"ICOMPLAY":"—");
     const iptvhora=fichaGetVal("fichaIptvHora")||"";
     const iptvPant=fichaGetVal("fichaIptvPantallas")||"1";
     const iptvpantallas=iptvPant+" DISPOSITIVO"+(iptvPant==="1"?"":"S");
