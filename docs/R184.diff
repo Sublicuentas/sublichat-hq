@@ -1,0 +1,439 @@
+--- a/index.html
++++ b/index.html
+@@ -1,5 +1,5 @@
+ <!DOCTYPE html>
+-<html lang="es">
++<html lang="es" class="ui-v2">
+ <head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+@@ -1322,10 +1322,10 @@
+   #screen-tickets #tkAvisoDetalle{min-height:180px}
+ }
+ </style>
+-<!-- R162 · diseño nuevo (apagado por defecto: ?ui=v2) -->
+-<link rel="stylesheet" href="/ui-v2.css?v=20261105-r167">
+-<script src="/ui-v2.js?v=20261105-r167"></script>
+-<script src="/ui-v2-inicio.js?v=20261105-r167"></script>
++<!-- R184 · diseño único de Sublichat Web (todas las cuentas). Antes: apagado por defecto (?ui=v2). -->
++<link rel="stylesheet" href="/ui-v2.css?v=20261106-r184">
++<script src="/ui-v2.js?v=20261106-r184"></script>
++<script src="/ui-v2-inicio.js?v=20261106-r184"></script>
+ </head>
+ <body>
+ <!-- INTRO SUBLIROBOT -->
+@@ -1716,7 +1716,7 @@
+   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
+ </nav>
+ <div id="sidebarWrap" class="sidebar-wrap"></div>
+-<script type="module" src="./sublichat-app.js?v=20261106-r183"></script>
++<script type="module" src="./sublichat-app.js?v=20261106-r184"></script>
+ <!-- MODAL MENSAJE DE COBRO -->
+ <div id="cobroModal" class="cobro-overlay">
+   <div class="cobro-sheet">
+@@ -4928,7 +4928,6 @@
+   body.ready input,body.ready textarea,body.ready select,body.ready .search,body.ready .tk-input{background:var(--surface)!important;color:var(--txt)!important;border-color:var(--line)!important}
+   body.ready table,body.ready thead th,body.ready tbody td{color:var(--txt)!important;border-color:var(--line)!important}
+   body.ready thead th{background:var(--surface)!important;color:var(--txt2)!important}
+-  body.ready .theme-swatch{background:var(--surface)!important;color:var(--txt)!important}
+ 
+   #screen-inicio.active{display:block!important;padding:0!important;color:var(--txt)!important}
+   #screen-inicio .home-welcome{position:relative;isolation:isolate;overflow:hidden;min-height:176px;padding:34px 48px;border-radius:24px;background:linear-gradient(118deg,var(--accent2),var(--accent),color-mix(in srgb,var(--accent) 52%,#54dff0 48%));color:#fff;display:flex;align-items:flex-start;box-shadow:0 12px 28px color-mix(in srgb,var(--accent) 25%,transparent)}
+--- a/ui-v2.js
++++ b/ui-v2.js
+@@ -1,26 +1,19 @@
+ /* ui-v2.js · R164 — Diseño nuevo de Sublichat Web: NAVEGACIÓN SUPERIOR (sin menú lateral).
+    Guía "Sublichat Web · Rediseño integral" (05/11/2026): encabezado grafito con logo, buscador, avisos y perfil;
+    fila clara de categorías con el activo en rojo y grupos desplegables; área de trabajo a ancho fluido.
+-   Apagado por defecto. Se enciende con ?ui=v2 (queda guardado) o localStorage sublichat_ui_v2=1.
+-   Se apaga con ?ui=v1 o con "Diseño anterior" en el menú del perfil.
++   R184 · ÚNICO diseño de Sublichat Web para TODAS las cuentas (PDF "4 ajustes", 06/11/2026): ya no existe
++   "Diseño anterior", ?ui=v1 ni la preferencia guardada en el navegador. La interfaz vieja (menú lateral) queda
++   oculta por ui-v2.css; su HTML se conserva porque las pantallas funcionales viven dentro de él.
+    El menú sale de window.SublichatRBAC.pantallas(): respeta los módulos que Sublicuentas activa o desactiva.
+    Solo presentación: no toca datos, APIs, Firebase, APK ni bot. Las pantallas se abren con SublichatRBAC.ir(). */
+ (function () {
+   'use strict';
+-  var KEY = 'sublichat_ui_v2';
+-  function leer() { try { return localStorage.getItem(KEY) === '1'; } catch (_) { return false; } }
+-  function guardar(v) { try { v ? localStorage.setItem(KEY, '1') : localStorage.removeItem(KEY); } catch (_) {} }
+-  try {
+-    var q = new URLSearchParams(location.search).get('ui');
+-    if (q === 'v2') guardar(true); else if (q === 'v1') guardar(false);
+-  } catch (_) {}
+-  var activo = leer();
++  try { localStorage.removeItem('sublichat_ui_v2'); } catch (_) {} // preferencia vieja: ya no decide nada
+   window.SublichatUI = {
+-    version: activo ? 'v2' : 'v1',
+-    usarNuevo: function () { guardar(true); location.reload(); },
+-    usarAnterior: function () { guardar(false); var u = new URL(location.href); u.searchParams.delete('ui'); location.replace(u.toString()); }
++    version: 'v2',
++    usarNuevo: function () {}, // compatibilidad: el diseño nuevo es el único
++    usarAnterior: function () {}
+   };
+-  if (!activo) return;
+   document.documentElement.classList.add('ui-v2');
+ 
+   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
+@@ -114,7 +107,6 @@
+               '<button class="v2-user" id="v2User" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="v2PopUser"><img src="/assets/sublirobot-96.webp" alt=""><span class="v2-who"><b id="v2Nombre"></b><small id="v2Rol"></small></span>' + ico('flecha') + '</button>' +
+               '<div class="v2-pop v2-pop-user" id="v2PopUser" role="menu" hidden>' +
+                 '<button type="button" role="menuitem" data-v2a="perfil">' + ico('perfil') + 'Mi perfil</button>' +
+-                '<button type="button" role="menuitem" data-v2a="anterior">' + ico('atras') + 'Diseño anterior</button>' +
+                 '<hr><button type="button" role="menuitem" data-v2a="salir" class="v2-peligro">' + ico('salir') + 'Cerrar sesión</button>' +
+               '</div>' +
+             '</div>' +
+@@ -139,7 +131,6 @@
+       if (a) {
+         var acc = a.getAttribute('data-v2a'); cerrarTodo();
+         if (acc === 'perfil') ir('perfil');
+-        else if (acc === 'anterior') window.SublichatUI.usarAnterior();
+         else if (acc === 'salir') { var lo = document.getElementById('logoutBtn'); if (lo) lo.click(); }
+       }
+     });
+@@ -275,21 +266,12 @@
+     shell.querySelectorAll('.v2-cuenta').forEach(function (c) { c.textContent = n; c.hidden = !n; });
+   }
+ 
+-  // Perfil (guía p. 16): datos personales primero; la galería de temas sale de la vista principal y queda en
+-  // "Apariencia avanzada" (plegada). Solo se MUEVEN nodos: mismos IDs, mismos botones y el tema guardado no cambia.
++  // Perfil: datos personales primero. R184: ya no hay galería de temas (tema único de Sublicuentas).
+   function ordenarPerfil() {
+     var raiz = document.getElementById('rbac-perfil'); if (!raiz || raiz.dataset.v2Orden) return;
+-    var grid = document.getElementById('themeSwatchGrid'); if (!grid) return;
+-    var cardTema = grid.closest('.rbac-card'); var form = raiz.querySelector('.profile-form');
+-    var cardForm = form && form.closest('.rbac-card'); var resumen = raiz.querySelector('.profile-summary-grid');
+-    raiz.dataset.v2Orden = '1';
+-    if (cardForm && resumen) resumen.insertAdjacentElement('afterend', cardForm);
+-    if (cardTema) {
+-      var det = document.createElement('details'); det.className = 'rbac-card v2-apariencia';
+-      det.innerHTML = '<summary><b>Apariencia avanzada</b><small>Tema de color guardado en este navegador. El diseño nuevo usa la identidad Sublicuentas.</small></summary>';
+-      cardTema.parentNode.insertBefore(det, cardTema); det.appendChild(cardTema); cardTema.classList.add('v2-apariencia-in');
+-      raiz.appendChild(det);
+-    }
++    var form = raiz.querySelector('.profile-form'); var cardForm = form && form.closest('.rbac-card'); var resumen = raiz.querySelector('.profile-summary-grid');
++    if (!cardForm || !resumen) return;
++    raiz.dataset.v2Orden = '1'; resumen.insertAdjacentElement('afterend', cardForm);
+   }
+ 
+   window.addEventListener('sublichat:nav', function () { construir(); usuario(); });
+@@ -304,7 +286,7 @@
+     if (wrap) new MutationObserver(revisar).observe(wrap, { childList: true, attributes: true, attributeFilter: ['class'], subtree: true });
+     var nav = document.querySelector('.nav.focus-nav');
+     if (nav) new MutationObserver(revisar).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+-    var obsP = document.getElementById('screen-perfil'); if (obsP) new MutationObserver(function () { if (obsP.querySelector('#themeSwatchGrid')) ordenarPerfil(); }).observe(obsP, { childList: true, subtree: true });
++    var obsP = document.getElementById('screen-perfil'); if (obsP) new MutationObserver(function () { if (obsP.querySelector('#rbac-perfil .profile-form')) ordenarPerfil(); }).observe(obsP, { childList: true, subtree: true });
+     var tries = 0, iv = setInterval(function () { tries++; if (rbac()) { construir(); usuario(); } if (rbac() || tries > 60) clearInterval(iv); }, 250);
+   }
+   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+--- a/ui-v2.css
++++ b/ui-v2.css
+@@ -352,15 +352,6 @@
+ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .rbac-nav-arrow{display:none!important}
+ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-buscar input{background:transparent!important;border:0!important;box-shadow:none!important;color:#fff!important;padding:0!important;height:auto!important}
+ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .wrap{border-radius:0!important;border:0!important;box-shadow:none!important}
+-/* Perfil: Apariencia avanzada plegada al final */
+-html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil details.v2-apariencia{padding:0!important}
+-#rbac-perfil details.v2-apariencia>summary{list-style:none;cursor:pointer;padding:16px 20px;display:flex;flex-direction:column;gap:2px}
+-#rbac-perfil details.v2-apariencia>summary::-webkit-details-marker{display:none}
+-#rbac-perfil details.v2-apariencia>summary::after{content:"Mostrar";position:absolute;right:20px;top:18px;font-size:13px;font-weight:600;color:#B91C1C}
+-#rbac-perfil details.v2-apariencia[open]>summary::after{content:"Ocultar"}
+-#rbac-perfil details.v2-apariencia{position:relative}
+-#rbac-perfil details.v2-apariencia>summary small{font-size:12.5px;color:#58616D}
+-html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .v2-apariencia-in{border:0!important;box-shadow:none!important;margin:0!important;padding:0 20px 20px!important;background:transparent!important}
+ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{min-height:0!important;height:220px!important;box-shadow:none!important}
+ @media (max-width:767.98px){html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{height:170px!important}}
+ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;height:auto!important;outline:none!important}
+@@ -379,3 +370,45 @@
+ 
+ /* R167 · con "Sala de Juntas" son 10 botones: en 1280-1599px se compactan un poco para que quepan en una fila */
+ @media (min-width:1280px) and (max-width:1599.98px){#v2Shell .v2-nav .v2-tab{padding:0 11px;font-size:13px;gap:7px}#v2Shell .v2-nav-in{gap:6px!important;padding:0 18px}#v2Shell .v2-tab>svg{width:17px;height:17px}}
++
++/* ===== R184 · Botones superiores con más presencia (PDF "4 ajustes", p. 4) =====
++   Mismos botones, orden, grupos y permisos. Alto 46 px (zona táctil ≥ 44×44), padding 14 px, 8 px entre
++   categorías (juntas, sin space-between), Inter 13.5–14 px / 600, ícono con acento suave por familia,
++   activo en rojo Sublicuentas, hover 180 ms, foco de teclado visible. Lo que no cabe pasa a "Más secciones". */
++@media (min-width:768px){:root{--v2-nav:64px;--v2-head:136px}}
++#v2Shell .v2-nav-in{justify-content:flex-start!important;gap:8px!important;padding:0 20px!important}
++#v2Shell .v2-nav .v2-tab{height:46px;min-width:44px;padding:0 14px 0 8px;gap:9px;border-radius:12px;border:1px solid #E6E9EF;background:#FAFBFC;
++  font-family:var(--v2-font);font-size:14px;font-weight:600;color:#1B222C;box-shadow:0 1px 0 rgba(20,25,32,.04);
++  transition:background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
++#v2Shell .v2-nav .v2-tab::after{display:none}
++#v2Shell .v2-nav .v2-tab>svg:first-child{width:28px;height:28px;padding:5px;box-sizing:border-box;border-radius:9px;flex:none;
++  color:var(--acento,#58616D);background:var(--acento-suave,#EEF0F4);transition:background-color .18s ease,color .18s ease}
++#v2Shell .v2-nav .v2-tab>.v2-chev{width:16px;height:16px;padding:0;background:none;color:#707C8D}
++#v2Shell .v2-nav .v2-tab:hover{background:#fff;border-color:#D5DAE3;box-shadow:0 2px 8px rgba(20,25,32,.08);color:#141920}
++#v2Shell .v2-nav .v2-tab:focus-visible{outline:2px solid #E2231A!important;outline-offset:2px!important}
++#v2Shell .v2-nav .v2-tab.v2-hijo,#v2Shell .v2-nav .v2-tab[aria-expanded="true"]{background:#fff;border-color:#F3B9B5;color:#B91C1C}
++#v2Shell .v2-nav .v2-tab.on,#v2Shell .v2-nav .v2-tab.on:hover{background:#E2231A;border-color:#E2231A;color:#fff;box-shadow:0 2px 0 #A0150F,0 6px 16px rgba(226,35,26,.24)}
++#v2Shell .v2-nav .v2-tab.on>svg:first-child{color:#fff;background:rgba(255,255,255,.2)}
++#v2Shell .v2-nav .v2-tab.on>.v2-chev{color:#fff}
++/* acentos discretos por familia (el rojo queda solo para el activo) */
++#v2Shell .v2-nav [data-s="inicio"]{--acento:#B91C1C;--acento-suave:#FDECEB}
++#v2Shell .v2-nav [data-s="clientes"]{--acento:#1D5FD1;--acento-suave:#E8F0FD}
++#v2Shell .v2-nav [data-s="agenda"]{--acento:#B76E00;--acento-suave:#FFF3DC}
++#v2Shell .v2-nav [data-s="control-cuentas"]{--acento:#6D3FD8;--acento-suave:#F0EAFD}
++#v2Shell .v2-nav [data-s="portal-cliente"]{--acento:#0B8579;--acento-suave:#E3F6F3}
++#v2Shell .v2-nav [data-s="catalogo-relojes"]{--acento:#9A4F12;--acento-suave:#FBEFE4}
++#v2Shell .v2-nav [data-s="sala-juntas"]{--acento:#3B4CC0;--acento-suave:#EBEDFB}
++#v2Shell .v2-nav [data-grupo="Operación"]>.v2-tab{--acento:#15803D;--acento-suave:#E5F5EA}
++#v2Shell .v2-nav [data-grupo="Supervisión"]>.v2-tab{--acento:#334155;--acento-suave:#ECEFF3}
++#v2Shell .v2-nav [data-grupo="Más"]>.v2-tab,#v2Shell .v2-nav .v2-desborde>.v2-tab{--acento:#58616D;--acento-suave:#EEF0F4}
++@media (min-width:1280px) and (max-width:1599.98px){#v2Shell .v2-nav .v2-tab{padding:0 12px 0 7px;font-size:13.5px;gap:8px}#v2Shell .v2-nav-in{gap:8px!important;padding:0 16px!important}#v2Shell .v2-nav .v2-tab>svg:first-child{width:26px;height:26px;padding:5px}}
++@media (min-width:768px) and (max-width:1279.98px){#v2Shell .v2-nav .v2-tab{padding:0 12px 0 7px;font-size:13.5px}}
++@media (prefers-reduced-motion:reduce){#v2Shell .v2-nav .v2-tab{transition:none}}
++/* R184 · esqueleto de Inicio mientras llegan los datos (bloques lisos, sin degradados ni ceros) */
++#v2Inicio .v2-esq{pointer-events:none}
++#v2Inicio .v2k.v2-esq .v2k-ico,#v2Inicio .v2k.v2-esq small,#v2Inicio .v2k.v2-esq b,#v2Inicio .v2k.v2-esq em{display:block;background:#EEF0F4!important;border-radius:8px;color:transparent!important;animation:v2Pulso 1.2s ease-in-out infinite}
++#v2Inicio .v2k.v2-esq small{width:60%;height:12px}#v2Inicio .v2k.v2-esq b{width:45%;height:26px;margin:8px 0}#v2Inicio .v2k.v2-esq em{width:70%;height:11px}
++#v2Inicio .v2-esq-g{min-height:260px;background:#fff!important}#v2Inicio .v2-esq-g::before{content:"";display:block;margin:20px;height:220px;border-radius:12px;background:#F3F4F7;animation:v2Pulso 1.2s ease-in-out infinite}
++#v2Inicio .v2-carga-error{padding:20px;display:grid;gap:10px;justify-items:start;border-color:#F5C2BE!important}#v2Inicio .v2-carga-error p{margin:0;color:#58616D}
++@keyframes v2Pulso{0%,100%{opacity:1}50%{opacity:.55}}
++@media (prefers-reduced-motion:reduce){#v2Inicio .v2-esq *,#v2Inicio .v2-esq-g::before{animation:none}}
+--- a/ui-v2-inicio.js
++++ b/ui-v2-inicio.js
+@@ -120,18 +120,25 @@
+       }).join('') + '</div>';
+   }
+ 
+-  var host, limite = 8;
++  var host, limite = 8, errorCarga = '';
+   function pintar() {
+     var D = window.SublichatDatos; var sec = document.getElementById('screen-inicio');
+-    if (!D || !sec) return;
++    if (!sec) return;
+     if (!host) {
+       host = document.createElement('div'); host.id = 'v2Inicio';
+       sec.insertBefore(host, sec.firstChild);
+       host.addEventListener('click', function (e) {
+         var b = e.target.closest('[data-v2cli]'); if (b) return abrirCliente(b.getAttribute('data-v2cli'));
+-        var g = e.target.closest('[data-v2go]'); if (g) { var dest = g.getAttribute('data-v2go'); if (dest === '__todos') { limite = limite === 8 ? 50 : 8; pintar(); } else ir(dest); }
++        var g = e.target.closest('[data-v2go]'); if (g) { var dest = g.getAttribute('data-v2go'); if (dest === '__recargar') { location.reload(); return; } if (dest === '__todos') { limite = limite === 8 ? 50 : 8; pintar(); } else ir(dest); }
+       });
+     }
++    // R184 · mientras llegan los datos: esqueleto (nunca ceros provisionales); si falla: error claro con reintento
++    if (!D) {
++      host.innerHTML = errorCarga ? '<div class="v2-card v2-carga-error" role="alert"><b>No se pudieron cargar los datos de Inicio.</b><p>' + esc(errorCarga) + '</p><button type="button" class="v2-btn" data-v2go="__recargar">Reintentar</button></div>'
++        : '<div class="v2-cab"><div><h2>Panel general</h2><p>Cargando cartera vigente…</p></div></div><div class="v2-kpis" aria-busy="true" aria-label="Cargando indicadores">' + [0, 1, 2, 3].map(function () { return '<div class="v2k v2-esq"><span class="v2k-ico"></span><div><small></small><b></b><em></em></div></div>'; }).join('') + '</div>' +
++          '<div class="v2-graficas"><section class="v2-card v2-esq v2-esq-g"></section><section class="v2-card v2-esq v2-esq-g"></section></div>';
++      return;
++    }
+     var c = calcular(D);
+     var delta = c.anterior > 0 ? Math.round((c.esperado - c.anterior) / c.anterior * 100) : null;
+     var nombre = (window.SublichatRBAC && window.SublichatRBAC.esSupervisor && window.SublichatRBAC.esSupervisor()) ? 'Sublicuentas' : ((window.SublichatRBAC && window.SublichatRBAC.usuario()) || '');
+@@ -154,7 +161,8 @@
+   }
+   var t;
+   window.addEventListener('sublichat:datos', function () { clearTimeout(t); t = setTimeout(pintar, 60); });
+-  function arrancar() { if (window.SublichatDatos) pintar(); }
++  window.addEventListener('sublichat:datos-error', function (e) { if (!window.SublichatDatos) { errorCarga = (e.detail && e.detail.error) || 'Error de conexión.'; pintar(); } });
++  function arrancar() { pintar(); } // R184: pinta el esqueleto de inmediato
+   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+   setInterval(function () { if (host && document.getElementById('screen-inicio').classList.contains('active')) pintar(); }, 60000); // cambio de día
+ })();
+--- a/sublichat-app.js
++++ b/sublichat-app.js
+@@ -357,6 +357,7 @@
+   {nombrePerfil:"Geisell Valle", servicios:[{plataforma:"netflix", precio:150, fechaRenovacion:offset(-2)}]}
+ ];
+ 
++let FINANZAS_LISTAS=false; // R184 · Finanzas llega después del primer pintado
+ let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
+ // Oct-2026 · sublichat-app.js es módulo: DATA no es global. Lectura para Atrapa tu Premio (buscar cliente al dar fichas).
+ Object.defineProperty(window,"__sublichatClientes",{configurable:true,get:()=>DATA});
+@@ -536,7 +537,7 @@
+     const docs=[],seen=new Set();let cursor='';
+     do{
+       if(session!==CONTROL_SESSION_VERSION)throw new Error('La sesión cambió.');
+-      const response=await fetch('/api/importar',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'control_datos',coleccion,cursor})});
++      const response=await fetch('/api/importar',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'control_datos',coleccion,cursor,pageSize:500})}); // R184: menos viajes (servidor acepta hasta 500, sigue cortando a 2 MB)
+       const result=await response.json().catch(()=>({}));
+       if(!response.ok||!result.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos de Control Maestro.');
+       if(result.coleccion!==coleccion||!Array.isArray(result.documentos))throw new Error('Respuesta incompleta de Control Maestro.');
+@@ -645,6 +646,7 @@
+   const forceServer=options===true || !!(options&&options.forceServer);
+   const requireServer=!!(options&&options.requireServer);
+   const controlOnly=!!(options&&options.controlOnly);
++  let pintadoTemprano=false; // R184
+   const session=CONTROL_SESSION_VERSION;
+   const sharedControl=controlUsesSharedData();
+   const cfg=CONFIG.firebase;
+@@ -684,12 +686,14 @@
+ 
+       // Clientes y Bodega se leen antes de sustituir la copia visible. Así una
+       // falla de red no deja Control Maestro con una mitad nueva y otra antigua.
++      // R184 · Clientes y Bodega se piden A LA VEZ (antes: uno detrás del otro). Se siguen aplicando juntos (atómico).
++      const pClientes=(async()=>{let x=null;if(!sharedControl&&!clientesLiveStarted&&!requireServer)x=await primeraFotoClientes(db,collection,onSnapshot);if(!x)x=await readCollection(CONFIG.collection);return x;})();
++      const pInventario=readCollection("inventario").then(ok=>({ok}),err=>({err}));
+       let snap=null;
+-      if(!sharedControl&&!clientesLiveStarted&&!requireServer)snap=await primeraFotoClientes(db,collection,onSnapshot);
+-      if(!snap)snap=await readCollection(CONFIG.collection);
++      try{snap=await pClientes;}catch(e){await pInventario;throw e;}
+       let invSnap=null,invError=null;
+-      try{invSnap=await readCollection("inventario");}
+-      catch(e){if(requireServer||sharedControl)throw e;invError=e;}
++      const invRes=await pInventario;
++      if(invRes.err){if(requireServer||sharedControl)throw invRes.err;invError=invRes.err;}else invSnap=invRes.ok;
+       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
+       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
+       if(session!==CONTROL_SESSION_VERSION)return;
+@@ -708,6 +712,9 @@
+       window._invError=invError?((invError&&invError.code)||(invError&&invError.message)||"error"):"";
+       if(invError)console.error("inv",invError);
+ 
++      // R184 · Inicio y Clientes se pintan YA con Clientes + Bodega; Finanzas llega después (no lo usan).
++      // Las pantallas que sí usan Finanzas (Egresos, Cierre, Objetivos, Finanzas) muestran "cargando" hasta que llegue.
++      if(!controlOnly){ FINANZAS_LISTAS=false; pintadoTemprano=true; try{render();renderInventario();}catch(e){console.error(e);} }
+       // Control Maestro no necesita volver a descargar Finanzas para reflejar
+       // cambios del bot; se omite en su actualización rápida.
+       if(!controlOnly){
+@@ -716,8 +723,11 @@
+           // tener históricos en finanzas. Leemos ambas fuentes y unificamos por
+           // ID, igual que el reporte de Telegram, para no omitir ni duplicar filas.
+           let finActual=null,finHistorico=null,finActualError=null,finHistoricoError=null;
+-          try{finActual=await readCollection("finanzas_movimientos");}catch(e){finActualError=e;}
+-          try{finHistorico=await readCollection("finanzas");}catch(e){finHistoricoError=e;}
++          // R184 · las dos fuentes de Finanzas en paralelo (antes en serie)
++          await Promise.all([
++            readCollection("finanzas_movimientos").then(x=>{finActual=x;},e=>{finActualError=e;}),
++            readCollection("finanzas").then(x=>{finHistorico=x;},e=>{finHistoricoError=e;})
++          ]);
+           if(!finActual&&!finHistorico)throw(finActualError||finHistoricoError||new Error("No se pudo leer finanzas"));
+           const finPorId=new Map();
+           if(finHistorico)finHistorico.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas",...d.data()}));
+@@ -731,6 +741,7 @@
+       if(session!==CONTROL_SESSION_VERSION)return;
+       console.error(e);
+       CONTROL_DATA_ERROR=e.message||'No se pudieron cargar los datos de Firebase. Presione Actualizar datos para reintentar.';
++      try{window.dispatchEvent(new CustomEvent('sublichat:datos-error',{detail:{error:CONTROL_DATA_ERROR}}));}catch(_){}
+       activarControlFallback();
+       document.getElementById("srcLabel").textContent=DATA.length?'Error de conexión · última copia visible':'No se pudieron cargar los datos';
+       try{window.sublichatControlSyncLoadedData?.();}catch(_){}
+@@ -745,9 +756,10 @@
+   // Finanzas detrás de la pantalla completa: ese trabajo duplicado era la
+   // pausa que se sentía como un congelamiento.
+   if(!controlOnly){
+-    render();
+-    renderInventario();
++    FINANZAS_LISTAS=true;
++    if(!pintadoTemprano){render();renderInventario();} // error o modo demo: no pasó por el pintado temprano
+     renderFinanzas();
++    try{window.dispatchEvent(new CustomEvent('sublichat:finanzas'));}catch(_){}
+   }
+   return {servicios:DATA.length,cuentas:INVENTARIO.length,forceServer};
+ }
+@@ -1603,6 +1615,7 @@
+   };
+ }
+ function renderFinanzas(){
++  if(!FINANZAS_LISTAS&&!window._finError){const st=document.getElementById("finStats");if(st)st.innerHTML='<div style="color:var(--muted);font-size:12.5px">Cargando movimientos de Finanzas…</div>';return;} // R184
+   if(window._finError){ const st=document.getElementById("finStats"); if(st)st.innerHTML=`<div style="color:var(--muted);font-size:12.5px">⚠️ No pude leer finanzas (${window._finError}). Revisá las reglas de Firestore.</div>`; return; }
+   const movs=FINANZAS.filter(m=>finKey(m?.tipo||m?.type||m?.movimiento||"")!=="venta").map(finParse).filter(m=>m.fecha);
+   const ing=movs.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
+@@ -2896,10 +2909,9 @@
+ })();
+ 
+ const themeBtn=document.getElementById("themeBtn");
+-function applyTheme(light){document.body.classList.toggle("light",light);themeBtn.textContent=light?"☀️":"🌙";try{localStorage.setItem("subli_theme",light?"light":"dark")}catch(e){}}
+-let savedLight=false;try{savedLight=localStorage.getItem("subli_theme")==="light"}catch(e){}
+-applyTheme(savedLight);
+-themeBtn.addEventListener("click",()=>{applyTheme(!document.body.classList.contains("light"));});
++// R184 · sin cambio claro/oscuro por usuario: la apariencia es única (clara, identidad Sublicuentas).
++function applyTheme(){document.body.classList.add("light");if(themeBtn){themeBtn.textContent="☀️";themeBtn.hidden=true;}}
++applyTheme();
+ 
+ /* ===== PELIS / SERIES ===== */
+ const mq=document.getElementById("mq"), movieResults=document.getElementById("movieResults");
+@@ -7484,7 +7496,7 @@
+         }
+         saveProfileLocal(merged);
+         _profileServerSynced=true;
+-        if(merged.tema)applyTheme(merged.tema,false);
++        /* R184: merged.tema ya no cambia la apariencia (tema único) */
+         updateTopAdvisor(); if(typeof renderPerfil==='function')renderPerfil();
+       }
+     }catch(e){}
+@@ -7511,9 +7523,13 @@
+   };
+   const THEME_VAR_MAP={bg:'--bg',surface:'--surface',surface2:'--surface2',card:'--card',line:'--line',line2:'--line2',txt:'--txt',txt2:'--txt2',muted:'--muted',accent:'--accent',accent2:'--accent2',accentSoft:'--accentSoft',good:'--good',goodSoft:'--goodSoft',warn:'--warn',warnSoft:'--warnSoft',info:'--info'};
+   function themeKey(){return 'sublichat_theme_'+norm(currentUser()||currentRole()||'usuario');}
+-  function currentThemeId(){try{return localStorage.getItem(themeKey())||'ejecutivo';}catch(e){return 'ejecutivo';}}
++  // R184 · tema ÚNICO de Sublicuentas. Las preferencias viejas (localStorage / perfil.tema) se IGNORAN al pintar;
++  // no se borran ni se migran (quedan como respaldo).
++  const TEMA_CORPORATIVO='ejecutivo';
++  function currentThemeId(){return TEMA_CORPORATIVO;}
+   // Aplica un tema cambiando solo variables CSS de color — nunca toca iconos, tipografía ni layout.
+   function applyTheme(id,persist){
++    id=TEMA_CORPORATIVO; persist=false; // R184 · nadie cambia los colores globales
+     const preset=THEME_PRESETS[id]; if(!preset)return;
+     const root=document.documentElement;
+     document.body.dataset.theme=id;
+@@ -7612,14 +7628,6 @@
+       .profile-avatar{width:96px;height:96px;border-radius:30px;object-fit:cover;box-shadow:0 10px 0 var(--accentSoft),0 18px 28px rgba(0,0,0,.16);background:var(--surface)}
+       .profile-name{font-family:var(--ff);font-size:28px;font-weight:900;letter-spacing:-.5px;color:var(--txt);margin:0 0 4px}.profile-cargo{font-size:14px;font-weight:900;color:var(--txt2);line-height:1.35}.profile-role{display:inline-flex;margin-top:10px;border-radius:999px;padding:7px 10px;background:var(--accentSoft);color:var(--accent);font-size:11px;font-weight:900;border:1px solid var(--accentSoft)}
+       .profile-funciones{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px}.profile-funcion{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:10px;font-size:12.5px;font-weight:800;color:var(--txt2);line-height:1.25}.profile-funcion:before{content:'✓ ';color:var(--good);font-weight:900}
+-      .theme-sub{font-size:12px;color:var(--txt2);margin-top:4px;margin-bottom:12px}
+-      .theme-swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+-      .theme-swatch{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px;border-radius:14px;border:2px solid var(--line);background:var(--surface);cursor:pointer;transition:.15s;text-align:left}
+-      .theme-swatch:active{transform:translateY(1px)}
+-      .theme-swatch.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+-      .tsw-preview{width:100%;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid rgba(0,0,0,.08)}
+-      .tsw-dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.15)}
+-      .tsw-name{font-size:10.5px;font-weight:700;color:var(--txt);line-height:1.25}
+       .profile-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.profile-form .rbac-field.wide{grid-column:1/-1}.profile-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.profile-actions .rbac-btn{flex:1;min-width:160px}.profile-file{font-size:12px;color:var(--txt2);font-weight:800}
+ 
+       .import-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.import-tab{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:12px;font-weight:900;color:var(--txt2);cursor:pointer}.import-tab.on{background:var(--accentSoft);color:var(--accent);border-color:var(--accentSoft);box-shadow:var(--sh)}
+@@ -7772,9 +7780,8 @@
+       <div class="profile-summary-grid"><div><b>${propios.length}</b><span>Servicios asignados</span></div><div><b>${fmt(totalPropios)}</b><span>Cartera asignada</span></div><div><b>${stats.games}</b><span>Juegos practicados</span></div><div><b>${stats.aula}%</b><span>Avance en aula</span></div><div><b>${stats.sent}</b><span>Tickets enviados</span></div><div><b>${stats.resolved}</b><span>Tickets resueltos</span></div></div>
+       <div class="profile-dashboard"><div class="profile-main-column"><div class="rbac-card profile-activity"><b>Actividad del perfil</b>${activity.map(a=>`<div class="profile-activity-row"><span>${a.ico}</span><div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div></div>`).join('')}</div><div class="rbac-card"><b>Funciones dentro de la empresa</b><div class="profile-funciones">${todas.map(f=>`<div class="profile-funcion">${esc(f)}</div>`).join('')}</div></div></div>
+       <div class="profile-side-column"><div class="rbac-card profile-progress"><b>Resumen de avance</b><div class="profile-progress-row"><span>Aula de clases</span><em>${stats.aula}%</em></div><i><u style="width:${stats.aula}%"></u></i><div class="profile-progress-row"><span>Tickets resueltos</span><em>${stats.resolved}/${Math.max(stats.sent,stats.resolved)}</em></div><i><u style="width:${Math.max(stats.sent,stats.resolved)?Math.round(stats.resolved/Math.max(stats.sent,stats.resolved)*100):0}%"></u></i><div class="profile-progress-row"><span>Materia cerebral</span><em>${stats.games} juegos</em></div></div></div></div>
+-      <div class="rbac-card"><b>Tema de color</b><div class="theme-sub">El tema cambia fondos, tarjetas, botones, textos y estados en toda la interfaz.</div><div class="theme-swatch-grid" id="themeSwatchGrid">${Object.keys(THEME_PRESETS).map(id=>{const t=THEME_PRESETS[id],on=id===currentThemeId();return `<button type="button" class="theme-swatch${on?' on':''}" data-theme="${id}" title="${esc(t.nombre)}"><span class="tsw-preview" style="background:${t.vars.bg}"><span class="tsw-dot" style="background:${t.vars.accent}"></span><span class="tsw-dot" style="background:${t.vars.accent2}"></span></span><span class="tsw-name">${esc(t.nombre)}</span></button>`;}).join('')}</div></div>
++      <!-- R184 · sin selector de tema: un solo tema Sublicuentas gestionado centralmente -->
+       <div class="rbac-card"><b>Editar perfil visible</b><div class="profile-form"><label class="rbac-field"><span>Nombre mostrado</span><input class="rbac-input" id="profNombre" value="${esc(p.nombre||'')}"></label><label class="rbac-field"><span>Cargo</span><input class="rbac-input" id="profCargo" value="${esc(p.cargo||'')}"></label><label class="rbac-field"><span>Teléfono interno</span><input class="rbac-input" id="profTelefono" value="${esc(p.telefono||'')}" placeholder="Opcional"></label><label class="rbac-field"><span>Área</span><input class="rbac-input" id="profArea" value="${esc(p.area||'')}" placeholder="Ventas, Finanzas, Auditoría…"></label><label class="rbac-field wide"><span>Foto / avatar</span><input class="profile-file" id="profFoto" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Banner de portada y mensaje diario</span><input class="profile-file" id="profBanner" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Funciones extra, una por línea</span><textarea class="rbac-input" id="profFunciones" rows="3">${esc(p.funcionesExtra||'')}</textarea></label></div><div class="profile-actions"><button class="rbac-btn good" id="profGuardar">💾 Guardar perfil</button><button class="rbac-btn" id="profReset">↩️ Restaurar perfil base</button><button class="rbac-btn red" id="profSalir">🚪 Cerrar sesión</button></div></div>`;
+-    document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.theme;applyTheme(id,true);document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(b=>b.classList.toggle('on',b===btn));mostrarToast('🎨 Tema aplicado: '+(THEME_PRESETS[id]?.nombre||id));});
+     const saveImage=async(input,key,max,quality,msg)=>{const file=input?.files?.[0];if(!file)return;try{const dataUrl=await resizeProfilePhoto(file,max,quality),cur=readProfile();cur[key]=dataUrl;saveProfile(cur);renderPerfil();updateTopAdvisor();mostrarToast(msg);}catch(e){mostrarToast('⚠️ No se pudo procesar la imagen. Use JPG o PNG más liviano.');}};
+     const foto=document.getElementById('profFoto'),banner=document.getElementById('profBanner');if(foto)foto.onchange=()=>saveImage(foto,'avatar',520,.82,'✅ Foto actualizada.');if(banner)banner.onchange=()=>saveImage(banner,'banner',1400,.72,'✅ Banner actualizado en Perfil e Inicio. Ahora puede ajustar el encuadre.');
+     const bannerBtn=document.getElementById('profBannerBtn');if(bannerBtn)bannerBtn.onclick=()=>document.getElementById('profBanner')?.click();
+@@ -7832,6 +7839,7 @@
+ 
+   function renderEgresos(){
+     const el=document.getElementById('rbac-egresos'); if(!el)return;
++    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
+     const eg=FINANZAS.filter(m=>norm(m.tipo||m.movimiento||'').includes('egreso')).slice().sort((a,b)=>{const va=parseDate(a.fecha||a.fechaPago||a.createdAt||a.created_at||a.timestamp);const vb=parseDate(b.fecha||b.fechaPago||b.createdAt||b.created_at||b.timestamp);return ((vb&&!isNaN(vb))?vb.getTime():0)-((va&&!isNaN(va))?va.getTime():0);}).slice(0,20);
+     el.innerHTML=`<div class="rbac-form"><label class="rbac-field"><span>Motivo</span><input class="rbac-input" id="egMotivo" placeholder="Compra, banco, soporte…"></label><label class="rbac-field"><span>Monto (L)</span><input class="rbac-input" id="egMonto" type="number" inputmode="numeric" placeholder="0"></label><label class="rbac-field"><span>Banco / billetera</span><input class="rbac-input" id="egBanco" placeholder="BAC, Ficohsa, efectivo…"></label><label class="rbac-field"><span>Fecha</span><input class="rbac-input" id="egFecha" type="date" value="${dateISO(new Date())}"></label><div class="rbac-wide"><button class="rbac-btn red" id="egGuardar" style="width:100%">💾 Guardar egreso</button></div></div><div class="count" style="margin-top:14px">Últimos egresos</div><div class="rbac-list">${eg.length?eg.map(m=>`<div class="rbac-row"><div><h3>${esc(m.motivo||m.descripcion||'Egreso')}</h3><p>${fmt(m.monto)} · ${esc(m.banco||'—')}</p><small>${esc(m.fecha||m.createdAt||'')}</small></div><span class="rbac-badge">${esc(m.registradoPor||'')}</span></div>`).join(''):'<div class="empty">Aún no hay egresos cargados.</div>'}</div>`;
+     const btn=document.getElementById('egGuardar'); if(btn)btn.onclick=async()=>{
+@@ -7848,6 +7856,7 @@
+   function movDate(m){ return parseDate(m.fechaPago||m.fecha||m.createdAt||m.updatedAt); }
+   function renderCierre(){
+     const el=document.getElementById('rbac-cierre'); if(!el)return;
++    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
+     const {start,end}=currentWeekRange();
+     const movs=FINANZAS.filter(m=>{const d=movDate(m);return d&&d>=start&&d<=end;});
+     const ingresos=movs.filter(m=>norm(m.tipo||'').includes('ingreso')||norm(m.tipo||'').includes('cobro')).reduce((s,m)=>s+Number(m.monto||0),0);
+@@ -7918,6 +7927,7 @@
+   }
+   function renderObjetivos(){
+     const el=document.getElementById('rbac-objetivos'); if(!el)return;
++    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
+     const metas=objReadMetas();
+     const ayer=new Date(today); ayer.setDate(today.getDate()-1);
+     const {start,end}=currentWeekRange();
+@@ -8509,6 +8519,7 @@
+   }
+   function renderTickets(force){const host=document.getElementById('rbac-tickets');if(!host)return;const active=!!document.getElementById('screen-tickets')?.classList.contains('active');if(!active&&!force)return;const ae=document.activeElement;if(!force&&ae&&host.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;ensureTkCss();host.innerHTML=tkHtml();tkBind(host);tkUpdateNavBadge();}
+ 
++  window.addEventListener('sublichat:finanzas',()=>{try{renderEgresos();renderCierre();renderObjetivos();}catch(e){console.error(e);}}); // R184
+   function renderRBACAll(){
+     updateTopAdvisor(); renderPerfil();
+     renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderActividad(); renderSoporteConfig(); renderTickets(); renderObjetivos();
+--- a/api/importar.js
++++ b/api/importar.js
+@@ -639,7 +639,7 @@
+   // Ambos administradores consultan las mismas colecciones completas. La
+   // autorización viene del token verificado, nunca del vendedor enviado.
+   // R184 · el navegador puede pedir páginas de hasta 500 (menos viajes); el corte de 2 MB de abajo sigue igual.
+-  const pageSize = 200;
++  const pageSize = Math.max(50, Math.min(500, Number(body.pageSize) || 200));
+   let query = db.collection(coleccion).orderBy(admin.firestore.FieldPath.documentId());
+   if (cursor) query = query.startAfter(cursor);
+   const snap = await query.limit(pageSize).get();
