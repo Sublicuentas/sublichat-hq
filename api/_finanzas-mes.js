@@ -40,6 +40,13 @@ export function resumenMes(movimientos = [], { desde, hasta }) {
     if (asig) { renovados += asig.length; for (const a of asig) porPlataforma.set(a.plataforma || "Sin plataforma", (porPlataforma.get(a.plataforma || "Sin plataforma") || 0) + Math.round(Number(a.montoCentavos) || 0)); }
     else { renovados += Array.isArray(v.servicios) && v.servicios.length ? v.servicios.length : 1; porPlataforma.set(v.plataforma || "Sin plataforma", (porPlataforma.get(v.plataforma || "Sin plataforma") || 0) + cents(v.monto)); }
   }
+  // R192 · Ingresos COBRADOS por plataforma: cada pago único se cuenta UNA vez, en la plataforma de su renglón de cobro
+  // (un pago de varios servicios queda como «Pago combinado»). La suma es exactamente «Ingresos cobrados».
+  const cobrosPlat = new Map();
+  for (const p of pagos.values()) {
+    const pl = String(p.plataforma || "").trim(), k = !pl ? "Sin plataforma" : /\s\+\s/.test(pl) ? "Pago combinado (varios servicios)" : pl;
+    cobrosPlat.set(k, (cobrosPlat.get(k) || 0) + p.centavos);
+  }
   const sum = (arr) => arr.reduce((a, m) => a + cents(m.monto), 0);
   const ingresosC = sum(ingresos), pagosC = [...pagos.values()].reduce((a, p) => a + p.centavos, 0);
   return {
@@ -47,6 +54,7 @@ export function resumenMes(movimientos = [], { desde, hasta }) {
     ingresos: L(ingresosC), ingresosCentavos: ingresosC, pagosUnicos: pagos.size, renglonesBanco: ingresos.length,
     egresos: L(sum(egresos)), planilla: L(sum(planilla)), resultado: L(ingresosC - sum(egresos) - sum(planilla)),
     ventasGeneradas: L(sum(ventas)), serviciosRenovadosOVendidos: renovados,
+    cobrosPorPlataforma: [...cobrosPlat.entries()].map(([plataforma, c]) => ({ plataforma, monto: L(c), centavos: c })).sort((a, b) => b.centavos - a.centavos),
     porPlataforma: [...porPlataforma.entries()].map(([plataforma, c]) => ({ plataforma, monto: L(c), centavos: c })).sort((a, b) => b.centavos - a.centavos),
     anulados: delMes.filter((m) => anuladoOReversa(m)).length,
     conciliacion: { ingresosVsPagos: ingresosC === pagosC, diferenciaCentavos: ingresosC - pagosC },
