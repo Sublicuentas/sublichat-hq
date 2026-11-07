@@ -1,0 +1,258 @@
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/app/sala-juntas.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/sala-juntas.js
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/app/sala-juntas.js	1969-12-31 18:00:00.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/sala-juntas.js	2026-11-07 14:43:24.038733995 -0600
+@@ -0,0 +1,84 @@
++// R189 · Más › Sala de Juntas en la APK (PDF «Sublichat 5 puntos», bloque 05). NO es otra sala ni otra base de datos:
++// lee y responde con /api/sala-juntas (el mismo servidor de SubliStudio 3D en Sublichat Web, que repite TODA la autorización)
++// y para entrar a la sala 3D abre la MISMA sala web (/?sala=<id>) en el navegador del teléfono (Chrome), que sí trae
++// WebGL + audio WebRTC + permisos de micrófono. La APK no guarda tokens de LiveKit ni manda tokens en la URL: en el
++// navegador se entra con el login normal de Sublichat y el servidor entrega el token temporal de audio (token_tiempo_real).
++// La APK no pide micrófono ni cámara; los pide la sala, y solo cuando la persona los activa.
++import { authPost, API_BASE } from '../api.js';
++import { state, esc, ui, showToast } from './core.js';
++import { operatorIdentity } from '../data.js';
++
++export const ESTADOS = Object.freeze({ borrador: 'Borrador', programada: 'Programada', en_curso: 'En curso', finalizada: 'Concluida', cancelada: 'Cancelada' });
++export function canSala() { return ['sublicuentas', 'relojes', 'geisell'].includes(operatorIdentity(state.session?.role || '', state.session?.usuario || '')); }
++export function sjState() { if (!state.sj) state.sj = { data: null, actas: null, abierta: '', confirmarEntrada: '', cargando: false, error: '', guardando: '' }; return state.sj; }
++export function urlSala(id) { return /^[A-Za-z0-9_-]{6,60}$/.test(String(id || '')) ? `${API_BASE}/?sala=${encodeURIComponent(id)}` : ''; }
++
++async function sala(accion, extra = {}) {
++  let r;
++  try { r = await authPost('/api/sala-juntas', { accion, origen: 'android', ...extra }); }
++  catch (e) { throw new Error(e?.data?.error || (Number(e?.status) === 403 ? 'Su usuario no tiene la Sala de Juntas. Sublicuentas lo activa en Permisos.' : e?.message || 'Sin conexión')); }
++  if (!r || r.ok === false) throw new Error(r?.error || 'No se pudo completar.');
++  return r;
++}
++export async function sjCargar() {
++  const s = sjState(); s.cargando = true; s.error = ''; ui.render();
++  try { const [p, a] = await Promise.all([sala('panel'), sala('actas').catch(() => ({ actas: [] }))]); s.data = p; s.actas = a.actas || []; }
++  catch (e) { s.error = e.message; }
++  s.cargando = false; if (state.subview === 'sala-juntas') ui.render();
++}
++
++const fechaTxt = (r) => r.fecha ? `${r.fecha} · ${r.hora}` : 'Sin fecha';
++const INV = { aceptada: 'Confirmó', rechazada: 'No asistirá', pendiente: 'Pendiente' };
++function reunionHtml(r, d, s) {
++  const yo = d.yo?.id, abierta = s.abierta === r.id, miInv = r.invitaciones?.[yo]?.estado || 'pendiente';
++  const nombres = Object.fromEntries((d.fundadoras || []).map((f) => [f.id, f.nombre]));
++  const acta = (s.actas || []).find((a) => a.reunionId === r.id);
++  const puedeEntrar = ['programada', 'en_curso'].includes(r.estado);
++  const detalle = abierta ? `
++    <div class="sj-m-det">
++      ${(r.agenda || []).length ? `<small><b>Agenda:</b> ${r.agenda.map((x) => esc(typeof x === 'string' ? x : x?.titulo || '')).join(' · ')}</small>` : ''}
++      <b>Participantes e invitaciones</b>
++      ${(r.participantes || []).map((u) => `<small>${esc(nombres[u] || u)} · ${esc(INV[r.invitaciones?.[u]?.estado] || 'Pendiente')}</small>`).join('')}
++      ${acta ? `<small><b>Acuerdos:</b> ${acta.acuerdos} · pendientes ${acta.pendientes}</small>` : ''}
++      ${r.avisos ? `<small><b>Avisos de Telegram:</b> enviados ${r.avisos.enviado} · pendientes ${r.avisos.pendiente} · fallidos ${r.avisos.fallido}${(r.avisos.fallas || []).length ? ` (${r.avisos.fallas.map((f) => esc(`${nombres[f.usuario] || f.usuario}: ${f.error || f.motivo || 'error'}`)).join(' · ')})` : ''}</small>` : ''}
++      ${puedeEntrar && r.estado === 'programada' ? `<div class="baul-acc"><button type="button" class="se-btn ${miInv === 'aceptada' ? '' : 'ghost'}" data-sj-rsvp="aceptada" data-id="${esc(r.id)}">Asistiré</button><button type="button" class="se-btn ${miInv === 'rechazada' ? '' : 'ghost'}" data-sj-rsvp="rechazada" data-id="${esc(r.id)}">No asistiré</button></div>` : ''}
++      ${puedeEntrar ? (s.confirmarEntrada === r.id
++        ? `<div class="sj-m-aviso"><b>Antes de entrar</b><small>La sala 3D se abre en Chrome, con su sesión normal de Sublichat. El micrófono y la cámara solo se encienden cuando usted lo permite en la sala; la grabación siempre pide confirmación.</small><div class="baul-acc"><button type="button" class="se-btn" data-sj-abrir="${esc(r.id)}">Entrar a la sala 3D</button><button type="button" class="se-btn ghost" data-sj-cancelar>Cancelar</button></div></div>`
++        : `<button type="button" class="se-btn" data-sj-entrar="${esc(r.id)}">🎙️ Entrar a la sala</button>`) : ''}
++    </div>` : '';
++  return `<article class="se-card sj-m-reu"><button type="button" class="sj-m-cab" data-sj-ver="${esc(r.id)}"><b>${esc(r.titulo || 'Reunión')}</b><small>${esc(fechaTxt(r))} · ${r.duracionMin || 60} min</small><span class="sj-m-est e-${esc(r.estado)}">${esc(ESTADOS[r.estado] || r.estado)}</span></button>${detalle}</article>`;
++}
++
++export function salaView() {
++  const s = sjState();
++  if (!canSala()) return ui.subPage('Sala de Juntas', 'No disponible', '<div class="empty-state"><strong>Su usuario no tiene la Sala de Juntas</strong></div>');
++  if (s.data === null && !s.cargando && !s.error) setTimeout(sjCargar, 0);
++  const d = s.data;
++  let cuerpo = '';
++  if (s.cargando && !d) cuerpo = '<div class="loading-card"><span class="spinner"></span><strong>Cargando reuniones…</strong></div>';
++  else if (s.error && !d) cuerpo = `<div class="error-box"><span>${esc(s.error)}</span></div>`;
++  else if (d) {
++    const lista = (d.reuniones || []).filter((r) => r.estado !== 'borrador' || d.permisos?.crear);
++    const proximas = lista.filter((r) => ['programada', 'en_curso'].includes(r.estado)).sort((a, b) => a.inicioMs - b.inicioMs);
++    const pasadas = lista.filter((r) => !['programada', 'en_curso'].includes(r.estado)).slice(0, 15);
++    cuerpo = `${s.error ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}
++      <p class="baul-aviso">${esc(d.yo?.nombre || '')}${d.permisos?.crear ? ' · Anfitriona: convoca, edita y aprueba ingresos desde la sala web.' : ''}${d.tiempoReal ? '' : ' · El audio en tiempo real todavía no está configurado.'}</p>
++      <b class="sj-m-tit">Próximas</b>${proximas.length ? proximas.map((r) => reunionHtml(r, d, s)).join('') : '<div class="empty-state"><strong>Sin reuniones próximas</strong></div>'}
++      ${pasadas.length ? `<b class="sj-m-tit">Concluidas y canceladas</b>${pasadas.map((r) => reunionHtml(r, d, s)).join('')}` : ''}`;
++  }
++  return ui.subPage('Sala de Juntas', 'SubliStudio 3D · la misma sala de Sublichat Web', `<section class="se-wrap">${cuerpo}<button type="button" class="se-btn ghost" data-sj-recargar>Actualizar</button></section>`);
++}
++
++export function bindSala() {
++  if (state.subview !== 'sala-juntas') return;
++  const s = sjState(), qa = (x) => document.querySelectorAll(x);
++  qa('[data-sj-ver]').forEach((b) => b.addEventListener('click', () => { s.abierta = s.abierta === b.dataset.sjVer ? '' : b.dataset.sjVer; s.confirmarEntrada = ''; ui.render(); }));
++  qa('[data-sj-recargar]').forEach((b) => b.addEventListener('click', sjCargar));
++  qa('[data-sj-entrar]').forEach((b) => b.addEventListener('click', () => { s.confirmarEntrada = b.dataset.sjEntrar; ui.render(); }));
++  qa('[data-sj-cancelar]').forEach((b) => b.addEventListener('click', () => { s.confirmarEntrada = ''; ui.render(); }));
++  qa('[data-sj-abrir]').forEach((b) => b.addEventListener('click', () => { const u = urlSala(b.dataset.sjAbrir); s.confirmarEntrada = ''; if (u) ui.openLink(u); }));
++  qa('[data-sj-rsvp]').forEach((b) => b.addEventListener('click', async () => {
++    try { await sala('rsvp', { id: b.dataset.id, respuesta: b.dataset.sjRsvp }); showToast?.(b.dataset.sjRsvp === 'aceptada' ? 'Asistencia confirmada' : 'Respuesta enviada'); await sjCargar(); }
++    catch (e) { s.error = e.message; ui.render(); }
++  }));
++}
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/data.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/data.js
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/data.js	2026-11-07 12:56:24.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/data.js	2026-11-07 14:43:41.679007039 -0600
+@@ -190,7 +190,7 @@
+ 
+ // Orden de las tarjetas de "Más": Perfil siempre va de último.
+ // R100: "Nuevo CRM" ya no va en Más (sigue en Clientes → "Nuevo CRM · Registrar venta"). Nueva sección personal: Recordatorios.
+-export const MORE_MODULE_ORDER = Object.freeze(['socios-entregas','recordatorios','pelis','partidos','subli','codigos','baul-apks','inventario','calculadora','control-maestro','finanzas','sorteos','aula','materia','perfil']);
++export const MORE_MODULE_ORDER = Object.freeze(['socios-entregas','recordatorios','pelis','partidos','subli','codigos','baul-apks','sala-juntas','inventario','calculadora','control-maestro','finanzas','sorteos','aula','materia','perfil']);
+ const STAFF_MORE_MODULES = Object.freeze(['recordatorios','pelis','partidos','subli','inventario','calculadora','aula','materia','perfil']);
+ 
+ // Qué ve cada usuario: pestañas de abajo, tarjetas de "Más" y herramientas del Inicio.
+@@ -199,10 +199,10 @@
+ //  · Geisell: Inicio, Clientes, Tickets, Más → Pelis, Partidos, Subli, Aula de clases, Materia cerebral, Perfil.
+ export function roleModules(role='', usuario='') {
+   const identity = operatorIdentity(role, usuario);
+-  if (identity === 'geisell') return { tabs:['inicio','clientes','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks',...STAFF_MORE_MODULES.slice(4).filter(m=>m!=='perfil'),'control-maestro','perfil'] /* R79: Códigos igual que Sublicuentas */, home:['aula','materia','clientes','tickets'] }; // R69: Control Maestro (roleCapabilities ya lo autoriza), Perfil último
+-  if (identity === 'relojes') return { tabs:['inicio','clientes','cobros','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks','finanzas',...STAFF_MORE_MODULES.slice(4)], home:['aula','materia','clientes','tickets'] }; // R77: Códigos · R106: Control financiero (Finanzas nueva es de Sublicuentas y Relojes)
++  if (identity === 'geisell') return { tabs:['inicio','clientes','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks','sala-juntas',...STAFF_MORE_MODULES.slice(4).filter(m=>m!=='perfil'),'control-maestro','perfil'] /* R79: Códigos igual que Sublicuentas */, home:['aula','materia','clientes','tickets'] }; // R69: Control Maestro (roleCapabilities ya lo autoriza), Perfil último
++  if (identity === 'relojes') return { tabs:['inicio','clientes','cobros','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks','sala-juntas','finanzas',...STAFF_MORE_MODULES.slice(4)], home:['aula','materia','clientes','tickets'] }; // R77: Códigos · R106: Control financiero (Finanzas nueva es de Sublicuentas y Relojes)
+   const caps = roleCapabilities(role, usuario);
+-  const gate = { 'baul-apks':identity==='sublicuentas' /* R187 · el servidor vuelve a validar */, codigos:caps.codigos, 'socios-entregas':caps.catalogo, 'nuevo-crm':caps.nuevoCrm, inventario:caps.inventario, 'control-maestro':caps.controlMaestro, finanzas:caps.finanzas, sorteos:caps.sorteos };
++  const gate = { 'baul-apks':identity==='sublicuentas' /* R187 · el servidor vuelve a validar */, 'sala-juntas':identity==='sublicuentas' /* R189 */, codigos:caps.codigos, 'socios-entregas':caps.catalogo, 'nuevo-crm':caps.nuevoCrm, inventario:caps.inventario, 'control-maestro':caps.controlMaestro, finanzas:caps.finanzas, sorteos:caps.sorteos };
+   return {
+     tabs:['inicio','clientes','cobros','tickets','mas'],
+     // R106: Sublicuentas ya no ve Control Maestro en Más (el módulo sigue para quien lo use, p. ej. Geisell).
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/main.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/main.js
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/main.js	2026-11-07 14:24:52.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/main.js	2026-11-07 14:43:41.684011090 -0600
+@@ -126,7 +126,7 @@
+ import { codigosView, bindCodigos, openCodigosFor, canCodigos, resetCodigos } from './app/codigos.js'; // R77
+ import { scheduleCobroReminders, syncCobroReminders, updateHomeWidget, reminderSettingsHtml, openCobrosFromReminder } from './app/avisos.js';
+ import { renewalGroups, renewView, activeRenewGroup, renewChargeGroup, renewalSheet, openRenewGroup, openRenewForRow, renewPickLabel, bindRenewDurations } from './app/cobros.js'; import { pushIniciar, pushBaja, pushDestino } from './app/push.js'; // Fase 2 · push
+-import { crmToggleAccountPicker } from './app/selector-cuenta.js'; import { crmNotasInternasHtml } from './app/notas-internas.js'; import { sociosEntregasView, bindSociosEntregas, sociosOfrecerEntrega, resetSociosEntregas } from './app/socios-entregas.js'; import { baulView, bindBaul } from './app/baul-apks.js'; import { crmR188Html, crmR188Read, bindCrmR188 } from './app/crm-r188.js'; import { spotifyView, bindSpotify, spotifyEntradaHtml, spotifyCrmHintHtml, bindSpotifyCrm } from './app/spotify-familias.js'; // Oct-2026 · notas internas · Pedidos de socios
++import { crmToggleAccountPicker } from './app/selector-cuenta.js'; import { crmNotasInternasHtml } from './app/notas-internas.js'; import { sociosEntregasView, bindSociosEntregas, sociosOfrecerEntrega, resetSociosEntregas } from './app/socios-entregas.js'; import { baulView, bindBaul } from './app/baul-apks.js'; import { crmR188Html, crmR188Read, bindCrmR188 } from './app/crm-r188.js'; import { spotifyView, bindSpotify, spotifyEntradaHtml, spotifyCrmHintHtml, bindSpotifyCrm } from './app/spotify-familias.js'; import { salaView, bindSala } from './app/sala-juntas.js'; // Oct-2026 · notas internas · Pedidos de socios
+ import { dashboardView } from './app/inicio.js';
+ import { ajustarInicio } from './app/inicio-ajuste.js'; // R121
+ import { recordatoriosView, bindRecordatorios, rpCerrarSesion } from './recordatorios-personales/modulo.js'; // R100 · Más › Recordatorios (sección personal independiente)
+@@ -1238,7 +1238,7 @@
+   if (state.subview==='aula') return state.academiaLesson!=null ? academiaLessonView(state.academiaLesson) : academiaListView();
+   if (state.subview==='objetivos') return preservedModuleView(state.subview);
+   if (state.subview==='materia') return juegosView();
+-  if (state.subview==='codigos') return codigosView(); /* R77 */ if (state.subview==='socios-entregas') return sociosEntregasView(); if (state.subview==='baul-apks') return baulView(); if (state.subview==='spotify-familias') return spotifyView(); // Oct-2026 · R187 Baúl
++  if (state.subview==='codigos') return codigosView(); /* R77 */ if (state.subview==='socios-entregas') return sociosEntregasView(); if (state.subview==='baul-apks') return baulView(); if (state.subview==='spotify-familias') return spotifyView(); if (state.subview==='sala-juntas') return salaView(); // R189 // Oct-2026 · R187 Baúl
+   if (state.subview==='recordatorios') return recordatoriosView(); // R100
+   const items=roleModules(state.session?.role || '', state.session?.usuario || '').more.map(id=>[id]);
+   const syncText=state.sync==='online'?'En línea':state.sync==='syncing'?'Sincronizando':state.sync==='partial'?'Parcial':'Listo';
+@@ -1552,7 +1552,7 @@
+ async function crmCopyText(text,ok,fail){ try{await navigator.clipboard.writeText(text);showToast(ok);}catch(_){showToast(fail);} }
+ 
+ function bindEvents() {
+-  bindCodigos(); bindSociosEntregas(); bindBaul(); bindSpotify(); // R77 · R187 · R188 · Oct-2026 Pedidos de socios
++  bindCodigos(); bindSociosEntregas(); bindBaul(); bindSpotify(); bindSala(); // R77 · R187 · R188 · R189 · Oct-2026 Pedidos de socios
+   bindRecordatorios(); // R100
+   const login=document.querySelector('#loginForm');
+   if(login)login.addEventListener('submit',async e=>{e.preventDefault();const usuario=document.querySelector('#loginUser').value.trim();const clave=document.querySelector('#loginPassword').value;if(!usuario||!clave){state.errors.login='Escriba usuario y clave.';render();return;}state.loading=true;delete state.errors.login;render();try{state.session=await loginUser(usuario,clave);state.loading=false;state.active='inicio';state.crmDraft=null;restoreCoreCache();render();loadRemoteConfig(true);await loadCoreData({force:true});}catch(err){state.loading=false;const base=err.message||'No se pudo iniciar sesión.';state.errors.login=err.status===401?`Acceso no autorizado para ${usuario}. Verifique la clave exacta.`:base;render();}return;});
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/screens.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/screens.js
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/screens.js	2026-11-07 12:56:24.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/screens.js	2026-11-07 14:43:41.678647411 -0600
+@@ -39,6 +39,7 @@
+   aula: { title: 'Aula de clases', sub: 'Capacitaciones', img: 'mas-aula', tint: 'pink' },
+   materia: { title: 'Materia cerebral', sub: 'Ideas y recursos', img: 'mas-materia', tint: 'white' },
+   'baul-apks': { title: 'Baúl de APKs', sub: 'Apps y URLs de TV Digital', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="16" width="36" height="24" rx="5" fill="#0a1f3a"/><path d="M6 24h36" stroke="#fff" stroke-width="3"/><rect x="19" y="10" width="10" height="8" rx="2" fill="none" stroke="#E2231A" stroke-width="3"/><rect x="21" y="21" width="6" height="7" rx="1.5" fill="#E2231A"/></svg>', tint: 'white' }, // R187 · PDF 5 puntos (solo se agrega; no cambia las demás)
++  'sala-juntas': { title: 'Sala de Juntas', sub: 'Reuniones SubliStudio 3D', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="12" width="36" height="22" rx="5" fill="#0a1f3a"/><circle cx="17" cy="23" r="4" fill="#fff"/><circle cx="31" cy="23" r="4" fill="#E2231A"/><path d="M14 40h20" stroke="#0a1f3a" stroke-width="3" stroke-linecap="round"/><path d="M24 34v6" stroke="#0a1f3a" stroke-width="3"/></svg>', tint: 'white' }, // R189 · PDF 5 puntos, bloque 05
+ });
+ 
+ export function masHomeHtml({ modules = [], sessionLabel = 'Sublicuentas', online = true, syncText = 'En línea', version = '1.0' } = {}) {
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/styles.css /home/claude/w/apk187/sublicuentas-android-bootstrap/src/styles.css
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 14:16:12.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 14:43:41.858735055 -0600
+@@ -2368,3 +2368,11 @@
+ .spf-m{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+ .spf-m span{flex:1;min-width:180px;overflow-wrap:anywhere}.spf-m b.ok{color:#15803d}
+ .crm2-r188-box{display:grid;gap:10px;margin:10px 0;background:#fff}
++/* R189 · Sala de Juntas (fondo blanco, sin degradados) */
++.sj-m-tit{display:block;margin:6px 0 0;color:var(--text)}
++.sj-m-cab{all:unset;display:grid;gap:3px;cursor:pointer;min-height:44px}
++.sj-m-cab small{color:var(--muted)}
++.sj-m-est{justify-self:start;padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:.78rem;font-weight:800;background:#fff}
++.sj-m-est.e-en_curso{border-color:#15803d;color:#15803d}.sj-m-est.e-programada{border-color:#2879C7;color:#2879C7}.sj-m-est.e-cancelada{color:#b91c1c;border-color:#b91c1c}
++.sj-m-det{display:grid;gap:6px;margin-top:6px}.sj-m-det small{color:var(--muted);overflow-wrap:anywhere}
++.sj-m-aviso{display:grid;gap:6px;border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs	1969-12-31 18:00:00.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs	2026-11-07 14:44:53.308545131 -0600
+@@ -0,0 +1,60 @@
++// R189 · APK: Más › Sala de Juntas = la MISMA sala de Sublichat Web (mismo servidor y misma base). Datos ficticios.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { bootApp } from './helpers/ui-harness.mjs';
++import { roleModules } from '../src/data.js';
++import { MAS_MODULES } from '../src/screens.js';
++
++const AHORA = Date.UTC(2026, 9, 4, 18, 0, 0);
++const PANEL = { ok: true, yo: { id: 'naara', nombre: 'Naara', anfitriona: true }, permisos: { crear: true, moderar: true }, tiempoReal: true,
++  fundadoras: [{ id: 'naara', nombre: 'Naara' }, { id: 'libni', nombre: 'Libni' }, { id: 'geisell', nombre: 'Geisell' }],
++  reuniones: [
++    { id: 'reuPrueba01', titulo: 'Junta de prueba', agenda: ['Ventas'], inicioMs: AHORA + 3600e3, fecha: '04/10/2026', hora: '1:00 p. m.', duracionMin: 45, estado: 'programada', participantes: ['naara', 'libni', 'geisell'],
++      invitaciones: { libni: { estado: 'aceptada' } }, avisos: { enviado: 2, pendiente: 0, fallido: 1, fallas: [{ usuario: 'geisell', tipo: 'h1', error: 'bot bloqueado' }] } },
++    { id: 'reuPasada01', titulo: 'Cierre de septiembre', inicioMs: AHORA - 30 * 864e5, fecha: '04/09/2026', hora: '9:00 a. m.', estado: 'finalizada', participantes: ['naara', 'libni'], invitaciones: {} },
++  ] };
++
++test('Más: solo se AGREGA Sala de Juntas (fundadoras); un rol desconocido no la ve; navbar intacto', () => {
++  assert.ok(MAS_MODULES['sala-juntas']?.svg);
++  for (const [r, u] of [['sublicuentas', 'sublicuentas'], ['relojes', 'libni'], ['geisell', 'geisell']]) assert.ok(roleModules(r, u).more.includes('sala-juntas'), u);
++  assert.equal(roleModules('otro', 'otro').more.includes('sala-juntas'), false);
++  assert.deepEqual(roleModules('geisell', 'geisell').tabs, ['inicio', 'clientes', 'tickets', 'mas']);
++});
++
++test('sin tokens en la APK: entra a la misma sala web (/?sala=id) en el navegador; no pide micrófono ni cámara', () => {
++  const src = fs.readFileSync(new URL('../src/app/sala-juntas.js', import.meta.url), 'utf8');
++  assert.match(src, /\$\{API_BASE\}\/\?sala=\$\{encodeURIComponent\(id\)\}/);
++  const codigo = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
++  assert.doesNotMatch(codigo, /token_tiempo_real|LIVEKIT|getUserMedia|livekit/i);
++  assert.match(src, /authPost\('\/api\/sala-juntas'/);
++});
++
++test('lista próximas y concluidas con estado; detalle con invitaciones, avisos fallidos; RSVP por el servidor; entrar pide confirmación', async () => {
++  const abiertos = [];
++  const app = await bootApp({ role: 'sublicuentas', fetchExtra: async (path, body) => {
++    if (path !== '/api/sala-juntas') return undefined;
++    if (body.accion === 'panel') return PANEL;
++    if (body.accion === 'actas') return { ok: true, actas: [{ reunionId: 'reuPrueba01', acuerdos: 3, pendientes: 1 }] };
++    if (body.accion === 'rsvp') return { ok: true, id: body.id, estado: body.respuesta };
++    return { ok: true };
++  } });
++  try {
++    app.w.open = (u) => abiertos.push(u);
++    await app.click('[data-tab="mas"]', 300);
++    await app.click('[data-open="sala-juntas"]', 400);
++    await app.waitFor(() => /Junta de prueba/.test(app.$('.se-wrap')?.textContent || ''));
++    const t = app.$('.se-wrap').textContent;
++    assert.match(t, /Programada/); assert.match(t, /Concluida/);
++    await app.click('[data-sj-ver="reuPrueba01"]', 150);
++    const d = app.$('.se-wrap').textContent;
++    assert.match(d, /Libni · Confirmó/); assert.match(d, /Geisell · Pendiente/); assert.match(d, /fallidos 1 \(Geisell: bot bloqueado\)/); assert.match(d, /Acuerdos:\s*3 · pendientes 1/);
++    await app.click('[data-sj-rsvp="aceptada"]', 300);
++    const r = app.bodies.find((b) => b?.accion === 'rsvp');
++    assert.deepEqual([r.id, r.respuesta, r.origen], ['reuPrueba01', 'aceptada', 'android']);
++    await app.waitFor(() => app.$('[data-sj-entrar="reuPrueba01"]'));
++    await app.click('[data-sj-entrar="reuPrueba01"]', 150);
++    assert.match(app.$('.se-wrap').textContent, /micrófono y la cámara solo se encienden cuando usted lo permite/);
++    assert.equal(abiertos.length, 0, 'no abre nada sin confirmar');
++  } finally { app.close(); }
++});
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs	2026-11-07 12:58:40.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs	2026-11-07 14:43:41.685202365 -0600
+@@ -18,7 +18,7 @@
+   const d = dom(masHomeHtml({ modules: all, sessionLabel: 'Sublicuentas', online: true, syncText: 'En línea' }));
+   const cards = [...d.querySelectorAll('.mas-card[data-open]')];
+   assert.deepEqual(cards.map(c => c.dataset.open), all);
+-  assert.equal(cards.length, 15); // R77: + Códigos · Oct-2026: + Pedidos de socios (ícono SVG) · R187: + Baúl de APKs (SVG)
++  assert.equal(cards.length, 16); // R77: + Códigos · Oct-2026: + Pedidos de socios (ícono SVG) · R187: + Baúl de APKs (SVG) · R189: + Sala de Juntas (SVG)
+   for (const m of Object.values(MAS_MODULES)) if (m.img) assert.ok(exists(`/assets/mas/${m.img}.png`), `falta ${m.img}.png`); else assert.ok(m.svg, 'icono propio (SVG)');
+   assert.ok(exists('/assets/mas/mas-resultados.png') && exists('/assets/mas/robot-sentado.webp') && exists('/assets/clientes-hero.png'));
+   assert.match(d.body.textContent, /Películas y series/);
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs
+--- /tmp/claude-0/r188apk/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs	2026-11-07 12:58:40.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs	2026-11-07 14:43:41.684858020 -0600
+@@ -7,7 +7,7 @@
+ import { MORE_MODULE_ORDER, roleModules } from '../src/data.js';
+ 
+ const STAFF = ['pelis', 'partidos', 'subli', 'inventario', 'calculadora', 'aula', 'materia', 'perfil'];
+-const RELOJES = ['recordatorios', 'pelis', 'partidos', 'subli', 'codigos', 'baul-apks', 'finanzas', 'inventario', 'calculadora', 'aula', 'materia', 'perfil']; // R77: Relojes también ve Códigos · R187: + Baúl de APKs
++const RELOJES = ['recordatorios', 'pelis', 'partidos', 'subli', 'codigos', 'baul-apks', 'sala-juntas', 'finanzas', 'inventario', 'calculadora', 'aula', 'materia', 'perfil']; // R77: Relojes también ve Códigos · R187: + Baúl de APKs
+ const SUBLI_MAS = MORE_MODULE_ORDER.filter(m => m !== 'control-maestro'); // R106: Sublicuentas sin Control Maestro en Más
+ const GEISELL_MAS = [...RELOJES.filter(m => m !== 'perfil' && m !== 'finanzas'), 'control-maestro', 'perfil']; // R106: Control financiero solo Sublicuentas y Relojes
+ const masModules = app => app.$$('.mas-card[data-open]').map(b => b.dataset.open);
