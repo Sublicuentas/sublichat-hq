@@ -1,0 +1,580 @@
+diff --git a/api/_finanzas-operacion.js b/api/_finanzas-operacion.js
+index 0def773..688f59f 100644
+--- a/api/_finanzas-operacion.js
++++ b/api/_finanzas-operacion.js
+@@ -138,7 +138,7 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
+   const pagos = Array.isArray(prep.pagos) && prep.pagos.length ? prep.pagos : (banco && ep.recibido > 0 ? [{ bancoId: banco.id, banco: banco.nombre, monto: ep.recibido }] : []);
+   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
+   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
+-  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}) };
++  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}), ...asignacionesDe(rel) };
+   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
+   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
+   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);
+@@ -150,4 +150,11 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
+   transaction.set(db.collection("auditoria_eventos").doc(), { actorUsuario: prep.usuario, rol: prep.rol, origen: prep.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: r.clienteId, compraId: r.compraId, operationId: prep.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: pagos.map((x) => x.banco).join(" + "), pagos, responsable: ep.saldo > 0 ? deudorTipo : "" }, detalle: `${r.clienteNombre} · ${r.plataforma} · total ${ep.total} · recibido ${ep.recibido}${pagos.length ? ` en ${pagos.map((x) => `${x.banco} ${x.monto}`).join(" + ")}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""} · guardado junto con la ${tipoOrigen}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [], resultado: "ok", tipo: `finanzas_${tipoOrigen}_pago`, createdAt: now });
+   return { duplicado: false, ...ep, cuentaId: ep.saldo > 0 ? cxcRef.id : "", operacionId: opId };
+ }
++// R186 · Renovación por lote: UN pago (cabecera) + N asignaciones por servicio (solo explican el desglose; no son ingresos).
++function asignacionesDe(rel = {}) {
++  const a = Array.isArray(rel.asignaciones) ? rel.asignaciones.slice(0, 30) : [];
++  if (!a.length) return {};
++  const asignaciones = a.map((x) => ({ compraId: clean(x.compraId), servicioIndex: Number.isInteger(x.servicioIndex) ? x.servicioIndex : null, plataforma: clean(x.plataforma, 40), montoCentavos: Math.round(Number(x.montoCentavos) || 0), monto: money((Math.round(Number(x.montoCentavos) || 0)) / 100), periodo: clean(x.periodo, 30), fechaAnterior: clean(x.fechaAnterior, 12), fechaNueva: clean(x.fechaNueva, 12) }));
++  return { asignaciones, loteRenovacion: true, compraIds: asignaciones.map((x) => x.compraId).filter(Boolean), servicios: asignaciones.map((x) => ({ compraId: x.compraId, plataforma: x.plataforma, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, monto: x.monto })) };
++}
+ export { money };
+diff --git a/api/finanzas.js b/api/finanzas.js
+index 9639b07..652997c 100644
+--- a/api/finanzas.js
++++ b/api/finanzas.js
+@@ -13,6 +13,7 @@ import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-c
+ import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
+ import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
+ import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
++import { periodoHN, resumenMes, diagnosticarDuplicados } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
+ import {
+   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
+   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
+@@ -286,6 +287,20 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
+   }
+ 
+   // R117 · Datos del Excel Saiyajin para la APK (misma data y reglas que el reporte del bot).
++  // R186 · Mes calendario de Honduras: tarjeta de la APK/Web y el Excel salen de esta misma consulta.
++  if (accion === "finanzas_mes") {
++    const per = periodoHN(new Date(), String(body.periodo || ""));
++    const all = rowsOf(await movementsRangoQuery(db, per.desde, per.hasta).limit(20000).get());
++    return res.status(200).json({ ok: true, accion, periodo: per.periodo, zona: "America/Tegucigalpa", generado: isoNow(), ...resumenMes(all, per), excel: { desde: per.desde, hasta: per.hasta, nombre: `finanzas_${per.periodo}.xlsx` } });
++  }
++  // R186 · Diagnóstico de cobros duplicados: SOLO LECTURA, nunca borra ni anula.
++  if (accion === "diagnostico_duplicados") {
++    const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : "2026-10-01";
++    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : hoyYmdHN();
++    const all = rowsOf(await movementsRangoQuery(db, desde, hasta).limit(20000).get());
++    return res.status(200).json({ ok: true, accion, desde, hasta, ...diagnosticarDuplicados(all) });
++  }
++
+   if (accion === "finanzas_reporte") {
+     const { methods, libro, saldos } = await estadoLibro(db);
+     const hoyR = hoyYmdHN();
+@@ -842,7 +857,7 @@ export default async function handler(req, res) {
+       await db.collection("auditoria_eventos").add({ actorUsuario: identity.usuario, rol: identity.role, origen: cleanText(body.origen || "web").slice(0, 20), modulo: "finanzas", accion: "exportar_excel_finanzas", tipo: "finanzas_exportar_excel_finanzas", detalle: `${desde} a ${hasta} · ${data.version}`, resultado: "ok", createdAt: isoNow() }).catch(() => {});
+       return res.status(200).json({ ok: true, accion, filename: data.filename, version: data.version, base64: data.base64 });
+     }
+-    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
++    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion) || ["finanzas_mes", "diagnostico_duplicados"].includes(accion) /* R186 */) {
+       const handled = await handleLibro(db, accion, body, identity, authUser, res);
+       if (handled !== null) return handled;
+     }
+diff --git a/api/renovar.js b/api/renovar.js
+index 0452432..8e9d582 100644
+--- a/api/renovar.js
++++ b/api/renovar.js
+@@ -9,7 +9,8 @@
+ import admin from "firebase-admin";
+ import { randomBytes } from "node:crypto";
+ import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
+-import { prepararPago, leerPago, escribirPago } from "./_finanzas-operacion.js";
++import { prepararPago, leerPago, escribirPago, esUsuarioLibro } from "./_finanzas-operacion.js";
++import { sumarPeriodo, sigueVencida, aCentavos, deCentavos } from "./_renovacion-motor.js"; // R186 · motor único de fechas
+ import { clasificarServicio, normalizarServicioVenta } from "./_catalogo-categorias.js"; // R112 // R107: pago en la misma transacción
+ 
+ function getApp() {
+@@ -145,12 +146,13 @@ function sumarDias(fechaStr, dias) {
+ function dmyDe(d) {
+   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+ }
+-function sumarMesesDMY(fechaStr, meses) {
++// R186 (07/11/2026): 1 mes = 30 días; 2+ meses = meses calendario con día ancla (motor único _renovacion-motor.js).
++function sumarMesesDMY(fechaStr, meses, diaAncla) {
+   const n = Number(meses);
+   if (!Number.isInteger(n) || n <= 0) return "";
+-  return sumarDias(fechaStr, n * 30 /* 1 mes = 30 días */);
++  try { return sumarPeriodo(fechaStr, { unidad: "meses", cantidad: n, diaAncla }).fechaNueva; } catch (_) { return ""; }
+ }
+-function calcularRenovacionPorDuracion(fechaActual, duracion = {}) {
++function calcularRenovacionPorDuracion(fechaActual, duracion = {}, diaAncla) {
+   const unidad = String(duracion.unidad || "").toLowerCase() === "dias" ? "dias" : "meses";
+   const cantidad = Math.round(Number(duracion.cantidad));
+   const max = unidad === "dias" ? 730 : 24;
+@@ -160,8 +162,9 @@ function calcularRenovacionPorDuracion(fechaActual, duracion = {}) {
+   const vigente = actual && actual >= parseFechaDMY(hoy);
+   const baseElegida = ["vencimiento", "hoy"].includes(String(duracion.base || "")) ? String(duracion.base) : "auto";
+   const fechaBase = baseElegida === "hoy" || !actual ? hoy : fechaActual;
+-  const fechaNueva = unidad === "dias" ? sumarDias(fechaBase, cantidad) : sumarMesesDMY(fechaBase, cantidad);
+-  return { unidad, cantidad, dias: unidad === "dias" ? cantidad : cantidad * 30, base: baseElegida, baseUsada: fechaBase === fechaActual ? "vencimiento" : "hoy", fechaBase, fechaNueva, vigente: !!vigente };
++  const motor = sumarPeriodo(fechaBase, { unidad, cantidad, diaAncla: fechaBase === fechaActual ? diaAncla : undefined });
++  const fechaNueva = motor.fechaNueva;
++  return { unidad, cantidad, dias: motor.dias, regla: motor.regla, diaAncla: motor.diaAncla, base: baseElegida, baseUsada: fechaBase === fechaActual ? "vencimiento" : "hoy", fechaBase, fechaNueva, vigente: !!vigente, sigueVencida: sigueVencida(fechaNueva, hoy) };
+ }
+ 
+ function normPlat(v) {
+@@ -1764,6 +1767,8 @@ async function handlerCore(req, res) {
+       });
+     }
+ 
++    if (acc === "renovar_lote") return await renovarLote(db, authUser, body, res); // R186
++
+     const query = db.collection("clientes");
+     let snap;
+     const exactId = cleanExistingDocId(clienteId);
+@@ -1827,6 +1832,8 @@ async function handlerCore(req, res) {
+       const latest = await transaction.get(docRef);
+       const lecturaPagoRenov = await leerPago(transaction, db, prepPagoRenov);
+       if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
++      // R186 · Reintento del mismo cobro (APK/Web/bot): el pago ya existe → NO se vuelve a mover la fecha.
++      if (acc === "renovar" && lecturaPagoRenov?.yaExiste && !lecturaPagoRenov.socio) return { duplicadoPago: true };
+       const data = latest.data() || {};
+       let servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
+       const nombreTitular = data.nombrePerfil || data.nombre || "";
+@@ -1851,9 +1858,16 @@ async function handlerCore(req, res) {
+         fechaAnterior = s.fechaRenovacion || fechaActual || null;
+         // Oct-2026: "duracion" = {unidad:"dias"|"meses", cantidad, base:"auto"|"vencimiento"|"hoy"}.
+         // Clientes viejos siguen mandando dias/fechaExacta y conservan su comportamiento.
+-        const duracionPedida = body.duracion && typeof body.duracion === "object" ? body.duracion : null;
+-        const calculo = !fechaExacta && duracionPedida ? calcularRenovacionPorDuracion(aFechaFB(s.fechaRenovacion || fechaActual || ""), duracionPedida) : null;
+-        const nuevaFecha = fechaExacta ? aFechaFB(fechaExacta) : (calculo ? calculo.fechaNueva : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10)));
++        // R186 · La APK instalada calcula la fecha en el teléfono (meses calendario y "desde hoy" si ya venció) y la manda
++        // como fechaExacta junto con duracionElegida. Si viene la duración elegida, manda el SERVIDOR con el motor único:
++        // así la regla (desde el vencimiento · 1 mes = 30 días · 2+ meses calendario) aplica sin esperar una APK nueva.
++        const de = body.duracionElegida && typeof body.duracionElegida === "object" ? body.duracionElegida : null;
++        const desdeDuracionApk = !!(de && ["dias", "meses"].includes(String(de.unidad || "")) && Number(de.cantidad) > 0);
++        const duracionPedida = body.duracion && typeof body.duracion === "object" ? body.duracion
++          : (desdeDuracionApk ? { unidad: String(de.unidad), cantidad: Number(de.cantidad), base: String(de.base || "") === "hoy" ? "hoy" : "auto" } : null);
++        const usarFechaExacta = !!fechaExacta && !desdeDuracionApk;
++        const calculo = !usarFechaExacta && duracionPedida ? calcularRenovacionPorDuracion(aFechaFB(s.fechaRenovacion || fechaActual || ""), duracionPedida, s.diaAncla) : null;
++        const nuevaFecha = usarFechaExacta ? aFechaFB(fechaExacta) : (calculo ? calculo.fechaNueva : sumarDias(s.fechaRenovacion || fechaActual, parseInt(dias, 10)));
+         if (!parseFechaDMY(nuevaFecha)) throw crmUserError("La fecha de renovación no es válida.");
+         const elegida = calculo || (body.duracionElegida && typeof body.duracionElegida === "object" ? body.duracionElegida : null);
+         fechaNueva = nuevaFecha;
+@@ -1862,6 +1876,7 @@ async function handlerCore(req, res) {
+         servicios[idx] = {
+           ...s,
+           fechaRenovacion: nuevaFecha,
++          diaAncla: calculo ? calculo.diaAncla : (parseFechaDMY(nuevaFecha) ? parseFechaDMY(nuevaFecha).getDate() : (s.diaAncla ?? null)), // R186
+           mesesContratados: mesesRenovacionSeguro(s.plataforma || plataforma || "", body.meses ?? body.mesesContratados, fechaAnterior || aFechaFB(fechaActual || ""), nuevaFecha),
+           ultimaRenovacionProcesadaPor: String(authUser.usuario || authUser.uid || "sublichat"),
+           ultimaRenovacionProcesadaAt: isoNow(),
+@@ -2081,6 +2096,13 @@ async function handlerCore(req, res) {
+       };
+     });
+ 
++    if (mutation?.duplicadoPago) {
++      const actual = (await docRef.get()).data() || {};
++      const servs = Array.isArray(actual.servicios) ? actual.servicios : [];
++      const cid = String(body.compraId || body.servicio?.compraId || "");
++      const sv = (cid && servs.find((x) => String(x?.compraId || "") === cid)) || servs[resolveServicioIndex(servs, { servicioIndex: body.servicioIndex, plataforma, correo, compraId: cid })] || {};
++      return res.status(200).json({ ok: true, verified: true, duplicado: true, accion: acc, clienteId: docRef.id, compraId: String(sv.compraId || cid), fechaNueva: String(sv.fechaRenovacion || ""), fechaAnterior: String(sv.ultimaRenovacion?.fechaAnterior || ""), mensaje: "Ese cobro ya estaba registrado: no se renovó otra vez." });
++    }
+     let invResult = null;
+     if (acc === "renovar" && body.ajusteAdministrativo === true) {
+       try {
+@@ -2241,13 +2263,128 @@ function camposModificados(body = {}) {
+   walk(body);
+   return [...out].slice(0, 80);
+ }
++// ─────────────────────────────────────────────────────────────────────────────
++// R186 · Renovar VARIOS servicios del mismo cliente con UN solo pago (Web, APK y bot).
++// Todo en UNA transacción: o se renuevan todos y se registra el pago, o no cambia nada.
++// Reintentos: el envoltorio de idempotencia (operationId) devuelve la misma respuesta; además el pago
++// usa su propio operationId (venta oper_op_*): si ya existe, no se vuelve a mover ninguna fecha.
++// body: { accion:"renovar_lote", clienteId, lineas:[{compraId?, servicioIndex?, plataforma, duracion:{unidad,cantidad}, periodos?, monto}],
++//         pago?, ajusteAdministrativo?, motivoAjuste?, confirmarAtraso?, soloVista?, origen, operationId }
++async function renovarLote(db, authUser, body, res) {
++  const exactId = cleanExistingDocId(body.clienteId);
++  if (!exactId) return res.status(200).json({ ok: false, error: "Falta el cliente (ID exacto)." });
++  const lineasIn = Array.isArray(body.lineas) ? body.lineas.slice(0, 31) : [];
++  if (!lineasIn.length) return res.status(200).json({ ok: false, error: "Elija al menos un servicio." });
++  if (lineasIn.length > 30) return res.status(200).json({ ok: false, error: "Máximo 30 servicios por operación." });
++  const ajuste = body.ajusteAdministrativo === true;
++  const motivoAjuste = String(body.motivoAjuste || "").trim().slice(0, 200);
++  if (ajuste && motivoAjuste.length < 4) return res.status(200).json({ ok: false, error: "El ajuste de fecha sin pago necesita un motivo." });
++  const conPago = !!(body.pago && typeof body.pago === "object");
++  // Regla de Finanzas: Sublicuentas/Relojes registran SIEMPRE el pago real (o ajuste con motivo). Los demás usuarios renuevan sin Finanzas.
++  if (!ajuste && !body.soloVista && !conPago && esUsuarioLibro(authUser)) return res.status(200).json({ ok: false, error: "Falta el pago de la renovación." });
++  const lineas = [];
++  for (const l of lineasIn) {
++    const dur = l && typeof l.duracion === "object" ? l.duracion : null;
++    if (!dur) return res.status(200).json({ ok: false, error: "Cada servicio necesita su duración." });
++    const cents = aCentavos(l.monto ?? 0);
++    if (!Number.isInteger(cents) || cents < 0) return res.status(200).json({ ok: false, error: `Monto inválido en ${String(l.plataforma || "un servicio")}.` });
++    lineas.push({ compraId: String(l.compraId || "").trim().slice(0, 120), servicioIndex: Number.isInteger(l.servicioIndex) ? l.servicioIndex : null, plataforma: String(l.plataforma || "").slice(0, 80), correo: String(l.correo || "").slice(0, 120), duracion: { unidad: String(dur.unidad || "meses"), cantidad: Number(dur.cantidad) }, periodos: Math.max(1, Math.min(24, Math.round(Number(l.periodos) || 1))), montoCentavos: ajuste ? 0 : cents });
++  }
++  const totalCentavos = lineas.reduce((a, l) => a + l.montoCentavos, 0);
++  if (!ajuste && !body.soloVista && conPago) {
++    const totalPago = aCentavos(body.pago.montoTotal);
++    if (totalPago !== totalCentavos) return res.status(200).json({ ok: false, error: `La suma por servicio (L${deCentavos(totalCentavos)}) no coincide con el total del pago (L${deCentavos(totalPago)}).` });
++  }
++  const docRef = db.collection("clientes").doc(exactId);
++  const prepPago = !ajuste && !body.soloVista && conPago ? await prepararPago(db, { ...body.pago, montoTotal: deCentavos(totalCentavos) }, authUser, "renovacion") : null;
++  const hoy = hoyDMYTegucigalpa();
++  const usuario = String(authUser.usuario || authUser.uid || "sublichat");
++  const origen = String(body.origen || "").slice(0, 20);
++  const opIdPago = prepPago?.opId || "";
++
++  const calcular = (servicios) => {
++    const vistos = new Set();
++    return lineas.map((l) => {
++      const idx = resolveServicioIndex(servicios, { servicioIndex: l.servicioIndex, plataforma: l.plataforma, correo: l.correo, compraId: l.compraId });
++      if (idx === -1) throw crmUserError(`No encontré ${l.plataforma || "ese servicio"} en el cliente. No se renovó nada.`);
++      if (vistos.has(idx)) throw crmUserError(`${l.plataforma || "Un servicio"} está repetido en la operación.`);
++      vistos.add(idx);
++      const s = servicios[idx];
++      const anterior = aFechaFB(s.fechaRenovacion || "");
++      let fechaBase = parseFechaDMY(anterior) ? anterior : hoy, diaAncla = parseFechaDMY(anterior) ? s.diaAncla : undefined, r = null;
++      for (let k = 0; k < l.periodos; k++) { r = sumarPeriodo(fechaBase, { ...l.duracion, diaAncla }); fechaBase = r.fechaNueva; diaAncla = r.diaAncla; }
++      return { idx, s, fechaAnterior: anterior, fechaNueva: r.fechaNueva, diaAncla: r.diaAncla, regla: r.regla, sigueVencida: sigueVencida(r.fechaNueva, hoy), baseUsada: parseFechaDMY(anterior) ? "vencimiento" : "hoy", l };
++    });
++  };
++
++  // Vista previa / confirmación de atraso: no escribe nada.
++  const snap0 = await docRef.get();
++  if (!snap0.exists) return res.status(200).json({ ok: false, error: "La ficha seleccionada ya no existe. Recargue la lista." });
++  const data0 = snap0.data() || {};
++  let previa;
++  try { previa = calcular(heredarVendedorServicios(data0.servicios || [], data0).map(limpiarServicioCRM)); }
++  catch (e) { return res.status(200).json({ ok: false, error: e.crmUserMessage || e.message }); }
++  const vistaLineas = previa.map((x) => ({ compraId: String(x.s.compraId || x.l.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, regla: x.regla, periodos: x.l.periodos, sigueVencida: x.sigueVencida, monto: deCentavos(x.l.montoCentavos) }));
++  if (body.soloVista) return res.status(200).json({ ok: true, vista: true, clienteId: exactId, hoy, lineas: vistaLineas, totalCentavos, total: deCentavos(totalCentavos) });
++  if (vistaLineas.some((x) => x.sigueVencida) && body.confirmarAtraso !== true) {
++    return res.status(200).json({ ok: false, requiereConfirmacion: true, error: "Hay servicios que siguen vencidos aun después de renovar. Confirme cuántos periodos cobra (no se adelanta al día del pago).", lineas: vistaLineas, hoy });
++  }
++
++  const mutation = await db.runTransaction(async (tx) => {
++    const latest = await tx.get(docRef);
++    const lecturaPago = await leerPago(tx, db, prepPago);
++    if (!latest.exists) throw crmUserError("La ficha seleccionada ya no existe. Recargue la lista.");
++    if (lecturaPago?.yaExiste) return { duplicado: true };
++    const data = latest.data() || {};
++    const servicios = heredarVendedorServicios(data.servicios || [], data).map(limpiarServicioCRM);
++    const calc = calcular(servicios);
++    const at = isoNow();
++    for (const x of calc) {
++      servicios[x.idx] = {
++        ...x.s,
++        fechaRenovacion: x.fechaNueva, diaAncla: x.diaAncla,
++        mesesContratados: mesesRenovacionSeguro(x.s.plataforma || x.l.plataforma || "", undefined, x.fechaAnterior, x.fechaNueva),
++        ultimaRenovacionProcesadaPor: usuario, ultimaRenovacionProcesadaAt: at,
++        ultimaRenovacion: { duracion: { unidad: x.l.duracion.unidad === "dias" ? "dias" : "meses", cantidad: x.l.duracion.cantidad, base: "vencimiento" }, periodos: x.l.periodos, regla: x.regla, fechaBase: x.fechaAnterior, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, por: usuario, at, origen, lote: opIdPago || String(body.operationId || ""), montoCentavos: x.l.montoCentavos },
++        ...(ajuste ? { ultimoAjusteAdministrativo: { motivo: motivoAjuste, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, por: usuario, at, origen } } : {}),
++        updatedAt: at,
++      };
++    }
++    const nombreTitular = data.nombrePerfil || data.nombre || "";
++    const accesos = prepararAccesosBeneficiarios({ servicios, registroAnterior: data.accesosBeneficiarios, nombreTitular, tokenTitularAnterior: data.tokenAcceso });
++    const serviciosLimpios = servicios.map(limpiarServicioCRM);
++    tx.set(docRef, { servicios: serviciosLimpios, ...resumenVendedoresCliente(serviciosLimpios, data), tokenAcceso: accesos.tokenTitular, accesosBeneficiarios: accesos.registro, updatedAt: at }, { merge: true });
++    const asignaciones = calc.map((x) => ({ compraId: String(x.s.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), montoCentavos: x.l.montoCentavos, periodo: `${x.l.periodos > 1 ? `${x.l.periodos}×` : ""}${x.l.duracion.cantidad} ${x.l.duracion.unidad === "dias" ? "días" : "meses"}`, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva }));
++    const pagoOperacion = prepPago ? escribirPago(tx, db, prepPago, lecturaPago, { clienteId: docRef.id, clienteNombre: String(nombreTitular), compraId: asignaciones[0].compraId, plataforma: asignaciones.map((a) => a.plataforma).join(" + ").slice(0, 40), fechaAnterior: asignaciones[0].fechaAnterior, fechaNueva: asignaciones[0].fechaNueva, asignaciones }) : null;
++    tx.set(db.collection("auditoria_eventos").doc(), { tipo: ajuste ? "renovacion_lote_ajuste" : "renovacion_lote", accion: "renovar_lote", modulo: "renovaciones", clienteId: docRef.id, actorUsuario: usuario, rol: String(authUser.role || ""), origen, operationId: String(body.operationId || ""), pagoOperacionId: opIdPago, servicios: asignaciones.length, totalCentavos, antes: asignaciones.map((a) => `${a.plataforma}:${a.fechaAnterior}`), despues: asignaciones.map((a) => `${a.plataforma}:${a.fechaNueva}`), ...(ajuste ? { motivo: motivoAjuste } : {}), resultado: "ok", createdAt: at });
++    return { serviciosLimpios, accesos, asignaciones, pagoOperacion, nombreTitular, data };
++  });
++
++  if (mutation.duplicado) {
++    const venta = await db.collection("finanzas_movimientos").doc(`${opIdPago}_venta`).get();
++    const v = venta.exists ? venta.data() || {} : {};
++    return res.status(200).json({ ok: true, verified: true, duplicado: true, accion: "renovar_lote", clienteId: exactId, lineas: (v.asignaciones || []).map((a) => ({ ...a, monto: deCentavos(a.montoCentavos) })), mensaje: "Esta renovación ya estaba registrada: no se cobró ni se movió ninguna fecha otra vez." });
++  }
++  try { await sincronizarEnlacesPublicos(db, { clienteId: docRef.id, servicios: mutation.serviciosLimpios, registro: mutation.accesos.registro }); } catch (_) {}
++  const persisted = (await docRef.get()).data() || {};
++  const ps = Array.isArray(persisted.servicios) ? persisted.servicios : [];
++  const verified = mutation.asignaciones.every((a) => { const s = a.compraId ? ps.find((x) => String(x?.compraId || "") === a.compraId) : ps[a.servicioIndex]; return s && String(s.fechaRenovacion || "") === a.fechaNueva; });
++  for (const a of mutation.asignaciones) {
++    if (a.fechaNueva === a.fechaAnterior) continue;
++    const compraEvento = a.compraId || `servicio-${a.servicioIndex}`;
++    let sorteo = null;
++    try { sorteo = await registrarEventoSorteosSeguro({ tipo: "renovacion", clientId: docRef.id, compraId: compraEvento, fechaEvento: a.fechaNueva, eventoId: `renov:${compraEvento}:${a.fechaNueva}`, meses: mesesPagadosEntre(a.fechaAnterior, a.fechaNueva), clienteNombre: persisted.nombrePerfil || persisted.nombre || "Cliente", telefono: persisted.telefono || "", vendedor: persisted.vendedor || "", origen: "Sublichat" }); } catch (_) {}
++    try { await db.collection("historial_clientes").add({ clientId: docRef.id, tipo: "servicio_renovado", compraId: compraEvento, servicioIndex: a.servicioIndex, descripcion: `Renovación confirmada (lote): ${a.fechaAnterior || "-"} → ${a.fechaNueva}`, plataforma: a.plataforma, fechaAnterior: a.fechaAnterior, fechaRenovacion: a.fechaNueva, meses: mesesPagadosEntre(a.fechaAnterior, a.fechaNueva), procesadoPor: usuario, origen: "Sublichat", lote: opIdPago, sorteoOk: sorteo?.ok !== false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); } catch (_) {}
++  }
++  return res.status(200).json({ ok: verified, verified, accion: "renovar_lote", clienteId: exactId, lineas: mutation.asignaciones.map((a) => ({ ...a, monto: deCentavos(a.montoCentavos) })), totalCentavos, total: deCentavos(totalCentavos), ...(mutation.pagoOperacion ? { pagoOperacion: mutation.pagoOperacion } : {}), ...(verified ? {} : { error: "Firebase no confirmó todas las fechas. Recargue y revise." }) });
++}
+ async function verifyForWrapper(req) {
+   try { const auth = String(req.headers.authorization || ""); const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : ""; if (!token) return null; return await admin.auth().verifyIdToken(token); } catch (_) { return null; }
+ }
+ export default async function handler(req, res) {
+   const body = (req.body && typeof req.body === "object") ? req.body : {};
+   const acc = String(body.accion || "renovar");
+-  const isWrite = req.method === "POST" && !READ_ACTIONS.has(acc);
++  const isWrite = req.method === "POST" && !READ_ACTIONS.has(acc) && !(acc === "renovar_lote" && body.soloVista === true); // R186: la vista previa no se guarda
+   const meta = body.clientMeta && typeof body.clientMeta === "object" ? body.clientMeta : {};
+   const minBuild = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
+   if (isWrite && meta.source === "android" && minBuild && Number(meta.appBuild || 0) < minBuild) {
+@@ -2291,3 +2428,4 @@ export default async function handler(req, res) {
+   }
+ }
+ export const __wrapperInternal = { camposModificados, OP_ID_RE };
++export const __r186 = { renovarLote, calcularRenovacionPorDuracion }; // pruebas R186
+diff --git a/sublichat-app.js b/sublichat-app.js
+index c998354..2783972 100644
+--- a/sublichat-app.js
++++ b/sublichat-app.js
+@@ -3502,6 +3502,8 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
+       ? `+${duracion.cantidad} ${duracion.unidad==="dias"?"día"+(duracion.cantidad===1?"":"s"):"mes"+(duracion.cantidad===1?"":"es")}${duracion.base==="hoy"?" desde hoy":duracion.base==="vencimiento"?" desde el vencimiento":""}`
+       : `+${dias} días`;
+   const nombres=aRenovar.map(s=>s.plataforma).join(", ");
++  // R186 · Varios servicios con duración: UNA operación en el servidor (todos o ninguno, un solo pago con desglose).
++  if(aRenovar.length>1&&!fechaExacta) return renovarLoteWeb(g,aRenovar,duracion||{unidad:"dias",cantidad:Number(dias)||31},descRenov);
+   let pagoOp=null; // R106: Sublicuentas/Relojes registran el pago real (o ajuste sin pago con motivo)
+   if(pagoOpHabilitado()){
+     pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:[{key:"renovacion",label:`${nombres} · ${descRenov}`}],permitirAjuste:true});
+@@ -3566,8 +3568,55 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
+     hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
+   }
+ }
++// R186 · Renovación múltiple: vista previa → (atraso: cuántos periodos) → pago con monto por servicio → una sola operación.
++async function renovarLoteWeb(g,aRenovar,duracion,descRenov){
++  const hint=$cobro("cobroRenovarHint");
++  const clienteId=String(g.clienteId||aRenovar[0]?.clienteId||"");
++  if(!clienteId){mostrarToast("No encontré el ID del cliente. Recargue la lista.");return;}
++  const dur={unidad:duracion.unidad==="dias"?"dias":"meses",cantidad:Number(duracion.cantidad)};
++  const lineas=aRenovar.map(s=>({compraId:s.compraId||"",servicioIndex:Number.isInteger(Number(s.srvIndex))?Number(s.srvIndex):null,plataforma:s.plataformaRaw||s.plataforma||"",correo:s.correo||"",duracion:dur,periodos:1,monto:0}));
++  const post=async(extra)=>{const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"renovar_lote",clienteId,lineas,origen:"web",...extra})});return r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));};
++  hint.textContent="Calculando fechas…";
++  let vista=await post({soloVista:true});
++  if(!vista.ok){hint.textContent="⚠️ "+(vista.error||"No se pudo calcular.");return;}
++  let atraso=false;
++  if(vista.lineas.some(x=>x.sigueVencida)){
++    const n=prompt(`Algunos servicios siguen vencidos aun después de renovar ${descRenov}:\n${vista.lineas.filter(x=>x.sigueVencida).map(x=>`· ${x.plataforma}: vencía ${x.fechaAnterior} → ${x.fechaNueva}`).join("\n")}\n\nLa fecha NO se adelanta al día del pago.\n¿Cuántos periodos cobra? (1 a 24)`,"1");
++    if(n===null){hint.textContent="";return;}
++    const k=Math.max(1,Math.min(24,parseInt(n,10)||1));
++    lineas.forEach((l,i)=>{if(vista.lineas[i]?.sigueVencida)l.periodos=k;});
++    vista=await post({soloVista:true});
++    if(!vista.ok){hint.textContent="⚠️ "+(vista.error||"No se pudo calcular.");return;}
++    atraso=true;
++  }
++  const detalle=vista.lineas.map(x=>`${x.plataforma}: ${x.fechaAnterior||"sin fecha"} → ${x.fechaNueva}${x.periodos>1?` (${x.periodos} periodos)`:""}`);
++  let pagoOp=null;
++  if(pagoOpHabilitado()){
++    pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:vista.lineas.map((x,i)=>({key:`s${i}`,label:`${x.plataforma} · vence ${x.fechaAnterior||"—"} → nuevo ${x.fechaNueva}`})),permitirAjuste:true});
++    if(!pagoOp){hint.textContent="";return;}
++  }else if(!confirm(`¿Confirmar renovación conjunta de ${lineas.length} servicios (${descRenov})?\n\n${detalle.join("\n")}`)){hint.textContent="";return;}
++  const extra={confirmarAtraso:atraso||vista.lineas.every(x=>!x.sigueVencida),operationId:pagoOpNuevoId()};
++  if(pagoOp?.modo==="ajuste"){extra.ajusteAdministrativo=true;extra.motivoAjuste=pagoOp.motivo;}
++  else if(pagoOp?.modo==="pago"){
++    let total=0,recibido=0;const porBanco={};
++    lineas.forEach((l,i)=>{const f=(pagoOp.filas||{})[`s${i}`]||{};const e=pagoOpFilaEstado(f);l.monto=e.total;total+=e.total;recibido+=e.recibido;(((pagoOp.pagosPorFila||{})[`s${i}`])||[]).forEach(p=>{porBanco[p.bancoId]=(porBanco[p.bancoId]||0)+Number(p.monto||0);});});
++    const pagos=Object.entries(porBanco).filter(([,m])=>m>0).map(([bancoId,monto])=>({bancoId,monto}));
++    extra.pago={montoTotal:total,recibido,bancoId:recibido>0?(pagos[0]?.bancoId||pagoOp.bancoId):"",...(pagos.length>1?{pagos}:{}),responsable:pagoOp.responsable,vendedorNombre:pagoOp.vendedor,fechaPago:pagoOp.fechaPago||pagoOpHoy(),operationId:extra.operationId,origen:"web"};
++  }
++  hint.textContent=`Renovando ${lineas.length} servicios en una sola operación…`;
++  let j=null;
++  for(let i=0;i<2;i++){ // un reintento con el MISMO operationId: el servidor no duplica
++    try{j=await post(extra);break;}catch(e){j={ok:false,error:e.message||"sin conexión"};}
++  }
++  if(!j?.ok){hint.textContent="⚠️ No se renovó nada: "+(j?.error||"error desconocido");mostrarToast(`⚠️ ${g.nombre}: no se renovó (todo o nada)`);return;}
++  hint.textContent=`✅ ${j.duplicado?"Ya estaba registrada":"Confirmado por el servidor"}: ${(j.lineas||[]).map(x=>`${x.plataforma} → ${x.fechaNueva}`).join(" · ")}${j.pagoOperacion?` · 💵 ${String(j.pagoOperacion.estado||"").toUpperCase()} · un solo cobro L${j.total}`:""}`;
++  mostrarToast(`✅ ${g.nombre}: ${lineas.length} servicios renovados`);
++  await load({forceServer:true});
++  (j.lineas||[]).forEach(x=>{const s=aRenovar.find(a=>(x.compraId&&a.compraId===x.compraId)||Number(a.srvIndex)===Number(x.servicioIndex));if(s)aplicarRenovacionLocal(g,s,{...x,clienteId});});
++  render();
++}
+ // Oct-2026 · Renovar: +31 días, 1, 2, 3, 6 y 12 meses + Personalizado (fecha). Iguales en Web, APK y Bot.
+-// El servidor calcula la fecha (R163): siempre desde el vencimiento · 1 mes = 30 días.
++// El servidor calcula la fecha (R186): siempre desde el vencimiento · 1 mes = 30 días · 2+ meses = meses calendario.
+ document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:"auto"})));
+ 
+ // Botón que despliega/oculta las opciones de renovación
+diff --git a/tests/r150-sincronizacion-total.test.mjs b/tests/r150-sincronizacion-total.test.mjs
+index b62b3c0..9244f41 100644
+--- a/tests/r150-sincronizacion-total.test.mjs
++++ b/tests/r150-sincronizacion-total.test.mjs
+@@ -115,11 +115,12 @@ test('URLs de TV Digital: proveedor ICOMPLAY, override por cuenta y solo http(s)
+   assert.equal(tvDigital.urlTvServicio({ plataforma: 'icomplay3', perfiles: [{ inventarioId: 'z' }] }, urls, new Map([['z', 'http://propia:8080']])), 'http://propia:8080', 'la URL propia de la cuenta manda');
+ });
+ 
+-test('Renovación por duración (R163): siempre desde el vencimiento, 1 mes = 30 días, base hoy solo si se pide', () => {
++test('Renovación por duración (R163 + R186): siempre desde el vencimiento, 1 mes = 30 días, 2+ meses calendario, base hoy solo si se pide', async () => {
++  const MOTOR = await import('../api/_renovacion-motor.js');
+   const src = fs.readFileSync(new URL('../api/renovar.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+   const pick = (n) => { const i = src.indexOf(`\nfunction ${n}(`); return src.slice(i, src.indexOf('\n}\n', i) + 3); };
+-  const f = new Function(['parseFechaDMY', 'hoyDMYTegucigalpa', 'sumarDias', 'dmyDe', 'sumarMesesDMY', 'calcularRenovacionPorDuracion'].map(pick).join('\n') +
+-    '\nfunction crmUserError(m){return new Error(m)}\nreturn {calcularRenovacionPorDuracion,sumarMesesDMY,hoyDMYTegucigalpa,sumarDias};')();
++  const f = new Function('sumarPeriodo', 'sigueVencida', ['parseFechaDMY', 'hoyDMYTegucigalpa', 'sumarDias', 'dmyDe', 'sumarMesesDMY', 'calcularRenovacionPorDuracion'].map(pick).join('\n') +
++    '\nfunction crmUserError(m){return new Error(m)}\nreturn {calcularRenovacionPorDuracion,sumarMesesDMY,hoyDMYTegucigalpa,sumarDias};')(MOTOR.sumarPeriodo, MOTOR.sigueVencida);
+   const hoy = f.hoyDMYTegucigalpa();
+   const [d, m, y] = hoy.split('/').map(Number);
+   const futuro = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y + 1}`;
+@@ -129,7 +130,8 @@ test('Renovación por duración (R163): siempre desde el vencimiento, 1 mes = 30
+   assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'meses', cantidad: 1 }).fechaNueva, '04/12/2026', '1 mes = 30 días');
+   assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'dias', cantidad: 31 }).fechaNueva, '05/12/2026', '+31 días = 31 días');
+   assert.equal(f.calcularRenovacionPorDuracion('01/10/2026', { unidad: 'meses', cantidad: 1 }).fechaNueva, '31/10/2026', 'octubre: 1 mes = 30 días, no 31');
+-  assert.equal(f.calcularRenovacionPorDuracion('01/01/2027', { unidad: 'meses', cantidad: 3 }).fechaNueva, '01/04/2027', '3 meses = 90 días');
++  assert.equal(f.calcularRenovacionPorDuracion('01/01/2027', { unidad: 'meses', cantidad: 3 }).fechaNueva, '01/04/2027', 'R186: 3 meses calendario');
++  assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'meses', cantidad: 3 }).fechaNueva, '04/02/2027', 'R186: 04/11 + 3 meses = 04/02');
+   assert.equal(f.calcularRenovacionPorDuracion('01/01/2020', { unidad: 'meses', cantidad: 1, base: 'hoy' }).fechaNueva, f.sumarDias(hoy, 30), 'base hoy solo si se pide');
+   assert.equal(f.sumarMesesDMY('31/01/2027', 1), '02/03/2027', '1 mes = 30 días exactos');
+   for (const n of [1, 2, 3, 4, 6, 7, 9, 12]) assert.ok(/^\d{2}\/\d{2}\/\d{4}$/.test(f.calcularRenovacionPorDuracion(futuro, { unidad: 'meses', cantidad: n }).fechaNueva));
+diff --git a/api/_renovacion-motor.js b/api/_renovacion-motor.js
+new file mode 100644
+index 0000000..3582040
+--- /dev/null
++++ b/api/_renovacion-motor.js
+@@ -0,0 +1,90 @@
++// R186 · Motor ÚNICO de fechas de renovación (PDF «Sublichat 5 puntos», bloque 02, 07/11/2026).
++// La MISMA lógica vive en el bot (lib_renovacion_motor.js) y ambos pasan los mismos vectores
++// (renovacion-vectores.json). La APK no calcula: usa este servidor.
++//
++// Reglas aprobadas por Sublicuentas:
++//   · Siempre desde la FECHA DE VENCIMIENTO (nunca desde el día del pago). Fecha de pago ≠ vencimiento.
++//   · "+31 días" = 31 días exactos · "+N días" = N días exactos.
++//   · "1 mes" = 30 días exactos (regla del negocio, se conserva).
++//   · 2, 3, 6, 12… meses = meses CALENDARIO: 04 nov + 3 meses = 04 feb.
++//     Si el día no existe en el mes destino (29/30/31) → último día de ese mes, y se guarda el día
++//     original (diaAncla) para volver a él después: 31 ene + 2 m = 31 mar; 30 nov + 3 m = 28 feb → luego 30 may.
++//   · Renovación por días reinicia el día ancla al día de la nueva fecha (así no "salta" en la siguiente).
++// Fechas civiles DD/MM/AAAA (sin zona horaria: no se corren por UTC).
++
++const RE_DMY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
++const RE_YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
++const pad = (n) => String(n).padStart(2, "0");
++function diasDelMes(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); } // m = 1..12
++
++export function leerFecha(v) {
++  const s = String(v == null ? "" : v).trim();
++  let y, m, d, x;
++  if ((x = RE_DMY.exec(s))) { d = +x[1]; m = +x[2]; y = +x[3]; }
++  else if ((x = RE_YMD.exec(s))) { y = +x[1]; m = +x[2]; d = +x[3]; }
++  else return null;
++  if (y < 2000 || y > 2200 || m < 1 || m > 12 || d < 1 || d > diasDelMes(y, m)) return null;
++  return { y, m, d };
++}
++export function aDMY({ y, m, d }) { return `${pad(d)}/${pad(m)}/${y}`; }
++export function aYMD({ y, m, d }) { return `${y}-${pad(m)}-${pad(d)}`; }
++function sumarDiasCivil(f, n) { const t = new Date(Date.UTC(f.y, f.m - 1, f.d + n)); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() }; }
++export function diasEntre(a, b) { return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000); }
++
++// El ancla solo vale si la fecha actual es esa misma (o su versión recortada al fin de mes).
++function anclaEfectiva(f, diaAncla) {
++  const a = Math.round(Number(diaAncla));
++  if (!Number.isInteger(a) || a < 1 || a > 31) return f.d;
++  if (a === f.d) return a;
++  if (a > f.d && f.d === diasDelMes(f.y, f.m)) return a;
++  return f.d;
++}
++
++/**
++ * @param {string} fecha  vencimiento actual (DD/MM/AAAA o AAAA-MM-DD)
++ * @param {{unidad:'dias'|'meses', cantidad:number, diaAncla?:number}} periodo
++ * @returns {{fechaNueva:string, ymd:string, diaAncla:number, regla:'dias'|'1mes_30dias'|'meses_calendario', dias:number}}
++ */
++export function sumarPeriodo(fecha, periodo = {}) {
++  const f = leerFecha(fecha);
++  if (!f) throw new Error("Fecha de vencimiento inválida.");
++  const unidad = String(periodo.unidad || "").toLowerCase() === "dias" ? "dias" : "meses";
++  const n = Math.round(Number(periodo.cantidad));
++  if (!Number.isInteger(n) || n < 1 || n > (unidad === "dias" ? 730 : 24)) throw new Error(unidad === "dias" ? "Use 1 a 730 días." : "Use 1 a 24 meses.");
++  let nueva, regla, ancla;
++  if (unidad === "dias" || n === 1) {
++    nueva = sumarDiasCivil(f, unidad === "dias" ? n : 30);
++    regla = unidad === "dias" ? "dias" : "1mes_30dias";
++    ancla = nueva.d;
++  } else {
++    ancla = anclaEfectiva(f, periodo.diaAncla);
++    const idx = f.y * 12 + (f.m - 1) + n;
++    const y = Math.floor(idx / 12), m = (idx % 12) + 1;
++    nueva = { y, m, d: Math.min(ancla, diasDelMes(y, m)) };
++    regla = "meses_calendario";
++  }
++  return { fechaNueva: aDMY(nueva), ymd: aYMD(nueva), diaAncla: ancla, regla, dias: diasEntre(f, nueva) };
++}
++
++// Aplica k periodos seguidos (para renovaciones muy atrasadas con confirmación explícita de cuántos periodos).
++export function sumarPeriodos(fecha, periodo, veces = 1) {
++  let r = { fechaNueva: fecha, diaAncla: periodo.diaAncla };
++  const k = Math.max(1, Math.min(24, Math.round(Number(veces) || 1)));
++  for (let i = 0; i < k; i++) r = sumarPeriodo(r.fechaNueva, { ...periodo, diaAncla: r.diaAncla });
++  return r;
++}
++
++// ¿La nueva fecha sigue vencida respecto a hoy? → el canal debe pedir confirmación de cuántos periodos cobra.
++export function sigueVencida(fechaNuevaDMY, hoyDMY) {
++  const a = leerFecha(fechaNuevaDMY), b = leerFecha(hoyDMY);
++  return !!(a && b && diasEntre(b, a) < 0);
++}
++
++// Montos exactos: todo en centavos enteros.
++export function aCentavos(v) {
++  const s = String(v == null ? "" : v).replace(/[^0-9.\-]/g, "");
++  if (!s || isNaN(Number(s))) return NaN;
++  const neg = s.startsWith("-"), [ent, dec = ""] = s.replace("-", "").split(".");
++  return (neg ? -1 : 1) * (Number(ent || 0) * 100 + Number((dec + "00").slice(0, 2)));
++}
++export function deCentavos(c) { return Math.round(Number(c) || 0) / 100; }
+diff --git a/api/_finanzas-mes.js b/api/_finanzas-mes.js
+new file mode 100644
+index 0000000..f693afd
+--- /dev/null
++++ b/api/_finanzas-mes.js
+@@ -0,0 +1,73 @@
++// R186 · Finanzas del MES CALENDARIO de Honduras (APK + Web + Excel con la misma consulta).
++// · Ventana [01 del mes, 01 del mes siguiente) sobre la fecha REAL del pago (fechaPago civil, hora de Honduras).
++// · Montos en centavos enteros (sin errores de coma flotante).
++// · Un pago = una operación (operacionId): si entró por dos bancos son 2 renglones de banco pero 1 pago.
++// · Anulados/corregidos y sus reversas no suman (igual que el Excel y el libro, R123/R125).
++// · Las asignaciones por servicio explican el desglose; NUNCA se suman como otro ingreso.
++import { movementYmd, movementKind, anuladoOReversa } from "./_finanzas-libro.js";
++
++const cents = (v) => Math.round((Number(v) || 0) * 100);
++const L = (c) => Math.round(c) / 100;
++
++export function periodoHN(ahora = new Date(), periodo = "") {
++  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(periodo || ""));
++  let y, mes;
++  if (m) { y = +m[1]; mes = +m[2]; }
++  else { const t = new Date(ahora.getTime() - 6 * 3600000); y = t.getUTCFullYear(); mes = t.getUTCMonth() + 1; }
++  const pad = (n) => String(n).padStart(2, "0");
++  const fin = new Date(Date.UTC(y, mes, 0)).getUTCDate();
++  return { periodo: `${y}-${pad(mes)}`, desde: `${y}-${pad(mes)}-01`, hasta: `${y}-${pad(mes)}-${pad(fin)}`, siguiente: mes === 12 ? `${y + 1}-01-01` : `${y}-${pad(mes + 1)}-01` };
++}
++
++export function resumenMes(movimientos = [], { desde, hasta }) {
++  const delMes = movimientos.filter((m) => { const f = movementYmd(m); return f && f >= desde && f <= hasta; });
++  const vigentes = delMes.filter((m) => !anuladoOReversa(m));
++  const ingresos = vigentes.filter((m) => movementKind(m) === "ingreso");
++  const egresos = vigentes.filter((m) => movementKind(m) === "egreso");
++  const planilla = vigentes.filter((m) => movementKind(m) === "planilla");
++  const ventas = vigentes.filter((m) => movementKind(m) === "venta");
++  const pagos = new Map(); // operacionId → pago único
++  for (const m of ingresos) {
++    const k = String(m.operacionId || m.pagoId || m.id);
++    const p = pagos.get(k) || { id: k, fecha: movementYmd(m), cliente: m.clienteNombre || m.cliente || "", plataforma: m.plataforma || "", centavos: 0, bancos: [], origen: m.origenCanal || m.origen || "" };
++    p.centavos += cents(m.monto); p.bancos.push({ banco: m.banco || m.bancoId || "", centavos: cents(m.monto) });
++    pagos.set(k, p);
++  }
++  const porPlataforma = new Map();
++  let renovados = 0;
++  for (const v of ventas) {
++    const asig = Array.isArray(v.asignaciones) && v.asignaciones.length ? v.asignaciones : null;
++    if (asig) { renovados += asig.length; for (const a of asig) porPlataforma.set(a.plataforma || "Sin plataforma", (porPlataforma.get(a.plataforma || "Sin plataforma") || 0) + Math.round(Number(a.montoCentavos) || 0)); }
++    else { renovados += Array.isArray(v.servicios) && v.servicios.length ? v.servicios.length : 1; porPlataforma.set(v.plataforma || "Sin plataforma", (porPlataforma.get(v.plataforma || "Sin plataforma") || 0) + cents(v.monto)); }
++  }
++  const sum = (arr) => arr.reduce((a, m) => a + cents(m.monto), 0);
++  const ingresosC = sum(ingresos), pagosC = [...pagos.values()].reduce((a, p) => a + p.centavos, 0);
++  return {
++    desde, hasta,
++    ingresos: L(ingresosC), ingresosCentavos: ingresosC, pagosUnicos: pagos.size, renglonesBanco: ingresos.length,
++    egresos: L(sum(egresos)), planilla: L(sum(planilla)), resultado: L(ingresosC - sum(egresos) - sum(planilla)),
++    ventasGeneradas: L(sum(ventas)), serviciosRenovadosOVendidos: renovados,
++    porPlataforma: [...porPlataforma.entries()].map(([plataforma, c]) => ({ plataforma, monto: L(c), centavos: c })).sort((a, b) => b.centavos - a.centavos),
++    anulados: delMes.filter((m) => anuladoOReversa(m)).length,
++    conciliacion: { ingresosVsPagos: ingresosC === pagosC, diferenciaCentavos: ingresosC - pagosC },
++    pagos: [...pagos.values()].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 500).map((p) => ({ ...p, monto: L(p.centavos) })),
++  };
++}
++
++// Diagnóstico SOLO LECTURA de posibles cobros duplicados (no borra ni anula nada: propone revisión supervisada).
++export function diagnosticarDuplicados(movimientos = []) {
++  const ing = movimientos.filter((m) => movementKind(m) === "ingreso" && !anuladoOReversa(m));
++  const grupos = new Map();
++  for (const m of ing) {
++    const cli = String(m.clienteId || m.clienteNombre || "").toLowerCase().trim();
++    if (!cli) continue;
++    const k = `${cli}|${cents(m.monto)}|${movementYmd(m)}`;
++    const g = grupos.get(k) || []; g.push(m); grupos.set(k, g);
++  }
++  const sospechosos = [];
++  for (const [k, g] of grupos) {
++    const ops = new Set(g.map((m) => String(m.operacionId || m.id)));
++    if (ops.size > 1) sospechosos.push({ clave: k, cliente: g[0].clienteNombre || g[0].clienteId || "", fecha: movementYmd(g[0]), monto: L(cents(g[0].monto)), veces: ops.size, ids: g.map((m) => m.id), operaciones: [...ops], origenes: [...new Set(g.map((m) => m.origenCanal || m.origen || ""))], propuesta: "Revisar: mismo cliente, mismo monto y mismo día en operaciones distintas. Si es duplicado, anular UNO con motivo (queda auditado)." });
++  }
++  return { revisados: ing.length, sospechosos: sospechosos.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))) };
++}
