@@ -298,8 +298,9 @@ async function handler(req, res, deps = {}) {
       if (!['programada', 'en_curso'].includes(S.estadoVigente(r, ahora))) throw err(409, 'Esa reunión ya no recibe confirmaciones.');
       const ref = db.collection(C.I).doc(`${id}_${yo.id}`); // solo SU invitación
       const b = db.batch();
-      b.set(ref, { reunionId: id, usuario: yo.id, estado: resp, respondidoAt: iso, canal: 'web', actualizadoAt: iso }, { merge: true });
-      const a = auditoria(db, yo, 'rsvp', id, { respuesta: resp, canal: 'web' }); b.set(a.ref, a.data);
+      const canal = body.origen === 'android' ? 'android' : 'web'; // R189 · la APK responde por el mismo servidor
+      b.set(ref, { reunionId: id, usuario: yo.id, estado: resp, respondidoAt: iso, canal, actualizadoAt: iso }, { merge: true });
+      const a = auditoria(db, yo, 'rsvp', id, { respuesta: resp, canal }); b.set(a.ref, a.data);
       await b.commit();
       return res.status(200).json({ ok: true, id, estado: resp });
     }
