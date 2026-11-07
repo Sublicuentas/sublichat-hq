@@ -115,11 +115,12 @@ test('URLs de TV Digital: proveedor ICOMPLAY, override por cuenta y solo http(s)
   assert.equal(tvDigital.urlTvServicio({ plataforma: 'icomplay3', perfiles: [{ inventarioId: 'z' }] }, urls, new Map([['z', 'http://propia:8080']])), 'http://propia:8080', 'la URL propia de la cuenta manda');
 });
 
-test('Renovación por duración (R163): siempre desde el vencimiento, 1 mes = 30 días, base hoy solo si se pide', () => {
+test('Renovación por duración (R163 + R186): siempre desde el vencimiento, 1 mes = 30 días, 2+ meses calendario, base hoy solo si se pide', async () => {
+  const MOTOR = await import('../api/_renovacion-motor.js');
   const src = fs.readFileSync(new URL('../api/renovar.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const pick = (n) => { const i = src.indexOf(`\nfunction ${n}(`); return src.slice(i, src.indexOf('\n}\n', i) + 3); };
-  const f = new Function(['parseFechaDMY', 'hoyDMYTegucigalpa', 'sumarDias', 'dmyDe', 'sumarMesesDMY', 'calcularRenovacionPorDuracion'].map(pick).join('\n') +
-    '\nfunction crmUserError(m){return new Error(m)}\nreturn {calcularRenovacionPorDuracion,sumarMesesDMY,hoyDMYTegucigalpa,sumarDias};')();
+  const f = new Function('sumarPeriodo', 'sigueVencida', ['parseFechaDMY', 'hoyDMYTegucigalpa', 'sumarDias', 'dmyDe', 'sumarMesesDMY', 'calcularRenovacionPorDuracion'].map(pick).join('\n') +
+    '\nfunction crmUserError(m){return new Error(m)}\nreturn {calcularRenovacionPorDuracion,sumarMesesDMY,hoyDMYTegucigalpa,sumarDias};')(MOTOR.sumarPeriodo, MOTOR.sigueVencida);
   const hoy = f.hoyDMYTegucigalpa();
   const [d, m, y] = hoy.split('/').map(Number);
   const futuro = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y + 1}`;
@@ -129,7 +130,8 @@ test('Renovación por duración (R163): siempre desde el vencimiento, 1 mes = 30
   assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'meses', cantidad: 1 }).fechaNueva, '04/12/2026', '1 mes = 30 días');
   assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'dias', cantidad: 31 }).fechaNueva, '05/12/2026', '+31 días = 31 días');
   assert.equal(f.calcularRenovacionPorDuracion('01/10/2026', { unidad: 'meses', cantidad: 1 }).fechaNueva, '31/10/2026', 'octubre: 1 mes = 30 días, no 31');
-  assert.equal(f.calcularRenovacionPorDuracion('01/01/2027', { unidad: 'meses', cantidad: 3 }).fechaNueva, '01/04/2027', '3 meses = 90 días');
+  assert.equal(f.calcularRenovacionPorDuracion('01/01/2027', { unidad: 'meses', cantidad: 3 }).fechaNueva, '01/04/2027', 'R186: 3 meses calendario');
+  assert.equal(f.calcularRenovacionPorDuracion('04/11/2026', { unidad: 'meses', cantidad: 3 }).fechaNueva, '04/02/2027', 'R186: 04/11 + 3 meses = 04/02');
   assert.equal(f.calcularRenovacionPorDuracion('01/01/2020', { unidad: 'meses', cantidad: 1, base: 'hoy' }).fechaNueva, f.sumarDias(hoy, 30), 'base hoy solo si se pide');
   assert.equal(f.sumarMesesDMY('31/01/2027', 1), '02/03/2027', '1 mes = 30 días exactos');
   for (const n of [1, 2, 3, 4, 6, 7, 9, 12]) assert.ok(/^\d{2}\/\d{2}\/\d{4}$/.test(f.calcularRenovacionPorDuracion(futuro, { unidad: 'meses', cantidad: n }).fechaNueva));
