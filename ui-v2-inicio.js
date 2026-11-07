@@ -120,17 +120,24 @@
       }).join('') + '</div>';
   }
 
-  var host, limite = 8;
+  var host, limite = 8, errorCarga = '';
   function pintar() {
     var D = window.SublichatDatos; var sec = document.getElementById('screen-inicio');
-    if (!D || !sec) return;
+    if (!sec) return;
     if (!host) {
       host = document.createElement('div'); host.id = 'v2Inicio';
       sec.insertBefore(host, sec.firstChild);
       host.addEventListener('click', function (e) {
         var b = e.target.closest('[data-v2cli]'); if (b) return abrirCliente(b.getAttribute('data-v2cli'));
-        var g = e.target.closest('[data-v2go]'); if (g) { var dest = g.getAttribute('data-v2go'); if (dest === '__todos') { limite = limite === 8 ? 50 : 8; pintar(); } else ir(dest); }
+        var g = e.target.closest('[data-v2go]'); if (g) { var dest = g.getAttribute('data-v2go'); if (dest === '__recargar') { location.reload(); return; } if (dest === '__todos') { limite = limite === 8 ? 50 : 8; pintar(); } else ir(dest); }
       });
+    }
+    // R184 · mientras llegan los datos: esqueleto (nunca ceros provisionales); si falla: error claro con reintento
+    if (!D) {
+      host.innerHTML = errorCarga ? '<div class="v2-card v2-carga-error" role="alert"><b>No se pudieron cargar los datos de Inicio.</b><p>' + esc(errorCarga) + '</p><button type="button" class="v2-btn" data-v2go="__recargar">Reintentar</button></div>'
+        : '<div class="v2-cab"><div><h2>Panel general</h2><p>Cargando cartera vigente…</p></div></div><div class="v2-kpis" aria-busy="true" aria-label="Cargando indicadores">' + [0, 1, 2, 3].map(function () { return '<div class="v2k v2-esq"><span class="v2k-ico"></span><div><small></small><b></b><em></em></div></div>'; }).join('') + '</div>' +
+          '<div class="v2-graficas"><section class="v2-card v2-esq v2-esq-g"></section><section class="v2-card v2-esq v2-esq-g"></section></div>';
+      return;
     }
     var c = calcular(D);
     var delta = c.anterior > 0 ? Math.round((c.esperado - c.anterior) / c.anterior * 100) : null;
@@ -154,7 +161,8 @@
   }
   var t;
   window.addEventListener('sublichat:datos', function () { clearTimeout(t); t = setTimeout(pintar, 60); });
-  function arrancar() { if (window.SublichatDatos) pintar(); }
+  window.addEventListener('sublichat:datos-error', function (e) { if (!window.SublichatDatos) { errorCarga = (e.detail && e.detail.error) || 'Error de conexión.'; pintar(); } });
+  function arrancar() { pintar(); } // R184: pinta el esqueleto de inmediato
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
   setInterval(function () { if (host && document.getElementById('screen-inicio').classList.contains('active')) pintar(); }, 60000); // cambio de día
 })();

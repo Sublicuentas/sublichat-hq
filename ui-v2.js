@@ -1,26 +1,19 @@
 /* ui-v2.js · R164 — Diseño nuevo de Sublichat Web: NAVEGACIÓN SUPERIOR (sin menú lateral).
    Guía "Sublichat Web · Rediseño integral" (05/11/2026): encabezado grafito con logo, buscador, avisos y perfil;
    fila clara de categorías con el activo en rojo y grupos desplegables; área de trabajo a ancho fluido.
-   Apagado por defecto. Se enciende con ?ui=v2 (queda guardado) o localStorage sublichat_ui_v2=1.
-   Se apaga con ?ui=v1 o con "Diseño anterior" en el menú del perfil.
+   R184 · ÚNICO diseño de Sublichat Web para TODAS las cuentas (PDF "4 ajustes", 06/11/2026): ya no existe
+   "Diseño anterior", ?ui=v1 ni la preferencia guardada en el navegador. La interfaz vieja (menú lateral) queda
+   oculta por ui-v2.css; su HTML se conserva porque las pantallas funcionales viven dentro de él.
    El menú sale de window.SublichatRBAC.pantallas(): respeta los módulos que Sublicuentas activa o desactiva.
    Solo presentación: no toca datos, APIs, Firebase, APK ni bot. Las pantallas se abren con SublichatRBAC.ir(). */
 (function () {
   'use strict';
-  var KEY = 'sublichat_ui_v2';
-  function leer() { try { return localStorage.getItem(KEY) === '1'; } catch (_) { return false; } }
-  function guardar(v) { try { v ? localStorage.setItem(KEY, '1') : localStorage.removeItem(KEY); } catch (_) {} }
-  try {
-    var q = new URLSearchParams(location.search).get('ui');
-    if (q === 'v2') guardar(true); else if (q === 'v1') guardar(false);
-  } catch (_) {}
-  var activo = leer();
+  try { localStorage.removeItem('sublichat_ui_v2'); } catch (_) {} // preferencia vieja: ya no decide nada
   window.SublichatUI = {
-    version: activo ? 'v2' : 'v1',
-    usarNuevo: function () { guardar(true); location.reload(); },
-    usarAnterior: function () { guardar(false); var u = new URL(location.href); u.searchParams.delete('ui'); location.replace(u.toString()); }
+    version: 'v2',
+    usarNuevo: function () {}, // compatibilidad: el diseño nuevo es el único
+    usarAnterior: function () {}
   };
-  if (!activo) return;
   document.documentElement.classList.add('ui-v2');
 
   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
@@ -114,7 +107,6 @@
               '<button class="v2-user" id="v2User" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="v2PopUser"><img src="/assets/sublirobot-96.webp" alt=""><span class="v2-who"><b id="v2Nombre"></b><small id="v2Rol"></small></span>' + ico('flecha') + '</button>' +
               '<div class="v2-pop v2-pop-user" id="v2PopUser" role="menu" hidden>' +
                 '<button type="button" role="menuitem" data-v2a="perfil">' + ico('perfil') + 'Mi perfil</button>' +
-                '<button type="button" role="menuitem" data-v2a="anterior">' + ico('atras') + 'Diseño anterior</button>' +
                 '<hr><button type="button" role="menuitem" data-v2a="salir" class="v2-peligro">' + ico('salir') + 'Cerrar sesión</button>' +
               '</div>' +
             '</div>' +
@@ -139,7 +131,6 @@
       if (a) {
         var acc = a.getAttribute('data-v2a'); cerrarTodo();
         if (acc === 'perfil') ir('perfil');
-        else if (acc === 'anterior') window.SublichatUI.usarAnterior();
         else if (acc === 'salir') { var lo = document.getElementById('logoutBtn'); if (lo) lo.click(); }
       }
     });
@@ -275,21 +266,12 @@
     shell.querySelectorAll('.v2-cuenta').forEach(function (c) { c.textContent = n; c.hidden = !n; });
   }
 
-  // Perfil (guía p. 16): datos personales primero; la galería de temas sale de la vista principal y queda en
-  // "Apariencia avanzada" (plegada). Solo se MUEVEN nodos: mismos IDs, mismos botones y el tema guardado no cambia.
+  // Perfil: datos personales primero. R184: ya no hay galería de temas (tema único de Sublicuentas).
   function ordenarPerfil() {
     var raiz = document.getElementById('rbac-perfil'); if (!raiz || raiz.dataset.v2Orden) return;
-    var grid = document.getElementById('themeSwatchGrid'); if (!grid) return;
-    var cardTema = grid.closest('.rbac-card'); var form = raiz.querySelector('.profile-form');
-    var cardForm = form && form.closest('.rbac-card'); var resumen = raiz.querySelector('.profile-summary-grid');
-    raiz.dataset.v2Orden = '1';
-    if (cardForm && resumen) resumen.insertAdjacentElement('afterend', cardForm);
-    if (cardTema) {
-      var det = document.createElement('details'); det.className = 'rbac-card v2-apariencia';
-      det.innerHTML = '<summary><b>Apariencia avanzada</b><small>Tema de color guardado en este navegador. El diseño nuevo usa la identidad Sublicuentas.</small></summary>';
-      cardTema.parentNode.insertBefore(det, cardTema); det.appendChild(cardTema); cardTema.classList.add('v2-apariencia-in');
-      raiz.appendChild(det);
-    }
+    var form = raiz.querySelector('.profile-form'); var cardForm = form && form.closest('.rbac-card'); var resumen = raiz.querySelector('.profile-summary-grid');
+    if (!cardForm || !resumen) return;
+    raiz.dataset.v2Orden = '1'; resumen.insertAdjacentElement('afterend', cardForm);
   }
 
   window.addEventListener('sublichat:nav', function () { construir(); usuario(); });
@@ -304,7 +286,7 @@
     if (wrap) new MutationObserver(revisar).observe(wrap, { childList: true, attributes: true, attributeFilter: ['class'], subtree: true });
     var nav = document.querySelector('.nav.focus-nav');
     if (nav) new MutationObserver(revisar).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style'] });
-    var obsP = document.getElementById('screen-perfil'); if (obsP) new MutationObserver(function () { if (obsP.querySelector('#themeSwatchGrid')) ordenarPerfil(); }).observe(obsP, { childList: true, subtree: true });
+    var obsP = document.getElementById('screen-perfil'); if (obsP) new MutationObserver(function () { if (obsP.querySelector('#rbac-perfil .profile-form')) ordenarPerfil(); }).observe(obsP, { childList: true, subtree: true });
     var tries = 0, iv = setInterval(function () { tries++; if (rbac()) { construir(); usuario(); } if (rbac() || tries > 60) clearInterval(iv); }, 250);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();

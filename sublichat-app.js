@@ -357,6 +357,7 @@ const DEMO = [
   {nombrePerfil:"Geisell Valle", servicios:[{plataforma:"netflix", precio:150, fechaRenovacion:offset(-2)}]}
 ];
 
+let FINANZAS_LISTAS=false; // R184 · Finanzas llega después del primer pintado
 let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
 // Oct-2026 · sublichat-app.js es módulo: DATA no es global. Lectura para Atrapa tu Premio (buscar cliente al dar fichas).
 Object.defineProperty(window,"__sublichatClientes",{configurable:true,get:()=>DATA});
@@ -536,7 +537,7 @@ async function readControlSharedCollection(coleccion){
     const docs=[],seen=new Set();let cursor='';
     do{
       if(session!==CONTROL_SESSION_VERSION)throw new Error('La sesión cambió.');
-      const response=await fetch('/api/importar',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'control_datos',coleccion,cursor})});
+      const response=await fetch('/api/importar',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'control_datos',coleccion,cursor,pageSize:500})}); // R184: menos viajes (servidor acepta hasta 500, sigue cortando a 2 MB)
       const result=await response.json().catch(()=>({}));
       if(!response.ok||!result.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos de Control Maestro.');
       if(result.coleccion!==coleccion||!Array.isArray(result.documentos))throw new Error('Respuesta incompleta de Control Maestro.');
@@ -645,6 +646,7 @@ async function load(options={}){
   const forceServer=options===true || !!(options&&options.forceServer);
   const requireServer=!!(options&&options.requireServer);
   const controlOnly=!!(options&&options.controlOnly);
+  let pintadoTemprano=false; // R184
   const session=CONTROL_SESSION_VERSION;
   const sharedControl=controlUsesSharedData();
   const cfg=CONFIG.firebase;
@@ -684,12 +686,14 @@ async function load(options={}){
 
       // Clientes y Bodega se leen antes de sustituir la copia visible. Así una
       // falla de red no deja Control Maestro con una mitad nueva y otra antigua.
+      // R184 · Clientes y Bodega se piden A LA VEZ (antes: uno detrás del otro). Se siguen aplicando juntos (atómico).
+      const pClientes=(async()=>{let x=null;if(!sharedControl&&!clientesLiveStarted&&!requireServer)x=await primeraFotoClientes(db,collection,onSnapshot);if(!x)x=await readCollection(CONFIG.collection);return x;})();
+      const pInventario=readCollection("inventario").then(ok=>({ok}),err=>({err}));
       let snap=null;
-      if(!sharedControl&&!clientesLiveStarted&&!requireServer)snap=await primeraFotoClientes(db,collection,onSnapshot);
-      if(!snap)snap=await readCollection(CONFIG.collection);
+      try{snap=await pClientes;}catch(e){await pInventario;throw e;}
       let invSnap=null,invError=null;
-      try{invSnap=await readCollection("inventario");}
-      catch(e){if(requireServer||sharedControl)throw e;invError=e;}
+      const invRes=await pInventario;
+      if(invRes.err){if(requireServer||sharedControl)throw invRes.err;invError=invRes.err;}else invSnap=invRes.ok;
       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       if(session!==CONTROL_SESSION_VERSION)return;
@@ -708,6 +712,9 @@ async function load(options={}){
       window._invError=invError?((invError&&invError.code)||(invError&&invError.message)||"error"):"";
       if(invError)console.error("inv",invError);
 
+      // R184 · Inicio y Clientes se pintan YA con Clientes + Bodega; Finanzas llega después (no lo usan).
+      // Las pantallas que sí usan Finanzas (Egresos, Cierre, Objetivos, Finanzas) muestran "cargando" hasta que llegue.
+      if(!controlOnly){ FINANZAS_LISTAS=false; pintadoTemprano=true; try{render();renderInventario();}catch(e){console.error(e);} }
       // Control Maestro no necesita volver a descargar Finanzas para reflejar
       // cambios del bot; se omite en su actualización rápida.
       if(!controlOnly){
@@ -716,8 +723,11 @@ async function load(options={}){
           // tener históricos en finanzas. Leemos ambas fuentes y unificamos por
           // ID, igual que el reporte de Telegram, para no omitir ni duplicar filas.
           let finActual=null,finHistorico=null,finActualError=null,finHistoricoError=null;
-          try{finActual=await readCollection("finanzas_movimientos");}catch(e){finActualError=e;}
-          try{finHistorico=await readCollection("finanzas");}catch(e){finHistoricoError=e;}
+          // R184 · las dos fuentes de Finanzas en paralelo (antes en serie)
+          await Promise.all([
+            readCollection("finanzas_movimientos").then(x=>{finActual=x;},e=>{finActualError=e;}),
+            readCollection("finanzas").then(x=>{finHistorico=x;},e=>{finHistoricoError=e;})
+          ]);
           if(!finActual&&!finHistorico)throw(finActualError||finHistoricoError||new Error("No se pudo leer finanzas"));
           const finPorId=new Map();
           if(finHistorico)finHistorico.docs.forEach(d=>finPorId.set(d.id,{id:d.id,_source:"finanzas",...d.data()}));
@@ -731,6 +741,7 @@ async function load(options={}){
       if(session!==CONTROL_SESSION_VERSION)return;
       console.error(e);
       CONTROL_DATA_ERROR=e.message||'No se pudieron cargar los datos de Firebase. Presione Actualizar datos para reintentar.';
+      try{window.dispatchEvent(new CustomEvent('sublichat:datos-error',{detail:{error:CONTROL_DATA_ERROR}}));}catch(_){}
       activarControlFallback();
       document.getElementById("srcLabel").textContent=DATA.length?'Error de conexión · última copia visible':'No se pudieron cargar los datos';
       try{window.sublichatControlSyncLoadedData?.();}catch(_){}
@@ -745,9 +756,10 @@ async function load(options={}){
   // Finanzas detrás de la pantalla completa: ese trabajo duplicado era la
   // pausa que se sentía como un congelamiento.
   if(!controlOnly){
-    render();
-    renderInventario();
+    FINANZAS_LISTAS=true;
+    if(!pintadoTemprano){render();renderInventario();} // error o modo demo: no pasó por el pintado temprano
     renderFinanzas();
+    try{window.dispatchEvent(new CustomEvent('sublichat:finanzas'));}catch(_){}
   }
   return {servicios:DATA.length,cuentas:INVENTARIO.length,forceServer};
 }
@@ -1603,6 +1615,7 @@ function finParse(m){
   };
 }
 function renderFinanzas(){
+  if(!FINANZAS_LISTAS&&!window._finError){const st=document.getElementById("finStats");if(st)st.innerHTML='<div style="color:var(--muted);font-size:12.5px">Cargando movimientos de Finanzas…</div>';return;} // R184
   if(window._finError){ const st=document.getElementById("finStats"); if(st)st.innerHTML=`<div style="color:var(--muted);font-size:12.5px">⚠️ No pude leer finanzas (${window._finError}). Revisá las reglas de Firestore.</div>`; return; }
   const movs=FINANZAS.filter(m=>finKey(m?.tipo||m?.type||m?.movimiento||"")!=="venta").map(finParse).filter(m=>m.fecha);
   const ing=movs.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
@@ -2896,10 +2909,9 @@ const FRASES=[
 })();
 
 const themeBtn=document.getElementById("themeBtn");
-function applyTheme(light){document.body.classList.toggle("light",light);themeBtn.textContent=light?"☀️":"🌙";try{localStorage.setItem("subli_theme",light?"light":"dark")}catch(e){}}
-let savedLight=false;try{savedLight=localStorage.getItem("subli_theme")==="light"}catch(e){}
-applyTheme(savedLight);
-themeBtn.addEventListener("click",()=>{applyTheme(!document.body.classList.contains("light"));});
+// R184 · sin cambio claro/oscuro por usuario: la apariencia es única (clara, identidad Sublicuentas).
+function applyTheme(){document.body.classList.add("light");if(themeBtn){themeBtn.textContent="☀️";themeBtn.hidden=true;}}
+applyTheme();
 
 /* ===== PELIS / SERIES ===== */
 const mq=document.getElementById("mq"), movieResults=document.getElementById("movieResults");
@@ -7484,7 +7496,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
         }
         saveProfileLocal(merged);
         _profileServerSynced=true;
-        if(merged.tema)applyTheme(merged.tema,false);
+        /* R184: merged.tema ya no cambia la apariencia (tema único) */
         updateTopAdvisor(); if(typeof renderPerfil==='function')renderPerfil();
       }
     }catch(e){}
@@ -7511,9 +7523,13 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   };
   const THEME_VAR_MAP={bg:'--bg',surface:'--surface',surface2:'--surface2',card:'--card',line:'--line',line2:'--line2',txt:'--txt',txt2:'--txt2',muted:'--muted',accent:'--accent',accent2:'--accent2',accentSoft:'--accentSoft',good:'--good',goodSoft:'--goodSoft',warn:'--warn',warnSoft:'--warnSoft',info:'--info'};
   function themeKey(){return 'sublichat_theme_'+norm(currentUser()||currentRole()||'usuario');}
-  function currentThemeId(){try{return localStorage.getItem(themeKey())||'ejecutivo';}catch(e){return 'ejecutivo';}}
+  // R184 · tema ÚNICO de Sublicuentas. Las preferencias viejas (localStorage / perfil.tema) se IGNORAN al pintar;
+  // no se borran ni se migran (quedan como respaldo).
+  const TEMA_CORPORATIVO='ejecutivo';
+  function currentThemeId(){return TEMA_CORPORATIVO;}
   // Aplica un tema cambiando solo variables CSS de color — nunca toca iconos, tipografía ni layout.
   function applyTheme(id,persist){
+    id=TEMA_CORPORATIVO; persist=false; // R184 · nadie cambia los colores globales
     const preset=THEME_PRESETS[id]; if(!preset)return;
     const root=document.documentElement;
     document.body.dataset.theme=id;
@@ -7612,14 +7628,6 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       .profile-avatar{width:96px;height:96px;border-radius:30px;object-fit:cover;box-shadow:0 10px 0 var(--accentSoft),0 18px 28px rgba(0,0,0,.16);background:var(--surface)}
       .profile-name{font-family:var(--ff);font-size:28px;font-weight:900;letter-spacing:-.5px;color:var(--txt);margin:0 0 4px}.profile-cargo{font-size:14px;font-weight:900;color:var(--txt2);line-height:1.35}.profile-role{display:inline-flex;margin-top:10px;border-radius:999px;padding:7px 10px;background:var(--accentSoft);color:var(--accent);font-size:11px;font-weight:900;border:1px solid var(--accentSoft)}
       .profile-funciones{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px}.profile-funcion{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:10px;font-size:12.5px;font-weight:800;color:var(--txt2);line-height:1.25}.profile-funcion:before{content:'✓ ';color:var(--good);font-weight:900}
-      .theme-sub{font-size:12px;color:var(--txt2);margin-top:4px;margin-bottom:12px}
-      .theme-swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-      .theme-swatch{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px;border-radius:14px;border:2px solid var(--line);background:var(--surface);cursor:pointer;transition:.15s;text-align:left}
-      .theme-swatch:active{transform:translateY(1px)}
-      .theme-swatch.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-      .tsw-preview{width:100%;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid rgba(0,0,0,.08)}
-      .tsw-dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.15)}
-      .tsw-name{font-size:10.5px;font-weight:700;color:var(--txt);line-height:1.25}
       .profile-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.profile-form .rbac-field.wide{grid-column:1/-1}.profile-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.profile-actions .rbac-btn{flex:1;min-width:160px}.profile-file{font-size:12px;color:var(--txt2);font-weight:800}
 
       .import-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.import-tab{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:12px;font-weight:900;color:var(--txt2);cursor:pointer}.import-tab.on{background:var(--accentSoft);color:var(--accent);border-color:var(--accentSoft);box-shadow:var(--sh)}
@@ -7772,9 +7780,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       <div class="profile-summary-grid"><div><b>${propios.length}</b><span>Servicios asignados</span></div><div><b>${fmt(totalPropios)}</b><span>Cartera asignada</span></div><div><b>${stats.games}</b><span>Juegos practicados</span></div><div><b>${stats.aula}%</b><span>Avance en aula</span></div><div><b>${stats.sent}</b><span>Tickets enviados</span></div><div><b>${stats.resolved}</b><span>Tickets resueltos</span></div></div>
       <div class="profile-dashboard"><div class="profile-main-column"><div class="rbac-card profile-activity"><b>Actividad del perfil</b>${activity.map(a=>`<div class="profile-activity-row"><span>${a.ico}</span><div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div></div>`).join('')}</div><div class="rbac-card"><b>Funciones dentro de la empresa</b><div class="profile-funciones">${todas.map(f=>`<div class="profile-funcion">${esc(f)}</div>`).join('')}</div></div></div>
       <div class="profile-side-column"><div class="rbac-card profile-progress"><b>Resumen de avance</b><div class="profile-progress-row"><span>Aula de clases</span><em>${stats.aula}%</em></div><i><u style="width:${stats.aula}%"></u></i><div class="profile-progress-row"><span>Tickets resueltos</span><em>${stats.resolved}/${Math.max(stats.sent,stats.resolved)}</em></div><i><u style="width:${Math.max(stats.sent,stats.resolved)?Math.round(stats.resolved/Math.max(stats.sent,stats.resolved)*100):0}%"></u></i><div class="profile-progress-row"><span>Materia cerebral</span><em>${stats.games} juegos</em></div></div></div></div>
-      <div class="rbac-card"><b>Tema de color</b><div class="theme-sub">El tema cambia fondos, tarjetas, botones, textos y estados en toda la interfaz.</div><div class="theme-swatch-grid" id="themeSwatchGrid">${Object.keys(THEME_PRESETS).map(id=>{const t=THEME_PRESETS[id],on=id===currentThemeId();return `<button type="button" class="theme-swatch${on?' on':''}" data-theme="${id}" title="${esc(t.nombre)}"><span class="tsw-preview" style="background:${t.vars.bg}"><span class="tsw-dot" style="background:${t.vars.accent}"></span><span class="tsw-dot" style="background:${t.vars.accent2}"></span></span><span class="tsw-name">${esc(t.nombre)}</span></button>`;}).join('')}</div></div>
+      <!-- R184 · sin selector de tema: un solo tema Sublicuentas gestionado centralmente -->
       <div class="rbac-card"><b>Editar perfil visible</b><div class="profile-form"><label class="rbac-field"><span>Nombre mostrado</span><input class="rbac-input" id="profNombre" value="${esc(p.nombre||'')}"></label><label class="rbac-field"><span>Cargo</span><input class="rbac-input" id="profCargo" value="${esc(p.cargo||'')}"></label><label class="rbac-field"><span>Teléfono interno</span><input class="rbac-input" id="profTelefono" value="${esc(p.telefono||'')}" placeholder="Opcional"></label><label class="rbac-field"><span>Área</span><input class="rbac-input" id="profArea" value="${esc(p.area||'')}" placeholder="Ventas, Finanzas, Auditoría…"></label><label class="rbac-field wide"><span>Foto / avatar</span><input class="profile-file" id="profFoto" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Banner de portada y mensaje diario</span><input class="profile-file" id="profBanner" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Funciones extra, una por línea</span><textarea class="rbac-input" id="profFunciones" rows="3">${esc(p.funcionesExtra||'')}</textarea></label></div><div class="profile-actions"><button class="rbac-btn good" id="profGuardar">💾 Guardar perfil</button><button class="rbac-btn" id="profReset">↩️ Restaurar perfil base</button><button class="rbac-btn red" id="profSalir">🚪 Cerrar sesión</button></div></div>`;
-    document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.theme;applyTheme(id,true);document.querySelectorAll('#themeSwatchGrid .theme-swatch').forEach(b=>b.classList.toggle('on',b===btn));mostrarToast('🎨 Tema aplicado: '+(THEME_PRESETS[id]?.nombre||id));});
     const saveImage=async(input,key,max,quality,msg)=>{const file=input?.files?.[0];if(!file)return;try{const dataUrl=await resizeProfilePhoto(file,max,quality),cur=readProfile();cur[key]=dataUrl;saveProfile(cur);renderPerfil();updateTopAdvisor();mostrarToast(msg);}catch(e){mostrarToast('⚠️ No se pudo procesar la imagen. Use JPG o PNG más liviano.');}};
     const foto=document.getElementById('profFoto'),banner=document.getElementById('profBanner');if(foto)foto.onchange=()=>saveImage(foto,'avatar',520,.82,'✅ Foto actualizada.');if(banner)banner.onchange=()=>saveImage(banner,'banner',1400,.72,'✅ Banner actualizado en Perfil e Inicio. Ahora puede ajustar el encuadre.');
     const bannerBtn=document.getElementById('profBannerBtn');if(bannerBtn)bannerBtn.onclick=()=>document.getElementById('profBanner')?.click();
@@ -7832,6 +7839,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
   function renderEgresos(){
     const el=document.getElementById('rbac-egresos'); if(!el)return;
+    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
     const eg=FINANZAS.filter(m=>norm(m.tipo||m.movimiento||'').includes('egreso')).slice().sort((a,b)=>{const va=parseDate(a.fecha||a.fechaPago||a.createdAt||a.created_at||a.timestamp);const vb=parseDate(b.fecha||b.fechaPago||b.createdAt||b.created_at||b.timestamp);return ((vb&&!isNaN(vb))?vb.getTime():0)-((va&&!isNaN(va))?va.getTime():0);}).slice(0,20);
     el.innerHTML=`<div class="rbac-form"><label class="rbac-field"><span>Motivo</span><input class="rbac-input" id="egMotivo" placeholder="Compra, banco, soporte…"></label><label class="rbac-field"><span>Monto (L)</span><input class="rbac-input" id="egMonto" type="number" inputmode="numeric" placeholder="0"></label><label class="rbac-field"><span>Banco / billetera</span><input class="rbac-input" id="egBanco" placeholder="BAC, Ficohsa, efectivo…"></label><label class="rbac-field"><span>Fecha</span><input class="rbac-input" id="egFecha" type="date" value="${dateISO(new Date())}"></label><div class="rbac-wide"><button class="rbac-btn red" id="egGuardar" style="width:100%">💾 Guardar egreso</button></div></div><div class="count" style="margin-top:14px">Últimos egresos</div><div class="rbac-list">${eg.length?eg.map(m=>`<div class="rbac-row"><div><h3>${esc(m.motivo||m.descripcion||'Egreso')}</h3><p>${fmt(m.monto)} · ${esc(m.banco||'—')}</p><small>${esc(m.fecha||m.createdAt||'')}</small></div><span class="rbac-badge">${esc(m.registradoPor||'')}</span></div>`).join(''):'<div class="empty">Aún no hay egresos cargados.</div>'}</div>`;
     const btn=document.getElementById('egGuardar'); if(btn)btn.onclick=async()=>{
@@ -7848,6 +7856,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   function movDate(m){ return parseDate(m.fechaPago||m.fecha||m.createdAt||m.updatedAt); }
   function renderCierre(){
     const el=document.getElementById('rbac-cierre'); if(!el)return;
+    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
     const {start,end}=currentWeekRange();
     const movs=FINANZAS.filter(m=>{const d=movDate(m);return d&&d>=start&&d<=end;});
     const ingresos=movs.filter(m=>norm(m.tipo||'').includes('ingreso')||norm(m.tipo||'').includes('cobro')).reduce((s,m)=>s+Number(m.monto||0),0);
@@ -7918,6 +7927,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   }
   function renderObjetivos(){
     const el=document.getElementById('rbac-objetivos'); if(!el)return;
+    if(!FINANZAS_LISTAS&&!window._finError){el.innerHTML='<div class="rbac-card fin-cargando" role="status" aria-busy="true"><b>Cargando movimientos de Finanzas…</b><small style="display:block;color:var(--txt2);margin-top:4px">Las cifras aparecen cuando terminan de llegar; no se muestran ceros provisionales.</small></div>';return;} // R184
     const metas=objReadMetas();
     const ayer=new Date(today); ayer.setDate(today.getDate()-1);
     const {start,end}=currentWeekRange();
@@ -8509,6 +8519,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   }
   function renderTickets(force){const host=document.getElementById('rbac-tickets');if(!host)return;const active=!!document.getElementById('screen-tickets')?.classList.contains('active');if(!active&&!force)return;const ae=document.activeElement;if(!force&&ae&&host.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;ensureTkCss();host.innerHTML=tkHtml();tkBind(host);tkUpdateNavBadge();}
 
+  window.addEventListener('sublichat:finanzas',()=>{try{renderEgresos();renderCierre();renderObjetivos();}catch(e){console.error(e);}}); // R184
   function renderRBACAll(){
     updateTopAdvisor(); renderPerfil();
     renderAgenda(); renderImportador(); renderEgresos(); renderCierre(); renderCRM(); renderAuditoria(); renderEstadisticas(); renderActividad(); renderSoporteConfig(); renderTickets(); renderObjetivos();

@@ -352,15 +352,6 @@ html.ui-v2 body .wrap>.screen.v2-entra{animation:v2Entra .22s var(--n-ease)}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .rbac-nav-arrow{display:none!important}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-buscar input{background:transparent!important;border:0!important;box-shadow:none!important;color:#fff!important;padding:0!important;height:auto!important}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body .wrap{border-radius:0!important;border:0!important;box-shadow:none!important}
-/* Perfil: Apariencia avanzada plegada al final */
-html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil details.v2-apariencia{padding:0!important}
-#rbac-perfil details.v2-apariencia>summary{list-style:none;cursor:pointer;padding:16px 20px;display:flex;flex-direction:column;gap:2px}
-#rbac-perfil details.v2-apariencia>summary::-webkit-details-marker{display:none}
-#rbac-perfil details.v2-apariencia>summary::after{content:"Mostrar";position:absolute;right:20px;top:18px;font-size:13px;font-weight:600;color:#B91C1C}
-#rbac-perfil details.v2-apariencia[open]>summary::after{content:"Ocultar"}
-#rbac-perfil details.v2-apariencia{position:relative}
-#rbac-perfil details.v2-apariencia>summary small{font-size:12.5px;color:#58616D}
-html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .v2-apariencia-in{border:0!important;box-shadow:none!important;margin:0!important;padding:0 20px 20px!important;background:transparent!important}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{min-height:0!important;height:220px!important;box-shadow:none!important}
 @media (max-width:767.98px){html.ui-v2:not(#v2a):not(#v2b):not(#v2c) body #rbac-perfil .profile-cover{height:170px!important}}
 html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;height:auto!important;outline:none!important}
@@ -379,3 +370,45 @@ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{backgro
 
 /* R167 · con "Sala de Juntas" son 10 botones: en 1280-1599px se compactan un poco para que quepan en una fila */
 @media (min-width:1280px) and (max-width:1599.98px){#v2Shell .v2-nav .v2-tab{padding:0 11px;font-size:13px;gap:7px}#v2Shell .v2-nav-in{gap:6px!important;padding:0 18px}#v2Shell .v2-tab>svg{width:17px;height:17px}}
+
+/* ===== R184 · Botones superiores con más presencia (PDF "4 ajustes", p. 4) =====
+   Mismos botones, orden, grupos y permisos. Alto 46 px (zona táctil ≥ 44×44), padding 14 px, 8 px entre
+   categorías (juntas, sin space-between), Inter 13.5–14 px / 600, ícono con acento suave por familia,
+   activo en rojo Sublicuentas, hover 180 ms, foco de teclado visible. Lo que no cabe pasa a "Más secciones". */
+@media (min-width:768px){:root{--v2-nav:64px;--v2-head:136px}}
+#v2Shell .v2-nav-in{justify-content:flex-start!important;gap:8px!important;padding:0 20px!important}
+#v2Shell .v2-nav .v2-tab{height:46px;min-width:44px;padding:0 14px 0 8px;gap:9px;border-radius:12px;border:1px solid #E6E9EF;background:#FAFBFC;
+  font-family:var(--v2-font);font-size:14px;font-weight:600;color:#1B222C;box-shadow:0 1px 0 rgba(20,25,32,.04);
+  transition:background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
+#v2Shell .v2-nav .v2-tab::after{display:none}
+#v2Shell .v2-nav .v2-tab>svg:first-child{width:28px;height:28px;padding:5px;box-sizing:border-box;border-radius:9px;flex:none;
+  color:var(--acento,#58616D);background:var(--acento-suave,#EEF0F4);transition:background-color .18s ease,color .18s ease}
+#v2Shell .v2-nav .v2-tab>.v2-chev{width:16px;height:16px;padding:0;background:none;color:#707C8D}
+#v2Shell .v2-nav .v2-tab:hover{background:#fff;border-color:#D5DAE3;box-shadow:0 2px 8px rgba(20,25,32,.08);color:#141920}
+#v2Shell .v2-nav .v2-tab:focus-visible{outline:2px solid #E2231A!important;outline-offset:2px!important}
+#v2Shell .v2-nav .v2-tab.v2-hijo,#v2Shell .v2-nav .v2-tab[aria-expanded="true"]{background:#fff;border-color:#F3B9B5;color:#B91C1C}
+#v2Shell .v2-nav .v2-tab.on,#v2Shell .v2-nav .v2-tab.on:hover{background:#E2231A;border-color:#E2231A;color:#fff;box-shadow:0 2px 0 #A0150F,0 6px 16px rgba(226,35,26,.24)}
+#v2Shell .v2-nav .v2-tab.on>svg:first-child{color:#fff;background:rgba(255,255,255,.2)}
+#v2Shell .v2-nav .v2-tab.on>.v2-chev{color:#fff}
+/* acentos discretos por familia (el rojo queda solo para el activo) */
+#v2Shell .v2-nav [data-s="inicio"]{--acento:#B91C1C;--acento-suave:#FDECEB}
+#v2Shell .v2-nav [data-s="clientes"]{--acento:#1D5FD1;--acento-suave:#E8F0FD}
+#v2Shell .v2-nav [data-s="agenda"]{--acento:#B76E00;--acento-suave:#FFF3DC}
+#v2Shell .v2-nav [data-s="control-cuentas"]{--acento:#6D3FD8;--acento-suave:#F0EAFD}
+#v2Shell .v2-nav [data-s="portal-cliente"]{--acento:#0B8579;--acento-suave:#E3F6F3}
+#v2Shell .v2-nav [data-s="catalogo-relojes"]{--acento:#9A4F12;--acento-suave:#FBEFE4}
+#v2Shell .v2-nav [data-s="sala-juntas"]{--acento:#3B4CC0;--acento-suave:#EBEDFB}
+#v2Shell .v2-nav [data-grupo="Operación"]>.v2-tab{--acento:#15803D;--acento-suave:#E5F5EA}
+#v2Shell .v2-nav [data-grupo="Supervisión"]>.v2-tab{--acento:#334155;--acento-suave:#ECEFF3}
+#v2Shell .v2-nav [data-grupo="Más"]>.v2-tab,#v2Shell .v2-nav .v2-desborde>.v2-tab{--acento:#58616D;--acento-suave:#EEF0F4}
+@media (min-width:1280px) and (max-width:1599.98px){#v2Shell .v2-nav .v2-tab{padding:0 12px 0 7px;font-size:13.5px;gap:8px}#v2Shell .v2-nav-in{gap:8px!important;padding:0 16px!important}#v2Shell .v2-nav .v2-tab>svg:first-child{width:26px;height:26px;padding:5px}}
+@media (min-width:768px) and (max-width:1279.98px){#v2Shell .v2-nav .v2-tab{padding:0 12px 0 7px;font-size:13.5px}}
+@media (prefers-reduced-motion:reduce){#v2Shell .v2-nav .v2-tab{transition:none}}
+/* R184 · esqueleto de Inicio mientras llegan los datos (bloques lisos, sin degradados ni ceros) */
+#v2Inicio .v2-esq{pointer-events:none}
+#v2Inicio .v2k.v2-esq .v2k-ico,#v2Inicio .v2k.v2-esq small,#v2Inicio .v2k.v2-esq b,#v2Inicio .v2k.v2-esq em{display:block;background:#EEF0F4!important;border-radius:8px;color:transparent!important;animation:v2Pulso 1.2s ease-in-out infinite}
+#v2Inicio .v2k.v2-esq small{width:60%;height:12px}#v2Inicio .v2k.v2-esq b{width:45%;height:26px;margin:8px 0}#v2Inicio .v2k.v2-esq em{width:70%;height:11px}
+#v2Inicio .v2-esq-g{min-height:260px;background:#fff!important}#v2Inicio .v2-esq-g::before{content:"";display:block;margin:20px;height:220px;border-radius:12px;background:#F3F4F7;animation:v2Pulso 1.2s ease-in-out infinite}
+#v2Inicio .v2-carga-error{padding:20px;display:grid;gap:10px;justify-items:start;border-color:#F5C2BE!important}#v2Inicio .v2-carga-error p{margin:0;color:#58616D}
+@keyframes v2Pulso{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){#v2Inicio .v2-esq *,#v2Inicio .v2-esq-g::before{animation:none}}

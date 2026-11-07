@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="ui-v2">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
@@ -1322,10 +1322,10 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   #screen-tickets #tkAvisoDetalle{min-height:180px}
 }
 </style>
-<!-- R162 · diseño nuevo (apagado por defecto: ?ui=v2) -->
-<link rel="stylesheet" href="/ui-v2.css?v=20261105-r167">
-<script src="/ui-v2.js?v=20261105-r167"></script>
-<script src="/ui-v2-inicio.js?v=20261105-r167"></script>
+<!-- R184 · diseño único de Sublichat Web (todas las cuentas). Antes: apagado por defecto (?ui=v2). -->
+<link rel="stylesheet" href="/ui-v2.css?v=20261106-r184">
+<script src="/ui-v2.js?v=20261106-r184"></script>
+<script src="/ui-v2-inicio.js?v=20261106-r184"></script>
 </head>
 <body>
 <!-- INTRO SUBLIROBOT -->
@@ -1716,7 +1716,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
 </nav>
 <div id="sidebarWrap" class="sidebar-wrap"></div>
-<script type="module" src="./sublichat-app.js?v=20261106-r183"></script>
+<script type="module" src="./sublichat-app.js?v=20261106-r184"></script>
 <!-- MODAL MENSAJE DE COBRO -->
 <div id="cobroModal" class="cobro-overlay">
   <div class="cobro-sheet">
@@ -4928,7 +4928,6 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
   body.ready input,body.ready textarea,body.ready select,body.ready .search,body.ready .tk-input{background:var(--surface)!important;color:var(--txt)!important;border-color:var(--line)!important}
   body.ready table,body.ready thead th,body.ready tbody td{color:var(--txt)!important;border-color:var(--line)!important}
   body.ready thead th{background:var(--surface)!important;color:var(--txt2)!important}
-  body.ready .theme-swatch{background:var(--surface)!important;color:var(--txt)!important}
 
   #screen-inicio.active{display:block!important;padding:0!important;color:var(--txt)!important}
   #screen-inicio .home-welcome{position:relative;isolation:isolate;overflow:hidden;min-height:176px;padding:34px 48px;border-radius:24px;background:linear-gradient(118deg,var(--accent2),var(--accent),color-mix(in srgb,var(--accent) 52%,#54dff0 48%));color:#fff;display:flex;align-items:flex-start;box-shadow:0 12px 28px color-mix(in srgb,var(--accent) 25%,transparent)}
