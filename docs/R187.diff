@@ -1,0 +1,1654 @@
+--- /dev/null
++++ R187/api/_baul-apks.js
+@@ -0,0 +1,153 @@
++// api/_baul-apks.js · R187 · Baúl de APKs de TV Digital (PDF «Sublichat 5 puntos», bloque 03, 07/11/2026).
++// Fuente ÚNICA para Sublichat Web, APK y bot de Telegram (el bot tiene una copia fiel: lib_baul_apks.js).
++// Directorio oficial dado por la dirección: URLs y códigos EXACTOS. Nada se inventa:
++//   · sin URL → "tienda del TV (sin URL exacta)" · código no confirmado → pendiente de confirmar.
++//   · Stella TV: solo Android TV/TV Box y Android móvil (no iPhone ni PC).
++//   · El código 298863 es SOLO de la app "Sublicuentas" (no de Latv-Gt).
++// Una app compartida (p. ej. "Sublicuentas" en Lion/Icomplay/Latin/Nanotech) es UN enlace con varias plataformas:
++// editarlo cambia todas a la vez sin duplicar el recurso.
++// Vive en Firestore (configuracion_tv_digital/baul_apks); estos valores son la semilla si el documento no existe.
++// Separado de las URLs de conexión de cada IPTV (_tv-digital.js): aquí solo hay descargas de apps.
++// CommonJS a propósito (igual que _tv-digital.js).
++
++const PLATAFORMAS = Object.freeze([
++  { id: "liontv", nombre: "Lion TV" }, { id: "icomplay", nombre: "ICOMPLAY" }, { id: "latintv", nombre: "Latin TV" },
++  { id: "oleada", nombre: "Oleada TV" }, { id: "stellatv", nombre: "Stella TV" }, { id: "evoutouch", nombre: "Nanotech" },
++]);
++const DISPOSITIVOS = Object.freeze({
++  android_tv: "Android TV / TV Box", fire_tv: "Fire TV / Fire Stick", android_movil: "Celular / tableta Android",
++  smart_tv: "Smart TV Samsung / LG", iphone: "iPhone / iPad", pc: "PC / Laptop",
++});
++const METODOS = Object.freeze({ apk: "APK directo", downloader: "Downloader", play_store: "Google Play", app_store: "App Store", tv_store: "Tienda del TV", web: "Web" });
++
++const PURPLE = "https://apps.apple.com/hn/app/purple-lite-iptv-player/id6749171817";
++const L4 = ["liontv", "icomplay", "latintv", "evoutouch"];
++const SEMILLA = Object.freeze({
++  version: 1,
++  apps: [
++    { id: "sublicuentas", nombre: "Sublicuentas" }, { id: "purple", nombre: "Purple IPTV Lite" },
++    { id: "maxplayer", nombre: "Max Player" }, { id: "smartone", nombre: "SmartOne" },
++    { id: "latvgt", nombre: "Latv-Gt" }, { id: "evotouch", nombre: "Evotouch" },
++    { id: "oleada", nombre: "Oleada" }, { id: "oleadaweb", nombre: "Oleada Web" }, { id: "stellatv", nombre: "Stella TV" },
++  ],
++  enlaces: [
++    { id: "subli-atv", appId: "sublicuentas", plataformas: L4, dispositivo: "android_tv", metodo: "downloader", url: "http://aftv.news/298863", codigo: "298863" },
++    { id: "purple-ios", appId: "purple", plataformas: L4, dispositivo: "iphone", metodo: "app_store", url: PURPLE, codigo: "" },
++    { id: "maxplayer-tv", appId: "maxplayer", plataformas: L4, dispositivo: "smart_tv", metodo: "tv_store", url: "", codigo: "", nota: "Tienda de apps del TV (sin URL exacta). Alternativa a SmartOne." },
++    { id: "smartone-tv", appId: "smartone", plataformas: L4, dispositivo: "smart_tv", metodo: "tv_store", url: "", codigo: "", nota: "Tienda de apps del TV (sin URL exacta). Alternativa a Max Player.", costoExterno: { monto: 85, moneda: "HNL", texto: "L85 para activar 12 meses POR DISPOSITIVO, lo paga el cliente aparte del costo IPTV." } },
++    { id: "latvgt-atv", appId: "latvgt", plataformas: ["latintv"], dispositivo: "android_tv", metodo: "play_store", url: "https://play.google.com/store/apps/details?id=latvgt.appcom", codigo: "", nota: "Segunda app Android independiente. El código 298863 NO es de esta app." },
++    { id: "evotouch-atv", appId: "evotouch", plataformas: ["evoutouch"], dispositivo: "android_tv", metodo: "play_store", url: "https://play.google.com/store/apps/details?id=com.evotouch.app", codigo: "" },
++    { id: "oleada-atv", appId: "oleada", plataformas: ["oleada"], dispositivo: "android_tv", metodo: "apk", url: "https://dldsrvs.com/apks/tv/ola_tv.apk", codigo: "9387291" },
++    { id: "oleada-fire", appId: "oleada", plataformas: ["oleada"], dispositivo: "fire_tv", metodo: "apk", url: "https://dldsrvs.com/apks/firestick/mgs_pro.apk", codigo: "1290332" },
++    { id: "oleada-mov-aftv", appId: "oleada", plataformas: ["oleada"], dispositivo: "android_movil", metodo: "downloader", url: "http://aftv.news/4221609", codigo: "", codigoPendiente: "4221609", nota: "El número 4221609 está en la URL pero NO está confirmado como código Downloader." },
++    { id: "oleada-mov-apk", appId: "oleada", plataformas: ["oleada"], dispositivo: "android_movil", metodo: "apk", url: "https://dldsrvs.com/apks/mobile/ola_mob.apk", codigo: "" },
++    { id: "oleadaweb-ios", appId: "oleadaweb", plataformas: ["oleada"], dispositivo: "iphone", metodo: "web", url: "https://www.oleada-tv.online", codigo: "" },
++    { id: "oleadaweb-pc", appId: "oleadaweb", plataformas: ["oleada"], dispositivo: "pc", metodo: "web", url: "https://www.oleada-tv.online", codigo: "" },
++    { id: "stella-atv-aftv", appId: "stellatv", plataformas: ["stellatv"], dispositivo: "android_tv", metodo: "downloader", url: "http://aftv.news/7471459", codigo: "7471459" },
++    { id: "stella-atv-bit", appId: "stellatv", plataformas: ["stellatv"], dispositivo: "android_tv", metodo: "apk", url: "https://bit.ly/stv0904", codigo: "" },
++    { id: "stella-mov", appId: "stellatv", plataformas: ["stellatv"], dispositivo: "android_movil", metodo: "apk", url: "https://bit.ly/4bg5tgE", codigo: "" },
++  ].map((e, i) => ({ prioridad: i + 1, activo: true, revision: 1, nota: "", ...e })),
++});
++const AVISO_INSTALACION = "Para APK externas: instale Downloader si corresponde, active el permiso de instalar desde esa fuente y use solo estos enlaces. Si no instala por falta de espacio, libere espacio borrando a mano una app que no use (Sublichat no borra nada).";
++
++const COL = "configuracion_tv_digital", DOC = "baul_apks";
++const clean = (v, n = 200) => String(v == null ? "" : v).trim().slice(0, n);
++const idOk = (v) => /^[a-z0-9-]{2,40}$/.test(String(v || ""));
++
++// Solo http(s), sin espacios ni caracteres de inyección; dominio obligatorio.
++function validarUrlDescarga(url) {
++  const s = clean(url, 400);
++  if (!s) return "";
++  let u; try { u = new URL(s); } catch (_) { return null; }
++  if (!["http:", "https:"].includes(u.protocol) || !u.hostname || !u.hostname.includes(".")) return null;
++  if (/[\s<>"'`\\]/.test(s)) return null;
++  return s;
++}
++function validarCodigo(c) { const s = clean(c, 20); return !s || /^\d{3,12}$/.test(s) ? s : null; }
++
++function normalizar(data) {
++  const d = data && Array.isArray(data.enlaces) ? data : SEMILLA;
++  return { version: Number(d.version || 1), apps: (d.apps || SEMILLA.apps).map((a) => ({ id: a.id, nombre: clean(a.nombre, 60) })), enlaces: d.enlaces.map((e) => ({ ...e })), updatedAt: d.updatedAt || "", updatedBy: d.updatedBy || "" };
++}
++
++let cache = { at: 0, data: null };
++async function leerBaul(db, { fresco = false } = {}) {
++  if (!fresco && cache.data && Date.now() - cache.at < 60 * 1000) return cache.data;
++  let data = null;
++  try { const s = await db.collection(COL).doc(DOC).get(); data = s.exists ? s.data() : null; } catch (_) { if (cache.data) return cache.data; }
++  cache = { at: Date.now(), data: normalizar(data) };
++  return cache.data;
++}
++
++// Vista para consultar: por plataforma → dispositivos → enlaces activos (con nombre de app y método legibles).
++function vistaPlataforma(baul, plataformaId, { incluirInactivos = false } = {}) {
++  const apps = new Map(baul.apps.map((a) => [a.id, a.nombre]));
++  const enl = baul.enlaces.filter((e) => (incluirInactivos || e.activo !== false) && (e.plataformas || []).includes(plataformaId)).sort((a, b) => (a.prioridad || 99) - (b.prioridad || 99));
++  const porDisp = {};
++  for (const e of enl) (porDisp[e.dispositivo] = porDisp[e.dispositivo] || []).push({ ...e, app: apps.get(e.appId) || e.appId, metodoTxt: METODOS[e.metodo] || e.metodo, dispositivoTxt: DISPOSITIVOS[e.dispositivo] || e.dispositivo, compartidaCon: (e.plataformas || []).filter((p) => p !== plataformaId) });
++  const p = PLATAFORMAS.find((x) => x.id === plataformaId);
++  return { plataforma: plataformaId, nombre: p ? p.nombre : plataformaId, dispositivos: Object.keys(DISPOSITIVOS).filter((k) => porDisp[k]).map((k) => ({ id: k, nombre: DISPOSITIVOS[k], enlaces: porDisp[k] })), aviso: AVISO_INSTALACION };
++}
++
++async function escribir(db, usuario, mutar, auditoria) {
++  const ref = db.collection(COL).doc(DOC), ahora = new Date().toISOString();
++  let antes = null, despues = null;
++  await db.runTransaction(async (tx) => {
++    const s = await tx.get(ref);
++    const actual = normalizar(s.exists ? s.data() : null);
++    const r = mutar(actual);
++    antes = r.antes; despues = r.despues;
++    tx.set(ref, { version: actual.version + 1, apps: actual.apps, enlaces: actual.enlaces, updatedAt: ahora, updatedBy: clean(usuario, 60) });
++  });
++  await db.collection("auditoria_eventos").add({ tipo: "baul_apks", accion: auditoria, modulo: "baul-apks", usuario: clean(usuario, 60), antes: antes || null, despues: despues || null, createdAt: ahora });
++  cache = { at: 0, data: null };
++  return { ok: true, antes, despues };
++}
++
++// Alta o edición de un enlace. Editar sube la revisión. Validación estricta (URL, código, plataformas, dispositivo, método).
++async function guardarEnlace(db, input = {}, usuario = "") {
++  const plataformas = [...new Set((Array.isArray(input.plataformas) ? input.plataformas : []).map((x) => clean(x, 20)).filter((x) => PLATAFORMAS.some((p) => p.id === x)))];
++  if (!plataformas.length) throw new Error("Elija al menos una plataforma.");
++  if (!DISPOSITIVOS[input.dispositivo]) throw new Error("Dispositivo inválido.");
++  if (!METODOS[input.metodo]) throw new Error("Método inválido.");
++  if (plataformas.includes("stellatv") && ["iphone", "pc"].includes(input.dispositivo)) throw new Error("Stella TV no se ofrece en iPhone ni en PC.");
++  const url = validarUrlDescarga(input.url);
++  if (url === null) throw new Error("URL inválida: use http:// o https:// con dominio, sin espacios.");
++  if (!url && input.metodo !== "tv_store") throw new Error("Falta la URL (solo «Tienda del TV» puede ir sin URL).");
++  const codigo = validarCodigo(input.codigo);
++  if (codigo === null) throw new Error("El código Downloader son solo números (3 a 12).");
++  const appNombre = clean(input.appNombre, 60);
++  return escribir(db, usuario, (b) => {
++    let appId = clean(input.appId, 40);
++    if (!b.apps.some((a) => a.id === appId)) {
++      if (!appNombre) throw new Error("Elija la aplicación o escriba su nombre.");
++      appId = appNombre.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || `app-${Date.now()}`;
++      if (!b.apps.some((a) => a.id === appId)) b.apps.push({ id: appId, nombre: appNombre });
++    }
++    if (codigo && b.enlaces.some((e) => e.codigo === codigo && e.appId !== appId && e.id !== input.id)) throw new Error(`El código ${codigo} ya pertenece a otra aplicación: no se reutiliza.`);
++    const i = input.id ? b.enlaces.findIndex((e) => e.id === input.id) : -1;
++    const base = { appId, plataformas, dispositivo: input.dispositivo, metodo: input.metodo, url, codigo, nota: clean(input.nota, 300), prioridad: Math.max(1, Math.min(99, Number(input.prioridad) || 50)) };
++    if (i >= 0) { const antes = { ...b.enlaces[i] }; b.enlaces[i] = { ...b.enlaces[i], ...base, revision: Number(antes.revision || 1) + 1, activo: antes.activo !== false }; return { antes, despues: b.enlaces[i] }; }
++    const id = idOk(input.id) ? input.id : `${appId}-${input.dispositivo}-${Date.now().toString(36)}`.slice(0, 40);
++    if (b.enlaces.some((e) => e.id === id)) throw new Error("Ya existe un enlace con ese ID.");
++    const nuevo = { id, ...base, activo: true, revision: 1 };
++    b.enlaces.push(nuevo);
++    return { antes: null, despues: nuevo };
++  }, input.id ? "editar_enlace" : "agregar_enlace");
++}
++async function activarEnlace(db, id, activo, usuario = "") {
++  return escribir(db, usuario, (b) => {
++    const e = b.enlaces.find((x) => x.id === id); if (!e) throw new Error("Ese enlace ya no existe.");
++    const antes = { ...e }; e.activo = !!activo; e.revision = Number(e.revision || 1) + 1; return { antes, despues: { ...e } };
++  }, activo ? "activar_enlace" : "desactivar_enlace");
++}
++// Eliminación controlada: solo un enlace YA desactivado (primero se desactiva, queda en la auditoría).
++async function eliminarEnlace(db, id, usuario = "") {
++  return escribir(db, usuario, (b) => {
++    const i = b.enlaces.findIndex((x) => x.id === id); if (i < 0) throw new Error("Ese enlace ya no existe.");
++    if (b.enlaces[i].activo !== false) throw new Error("Primero desactívelo; luego se puede eliminar.");
++    const antes = b.enlaces[i]; b.enlaces.splice(i, 1); return { antes, despues: null };
++  }, "eliminar_enlace");
++}
++
++module.exports = { PLATAFORMAS, DISPOSITIVOS, METODOS, SEMILLA, AVISO_INSTALACION, validarUrlDescarga, validarCodigo, leerBaul, vistaPlataforma, guardarEnlace, activarEnlace, eliminarEnlace, _limpiarCache: () => { cache = { at: 0, data: null }; } };
+--- /dev/null
++++ R187/api/_planes-tv.js
+@@ -0,0 +1,73 @@
++// api/_planes-tv.js · R187 · Catálogo CENTRAL de planes de TV Digital (empieza con ICOMPLAY, PDF bloque 03).
++// Web, APK y bot leen de aquí (el bot tiene copia fiel: lib_planes_tv.js). Nada de tarifas fijas por triplicado.
++// ICOMPLAY (nombre oficial; NO "Icomplay Max": Max Player es otro reproductor):
++//   20 variantes exactas = 1, 2, 3, 5, 7 pantallas × 1, 3, 6, 12 meses. Las pantallas NO se deducen de la duración.
++// Precios nuevos solo para ventas FUTURAS: cada servicio guarda su precio al confirmarse (foto del precio);
++// al cambiar una tarifa, la anterior se archiva con fecha y usuario (historial) y queda en auditoría.
++// Firestore: configuracion_tv_digital/planes { planes: { icomplay: { "2x3": {precio, desde, por}, … } }, historial: [...] }.
++// CommonJS a propósito (igual que _tv-digital.js).
++
++const PANTALLAS = Object.freeze({ icomplay: [1, 2, 3, 5, 7] });
++const MESES = Object.freeze({ icomplay: [1, 3, 6, 12] });
++const BASE = Object.freeze({
++  icomplay: Object.freeze({
++    1: { 1: 179, 3: 499, 6: 949, 12: 1799 },
++    2: { 1: 219, 3: 599, 6: 1149, 12: 2149 },
++    3: { 1: 249, 3: 699, 6: 1349, 12: 2499 },
++    5: { 1: 329, 3: 929, 6: 1799, 12: 3399 },
++    7: { 1: 399, 3: 1129, 6: 2199, 12: 4199 },
++  }),
++});
++const NOMBRE = Object.freeze({ icomplay: "ICOMPLAY" });
++const VIGENTE_DESDE = "2026-11-07";
++const COL = "configuracion_tv_digital", DOC = "planes";
++
++function variantes(plataforma = "icomplay", tabla = BASE[plataforma]) {
++  const out = [];
++  for (const p of PANTALLAS[plataforma] || []) for (const m of MESES[plataforma] || []) {
++    const precio = Number(tabla?.[p]?.[m]);
++    if (precio > 0) out.push({ plataforma, nombre: NOMBRE[plataforma], pantallas: p, meses: m, clave: `${plataforma}${p}`, precio, moneda: "HNL", etiqueta: `${NOMBRE[plataforma]} · ${p} pantalla${p === 1 ? "" : "s"} · ${m} mes${m === 1 ? "" : "es"}` });
++  }
++  return out;
++}
++function tablaDe(data = {}, plataforma = "icomplay") {
++  const t = JSON.parse(JSON.stringify(BASE[plataforma] || {}));
++  const g = (data.planes || {})[plataforma] || {};
++  for (const [k, v] of Object.entries(g)) { const [p, m] = k.split("x").map(Number); if (t[p] && t[p][m] != null && Number(v?.precio) > 0) t[p][m] = Number(v.precio); }
++  return t;
++}
++let cache = { at: 0, data: null };
++async function leerPlanesTv(db, { fresco = false } = {}) {
++  if (!fresco && cache.data && Date.now() - cache.at < 60 * 1000) return cache.data;
++  let data = {};
++  try { const s = await db.collection(COL).doc(DOC).get(); data = s.exists ? s.data() || {} : {}; } catch (_) { if (cache.data) return cache.data; }
++  const icomplay = tablaDe(data, "icomplay");
++  cache = { at: Date.now(), data: { version: Number(data.version || 0), icomplay: { nombre: NOMBRE.icomplay, pantallas: PANTALLAS.icomplay, meses: MESES.icomplay, precios: icomplay, variantes: variantes("icomplay", icomplay) }, historial: (data.historial || []).slice(-40) } };
++  return cache.data;
++}
++// Precio para una venta: plan permitido o error (nunca 0 silencioso, nunca mezclar con otro IPTV).
++function precioPlan(planes, plataforma, pantallas, meses) {
++  const P = planes?.[plataforma];
++  if (!P) throw new Error("Plataforma sin catálogo de planes.");
++  if (!P.pantallas.includes(Number(pantallas))) throw new Error(`${P.nombre}: pantallas permitidas ${P.pantallas.join(", ")}.`);
++  if (!P.meses.includes(Number(meses))) throw new Error(`${P.nombre}: meses permitidos ${P.meses.join(", ")}.`);
++  return Number(P.precios[pantallas][meses]);
++}
++async function guardarPrecioPlan(db, { plataforma = "icomplay", pantallas, meses, precio, usuario }) {
++  const p = Number(pantallas), m = Number(meses), nuevo = Math.round(Number(precio) * 100) / 100;
++  if (!(PANTALLAS[plataforma] || []).includes(p) || !(MESES[plataforma] || []).includes(m)) throw new Error("Esa combinación no existe en el catálogo.");
++  if (!(nuevo > 0 && nuevo < 100000)) throw new Error("Precio inválido.");
++  const ref = db.collection(COL).doc(DOC), ahora = new Date().toISOString(), hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
++  let anterior = 0;
++  await db.runTransaction(async (tx) => {
++    const s = await tx.get(ref); const d = s.exists ? s.data() || {} : {};
++    anterior = tablaDe(d, plataforma)[p][m];
++    const planes = { ...(d.planes || {}) }; planes[plataforma] = { ...(planes[plataforma] || {}), [`${p}x${m}`]: { precio: nuevo, desde: hoy, por: String(usuario || "").slice(0, 60) } };
++    const historial = [...(d.historial || []), { plataforma, pantallas: p, meses: m, precioAnterior: anterior, precioNuevo: nuevo, hasta: hoy, por: String(usuario || "").slice(0, 60), at: ahora }].slice(-200);
++    tx.set(ref, { planes, historial, version: Number(d.version || 0) + 1, updatedAt: ahora }, { merge: true });
++  });
++  await db.collection("auditoria_eventos").add({ tipo: "plan_tv_precio", plataforma, pantallas: p, meses: m, precioAnterior: anterior, precioNuevo: nuevo, usuario: String(usuario || ""), nota: "Solo ventas futuras; las ventas anteriores conservan su precio.", createdAt: ahora });
++  cache = { at: 0, data: null };
++  return { plataforma, pantallas: p, meses: m, precioAnterior: anterior, precioNuevo: nuevo };
++}
++module.exports = { PANTALLAS, MESES, BASE, NOMBRE, VIGENTE_DESDE, variantes, leerPlanesTv, precioPlan, guardarPrecioPlan, _limpiarCache: () => { cache = { at: 0, data: null }; } };
+diff --git a/api/_tv-digital.js b/api/_tv-digital.js
+index a892473..73c9f66 100644
+--- a/api/_tv-digital.js
++++ b/api/_tv-digital.js
+@@ -9,7 +9,7 @@ const URLS_POR_DEFECTO = Object.freeze({
+   latintv2: { nombre: "LatinTV 2", url: "http://enlatv.com" },
+   liontv: { nombre: "LionTV", url: "http://liontv.es:80" },
+   evoutouch: { nombre: "Nanotech", url: "http://smarterstv99.dyndns.tv:25461/" },
+-  icomplay: { nombre: "ICOMPLAY MAX", url: "http://latinostream.xyz:80" }
++  icomplay: { nombre: "ICOMPLAY", url: "http://latinostream.xyz:80" } // R187: nombre oficial (Max Player es otro reproductor)
+ });
+ const CONFIG_COL = "configuracion_tv_digital";
+ const CONFIG_DOC = "urls";
+@@ -47,14 +47,14 @@ let cache = { at: 0, data: null };
+ async function leerUrlsTv(db, { fresco = false } = {}) {
+   if (!fresco && cache.data && Date.now() - cache.at < 60 * 1000) return cache.data;
+   const out = {};
+-  for (const [k, v] of Object.entries(URLS_POR_DEFECTO)) out[k] = { ...v };
++  for (const [k, v] of Object.entries(URLS_POR_DEFECTO)) out[k] = { ...v, activo: true, version: 1 };
+   try {
+     const snap = await db.collection(CONFIG_COL).doc(CONFIG_DOC).get();
+     const guardado = snap.exists ? (snap.data() || {}).proveedores || {} : {};
+     for (const [k, v] of Object.entries(guardado)) {
+       const url = validarUrlTv(v && v.url);
+       if (!url) continue;
+-      out[k] = { nombre: String((v && v.nombre) || (out[k] && out[k].nombre) || k).slice(0, 60), url, updatedAt: v.updatedAt || "", updatedBy: v.updatedBy || "" };
++      out[k] = { nombre: String((v && v.nombre) || (out[k] && out[k].nombre) || k).replace(/^ICOMPLAY MAX$/i, "ICOMPLAY").slice(0, 60), url, activo: v.activo !== false, version: Number(v.version || 1), updatedAt: v.updatedAt || "", updatedBy: v.updatedBy || "" };
+     }
+   } catch (_) { /* sin documento: valores por defecto */ }
+   cache = { at: Date.now(), data: out };
+@@ -102,9 +102,11 @@ async function guardarUrlTv(db, { proveedor, url, nombre, usuario }) {
+     const data = snap.exists ? snap.data() || {} : {};
+     const proveedores = { ...(data.proveedores || {}) };
+     anterior = (proveedores[prov] && proveedores[prov].url) || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].url) || "";
+-    proveedores[prov] = { nombre: String(nombre || (proveedores[prov] && proveedores[prov].nombre) || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].nombre) || prov).slice(0, 60),
+-      url: limpia, updatedAt: ahora, updatedBy: String(usuario || "") };
+-    tx.set(ref, { proveedores, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
++    const previo = proveedores[prov] || {};
++    proveedores[prov] = { nombre: String(nombre || previo.nombre || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].nombre) || prov).slice(0, 60),
++      url: limpia, activo: previo.activo !== false, version: Number(previo.version || 1) + (previo.url && previo.url !== limpia ? 1 : 0), updatedAt: ahora, updatedBy: String(usuario || "") };
++    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: previo.url || URLS_POR_DEFECTO[prov] ? "editar" : "agregar", urlAnterior: anterior, urlNueva: limpia, por: String(usuario || ""), at: ahora }].slice(-100); // R187
++    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
+   });
+   // Historial: URL anterior y nueva (no es un secreto: la ve el cliente final).
+   await db.collection("auditoria_eventos").add({ tipo: "tv_digital_url_cambiada", proveedor: prov, urlAnterior: anterior, urlNueva: limpia, usuario: String(usuario || ""), createdAt: ahora });
+@@ -112,6 +114,58 @@ async function guardarUrlTv(db, { proveedor, url, nombre, usuario }) {
+   return { proveedor: prov, url: limpia, urlAnterior: anterior };
+ }
+ 
++// R187 · Cuántos clientes tienen un servicio de ese proveedor (para no borrar una URL que todavía usan).
++async function clientesConProveedor(db, prov) {
++  const snap = await db.collection("clientes").get();
++  let n = 0;
++  snap.forEach((d) => { const s = (d.data() || {}).servicios; if (Array.isArray(s) && s.some((x) => proveedorTv(x && x.plataforma, x && x.iptvProveedor) === prov)) n++; });
++  return n;
++}
++// Desactivar = ya no se ofrece para configuraciones NUEVAS; las entregas que ya la usan la siguen mostrando (no se rompen).
++async function activarUrlTv(db, { proveedor, activo, usuario }) {
++  const prov = normKey(proveedor), ref = db.collection(CONFIG_COL).doc(CONFIG_DOC), ahora = new Date().toISOString();
++  await db.runTransaction(async (tx) => {
++    const snap = await tx.get(ref); const data = snap.exists ? snap.data() || {} : {};
++    const proveedores = { ...(data.proveedores || {}) };
++    const previo = proveedores[prov] || (URLS_POR_DEFECTO[prov] ? { ...URLS_POR_DEFECTO[prov] } : null);
++    if (!previo) throw new Error("Ese proveedor no existe.");
++    proveedores[prov] = { ...previo, activo: !!activo, updatedAt: ahora, updatedBy: String(usuario || "") };
++    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: activo ? "activar" : "desactivar", url: previo.url || "", por: String(usuario || ""), at: ahora }].slice(-100);
++    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
++  });
++  await db.collection("auditoria_eventos").add({ tipo: activo ? "tv_digital_url_activada" : "tv_digital_url_desactivada", proveedor: prov, usuario: String(usuario || ""), createdAt: ahora });
++  cache = { at: 0, data: null };
++  return { proveedor: prov, activo: !!activo };
++}
++// Eliminar: solo proveedores agregados (no los de fábrica), desactivados y SIN clientes asignados.
++async function eliminarUrlTv(db, { proveedor, usuario }) {
++  const prov = normKey(proveedor);
++  if (URLS_POR_DEFECTO[prov]) throw new Error("Esta URL es de un proveedor base: se puede editar o desactivar, no eliminar.");
++  const asignados = await clientesConProveedor(db, prov);
++  if (asignados > 0) throw new Error(`No se puede eliminar: ${asignados} cliente(s) la usan. Desactívela y cree la nueva.`);
++  const ref = db.collection(CONFIG_COL).doc(CONFIG_DOC), ahora = new Date().toISOString();
++  let anterior = null;
++  await db.runTransaction(async (tx) => {
++    const snap = await tx.get(ref); const data = snap.exists ? snap.data() || {} : {};
++    const proveedores = { ...(data.proveedores || {}) };
++    if (!proveedores[prov]) throw new Error("Ese proveedor no existe.");
++    if (proveedores[prov].activo !== false) throw new Error("Primero desactívela; luego se puede eliminar.");
++    anterior = proveedores[prov]; delete proveedores[prov];
++    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: "eliminar", url: anterior.url || "", por: String(usuario || ""), at: ahora }].slice(-100);
++    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora });
++  });
++  await db.collection("auditoria_eventos").add({ tipo: "tv_digital_url_eliminada", proveedor: prov, urlAnterior: anterior && anterior.url || "", usuario: String(usuario || ""), createdAt: ahora });
++  cache = { at: 0, data: null };
++  return { proveedor: prov, eliminado: true };
++}
++async function historialUrlsTv(db) {
++  try { const s = await db.collection(CONFIG_COL).doc(CONFIG_DOC).get(); return ((s.exists ? s.data() || {} : {}).historial || []).slice(-50).reverse(); } catch (_) { return []; }
++}
++
++exports.activarUrlTv = activarUrlTv;
++exports.eliminarUrlTv = eliminarUrlTv;
++exports.historialUrlsTv = historialUrlsTv;
++exports.clientesConProveedor = clientesConProveedor;
+ exports.URLS_POR_DEFECTO = URLS_POR_DEFECTO;
+ exports.proveedorTv = proveedorTv;
+ exports.validarUrlTv = validarUrlTv;
+diff --git a/api/inventario.js b/api/inventario.js
+index 110a848..21aab36 100644
+--- a/api/inventario.js
++++ b/api/inventario.js
+@@ -5,6 +5,8 @@
+ 
+ import admin from "firebase-admin";
+ import tvDigital from "./_tv-digital.js";
++import baulApks from "./_baul-apks.js"; // R187 · Baúl de APKs (fuente única Web/APK/bot)
++import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (ICOMPLAY)
+ import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
+ import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
+ 
+@@ -521,8 +523,32 @@ export default async function handler(req, res) {
+     if (accion === "tvUrls") {
+       return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db) });
+     }
++    // R187 · Catálogo de planes de TV Digital: lo leen todos los que venden (Web, APK y bot ven las mismas tarifas).
++    if (accion === "planesTv") return res.status(200).json({ ok: true, planes: await planesTv.leerPlanesTv(db) });
++    const usrTv = String(authUser.usuario || "").toLowerCase();
++    const rolTv = String(authUser.role || "").toLowerCase();
++    const editorTv = ["admin", "administrador", "sublicuentas", "owner"].includes(rolTv) || ["sublicuentas", "naara", "relojes", "libni"].includes(usrTv); // R187: editan tarifas, Baúl y URLs
++    if (["guardarPrecioPlanTv", "baulGuardarEnlace", "baulActivarEnlace", "baulEliminarEnlace", "activarTvUrl", "eliminarTvUrl"].includes(accion) && !editorTv)
++      return res.status(403).json({ ok: false, error: "Solo Sublicuentas o Relojes pueden editar tarifas, el Baúl y las URLs de TV Digital." });
++    try {
++      if (accion === "guardarPrecioPlanTv") return res.status(200).json({ ok: true, ...(await planesTv.guardarPrecioPlan(db, { plataforma: "icomplay", pantallas: req.body.pantallas, meses: req.body.meses, precio: req.body.precio, usuario: usrTv })), planes: await planesTv.leerPlanesTv(db, { fresco: true }) });
++      if (accion === "baulGuardarEnlace") { const r = await baulApks.guardarEnlace(db, req.body.enlace || {}, usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
++      if (accion === "baulActivarEnlace") { const r = await baulApks.activarEnlace(db, String(req.body.id || ""), req.body.activo === true, usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
++      if (accion === "baulEliminarEnlace") { const r = await baulApks.eliminarEnlace(db, String(req.body.id || ""), usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
++      if (accion === "activarTvUrl") return res.status(200).json({ ok: true, ...(await tvDigital.activarUrlTv(db, { proveedor: req.body.proveedor, activo: req.body.activo === true, usuario: usrTv })), urls: await tvDigital.leerUrlsTv(db, { fresco: true }) });
++      if (accion === "eliminarTvUrl") return res.status(200).json({ ok: true, ...(await tvDigital.eliminarUrlTv(db, { proveedor: req.body.proveedor, usuario: usrTv })), urls: await tvDigital.leerUrlsTv(db, { fresco: true }) });
++    } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
++
+     // R162: Control Maestro / Bodega según lo que Sublicuentas active o desactive a cada usuario.
+     const permisosCtx = await PERMISOS.contexto(db, authUser);
++    // R187 · Baúl de APKs: módulo propio (lo activa Sublicuentas por usuario). Solo lectura aquí.
++    if (accion === "baulApks" || accion === "tvUrlsHistorial") {
++      if (!(editorTv || PERMISOS.aplicar(permisosCtx, "baul-apks", !!(PERMISOS.porDefecto && PERMISOS.porDefecto(authUser) || {})["baul-apks"]))) return res.status(403).json({ ok: false, error: "No tiene acceso al Baúl de APKs." });
++      if (accion === "tvUrlsHistorial") return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db), historial: editorTv ? await tvDigital.historialUrlsTv(db) : [] });
++      const baul = await baulApks.leerBaul(db);
++      return res.status(200).json({ ok: true, editor: editorTv, version: baul.version, plataformas: baulApks.PLATAFORMAS, dispositivos: baulApks.DISPOSITIVOS, metodos: baulApks.METODOS, apps: baul.apps,
++        vistas: baulApks.PLATAFORMAS.map((p) => baulApks.vistaPlataforma(baul, p.id, { incluirInactivos: editorTv })), ...(editorTv ? { enlaces: baul.enlaces } : {}), aviso: baulApks.AVISO_INSTALACION });
++    }
+     const puedeInventario = PERMISOS.aplicar(permisosCtx, "control-maestro", isAdminUser(authUser)) || permisosCtx.overrides?.bodega === true;
+     if (!puedeInventario) {
+       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
+diff --git a/api/_permisos.js b/api/_permisos.js
+index 478c203..ebd6b9b 100644
+--- a/api/_permisos.js
++++ b/api/_permisos.js
+@@ -30,6 +30,7 @@ const MODULOS = Object.freeze([
+   { id: 'bodega', label: 'Bodega', grupo: 'Operación', pantallas: ['inventario'], servidor: true },
+   { id: 'finanzas', label: 'Finanzas (egresos, cierre y libro)', grupo: 'Operación', pantallas: ['egresos', 'cierre'], servidor: true },
+   { id: 'codigos', label: 'Códigos de plataformas (APK)', grupo: 'Operación', pantallas: [], servidor: true },
++  { id: 'baul-apks', label: 'Baúl de APKs de TV Digital (APK y bot)', grupo: 'Operación', pantallas: [], servidor: true }, // R187
+   { id: 'actividad', label: 'Actividad del sistema', grupo: 'Supervisión', pantallas: ['actividad'], servidor: true },
+   { id: 'auditoria', label: 'Cuadre y auditoría', grupo: 'Supervisión', pantallas: ['auditoria'] },
+   { id: 'crm-master', label: 'CRM Master', grupo: 'Supervisión', pantallas: ['crm-master'] },
+@@ -80,6 +81,7 @@ function porDefecto(user = {}) {
+     if (['portal-cliente', 'sorteos', 'catalogo'].includes(m.id)) v = relojes;
+     if (m.id === 'finanzas') v = rol === 'finanzas' && relojes;
+     if (m.id === 'codigos') v = relojes || geisell;
++    if (m.id === 'baul-apks') v = relojes || geisell; // R187 · fundadoras; a los demás lo activa Sublicuentas
+     if (m.id === 'bodega') v = false;
+     if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
+     out[m.id] = !!v;
+diff --git a/api/mobile-core.js b/api/mobile-core.js
+index 46fd541..e32fe12 100644
+--- a/api/mobile-core.js
++++ b/api/mobile-core.js
+@@ -1,384 +1,387 @@
+-// api/mobile-core.js
+-// Core mínimo para la APK Sublicuentas: login CORS + lecturas operativas autenticadas.
+-const admin = require('firebase-admin');
+-const loginHandler = require('./login');
+-const tvDigital = require('./_tv-digital.js');
+-const vendedoresReg = require('./_vendedores.js'); // Oct-2026 · registro único de vendedores/socios
+-const push = require('./_push.js'); // Fase 2 · notificaciones push
+-
+-const ALLOWED_ORIGINS = new Set([
+-  'https://localhost',
+-  'http://localhost',
+-  'capacitor://localhost',
+-]);
+-
+-function getApp() {
+-  if (admin.apps.length) return admin.app();
+-  const projectId = process.env.FIREBASE_PROJECT_ID;
+-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+-  const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+-  if (!projectId || !clientEmail || !privateKey) throw new Error('AUTH_CONFIG');
+-  return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+-}
+-
+-async function requireFirebaseUser(req, res) {
+-  const auth = String(req.headers.authorization || '');
+-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+-  if (!token) {
+-    res.status(401).json({ ok:false, error:'Sesión requerida.' });
+-    return null;
+-  }
+-  try {
+-    getApp();
+-    return await admin.auth().verifyIdToken(token, true);
+-  } catch (_) {
+-    res.status(401).json({ ok:false, error:'Sesión inválida o vencida.' });
+-    return null;
+-  }
+-}
+-
+-function norm(value) {
+-  return String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+-}
+-
+-function accessFor(user) {
+-  const usuario = norm(user?.usuario || String(user?.uid || '').replace(/^asesor-/, ''));
+-  const role = norm(user?.role).replace(/\s+/g, '_');
+-  const sublicuentas = ['sublicuentas','naara'].includes(usuario) || ['admin','administrador','sublicuentas','owner'].includes(role);
+-  const relojes = ['relojes','libni','daniela','finanzas'].includes(usuario) || ['relojes','finanzas'].includes(role);
+-  const geisell = ['geisell','geissel'].includes(usuario) || ['geisell_admin','control_admin'].includes(role);
+-  return { usuario, role, sublicuentas, relojes, geisell };
+-}
+-
+-function canRead(resource, user) {
+-  const a = accessFor(user);
+-  if (resource === 'clientes') return a.sublicuentas || a.relojes || a.geisell;
+-  if (resource === 'inventario') return a.sublicuentas || a.geisell || a.relojes; // Relojes y Geisell ven Inventario en la app (pedido del dueño)
+-  // `finanzas` = histórico; `finanzas_movimientos` = movimientos actuales. Control financiero (web y app) une las dos.
+-  if (resource === 'finanzas_movimientos' || resource === 'finanzas') return a.sublicuentas || a.relojes;
+-  return false;
+-}
+-
+-function applyCors(req, res) {
+-  const origin = String(req.headers?.origin || '');
+-  const allowed = ALLOWED_ORIGINS.has(origin);
+-  if (origin) {
+-    res.setHeader('Vary', 'Origin');
+-    if (allowed) res.setHeader('Access-Control-Allow-Origin', origin);
+-  }
+-  return { origin, allowed };
+-}
+-
+-// Compatibilidad con APK ya instalada: la web reconstruye el pie de la ficha
+-// (teléfono del CLIENTE + vendedor) al abrir una cuenta, pero versiones actuales
+-// de la APK muestran fichaTexto tal como llega de Firestore. Si una ficha antigua
+-// quedó guardada sin ese pie, el número desaparece solo en la APK.
+-//
+-// Este hotfix NO modifica Firestore ni requiere actualizar la APK: únicamente
+-// completa fichaTexto en la respuesta /api/mobile-core para el recurso clientes.
+-function sellerIconForFicha(seller = '') {
+-  const n = norm(seller).replace(/\s+/g, ' ');
+-  if (n === 'relojes') return '⌚';
+-  if (n === 'sublicuentas') return '💻';
+-  return '🌟';
+-}
+-
+-function phoneDigits(value = '') {
+-  return String(value || '').replace(/\D/g, '');
+-}
+-
+-function ensureMobileFichaFooter(text = '', telefono = '', vendedor = '') {
+-  const raw = String(text || '').replace(/\r\n/g, '\n').trimEnd();
+-  if (!raw.trim()) return raw;
+-
+-  const lines = raw.split('\n');
+-  const trimBlanks = () => { while (lines.length && !String(lines[lines.length - 1] || '').trim()) lines.pop(); };
+-  const isSellerLine = line => /^(?:⌚|💻|🌟)?\s*Vendedor\b/i.test(String(line || '').trim());
+-  const isPhoneLine = line => /^\+?\d[\d\s().-]{5,}$/.test(String(line || '').trim());
+-
+-  trimBlanks();
+-
+-  // Quite únicamente el pie estructurado anterior; no toque el cuerpo de la ficha.
+-  if (lines.length && isSellerLine(lines[lines.length - 1])) {
+-    lines.pop();
+-    trimBlanks();
+-    if (lines.length && isPhoneLine(lines[lines.length - 1])) {
+-      lines.pop();
+-      trimBlanks();
+-    }
+-  } else {
+-    // Si una versión antigua dejó solo el teléfono al final, reemplácelo únicamente
+-    // cuando coincide exactamente con el teléfono actual del cliente.
+-    const wanted = phoneDigits(telefono);
+-    const last = lines.length ? phoneDigits(lines[lines.length - 1]) : '';
+-    if (wanted && last === wanted && isPhoneLine(lines[lines.length - 1])) {
+-      lines.pop();
+-      trimBlanks();
+-    }
+-  }
+-
+-  const base = lines.join('\n').trimEnd();
+-  const footer = [];
+-  const phone = String(telefono || '').trim();
+-  const seller = String(vendedor || '').trim();
+-  if (phone) footer.push(phone);
+-  if (seller) footer.push(`${sellerIconForFicha(seller)} Vendedor ${seller}`);
+-  if (!footer.length) return base;
+-  return `${base}\n\n${footer.join('\n')}`.trim();
+-}
+-
+-// La APK muestra fichaTexto tal como está guardada. Ese texto es una FOTO del
+-// momento en que se creó la ficha: al renovar (web, bot o APK) o al cambiar
+-// correo/clave/PIN desde el bot, la fecha y los datos del servicio sí cambian,
+-// pero el texto viejo seguía mostrando lo anterior ("no me actualiza la ficha").
+-// Aquí se refrescan SOLO las líneas estructuradas de la plantilla, con los datos
+-// actuales del servicio. No modifica Firestore. Si una etiqueta aparece más de
+-// una vez (fichas multiperfil) no se toca, para no mezclar perfiles.
+-function perfilPrincipalMovil(service = {}) {
+-  const perfiles = Array.isArray(service.perfiles) ? service.perfiles.filter(p => p && typeof p === 'object') : [];
+-  return perfiles[0] || {};
+-}
+-function reemplazarValorEtiqueta(lines, regex, valor) {
+-  const v = String(valor ?? '').trim();
+-  if (!v) return;
+-  const idx = [];
+-  lines.forEach((line, i) => { if (regex.test(line)) idx.push(i); });
+-  if (idx.length !== 1) return;
+-  const i = idx[0];
+-  lines[i] = lines[i].replace(/(:\s*)(.*?)(\*?\s*)$/, (_m, sep, _old, tail) => `${sep}${v}${tail}`);
+-}
+-function refrescarFichaTextoMovil(texto = '', service = {}, urlTv = '') {
+-  const raw = String(texto || '');
+-  if (!raw.trim()) return raw;
+-  const principal = perfilPrincipalMovil(service);
+-  const lines = raw.replace(/\r\n/g, '\n').split('\n');
+-  const fecha = String(service.fechaRenovacion || '').trim();
+-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fecha)) {
+-    reemplazarValorEtiqueta(lines, /📅\s*Renovaci[oó]n\s*:/i, fecha);
+-    reemplazarValorEtiqueta(lines, /(📅|⏳)\s*Pr[oó]ximo pago\s*:/i, fecha);
+-  }
+-  reemplazarValorEtiqueta(lines, /(📧|📩|📨|✉️?)\s*Correo\s*:/i, principal.correo || service.correo);
+-  // R143: Netflix VIP y otras plantillas dicen "🔑 Contraseña:" (antes solo se refrescaba "🔑 Clave:").
+-  if (service.maxPlayer !== true) reemplazarValorEtiqueta(lines, /(🔑|🔒)\s*(Clave|Contrase[ñn]a)\s*:/i, principal.clave || service.clave);
+-  reemplazarValorEtiqueta(lines, /📎\s*Pin\s*:/i, principal.pinPerfil || principal.pin || service.pinPerfil || service.pin);
+-  // Oct-2026: la URL de TV Digital es editable; la ficha muestra siempre la URL vigente.
+-  if (urlTv) reemplazarValorEtiqueta(lines, /🧾\s*URL\s*:/i, urlTv);
+-  return lines.join('\n');
+-}
+-
+-// La APK solo entiende fechas exactas DD/MM/AAAA. La web también acepta
+-// AAAA-MM-DD, Timestamp de Firebase o "DD/MM/AAAA hora". Un servicio con otro
+-// formato contaba en la web pero en la APK quedaba "sin fecha" (fuera de
+-// Vigentes). Se entrega normalizado a la APK sin tocar Firestore.
+-function fechaDMYMovil(v) {
+-  if (v == null || v === '') return '';
+-  const pad = n => String(n).padStart(2, '0');
+-  const fmt = d => (d instanceof Date && !isNaN(d)) ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : '';
+-  if (typeof v === 'object') {
+-    const sec = v.seconds ?? v._seconds;
+-    if (sec != null) {
+-      const d = new Date(Number(sec) * 1000);
+-      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Tegucigalpa', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+-      const g = t => p.find(x => x.type === t)?.value || '';
+-      return `${g('day')}/${g('month')}/${g('year')}`;
+-    }
+-    if (typeof v.toDate === 'function') return fmt(v.toDate());
+-    return '';
+-  }
+-  const s = String(v).trim();
+-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+-  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+-  if (m) return `${pad(m[1])}/${pad(m[2])}/${m[3]}`;
+-  return s;
+-}
+-
+-function prepareClientForMobile(client = {}, tv = null, reg = null) {
+-  const out = { ...(client || {}) };
+-  const telefono = String(out.telefono || '').trim();
+-  const clientSeller = String(out.vendedor || '').trim();
+-  // Número del vendedor siempre el vigente (si Relojes cambia de número, todas sus fichas muestran el nuevo).
+-  if (reg && clientSeller) out.vendedorTelefono = vendedoresReg.telefonoVigente(reg, clientSeller, out.vendedorTelefono);
+-  if (!Array.isArray(out.servicios)) return out;
+-
+-  out.servicios = out.servicios.map(service => {
+-    if (!service || typeof service !== 'object') return service;
+-    const copy = { ...service };
+-    if (reg && (copy.vendedor || clientSeller)) copy.vendedorTelefono = vendedoresReg.telefonoVigente(reg, copy.vendedor || clientSeller, copy.vendedorTelefono);
+-    if (copy.fechaRenovacion != null && copy.fechaRenovacion !== '') copy.fechaRenovacion = fechaDMYMovil(copy.fechaRenovacion);
+-    const urlTv = tv ? tvDigital.urlTvServicio(copy, tv.urls, tv.cuentas) : '';
+-    if (urlTv) copy.urlServidorTv = urlTv;
+-    const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy, urlTv);
+-    if (!fichaTexto.trim()) return copy;
+-    const vendedor = String(copy.vendedor || clientSeller || '').trim();
+-    copy.fichaTexto = ensureMobileFichaFooter(fichaTexto, telefono, vendedor);
+-    return copy;
+-  });
+-  return out;
+-}
+-
+-async function listResource(req, res) {
+-  const user = await requireFirebaseUser(req, res);
+-  if (!user) return;
+-  const body = req.body && typeof req.body === 'object' ? req.body : {};
+-  const resource = String(body.resource || '').trim();
+-  if (!['clientes','inventario','finanzas_movimientos','finanzas'].includes(resource)) {
+-    return res.status(400).json({ ok:false, error:'Recurso no válido.' });
+-  }
+-  if (!canRead(resource, user)) {
+-    return res.status(403).json({ ok:false, error:'No tiene permiso para consultar este recurso.' });
+-  }
+-
+-  const limit = Math.max(25, Math.min(300, Number(body.limit) || 250));
+-  const cursor = String(body.cursor || '').trim();
+-  const db = getApp().firestore();
+-  const ref = db.collection(resource);
+-  let query = ref.orderBy(admin.firestore.FieldPath.documentId()).limit(limit);
+-  if (cursor) {
+-    const cursorSnap = await ref.doc(cursor).get();
+-    if (cursorSnap.exists) query = query.startAfter(cursorSnap);
+-  }
+-  const snap = await query.get();
+-  const tv = resource === 'clientes' ? { urls: await tvDigital.leerUrlsTv(db), cuentas: await tvDigital.leerUrlsCuentas(db) } : null;
+-  const reg = resource === 'clientes' ? await vendedoresReg.leerRegistro(db).catch(() => null) : null;
+-  // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
+-  // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
+-  // usando el último documento leído, así la paginación no se altera.
+-  let items = snap.docs
+-    .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
+-    .map(doc => {
+-      const item = { ...(doc.data() || {}), id:doc.id };
+-      return resource === 'clientes' ? prepareClientForMobile(item, tv, reg) : item;
+-    });
+-  if (resource === 'inventario' && items.length) {
+-    // La APK instalada ya usa esta lectura al sincronizar. Se conserva el
+-    // formato y cursor; solo se reparan cupos faltantes y sus contadores.
+-    const { reconciliarInventario } = await import('./inventario.js');
+-    items = await reconciliarInventario(db, items);
+-  }
+-  const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
+-  // Monitoreo de lecturas (Vercel → Logs, buscar "fs_read"): quién descarga qué y cuántos documentos.
+-  console.log(JSON.stringify({ evt:'fs_read', src:'mobile-core', resource, docs:snap.size, page:cursor ? 'next' : 'first', uid:String(user.uid || '').slice(0, 8) }));
+-  return res.status(200).json({ ok:true, items, nextCursor });
+-}
+-
+-// R69 · Paquete G — configuración remota NO sensible para la APK (sin secretos).
+-// Fuente: documento Firestore `configuracion_app/android` (editable) sobre valores por defecto; MIN_ANDROID_BUILD por entorno.
+-const CONFIG_DEFAULTS = Object.freeze({
+-  configVersion: 1, apiVersion: 2, minAppBuild: 0, syncStaleSeconds: 300, // Auditoría Firestore: antes 15 s → cada vuelta a la app releía TODO
+-  sellerPhones: { relojes: '32126332', sublicuentas: '89464277', 'sublicuentas 2': '89464328', yami: '96877246', jimena: '88501036', heber: '32174922', abner: '94306551', manuel: '87989267' },
+-  calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
+-});
+-const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
+-// tvDigitalUrls no es un secreto (la URL la ve el cliente final); se agrega aparte de CONFIG_ALLOWED.
+-// Fase 2 · Push: el teléfono registra su token después del login; baja al cerrar sesión; "probar" se manda a sí mismo.
+-async function pushAccion(req, res) {
+-  const user = await requireFirebaseUser(req, res);
+-  if (!user) return;
+-  const acc = accessFor(user);
+-  const body = req.body && typeof req.body === 'object' ? req.body : {};
+-  const op = String(body.op || '').trim();
+-  const db = getApp().firestore();
+-  const grupo = acc.sublicuentas ? 'sublicuentas' : acc.relojes ? 'relojes' : acc.geisell ? 'geisell' : acc.usuario;
+-  try {
++// api/mobile-core.js
++// Core mínimo para la APK Sublicuentas: login CORS + lecturas operativas autenticadas.
++const admin = require('firebase-admin');
++const loginHandler = require('./login');
++const tvDigital = require('./_tv-digital.js');
++const planesTv = require('./_planes-tv.js'); // R187
++const vendedoresReg = require('./_vendedores.js'); // Oct-2026 · registro único de vendedores/socios
++const push = require('./_push.js'); // Fase 2 · notificaciones push
++
++const ALLOWED_ORIGINS = new Set([
++  'https://localhost',
++  'http://localhost',
++  'capacitor://localhost',
++]);
++
++function getApp() {
++  if (admin.apps.length) return admin.app();
++  const projectId = process.env.FIREBASE_PROJECT_ID;
++  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
++  const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
++  if (!projectId || !clientEmail || !privateKey) throw new Error('AUTH_CONFIG');
++  return admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
++}
++
++async function requireFirebaseUser(req, res) {
++  const auth = String(req.headers.authorization || '');
++  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
++  if (!token) {
++    res.status(401).json({ ok:false, error:'Sesión requerida.' });
++    return null;
++  }
++  try {
++    getApp();
++    return await admin.auth().verifyIdToken(token, true);
++  } catch (_) {
++    res.status(401).json({ ok:false, error:'Sesión inválida o vencida.' });
++    return null;
++  }
++}
++
++function norm(value) {
++  return String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
++}
++
++function accessFor(user) {
++  const usuario = norm(user?.usuario || String(user?.uid || '').replace(/^asesor-/, ''));
++  const role = norm(user?.role).replace(/\s+/g, '_');
++  const sublicuentas = ['sublicuentas','naara'].includes(usuario) || ['admin','administrador','sublicuentas','owner'].includes(role);
++  const relojes = ['relojes','libni','daniela','finanzas'].includes(usuario) || ['relojes','finanzas'].includes(role);
++  const geisell = ['geisell','geissel'].includes(usuario) || ['geisell_admin','control_admin'].includes(role);
++  return { usuario, role, sublicuentas, relojes, geisell };
++}
++
++function canRead(resource, user) {
++  const a = accessFor(user);
++  if (resource === 'clientes') return a.sublicuentas || a.relojes || a.geisell;
++  if (resource === 'inventario') return a.sublicuentas || a.geisell || a.relojes; // Relojes y Geisell ven Inventario en la app (pedido del dueño)
++  // `finanzas` = histórico; `finanzas_movimientos` = movimientos actuales. Control financiero (web y app) une las dos.
++  if (resource === 'finanzas_movimientos' || resource === 'finanzas') return a.sublicuentas || a.relojes;
++  return false;
++}
++
++function applyCors(req, res) {
++  const origin = String(req.headers?.origin || '');
++  const allowed = ALLOWED_ORIGINS.has(origin);
++  if (origin) {
++    res.setHeader('Vary', 'Origin');
++    if (allowed) res.setHeader('Access-Control-Allow-Origin', origin);
++  }
++  return { origin, allowed };
++}
++
++// Compatibilidad con APK ya instalada: la web reconstruye el pie de la ficha
++// (teléfono del CLIENTE + vendedor) al abrir una cuenta, pero versiones actuales
++// de la APK muestran fichaTexto tal como llega de Firestore. Si una ficha antigua
++// quedó guardada sin ese pie, el número desaparece solo en la APK.
++//
++// Este hotfix NO modifica Firestore ni requiere actualizar la APK: únicamente
++// completa fichaTexto en la respuesta /api/mobile-core para el recurso clientes.
++function sellerIconForFicha(seller = '') {
++  const n = norm(seller).replace(/\s+/g, ' ');
++  if (n === 'relojes') return '⌚';
++  if (n === 'sublicuentas') return '💻';
++  return '🌟';
++}
++
++function phoneDigits(value = '') {
++  return String(value || '').replace(/\D/g, '');
++}
++
++function ensureMobileFichaFooter(text = '', telefono = '', vendedor = '') {
++  const raw = String(text || '').replace(/\r\n/g, '\n').trimEnd();
++  if (!raw.trim()) return raw;
++
++  const lines = raw.split('\n');
++  const trimBlanks = () => { while (lines.length && !String(lines[lines.length - 1] || '').trim()) lines.pop(); };
++  const isSellerLine = line => /^(?:⌚|💻|🌟)?\s*Vendedor\b/i.test(String(line || '').trim());
++  const isPhoneLine = line => /^\+?\d[\d\s().-]{5,}$/.test(String(line || '').trim());
++
++  trimBlanks();
++
++  // Quite únicamente el pie estructurado anterior; no toque el cuerpo de la ficha.
++  if (lines.length && isSellerLine(lines[lines.length - 1])) {
++    lines.pop();
++    trimBlanks();
++    if (lines.length && isPhoneLine(lines[lines.length - 1])) {
++      lines.pop();
++      trimBlanks();
++    }
++  } else {
++    // Si una versión antigua dejó solo el teléfono al final, reemplácelo únicamente
++    // cuando coincide exactamente con el teléfono actual del cliente.
++    const wanted = phoneDigits(telefono);
++    const last = lines.length ? phoneDigits(lines[lines.length - 1]) : '';
++    if (wanted && last === wanted && isPhoneLine(lines[lines.length - 1])) {
++      lines.pop();
++      trimBlanks();
++    }
++  }
++
++  const base = lines.join('\n').trimEnd();
++  const footer = [];
++  const phone = String(telefono || '').trim();
++  const seller = String(vendedor || '').trim();
++  if (phone) footer.push(phone);
++  if (seller) footer.push(`${sellerIconForFicha(seller)} Vendedor ${seller}`);
++  if (!footer.length) return base;
++  return `${base}\n\n${footer.join('\n')}`.trim();
++}
++
++// La APK muestra fichaTexto tal como está guardada. Ese texto es una FOTO del
++// momento en que se creó la ficha: al renovar (web, bot o APK) o al cambiar
++// correo/clave/PIN desde el bot, la fecha y los datos del servicio sí cambian,
++// pero el texto viejo seguía mostrando lo anterior ("no me actualiza la ficha").
++// Aquí se refrescan SOLO las líneas estructuradas de la plantilla, con los datos
++// actuales del servicio. No modifica Firestore. Si una etiqueta aparece más de
++// una vez (fichas multiperfil) no se toca, para no mezclar perfiles.
++function perfilPrincipalMovil(service = {}) {
++  const perfiles = Array.isArray(service.perfiles) ? service.perfiles.filter(p => p && typeof p === 'object') : [];
++  return perfiles[0] || {};
++}
++function reemplazarValorEtiqueta(lines, regex, valor) {
++  const v = String(valor ?? '').trim();
++  if (!v) return;
++  const idx = [];
++  lines.forEach((line, i) => { if (regex.test(line)) idx.push(i); });
++  if (idx.length !== 1) return;
++  const i = idx[0];
++  lines[i] = lines[i].replace(/(:\s*)(.*?)(\*?\s*)$/, (_m, sep, _old, tail) => `${sep}${v}${tail}`);
++}
++function refrescarFichaTextoMovil(texto = '', service = {}, urlTv = '') {
++  const raw = String(texto || '');
++  if (!raw.trim()) return raw;
++  const principal = perfilPrincipalMovil(service);
++  const lines = raw.replace(/\r\n/g, '\n').split('\n');
++  const fecha = String(service.fechaRenovacion || '').trim();
++  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fecha)) {
++    reemplazarValorEtiqueta(lines, /📅\s*Renovaci[oó]n\s*:/i, fecha);
++    reemplazarValorEtiqueta(lines, /(📅|⏳)\s*Pr[oó]ximo pago\s*:/i, fecha);
++  }
++  reemplazarValorEtiqueta(lines, /(📧|📩|📨|✉️?)\s*Correo\s*:/i, principal.correo || service.correo);
++  // R143: Netflix VIP y otras plantillas dicen "🔑 Contraseña:" (antes solo se refrescaba "🔑 Clave:").
++  if (service.maxPlayer !== true) reemplazarValorEtiqueta(lines, /(🔑|🔒)\s*(Clave|Contrase[ñn]a)\s*:/i, principal.clave || service.clave);
++  reemplazarValorEtiqueta(lines, /📎\s*Pin\s*:/i, principal.pinPerfil || principal.pin || service.pinPerfil || service.pin);
++  // Oct-2026: la URL de TV Digital es editable; la ficha muestra siempre la URL vigente.
++  if (urlTv) reemplazarValorEtiqueta(lines, /🧾\s*URL\s*:/i, urlTv);
++  return lines.join('\n');
++}
++
++// La APK solo entiende fechas exactas DD/MM/AAAA. La web también acepta
++// AAAA-MM-DD, Timestamp de Firebase o "DD/MM/AAAA hora". Un servicio con otro
++// formato contaba en la web pero en la APK quedaba "sin fecha" (fuera de
++// Vigentes). Se entrega normalizado a la APK sin tocar Firestore.
++function fechaDMYMovil(v) {
++  if (v == null || v === '') return '';
++  const pad = n => String(n).padStart(2, '0');
++  const fmt = d => (d instanceof Date && !isNaN(d)) ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : '';
++  if (typeof v === 'object') {
++    const sec = v.seconds ?? v._seconds;
++    if (sec != null) {
++      const d = new Date(Number(sec) * 1000);
++      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Tegucigalpa', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
++      const g = t => p.find(x => x.type === t)?.value || '';
++      return `${g('day')}/${g('month')}/${g('year')}`;
++    }
++    if (typeof v.toDate === 'function') return fmt(v.toDate());
++    return '';
++  }
++  const s = String(v).trim();
++  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
++  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
++  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
++  if (m) return `${pad(m[1])}/${pad(m[2])}/${m[3]}`;
++  return s;
++}
++
++function prepareClientForMobile(client = {}, tv = null, reg = null) {
++  const out = { ...(client || {}) };
++  const telefono = String(out.telefono || '').trim();
++  const clientSeller = String(out.vendedor || '').trim();
++  // Número del vendedor siempre el vigente (si Relojes cambia de número, todas sus fichas muestran el nuevo).
++  if (reg && clientSeller) out.vendedorTelefono = vendedoresReg.telefonoVigente(reg, clientSeller, out.vendedorTelefono);
++  if (!Array.isArray(out.servicios)) return out;
++
++  out.servicios = out.servicios.map(service => {
++    if (!service || typeof service !== 'object') return service;
++    const copy = { ...service };
++    if (reg && (copy.vendedor || clientSeller)) copy.vendedorTelefono = vendedoresReg.telefonoVigente(reg, copy.vendedor || clientSeller, copy.vendedorTelefono);
++    if (copy.fechaRenovacion != null && copy.fechaRenovacion !== '') copy.fechaRenovacion = fechaDMYMovil(copy.fechaRenovacion);
++    const urlTv = tv ? tvDigital.urlTvServicio(copy, tv.urls, tv.cuentas) : '';
++    if (urlTv) copy.urlServidorTv = urlTv;
++    const fichaTexto = refrescarFichaTextoMovil(String(copy.fichaTexto || ''), copy, urlTv);
++    if (!fichaTexto.trim()) return copy;
++    const vendedor = String(copy.vendedor || clientSeller || '').trim();
++    copy.fichaTexto = ensureMobileFichaFooter(fichaTexto, telefono, vendedor);
++    return copy;
++  });
++  return out;
++}
++
++async function listResource(req, res) {
++  const user = await requireFirebaseUser(req, res);
++  if (!user) return;
++  const body = req.body && typeof req.body === 'object' ? req.body : {};
++  const resource = String(body.resource || '').trim();
++  if (!['clientes','inventario','finanzas_movimientos','finanzas'].includes(resource)) {
++    return res.status(400).json({ ok:false, error:'Recurso no válido.' });
++  }
++  if (!canRead(resource, user)) {
++    return res.status(403).json({ ok:false, error:'No tiene permiso para consultar este recurso.' });
++  }
++
++  const limit = Math.max(25, Math.min(300, Number(body.limit) || 250));
++  const cursor = String(body.cursor || '').trim();
++  const db = getApp().firestore();
++  const ref = db.collection(resource);
++  let query = ref.orderBy(admin.firestore.FieldPath.documentId()).limit(limit);
++  if (cursor) {
++    const cursorSnap = await ref.doc(cursor).get();
++    if (cursorSnap.exists) query = query.startAfter(cursorSnap);
++  }
++  const snap = await query.get();
++  const tv = resource === 'clientes' ? { urls: await tvDigital.leerUrlsTv(db), cuentas: await tvDigital.leerUrlsCuentas(db) } : null;
++  const reg = resource === 'clientes' ? await vendedoresReg.leerRegistro(db).catch(() => null) : null;
++  // Las fichas unidas por la consolidación quedan como alias (consolidadoEn)
++  // y la web no las muestra; la APK tampoco debe contarlas. El cursor sigue
++  // usando el último documento leído, así la paginación no se altera.
++  let items = snap.docs
++    .filter(doc => resource !== 'clientes' || !String(doc.get('consolidadoEn') || '').trim())
++    .map(doc => {
++      const item = { ...(doc.data() || {}), id:doc.id };
++      return resource === 'clientes' ? prepareClientForMobile(item, tv, reg) : item;
++    });
++  if (resource === 'inventario' && items.length) {
++    // La APK instalada ya usa esta lectura al sincronizar. Se conserva el
++    // formato y cursor; solo se reparan cupos faltantes y sus contadores.
++    const { reconciliarInventario } = await import('./inventario.js');
++    items = await reconciliarInventario(db, items);
++  }
++  const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : '';
++  // Monitoreo de lecturas (Vercel → Logs, buscar "fs_read"): quién descarga qué y cuántos documentos.
++  console.log(JSON.stringify({ evt:'fs_read', src:'mobile-core', resource, docs:snap.size, page:cursor ? 'next' : 'first', uid:String(user.uid || '').slice(0, 8) }));
++  return res.status(200).json({ ok:true, items, nextCursor });
++}
++
++// R69 · Paquete G — configuración remota NO sensible para la APK (sin secretos).
++// Fuente: documento Firestore `configuracion_app/android` (editable) sobre valores por defecto; MIN_ANDROID_BUILD por entorno.
++const CONFIG_DEFAULTS = Object.freeze({
++  configVersion: 1, apiVersion: 2, minAppBuild: 0, syncStaleSeconds: 300, // Auditoría Firestore: antes 15 s → cada vuelta a la app releía TODO
++  sellerPhones: { relojes: '32126332', sublicuentas: '89464277', 'sublicuentas 2': '89464328', yami: '96877246', jimena: '88501036', heber: '32174922', abner: '94306551', manuel: '87989267' },
++  calculatorBasePrices: {}, tvDigitalRules: {}, featureFlags: {},
++});
++const CONFIG_ALLOWED = ['configVersion', 'apiVersion', 'minAppBuild', 'syncStaleSeconds', 'sellerPhones', 'calculatorBasePrices', 'tvDigitalRules', 'featureFlags'];
++// tvDigitalUrls no es un secreto (la URL la ve el cliente final); se agrega aparte de CONFIG_ALLOWED.
++// Fase 2 · Push: el teléfono registra su token después del login; baja al cerrar sesión; "probar" se manda a sí mismo.
++async function pushAccion(req, res) {
++  const user = await requireFirebaseUser(req, res);
++  if (!user) return;
++  const acc = accessFor(user);
++  const body = req.body && typeof req.body === 'object' ? req.body : {};
++  const op = String(body.op || '').trim();
++  const db = getApp().firestore();
++  const grupo = acc.sublicuentas ? 'sublicuentas' : acc.relojes ? 'relojes' : acc.geisell ? 'geisell' : acc.usuario;
++  try {
+     if (op === 'registrar') return res.status(200).json(await push.registrarToken(db, { token: body.token, usuario: acc.usuario || grupo, role: acc.role, grupo, appBuild: body.appBuild, cobros: body.cobros !== false }));
+-    if (op === 'preferencias') return res.status(200).json(await push.preferenciasToken(db, { token: body.token, usuario: acc.usuario || grupo, cobros: body.cobros !== false }));
+-    if (op === 'baja') return res.status(200).json(await push.bajaToken(db, { token: body.token, usuario: acc.usuario || grupo }));
+-    if (op === 'probar') {
+-      const r = await push.enviarPush(db, admin, { usuarios: [acc.usuario || grupo], titulo: '✅ Prueba de Sublichat', cuerpo: 'Las notificaciones push funcionan en este teléfono.', data: { tipo: 'prueba', ir: 'inicio' } });
+-      return res.status(200).json({ ok: true, ...r });
+-    }
+-    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
+-  } catch (e) {
+-    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 200) });
+-  }
+-}
+-
+-// Vendedores: registro único (api/_vendedores.js), el mismo que usan la Web y el Bot.
+-// Lo guardado manda sobre la lista base; eliminados no vuelven; números viejos → número vigente.
+-async function vendedoresParaApp(db) {
+-  return vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db));
+-}
+-// Añadir / editar / eliminar vendedor o socio desde Sublichat Web (y la APK si algún día se habilita).
+-async function vendedoresAccion(req, res) {
+-  const user = await requireFirebaseUser(req, res);
+-  if (!user) return;
+-  const acc = accessFor(user);
+-  const body = req.body && typeof req.body === 'object' ? req.body : {};
+-  const op = String(body.op || 'listar').trim();
+-  const db = getApp().firestore();
+-  try {
+-    if (op === 'listar') return res.status(200).json({ ok: true, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db, { fresco: true })) });
+-    if (!acc.sublicuentas && !acc.relojes) return res.status(403).json({ ok: false, error: 'Solo Sublicuentas o Relojes pueden cambiar vendedores.' });
+-    const usuario = acc.usuario || acc.role || '';
+-    if (op === 'guardar') {
+-      const v = await vendedoresReg.guardarVendedor(db, { nombre: body.nombre, telefono: body.telefono, nombreAnterior: body.nombreAnterior || '', usuario });
+-      return res.status(200).json({ ok: true, vendedor: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
+-    }
+-    if (op === 'eliminar') {
+-      const v = await vendedoresReg.eliminarVendedor(db, { nombre: body.nombre, usuario });
+-      return res.status(200).json({ ok: true, eliminado: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
+-    }
+-    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
+-  } catch (e) {
+-    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 300) });
+-  }
+-}
+-async function getConfig(req, res) {
+-  const user = await requireFirebaseUser(req, res);
+-  if (!user) return;
+-  let doc = {};
+-  try { const snap = await getApp().firestore().collection('configuracion_app').doc('android').get(); if (snap.exists) doc = snap.data() || {}; } catch (_) { doc = {}; }
+-  const config = {};
+-  for (const k of CONFIG_ALLOWED) config[k] = doc[k] !== undefined ? doc[k] : CONFIG_DEFAULTS[k];
+-  const envMin = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
+-  config.minAppBuild = Math.max(Number(config.minAppBuild) || 0, envMin);
+-  // Auditoría Firestore (oct-2026): la APK descarga clientes/inventario/finanzas COMPLETOS cada vez que vuelve
+-  // al frente (WhatsApp ↔ app) si el último refresco tiene más de syncStaleSeconds. Con 15 s eso eran cientos de
+-  // descargas completas al día por vendedor. Piso de 5 min (los cambios propios se ven al instante igual).
+-  config.syncStaleSeconds = Math.max(300, Number(config.syncStaleSeconds) || 300);
+-  try {
+-    const urls = await tvDigital.leerUrlsTv(getApp().firestore());
+-    config.tvDigitalUrls = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.url]));
+-  } catch (_) { /* la APK conserva sus URLs guardadas */ }
+-  // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
+-  // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
+-  try {
+-    const vend = await vendedoresParaApp(getApp().firestore());
+-    config.sellers = vend.sellers;
+-    // El registro manda sobre configuracion_app/android (antes ese número fijo ganaba y no cambiaba nunca).
+-    config.sellerPhones = vend.sellerPhones;
+-    config.sellerPhonesKnown = vend.sellerPhonesKnown;
+-    config.sellerAliases = vend.sellerAliases;
+-    config.sellersDetail = vend.sellersDetail;
+-  } catch (e) { console.error('APP_SELLERS_ERROR', e && e.message || e); }
+-  if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
+-  return res.status(200).json({ ok: true, config });
+-}
+-
+-module.exports = async function mobileCore(req, res) {
+-  res.setHeader('Cache-Control', 'no-store');
+-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+-  const { origin, allowed } = applyCors(req, res);
+-
+-  if (req.method === 'OPTIONS') {
+-    if (!allowed) return res.status(403).end();
+-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
+-    res.setHeader('Access-Control-Max-Age', '600');
+-    return res.status(204).end();
+-  }
+-  if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Método no permitido.' });
+-
+-  const action = String(req.query?.action || req.body?.action || '').trim().toLowerCase();
+-  if (action === 'login') {
+-    if (origin && !allowed) return res.status(403).json({ error:'Origen no autorizado' });
+-    return loginHandler(req, res);
+-  }
+-  if (action === 'list') return listResource(req, res);
+-  if (action === 'config') return getConfig(req, res);
+-  if (action === 'vendedores') return vendedoresAccion(req, res);
+-  if (action === 'push') return pushAccion(req, res);
+-  return res.status(400).json({ ok:false, error:'Acción no válida.' });
+-};
+-module.exports.__pruebas = { refrescarFichaTextoMovil, prepareClientForMobile }; // R143
++    if (op === 'preferencias') return res.status(200).json(await push.preferenciasToken(db, { token: body.token, usuario: acc.usuario || grupo, cobros: body.cobros !== false }));
++    if (op === 'baja') return res.status(200).json(await push.bajaToken(db, { token: body.token, usuario: acc.usuario || grupo }));
++    if (op === 'probar') {
++      const r = await push.enviarPush(db, admin, { usuarios: [acc.usuario || grupo], titulo: '✅ Prueba de Sublichat', cuerpo: 'Las notificaciones push funcionan en este teléfono.', data: { tipo: 'prueba', ir: 'inicio' } });
++      return res.status(200).json({ ok: true, ...r });
++    }
++    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
++  } catch (e) {
++    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 200) });
++  }
++}
++
++// Vendedores: registro único (api/_vendedores.js), el mismo que usan la Web y el Bot.
++// Lo guardado manda sobre la lista base; eliminados no vuelven; números viejos → número vigente.
++async function vendedoresParaApp(db) {
++  return vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db));
++}
++// Añadir / editar / eliminar vendedor o socio desde Sublichat Web (y la APK si algún día se habilita).
++async function vendedoresAccion(req, res) {
++  const user = await requireFirebaseUser(req, res);
++  if (!user) return;
++  const acc = accessFor(user);
++  const body = req.body && typeof req.body === 'object' ? req.body : {};
++  const op = String(body.op || 'listar').trim();
++  const db = getApp().firestore();
++  try {
++    if (op === 'listar') return res.status(200).json({ ok: true, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db, { fresco: true })) });
++    if (!acc.sublicuentas && !acc.relojes) return res.status(403).json({ ok: false, error: 'Solo Sublicuentas o Relojes pueden cambiar vendedores.' });
++    const usuario = acc.usuario || acc.role || '';
++    if (op === 'guardar') {
++      const v = await vendedoresReg.guardarVendedor(db, { nombre: body.nombre, telefono: body.telefono, nombreAnterior: body.nombreAnterior || '', usuario });
++      return res.status(200).json({ ok: true, vendedor: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
++    }
++    if (op === 'eliminar') {
++      const v = await vendedoresReg.eliminarVendedor(db, { nombre: body.nombre, usuario });
++      return res.status(200).json({ ok: true, eliminado: v, ...vendedoresReg.registroPublico(await vendedoresReg.leerRegistro(db)) });
++    }
++    return res.status(400).json({ ok: false, error: 'Operación no válida.' });
++  } catch (e) {
++    return res.status(400).json({ ok: false, error: String(e && e.message || e).slice(0, 300) });
++  }
++}
++async function getConfig(req, res) {
++  const user = await requireFirebaseUser(req, res);
++  if (!user) return;
++  let doc = {};
++  try { const snap = await getApp().firestore().collection('configuracion_app').doc('android').get(); if (snap.exists) doc = snap.data() || {}; } catch (_) { doc = {}; }
++  const config = {};
++  for (const k of CONFIG_ALLOWED) config[k] = doc[k] !== undefined ? doc[k] : CONFIG_DEFAULTS[k];
++  const envMin = Number(process.env.MIN_ANDROID_BUILD || 0) || 0;
++  config.minAppBuild = Math.max(Number(config.minAppBuild) || 0, envMin);
++  // Auditoría Firestore (oct-2026): la APK descarga clientes/inventario/finanzas COMPLETOS cada vez que vuelve
++  // al frente (WhatsApp ↔ app) si el último refresco tiene más de syncStaleSeconds. Con 15 s eso eran cientos de
++  // descargas completas al día por vendedor. Piso de 5 min (los cambios propios se ven al instante igual).
++  config.syncStaleSeconds = Math.max(300, Number(config.syncStaleSeconds) || 300);
++  try {
++    const urls = await tvDigital.leerUrlsTv(getApp().firestore());
++    config.tvDigitalUrls = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.url]));
++    config.tvDigitalUrlsActivas = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.activo !== false])); // R187
++  } catch (_) { /* la APK conserva sus URLs guardadas */ }
++  try { const pl = await planesTv.leerPlanesTv(getApp().firestore()); config.planesTv = { icomplay: pl.icomplay.precios, version: pl.version }; } catch (_) { /* R187: la APK usa su tabla interna */ }
++  // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
++  // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
++  try {
++    const vend = await vendedoresParaApp(getApp().firestore());
++    config.sellers = vend.sellers;
++    // El registro manda sobre configuracion_app/android (antes ese número fijo ganaba y no cambiaba nunca).
++    config.sellerPhones = vend.sellerPhones;
++    config.sellerPhonesKnown = vend.sellerPhonesKnown;
++    config.sellerAliases = vend.sellerAliases;
++    config.sellersDetail = vend.sellersDetail;
++  } catch (e) { console.error('APP_SELLERS_ERROR', e && e.message || e); }
++  if (/token|secret|password|private_key/i.test(JSON.stringify(config))) return res.status(500).json({ ok: false, error: 'Configuración inválida.' });
++  return res.status(200).json({ ok: true, config });
++}
++
++module.exports = async function mobileCore(req, res) {
++  res.setHeader('Cache-Control', 'no-store');
++  res.setHeader('Content-Type', 'application/json; charset=utf-8');
++  const { origin, allowed } = applyCors(req, res);
++
++  if (req.method === 'OPTIONS') {
++    if (!allowed) return res.status(403).end();
++    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
++    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
++    res.setHeader('Access-Control-Max-Age', '600');
++    return res.status(204).end();
++  }
++  if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Método no permitido.' });
++
++  const action = String(req.query?.action || req.body?.action || '').trim().toLowerCase();
++  if (action === 'login') {
++    if (origin && !allowed) return res.status(403).json({ error:'Origen no autorizado' });
++    return loginHandler(req, res);
++  }
++  if (action === 'list') return listResource(req, res);
++  if (action === 'config') return getConfig(req, res);
++  if (action === 'vendedores') return vendedoresAccion(req, res);
++  if (action === 'push') return pushAccion(req, res);
++  return res.status(400).json({ ok:false, error:'Acción no válida.' });
++};
++module.exports.__pruebas = { refrescarFichaTextoMovil, prepareClientForMobile }; // R143
+diff --git a/api/acceso.js b/api/acceso.js
+index af22012..907968e 100644
+--- a/api/acceso.js
++++ b/api/acceso.js
+@@ -95,7 +95,7 @@ function canonPlat(v) {
+   if (p.startsWith("latintv")) return "latintv";
+   if (p.startsWith("liontv")) return "liontv";
+   if (p.startsWith("evoutouch")) { const m=p.match(/([123])$/); return `evoutouch${m?m[1]:"1"}`; }
+-  { const ic = p.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; }
++  { const ic = p.match(/^icomplay(?:max)?([12357])$/); if (ic) return `icomplay${ic[1]}`; }
+   return p;
+ }
+ 
+@@ -200,7 +200,7 @@ const PLAT_LABELS = {
+   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
+   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
+   evoutouch1: "Nanotech (1 dispositivo)", evoutouch2: "Nanotech (2 dispositivos)", evoutouch3: "Nanotech (3 dispositivos)", evoutouch4: "Nanotech (1 dispositivo)", evoutouch: "Nanotech",
+-  icomplay: "ICOMPLAY MAX", icomplay1: "ICOMPLAY MAX (1 pantalla)", icomplay3: "ICOMPLAY MAX (3 pantallas)", icomplay5: "ICOMPLAY MAX (5 pantallas)", icomplay7: "ICOMPLAY MAX (7 pantallas)",
++  icomplay: "ICOMPLAY", icomplay1: "ICOMPLAY (1 pantalla)", icomplay2: "ICOMPLAY (2 pantallas)", icomplay3: "ICOMPLAY (3 pantallas)", icomplay5: "ICOMPLAY (5 pantallas)", icomplay7: "ICOMPLAY (7 pantallas)",
+   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
+   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
+ };
+diff --git a/api/chat.js b/api/chat.js
+index 18b575e..03d5556 100644
+--- a/api/chat.js
++++ b/api/chat.js
+@@ -121,7 +121,7 @@ function buildResumen(clientes, hoyISO) {
+ // Las preguntas de fechas (hoy, mañana, semana, vencidos) se responden aquí al instante y con cifras exactas.
+ // Así Subli nunca se queda "pensando" por mandarle a Gemini toda la cartera.
+ const normQ = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+-const PLAT_LABEL = { vipnetflix: "Netflix Premium VIP", netflix: "Netflix", disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN", hbomax: "HBO Max", primevideo: "Prime Video", paramount: "Paramount+", vix: "ViX+", crunchyroll: "Crunchyroll", spotify: "Spotify", youtube: "YouTube Premium", deezer: "Deezer", canva: "Canva", appletv: "Apple TV", universal: "Universal+", oleadatv: "Oleada TV", oleada: "Oleada TV", evoutouch: "Nanotech", icomplay: "ICOMPLAY MAX", icomplay1: "ICOMPLAY MAX (1)", icomplay3: "ICOMPLAY MAX (3)", icomplay5: "ICOMPLAY MAX (5)", icomplay7: "ICOMPLAY MAX (7)", evoutouch1: "Nanotech 1", evoutouch2: "Nanotech 2", evoutouch3: "Nanotech 3", latintv: "LatinTV", liontv: "LionTV", stellatv: "Stella TV" };
++const PLAT_LABEL = { vipnetflix: "Netflix Premium VIP", netflix: "Netflix", disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN", hbomax: "HBO Max", primevideo: "Prime Video", paramount: "Paramount+", vix: "ViX+", crunchyroll: "Crunchyroll", spotify: "Spotify", youtube: "YouTube Premium", deezer: "Deezer", canva: "Canva", appletv: "Apple TV", universal: "Universal+", oleadatv: "Oleada TV", oleada: "Oleada TV", evoutouch: "Nanotech", icomplay: "ICOMPLAY", icomplay1: "ICOMPLAY (1)", icomplay2: "ICOMPLAY (2)", icomplay3: "ICOMPLAY (3)", icomplay5: "ICOMPLAY (5)", icomplay7: "ICOMPLAY (7)", evoutouch1: "Nanotech 1", evoutouch2: "Nanotech 2", evoutouch3: "Nanotech 3", latintv: "LatinTV", liontv: "LionTV", stellatv: "Stella TV" };
+ const platLabel = p => PLAT_LABEL[String(p || "").toLowerCase().trim()] || String(p || "—");
+ function filasConFecha(clientes, hoyISO) {
+   const out = [];
+--- R186/api/renovar.js
++++ R187/api/renovar.js
+@@ -56,7 +56,7 @@
+   stellatv:[1,3,7],
+   oleadatv:[1,3,7,14],
+   evoutouch:[1,3,6,12], // Nanotech: 1, 3, 6 y 12 meses (sin meses gratis)
+-  icomplay:[1,3,6,12],  // ICOMPLAY MAX (oct-2026): 1, 3, 6 y 12 meses
++  icomplay:[1,3,6,12],  // ICOMPLAY: 1, 3, 6 y 12 meses
+ });
+ function familiaMesesTvDigital(plataforma=""){
+   const p=canonPlat(plataforma||"");
+@@ -220,7 +220,7 @@
+   if (/^liontv[1235]$/.test(key)) return key;
+   if (/^evoutouch[1-4]?$/.test(key)) return key.endsWith("2") ? "evoutouch2" : key.endsWith("3") ? "evoutouch3" : "evoutouch1";
+   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
+-  { const ic = key.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; } // ICOMPLAY MAX · 1/3/5/7 dispositivos
++  { const ic = key.match(/^icomplay(?:max)?([12357])$/); if (ic) return `icomplay${ic[1]}`; } // R187 · ICOMPLAY · 1/2/3/5/7 pantallas
+   if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
+   if (key.startsWith("oleada")) return "oleada";
+   if (key.startsWith("latintv")) return "latintv";
+@@ -1200,7 +1200,7 @@
+     out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : familia.startsWith("icomplay") ? "icomplay" : ""));
+     if (familia.startsWith("icomplay")) out.iptvProveedor = "icomplay";
+     out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1))
+-      : familia.startsWith("icomplay") ? Number((familia.match(/([1357])$/) || [])[1] || 1)
++      : familia.startsWith("icomplay") ? Number((familia.match(/([12357])$/) || [])[1] || 1)
+       : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
+     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
+     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");
+diff --git a/control-maestro.js b/control-maestro.js
+index 86b4a11..5b70706 100644
+--- a/control-maestro.js
++++ b/control-maestro.js
+@@ -311,7 +311,7 @@
+     if(/^latintv[1234]$/.test(k)||/^liontv[1235]$/.test(k)||/^iptv[134]$/.test(k))return k;
+     const nano=k.match(/^(?:nanotech|evoutouch)([1-4])$/);if(nano)return `evoutouch${nano[1]==='4'?'1':nano[1]}`;
+     if(k.startsWith('nanotech')||k.startsWith('evoutouch'))return 'evoutouch';
+-    const icom=k.match(/^icomplay(?:max)?([1357])$/);if(icom)return `icomplay${icom[1]}`;
++    const icom=k.match(/^icomplay(?:max)?([12357])$/);if(icom)return `icomplay${icom[1]}`;
+     if(k.startsWith('icomplay'))return 'icomplay';
+     if(k.startsWith('stellatv')||k.startsWith('stella'))return 'stellatv';
+     if(k.startsWith('oleada'))return 'oleada';
+@@ -380,8 +380,8 @@
+       return m?[`evoutouch${m[1]}`]:['evoutouch1','evoutouch2','evoutouch3'];
+     }
+     if(n.includes('icomplay')){
+-      const m=n.match(/icomplay(?:\s*max)?\s*([1357])\b/);
+-      return m?[`icomplay${m[1]}`]:['icomplay1','icomplay3','icomplay5','icomplay7'];
++      const m=n.match(/icomplay(?:\s*max)?\s*([12357])\b/);
++      return m?[`icomplay${m[1]}`]:['icomplay1','icomplay2','icomplay3','icomplay5','icomplay7'];
+     }
+     const tvFamily=[];
+     if(n.includes('magis'))tvFamily.push('magis');
+@@ -499,7 +499,7 @@
+     appletv:'Apple TV',star:'Star+',office:'Office 365',office2021:'Office 2021',windows10:'Windows 10',windows11:'Windows 11',
+     adobeexpress:'Adobe Express',eset:'ESET NOD32',magis:'Magis TV',stellatv:'Stella TV',stellatv1:'Stella TV (1)',stellatv2:'Stella TV (2)',stellatv3:'Stella TV (3)',oleada:'Oleada TV',oleadatv1:'Oleada TV (1)',oleadatv3:'Oleada TV (3)',
+     latintv:'LatinTV',latintv1:'LatinTV (1)',latintv2:'LatinTV (2)',latintv3:'LatinTV (3)',latintv4:'LatinTV (4)',
+-    liontv:'LionTV',liontv1:'LionTV (1)',liontv2:'LionTV (2)',liontv3:'LionTV (3)',liontv5:'LionTV (5)',evoutouch:'Nanotech',evoutouch1:'Nanotech (1)',evoutouch2:'Nanotech (2)',evoutouch3:'Nanotech (3)',icomplay:'ICOMPLAY MAX',icomplay1:'ICOMPLAY MAX (1)',icomplay3:'ICOMPLAY MAX (3)',icomplay5:'ICOMPLAY MAX (5)',icomplay7:'ICOMPLAY MAX (7)',iptv:'IPTV anterior',
++    liontv:'LionTV',liontv1:'LionTV (1)',liontv2:'LionTV (2)',liontv3:'LionTV (3)',liontv5:'LionTV (5)',evoutouch:'Nanotech',evoutouch1:'Nanotech (1)',evoutouch2:'Nanotech (2)',evoutouch3:'Nanotech (3)',icomplay:'ICOMPLAY',icomplay1:'ICOMPLAY (1)',icomplay2:'ICOMPLAY (2)',icomplay3:'ICOMPLAY (3)',icomplay5:'ICOMPLAY (5)',icomplay7:'ICOMPLAY (7)',iptv:'IPTV anterior',
+     vixmix:'ViX / Viki / Universal+'
+   };
+ 
+@@ -513,7 +513,7 @@
+     if(['latintv','latintv1','latintv2','latintv3','latintv4','latintv5'].includes(p))return 'latintv';
+     if(['stellatv','stellatv1','stellatv2','stellatv3'].includes(p))return 'stellatv';
+     if(['evoutouch','evoutouch1','evoutouch2','evoutouch3','evoutouch4'].includes(p))return 'evoutouch';
+-    if(['icomplay','icomplay1','icomplay3','icomplay5','icomplay7'].includes(p))return 'icomplay';
++    if(['icomplay','icomplay1','icomplay2','icomplay3','icomplay5','icomplay7'].includes(p))return 'icomplay';
+     return p||'sin_plataforma';
+   }
+ 
+@@ -1074,7 +1074,7 @@
+     paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
+     spotify:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
+     appletv:'#555b66',star:'#7d30c9',office:'#d83b01',office2021:'#d83b01',windows10:'#0078d4',windows11:'#0067c0',adobeexpress:'#e60023',eset:'#008f83',
+-    magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',evoutouch:'#3b5bdb',icomplay:'#e2231a',icomplay1:'#e2231a',icomplay3:'#e2231a',icomplay5:'#e2231a',icomplay7:'#e2231a',evoutouch1:'#3b5bdb',evoutouch2:'#3b5bdb',evoutouch3:'#3b5bdb',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
++    magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',evoutouch:'#3b5bdb',icomplay:'#e2231a',icomplay1:'#e2231a',icomplay2:'#e2231a',icomplay3:'#e2231a',icomplay5:'#e2231a',icomplay7:'#e2231a',evoutouch1:'#3b5bdb',evoutouch2:'#3b5bdb',evoutouch3:'#3b5bdb',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
+   };
+ 
+   function platformColor(family){return AUDIT_PLATFORM_COLORS[auditFamily(family)]||'#168fd3';}
+@@ -1314,9 +1314,9 @@
+       evoutouch1:{label:'Nanotech (1)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
+       evoutouch2:{label:'Nanotech (2)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
+       evoutouch3:{label:'Nanotech (3)',short:'NA',logo:'/assets/platformas/iptv.jpg'},
+-      icomplay:{label:'ICOMPLAY MAX',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
+-      icomplay1:{label:'ICOMPLAY MAX (1)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay3:{label:'ICOMPLAY MAX (3)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
+-      icomplay5:{label:'ICOMPLAY MAX (5)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay7:{label:'ICOMPLAY MAX (7)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
++      icomplay:{label:'ICOMPLAY',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
++      icomplay1:{label:'ICOMPLAY (1)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay2:{label:'ICOMPLAY (2)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay3:{label:'ICOMPLAY (3)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
++      icomplay5:{label:'ICOMPLAY (5)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},icomplay7:{label:'ICOMPLAY (7)',short:'IC',logo:'/assets/platformas/icomplay.jpg'},
+       iptv:{label:'IPTV',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+       iptv1:{label:'IPTV (1)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+       iptv3:{label:'IPTV (3)',short:'IP',logo:'/assets/platformas/iptv.jpg'},
+diff --git a/index.html b/index.html
+index c7d453d..ba7311e 100644
+--- a/index.html
++++ b/index.html
+@@ -1620,6 +1620,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
+       <div class="toolbar" style="gap:8px">
+         <button class="cobro-btn" id="invValidarBtn" type="button" style="flex:1;margin:0">🔎 Validar / reparar inventario</button>
+         <button class="cobro-btn" id="invUrlsTvBtn" type="button" style="flex:1;margin:0">🌐 URLs TV Digital</button>
++        <button class="cobro-btn" id="invBaulBtn" type="button" style="flex:1;margin:0">🧰 Baúl de APKs</button>
+       </div>
+       <div id="invAuditBox" class="iv-perfiles" style="display:none;margin-bottom:10px"></div>
+       <div class="toolbar"><div class="search">🔎 <input id="invQ" type="text" placeholder="Buscar usuario, correo o plataforma…"></div></div>
+--- R186/sublichat-app.js
++++ R187/sublichat-app.js
+@@ -328,7 +328,7 @@
+   latintv:"LatinTV", latintv1:"LatinTV (1 dispositivo)", latintv2:"LatinTV (2 dispositivos)", latintv3:"LatinTV (3 dispositivos)", latintv4:"LatinTV (4 dispositivos)",
+   liontv:"LionTV", liontv1:"LionTV (1 dispositivo)", liontv2:"LionTV (2 dispositivos)", liontv3:"LionTV (3 dispositivos)", liontv5:"LionTV (5 dispositivos)",
+   evoutouch:"Nanotech", evoutouch1:"Nanotech (1 dispositivo)", evoutouch2:"Nanotech (2 dispositivos)", evoutouch3:"Nanotech (3 dispositivos)", evoutouch4:"Nanotech (1 dispositivo)",
+-  icomplay:"ICOMPLAY MAX", icomplay1:"ICOMPLAY MAX (1 pantalla)", icomplay3:"ICOMPLAY MAX (3 pantallas)", icomplay5:"ICOMPLAY MAX (5 pantallas)", icomplay7:"ICOMPLAY MAX (7 pantallas)",
++  icomplay:"ICOMPLAY", icomplay1:"ICOMPLAY (1 pantalla)", icomplay2:"ICOMPLAY (2 pantallas)", icomplay3:"ICOMPLAY (3 pantallas)", icomplay5:"ICOMPLAY (5 pantallas)", icomplay7:"ICOMPLAY (7 pantallas)",
+   iptv:"IPTV anterior", iptv1:"IPTV anterior (1)", iptv3:"IPTV anterior (3)", iptv4:"IPTV anterior (4)",
+   canva:"Canva", gemini:"Gemini Pro", chatgpt:"ChatGPT", star:"Star+", office:"Office 365", office2021:"Office 2021", microsoft:"Office 365",
+   viki:"Viki Rakuten", windows10:"Windows 10", windows11:"Windows 11", adobeexpress:"Adobe Express", eset:"ESET NOD32"
+@@ -1449,27 +1449,75 @@
+ async function invCargarUrlsTv(){
+   try{const j=await invPost({accion:"tvUrls"});if(j&&j.ok&&j.urls&&typeof window.sublichatAplicarUrlsTv==="function")window.sublichatAplicarUrlsTv(j.urls);return j&&j.urls||null;}catch(_){return null;}
+ }
++// R187 · URLs de conexión por proveedor: editar, agregar, desactivar (no se ofrece para nuevas; las entregas actuales siguen),
++// eliminar (solo agregados, desactivados y sin clientes) e historial. Separadas del Baúl de APKs (descargas de apps).
+ async function invEditarUrlsTv(){
+   const box=document.getElementById("invAuditBox");if(!box)return;
+   box.style.display="block";box.innerHTML="Cargando URLs…";
+-  const urls=await invCargarUrlsTv();
++  let j=null;try{j=await invPost({accion:"tvUrlsHistorial"});}catch(_){}
++  const urls=j&&j.ok?j.urls:await invCargarUrlsTv();
+   if(!urls){box.innerHTML="⚠️ No pude leer las URLs.";return;}
+-  box.innerHTML=`<div class="cr-label">URLs de TV Digital (por proveedor)</div>`+Object.entries(urls).map(([k,v])=>`
+-    <div class="iv-row" style="gap:8px;align-items:center"><span class="k" style="min-width:110px">${clienteEsc(v.nombre||k)}</span>
+-    <input class="serv-input" data-tv-url="${clienteEsc(k)}" value="${clienteEsc(v.url||"")}" style="flex:1;margin:0">
+-    <button class="cobro-btn" data-tv-url-save="${clienteEsc(k)}" type="button" style="width:auto;margin:0">Guardar</button></div>`).join("")+
+-    `<div class="cr-hint">Se acepta http:// (ICOMPLAY usa http y puerto 80). Al guardar, todas las entregas de ese proveedor muestran la URL nueva.</div>`;
++  const hist=(j&&j.historial)||[];
++  const fila=([k,v])=>`<div class="iv-row" style="gap:8px;align-items:center;flex-wrap:wrap;${v.activo===false?"opacity:.6":""}"><span class="k" style="min-width:110px">${clienteEsc(v.nombre||k)}${v.activo===false?" · <b style='color:#b91c1c'>desactivada</b>":""}</span>
++    <input class="serv-input" data-tv-url="${clienteEsc(k)}" value="${clienteEsc(v.url||"")}" style="flex:1;min-width:200px;margin:0">
++    <button class="cobro-btn" data-tv-url-save="${clienteEsc(k)}" type="button" style="width:auto;margin:0">Guardar</button>
++    <button class="cobro-btn" data-tv-url-act="${clienteEsc(k)}" data-on="${v.activo===false?"1":"0"}" type="button" style="width:auto;margin:0">${v.activo===false?"Activar":"Desactivar"}</button>
++    ${v.activo===false?`<button class="cobro-btn" data-tv-url-del="${clienteEsc(k)}" type="button" style="width:auto;margin:0;color:#b91c1c">Eliminar</button>`:""}</div>`;
++  box.innerHTML=`<div class="cr-label">URLs de conexión de TV Digital (por proveedor)</div>`+Object.entries(urls).map(fila).join("")+
++    `<div class="iv-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><input class="serv-input" id="tvNuevoNombre" placeholder="Proveedor nuevo (ej. LatinTV 3)" style="flex:1;min-width:160px;margin:0"><input class="serv-input" id="tvNuevaUrl" placeholder="http://…" style="flex:1;min-width:200px;margin:0"><button class="cobro-btn" id="tvNuevaBtn" type="button" style="width:auto;margin:0">＋ Agregar</button></div>
++    <div class="cr-hint">Se acepta http:// (ICOMPLAY usa http y puerto 80). Al guardar, todas las entregas de ese proveedor muestran la URL nueva. Desactivar no rompe a los clientes que ya la tienen. Solo se elimina una URL agregada, desactivada y sin clientes.</div>
++    ${hist.length?`<details style="margin-top:8px"><summary class="cr-label" style="cursor:pointer">Historial (${hist.length})</summary>${hist.map(h=>`<div class="cr-hint">${clienteEsc((h.at||"").slice(0,16).replace("T"," "))} · ${clienteEsc(h.por||"")} · ${clienteEsc(h.accion||"")} ${clienteEsc(h.proveedor||"")}: ${clienteEsc(h.urlAnterior||h.url||"")}${h.urlNueva?" → "+clienteEsc(h.urlNueva):""}</div>`).join("")}</details>`:""}`;
++  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok);await invCargarUrlsTv();invEditarUrlsTv();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
+   box.querySelectorAll("[data-tv-url-save]").forEach(b=>b.addEventListener("click",async()=>{
+     const k=b.dataset.tvUrlSave,inp=box.querySelector(`[data-tv-url="${k}"]`);
+     if(!confirm(`¿Cambiar la URL de ${urls[k]?.nombre||k}?\n\n${urls[k]?.url||"—"} → ${inp.value.trim()}`))return;
+-    b.disabled=true;b.textContent="Guardando…";
+-    try{const j=await invPost({accion:"guardarTvUrl",proveedor:k,url:inp.value.trim()});
+-      if(j.ok){mostrarToast(`✅ URL de ${urls[k]?.nombre||k} actualizada`);await invCargarUrlsTv();b.textContent="Guardado";}
+-      else{mostrarToast("⚠️ "+(j.error||"Error"));b.textContent="Guardar";}
+-    }catch(_){mostrarToast("⚠️ No pude conectar.");b.textContent="Guardar";}
+-    finally{b.disabled=false;}
++    b.disabled=true;b.textContent="Guardando…";await post({accion:"guardarTvUrl",proveedor:k,url:inp.value.trim()},`✅ URL de ${urls[k]?.nombre||k} actualizada`);
+   }));
++  box.querySelectorAll("[data-tv-url-act]").forEach(b=>b.addEventListener("click",()=>{const k=b.dataset.tvUrlAct,on=b.dataset.on==="1";if(!on&&!confirm(`¿Desactivar ${urls[k]?.nombre||k}?\n\nYa no se ofrecerá para configuraciones nuevas. Los clientes que ya la tienen siguen igual.`))return;post({accion:"activarTvUrl",proveedor:k,activo:on},on?"✅ Activada":"✅ Desactivada");}));
++  box.querySelectorAll("[data-tv-url-del]").forEach(b=>b.addEventListener("click",()=>{const k=b.dataset.tvUrlDel;if(!confirm(`¿Eliminar ${urls[k]?.nombre||k}? Queda en el historial.`))return;post({accion:"eliminarTvUrl",proveedor:k},"✅ Eliminada");}));
++  box.querySelector("#tvNuevaBtn")?.addEventListener("click",()=>{const n=box.querySelector("#tvNuevoNombre").value.trim(),u=box.querySelector("#tvNuevaUrl").value.trim();if(n.length<2||!u){mostrarToast("Escriba el proveedor y la URL.");return;}post({accion:"guardarTvUrl",proveedor:n,nombre:n,url:u},"✅ Proveedor agregado");});
+ }
++// R187 · Baúl de APKs (descargas de apps por plataforma y dispositivo) + tarifas ICOMPLAY. Misma fuente que APK y bot.
++async function invBaulApks(){
++  const box=document.getElementById("invAuditBox");if(!box)return;
++  box.style.display="block";box.innerHTML="Cargando Baúl de APKs…";
++  let j=null,pl=null;try{[j,pl]=await Promise.all([invPost({accion:"baulApks"}),invPost({accion:"planesTv"})]);}catch(_){}
++  if(!j||!j.ok){box.innerHTML="⚠️ "+clienteEsc(j&&j.error||"No pude leer el Baúl.");return;}
++  const st=window._baulSt=window._baulSt||{plat:"liontv",edit:null};
++  const vista=j.vistas.find(v=>v.plataforma===st.plat)||j.vistas[0];
++  const enlHtml=e=>`<div class="iv-row" style="gap:8px;align-items:flex-start;flex-wrap:wrap;${e.activo===false?"opacity:.55":""}"><div style="flex:1;min-width:220px"><b>${clienteEsc(e.app)}</b> · ${clienteEsc(e.metodoTxt)}${e.activo===false?" · <b style='color:#b91c1c'>desactivado</b>":""}<br>
++    ${e.url?`<a href="${clienteEsc(e.url)}" target="_blank" rel="noopener noreferrer">${clienteEsc(e.url)}</a>`:"<i>Tienda del TV (sin URL exacta)</i>"}${e.codigo?` · Código Downloader <b>${clienteEsc(e.codigo)}</b>`:""}${e.codigoPendiente?` · <span style="color:#b45309">${clienteEsc(e.codigoPendiente)} pendiente de confirmar</span>`:""}
++    ${e.nota?`<div class="cr-hint">${clienteEsc(e.nota)}</div>`:""}${e.costoExterno?`<div class="cr-hint" style="color:#b45309">💲 ${clienteEsc(e.costoExterno.texto)}</div>`:""}${e.compartidaCon.length?`<div class="cr-hint">También en: ${clienteEsc(e.compartidaCon.map(x=>(j.plataformas.find(p=>p.id===x)||{}).nombre||x).join(", "))}</div>`:""}</div>
++    ${j.editor?`<button class="cobro-btn" data-be="${clienteEsc(e.id)}" type="button" style="width:auto;margin:0">Editar</button><button class="cobro-btn" data-ba="${clienteEsc(e.id)}" data-on="${e.activo===false?"1":"0"}" type="button" style="width:auto;margin:0">${e.activo===false?"Activar":"Desactivar"}</button>${e.activo===false?`<button class="cobro-btn" data-bd="${clienteEsc(e.id)}" type="button" style="width:auto;margin:0;color:#b91c1c">Eliminar</button>`:""}`:""}</div>`;
++  const ed=st.edit, opt=(o,sel)=>Object.entries(o).map(([k,v])=>`<option value="${k}" ${k===sel?"selected":""}>${clienteEsc(v)}</option>`).join("");
++  const form=ed?`<div class="cr-label" style="margin-top:12px">${ed.id?"Editar enlace":"Agregar aplicación / enlace"}</div>
++    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><select class="serv-input" id="bfApp" style="flex:1;min-width:150px;margin:0"><option value="">— App nueva —</option>${j.apps.map(a=>`<option value="${a.id}" ${a.id===ed.appId?"selected":""}>${clienteEsc(a.nombre)}</option>`).join("")}</select><input class="serv-input" id="bfAppNombre" placeholder="Nombre de app nueva" style="flex:1;min-width:150px;margin:0"></div>
++    <div class="iv-row" style="gap:8px;flex-wrap:wrap">${j.plataformas.map(p=>`<label style="font-size:13px"><input type="checkbox" data-bfp="${p.id}" ${(ed.plataformas||[]).includes(p.id)?"checked":""}> ${clienteEsc(p.nombre)}</label>`).join(" ")}</div>
++    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><select class="serv-input" id="bfDisp" style="flex:1;margin:0">${opt(j.dispositivos,ed.dispositivo)}</select><select class="serv-input" id="bfMet" style="flex:1;margin:0">${opt(j.metodos,ed.metodo)}</select></div>
++    <div class="iv-row" style="gap:8px;flex-wrap:wrap"><input class="serv-input" id="bfUrl" placeholder="https://… (vacío solo para Tienda del TV)" value="${clienteEsc(ed.url||"")}" style="flex:2;min-width:220px;margin:0"><input class="serv-input" id="bfCod" placeholder="Código Downloader" value="${clienteEsc(ed.codigo||"")}" style="flex:1;min-width:120px;margin:0" inputmode="numeric"></div>
++    <input class="serv-input" id="bfNota" placeholder="Nota (requisitos, costo externo…)" value="${clienteEsc(ed.nota||"")}" style="margin:6px 0">
++    <div class="iv-row" style="gap:8px"><button class="cobro-btn renew" id="bfSave" type="button" style="flex:1;margin:0">Guardar</button><button class="cobro-btn" id="bfCancel" type="button" style="flex:1;margin:0">Cancelar</button></div>`:"";
++  const P=pl&&pl.ok?pl.planes.icomplay:null;
++  const tarifas=P?`<details style="margin-top:12px"><summary class="cr-label" style="cursor:pointer">Tarifas ICOMPLAY (${P.variantes.length} variantes · solo ventas futuras)</summary>
++    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tr><th style="text-align:left">Pantallas</th>${P.meses.map(m=>`<th>${m} mes${m===1?"":"es"}</th>`).join("")}</tr>
++    ${P.pantallas.map(p=>`<tr><td>${p}</td>${P.meses.map(m=>`<td style="text-align:center">${j.editor?`<input class="serv-input" data-tp="${p}x${m}" value="${P.precios[p][m]}" inputmode="decimal" style="width:80px;margin:2px;text-align:right">`:`L${Number(P.precios[p][m]).toLocaleString("en-US")}`}</td>`).join("")}</tr>`).join("")}</table>
++    <div class="cr-hint">Cambiar una tarifa archiva la anterior con fecha y usuario. Las ventas ya hechas conservan su precio.</div></details>`:"";
++  box.innerHTML=`<div class="cr-label">🧰 Baúl de APKs · ${j.vistas.length} plataformas</div>
++    <div class="iv-row" style="gap:6px;flex-wrap:wrap">${j.vistas.map(v=>`<button class="cobro-btn" data-bp="${v.plataforma}" type="button" style="width:auto;margin:0;${v.plataforma===vista.plataforma?"background:#e2231a;color:#fff;border-color:#e2231a":""}">${clienteEsc(v.nombre)}</button>`).join("")}</div>
++    ${vista.dispositivos.length?vista.dispositivos.map(d=>`<div class="cr-label" style="margin-top:10px">${clienteEsc(d.nombre)}</div>${d.enlaces.map(enlHtml).join("")}`).join(""):`<p class="cr-hint">Sin aplicaciones registradas para ${clienteEsc(vista.nombre)}.</p>`}
++    <div class="cr-hint" style="margin-top:8px">${clienteEsc(j.aviso)}</div>
++    ${j.editor&&!ed?`<button class="cobro-btn renew" id="bfNew" type="button" style="width:100%;margin-top:10px">＋ Agregar aplicación (autorizado)</button>`:""}${form}${tarifas}`;
++  box.querySelectorAll("[data-bp]").forEach(b=>b.addEventListener("click",()=>{st.plat=b.dataset.bp;st.edit=null;invBaulApks();}));
++  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok);st.edit=null;invBaulApks();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
++  box.querySelector("#bfNew")?.addEventListener("click",()=>{st.edit={plataformas:[vista.plataforma],dispositivo:"android_tv",metodo:"downloader"};invBaulApks();});
++  box.querySelectorAll("[data-be]").forEach(b=>b.addEventListener("click",()=>{st.edit={...(j.enlaces||[]).find(e=>e.id===b.dataset.be)};invBaulApks();}));
++  box.querySelectorAll("[data-ba]").forEach(b=>b.addEventListener("click",()=>post({accion:"baulActivarEnlace",id:b.dataset.ba,activo:b.dataset.on==="1"},b.dataset.on==="1"?"✅ Activado":"✅ Desactivado")));
++  box.querySelectorAll("[data-bd]").forEach(b=>b.addEventListener("click",()=>{if(confirm("¿Eliminar este enlace? Queda en la auditoría."))post({accion:"baulEliminarEnlace",id:b.dataset.bd},"✅ Eliminado");}));
++  box.querySelector("#bfCancel")?.addEventListener("click",()=>{st.edit=null;invBaulApks();});
++  box.querySelector("#bfSave")?.addEventListener("click",()=>{const q=id=>box.querySelector(id);post({accion:"baulGuardarEnlace",enlace:{id:ed.id||"",appId:q("#bfApp").value,appNombre:q("#bfAppNombre").value.trim(),plataformas:[...box.querySelectorAll("[data-bfp]:checked")].map(x=>x.dataset.bfp),dispositivo:q("#bfDisp").value,metodo:q("#bfMet").value,url:q("#bfUrl").value.trim(),codigo:q("#bfCod").value.trim(),nota:q("#bfNota").value.trim(),prioridad:ed.prioridad||50}},"✅ Enlace guardado");});
++  box.querySelectorAll("[data-tp]").forEach(inp=>inp.addEventListener("change",()=>{const [p,m]=inp.dataset.tp.split("x");if(!confirm(`¿Cambiar ICOMPLAY ${p} pantalla(s) · ${m} mes(es) a L${inp.value}?\n\nSolo para ventas futuras.`)){invBaulApks();return;}post({accion:"guardarPrecioPlanTv",pantallas:Number(p),meses:Number(m),precio:Number(inp.value)},"✅ Tarifa actualizada");}));
++}
++async function invCargarPlanesTv(){try{const j=await invPost({accion:"planesTv"});if(j&&j.ok&&typeof window.sublichatAplicarPlanesTv==="function")window.sublichatAplicarPlanesTv(j.planes);}catch(_){}}
+ // Validar (solo lee) y Reparar (idempotente) Bodega ↔ fichas.
+ async function invAuditar(aplicar){
+   const box=document.getElementById("invAuditBox");if(!box)return;
+@@ -1505,7 +1553,8 @@
+ (function invHerramientasInit(){
+   const v=document.getElementById("invValidarBtn");if(v&&!v._w){v._w=true;v.addEventListener("click",()=>invAuditar(false));}
+   const u=document.getElementById("invUrlsTvBtn");if(u&&!u._w){u._w=true;u.addEventListener("click",invEditarUrlsTv);}
+-  setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);
++  const bz=document.getElementById("invBaulBtn");if(bz&&!bz._w){bz._w=true;bz.addEventListener("click",invBaulApks);} // R187
++  setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);setTimeout(invCargarPlanesTv,3000); // R187: tarifas centrales
+ })();
+ 
+ /* ===== FINANZAS (reportes con gráficos interactivos) ===== */
+@@ -4554,7 +4603,7 @@
+     ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
+     ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
+     ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
+-    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY MAX"]
++    ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY"]
+   ];
+   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
+   const FICHA_VENDEDOR_TELS={ relojes:"32126332", sublicuentas:"89464277", sublicuentas2:"89464328", yami:"96877246", jimena:"88501036", heber:"32174922", abner:"94306551", manuel:"87989267" };
+@@ -4712,7 +4761,7 @@
+     netflix:130, vipnetflix:150, disneyp:90, disneys:70, hbomax:75, primevideo:60,
+     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
+     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, stellatv:0, oleada:90, evoutouch:0, evoutouch1:0, evoutouch2:0, evoutouch3:0, iptv:130,
+-    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399,
++    icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399,
+     office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
+   };
+   const FICHA_PRECIOS_ESPECIALES={
+@@ -4722,10 +4771,12 @@
+     oleada1:90, oleada3:200,
+     latintv1:99, latintv2:149, latintv3:199, latintv4:249,
+     liontv1:250, liontv2:275, liontv3:300, liontv5:350, evoutouch1:0, evoutouch2:0, evoutouch3:0, evoutouch4:0, evoutouch:0,
+-    icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399
++    icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399
+   };
+-  // ICOMPLAY MAX (oct-2026) · precio por pantallas × meses (Max Player incluido).
+-  const ICOMPLAY_PRECIOS={1:{1:179,3:499,6:949,12:1799},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
++  // R187 · ICOMPLAY (nombre oficial) · 1, 2, 3, 5 y 7 pantallas × 1, 3, 6 y 12 meses = 20 tarifas. Respaldo local:
++  // las tarifas vigentes llegan del catálogo central (api/_planes-tv.js → inventario «planesTv») y reemplazan esta tabla.
++  const ICOMPLAY_PRECIOS={1:{1:179,3:499,6:949,12:1799},2:{1:219,3:599,6:1149,12:2149},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
++  window.sublichatAplicarPlanesTv=(pl)=>{try{const t=pl&&pl.icomplay&&pl.icomplay.precios;if(t)for(const p of Object.keys(t))ICOMPLAY_PRECIOS[p]={...t[p]};}catch(_){}};
+   const FICHA_VENDEDORES_TARIFA_ESPECIAL=new Set(["sublicuentas","sublicuentas2","relojes","geisell","geissel"]);
+   // Reglas reales de entrega por plataforma. Se separan de la pregunta de
+   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
+@@ -5395,7 +5446,7 @@
+     if(/^latintv[1234]$/.test(p))return "latintv";
+     if(/^liontv[1235]$/.test(p))return "liontv";
+     if(/^evoutouch[1-4]?$/.test(p))return "evoutouch";
+-    if(/^icomplay(max)?[1357]?$/.test(p))return "icomplay";
++    if(/^icomplay(max)?[12357]?$/.test(p))return "icomplay";
+     if(/^iptv[1234]$/.test(p))return "iptv";
+     return p;
+   };
+@@ -5906,13 +5957,13 @@
+   }
+   function fichaCantidadDesdePlataforma(raw, fallback="1"){
+     const n=fichaNorm(raw);
+-    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/)||n.match(/icomplay(?:max)?([1357])$/);
++    const m=n.match(/(?:stellatv|stella|oleadatv|oleada|latintv|liontv|evoutouch|evotouch|nanotech|iptv)([1-5])$/)||n.match(/icomplay(?:max)?([12357])$/);
+     return m?m[1]:String(fallback||"1");
+   }
+   function fichaActualizarIptvOpciones(cantidadPreferida="", proveedorPreferido=""){
+     const plat=fichaBaseRegla(fichaGetVal("fichaPlat"));
+     const pantallas=fichaQ("fichaIptvPantallas"), proveedor=fichaQ("fichaIptvProveedor");
+-    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:(plat==="icomplay"?[1,3,5,7]:[1,2,3,4]));
++    const permitidas=plat==="liontv"?[1,2,3,5]:(plat==="evoutouch"?[1,2,3]:(plat==="icomplay"?[1,2,3,5,7]:[1,2,3,4]));
+     if(pantallas){
+       const deseada=String(cantidadPreferida||pantallas.value||"1");
+       pantallas.innerHTML=permitidas.map(n=>`<option value="${n}">${n} dispositivo${n===1?"":"s"}</option>`).join("");
+@@ -5927,7 +5978,7 @@
+           : plat==="evoutouch"
+             ? [["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]]
+           : plat==="icomplay"
+-            ? [["icomplay","ICOMPLAY MAX (URL vigente de Bodega)"]]
++            ? [["icomplay","ICOMPLAY (URL vigente de Bodega)"]]
+             : [["latintv","LatinTV (latgt.com:8080)"],["latintv2","LatinTV (enlatv.com)"],["liontv","LionTV (liontv.es)"],["evoutouch","Nanotech (smarterstv99.dyndns.tv)"]];
+       proveedor.innerHTML=opciones.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+       proveedor.value=opciones.some(([v])=>v===anterior)?anterior:opciones[0][0];
+@@ -5968,7 +6019,7 @@
+       return `evoutouch${n}`;
+     }
+     if(p==="icomplay"){
+-      const n=["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
++      const n=["1","2","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1";
+       return `icomplay${n}`;
+     }
+     if(p==="iptv") return `iptv${fichaGetVal("fichaIptvPantallas")||"1"}`;
+@@ -5980,7 +6031,7 @@
+     if(p==="oleada")return `oleada${fichaGetVal("fichaOleadaDispositivos")||"1"}`;
+     if(p==="latintv"||p==="liontv")return `${p}${fichaGetVal("fichaIptvPantallas")||"1"}`;
+     if(p==="evoutouch")return `evoutouch${["1","2","3"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
+-    if(p==="icomplay")return `icomplay${["1","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
++    if(p==="icomplay")return `icomplay${["1","2","3","5","7"].includes(fichaGetVal("fichaIptvPantallas"))?fichaGetVal("fichaIptvPantallas"):"1"}`;
+     return p;
+   }
+   const fichaPrecioDefault=plat=>{
+@@ -6034,7 +6085,7 @@
+ 
+   // R83 · Respaldo para el grupo de WhatsApp: con Max Player se agregan SUS credenciales (además de la lista).
+   function fichaMaxPlayerTexto(plat){
+-    // ICOMPLAY MAX trae Max Player incluido: se informa el reproductor aunque no tenga credenciales aparte.
++    // ICOMPLAY trae Max Player incluido (Max Player es el reproductor, no el nombre del servicio): se informa el reproductor aunque no tenga credenciales aparte.
+     if(fichaBaseRegla(plat)==="icomplay"&&fichaGetVal("fichaMaxPlayer")!=="si")return "\n*📱 Reproductor: Max Player (incluido)*";
+     if(!fichaEsIptv(plat)||fichaGetVal("fichaMaxPlayer")!=="si")return "";
+     return `\n\n*📱 App: Max Player*\n*👤 Usuario Max Player: ${fichaGetVal("fichaMpUsuario")||"—"}*\n*🔒 Contraseña Max Player: ${fichaGetVal("fichaMpClave")||"—"}*`;
+@@ -6060,7 +6111,7 @@
+     const cuentaBodega=fichaCuentaBodegaPara(plat,correo);
+     const iptvurl=(cuentaBodega&&cuentaBodega.url)||(fichaBaseRegla(plat)==="icomplay"?IPTV_URLS.icomplay:"")||IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
+     const urlcuentaLine=cuentaBodega&&cuentaBodega.url?`\n*🌐 URL: ${cuentaBodega.url}*`:"";
+-    const iptvlista=fichaGetVal("fichaIptvLista")||(fichaBaseRegla(plat)==="icomplay"?"ICOMPLAY MAX":"—");
++    const iptvlista=fichaGetVal("fichaIptvLista")||(fichaBaseRegla(plat)==="icomplay"?"ICOMPLAY":"—");
+     const iptvhora=fichaGetVal("fichaIptvHora")||"";
+     const iptvPant=fichaGetVal("fichaIptvPantallas")||"1";
+     const iptvpantallas=iptvPant+" DISPOSITIVO"+(iptvPant==="1"?"":"S");
+--- /dev/null
++++ R187/tests/r187-tv-digital.test.mjs
+@@ -0,0 +1,107 @@
++// R187 · Fase 2: ICOMPLAY (20 tarifas, nombre oficial), Baúl de APKs y URLs de TV Digital. Firestore en memoria, datos ficticios.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { createRequire } from 'node:module';
++import { fakeFirestore } from './helpers/fake-firestore.mjs';
++const require = createRequire(import.meta.url);
++const planes = require('../api/_planes-tv.js');
++const baul = require('../api/_baul-apks.js');
++const tv = require('../api/_tv-digital.js');
++
++test('I01/I02: ICOMPLAY = 20 variantes exactas (1,2,3,5,7 pantallas × 1,3,6,12 meses); 2 pantallas · 3 meses = L599', async () => {
++  const v = planes.variantes('icomplay');
++  assert.equal(v.length, 20);
++  assert.deepEqual([...new Set(v.map((x) => x.pantallas))], [1, 2, 3, 5, 7]);
++  const t = Object.fromEntries(v.map((x) => [`${x.pantallas}x${x.meses}`, x.precio]));
++  assert.deepEqual(t, { '1x1': 179, '1x3': 499, '1x6': 949, '1x12': 1799, '2x1': 219, '2x3': 599, '2x6': 1149, '2x12': 2149, '3x1': 249, '3x3': 699, '3x6': 1349, '3x12': 2499, '5x1': 329, '5x3': 929, '5x6': 1799, '5x12': 3399, '7x1': 399, '7x3': 1129, '7x6': 2199, '7x12': 4199 });
++  assert.ok(v.every((x) => x.nombre === 'ICOMPLAY' && !/max/i.test(x.etiqueta)), 'sin «Icomplay Max»');
++  const db = fakeFirestore();
++  const P = await planes.leerPlanesTv(db, { fresco: true });
++  assert.equal(planes.precioPlan(P, 'icomplay', 2, 3), 599);
++  assert.throws(() => planes.precioPlan(P, 'icomplay', 4, 3), /pantallas permitidas 1, 2, 3, 5, 7/);
++  assert.throws(() => planes.precioPlan(P, 'icomplay', 2, 2), /meses permitidos/);
++  assert.throws(() => planes.precioPlan(P, 'liontv', 1, 1), /sin catálogo/, 'no se mezcla con otro IPTV');
++});
++
++test('cambiar una tarifa: solo ventas futuras, la anterior queda archivada con fecha y usuario + auditoría', async () => {
++  const db = fakeFirestore(); planes._limpiarCache();
++  const r = await planes.guardarPrecioPlan(db, { plataforma: 'icomplay', pantallas: 2, meses: 3, precio: 649, usuario: 'naara' });
++  assert.deepEqual([r.precioAnterior, r.precioNuevo], [599, 649]);
++  const P = await planes.leerPlanesTv(db, { fresco: true });
++  assert.equal(P.icomplay.precios[2][3], 649); assert.equal(P.historial.at(-1).precioAnterior, 599); assert.equal(P.historial.at(-1).por, 'naara');
++  await assert.rejects(planes.guardarPrecioPlan(db, { pantallas: 4, meses: 3, precio: 100 }), /no existe/);
++  await assert.rejects(planes.guardarPrecioPlan(db, { pantallas: 2, meses: 3, precio: 0 }), /inválido/);
++  assert.ok([...db._data.keys()].some((k) => k.startsWith('auditoria_eventos/')));
++});
++
++test('A01–A04, A06: directorio oficial exacto (apps compartidas, Latv-Gt aparte, Oleada Fire TV 1290332, Stella sin iPhone/PC, SmartOne L85)', () => {
++  const b = { ...baul.SEMILLA, apps: baul.SEMILLA.apps, enlaces: baul.SEMILLA.enlaces };
++  const lion = baul.vistaPlataforma(b, 'liontv'), nano = baul.vistaPlataforma(b, 'evoutouch');
++  const subliLion = lion.dispositivos.find((d) => d.id === 'android_tv').enlaces.find((e) => e.appId === 'sublicuentas');
++  const subliNano = nano.dispositivos.find((d) => d.id === 'android_tv').enlaces.find((e) => e.appId === 'sublicuentas');
++  assert.equal(subliLion.id, subliNano.id, 'A01: el mismo recurso, no duplicado'); assert.equal(subliLion.url, 'http://aftv.news/298863'); assert.equal(subliLion.codigo, '298863');
++  const latin = baul.vistaPlataforma(b, 'latintv').dispositivos.find((d) => d.id === 'android_tv').enlaces;
++  assert.deepEqual(latin.map((e) => e.app).sort(), ['Latv-Gt', 'Sublicuentas'], 'A02: dos apps distintas');
++  assert.equal(latin.find((e) => e.appId === 'latvgt').codigo, '', 'el 298863 no se asigna a Latv-Gt');
++  const fire = baul.vistaPlataforma(b, 'oleada').dispositivos.find((d) => d.id === 'fire_tv').enlaces[0];
++  assert.deepEqual([fire.url, fire.codigo], ['https://dldsrvs.com/apks/firestick/mgs_pro.apk', '1290332'], 'A03');
++  const mov = baul.vistaPlataforma(b, 'oleada').dispositivos.find((d) => d.id === 'android_movil').enlaces.find((e) => e.url === 'http://aftv.news/4221609');
++  assert.equal(mov.codigo, '', '4221609 no confirmado: no se da como código'); assert.equal(mov.codigoPendiente, '4221609');
++  const stella = baul.vistaPlataforma(b, 'stellatv').dispositivos.map((d) => d.id);
++  assert.deepEqual(stella, ['android_tv', 'android_movil'], 'A04: Stella sin iPhone ni PC');
++  const smart = lion.dispositivos.find((d) => d.id === 'smart_tv').enlaces;
++  assert.deepEqual(smart.map((e) => e.app).sort(), ['Max Player', 'SmartOne']);
++  assert.ok(smart.every((e) => e.url === '' && e.metodo === 'tv_store'), 'sin URL inventada de la tienda del TV');
++  assert.match(smart.find((e) => e.appId === 'smartone').costoExterno.texto, /L85 para activar 12 meses POR DISPOSITIVO/, 'A06');
++  assert.equal(baul.SEMILLA.enlaces.find((e) => e.id === 'purple-ios').url, 'https://apps.apple.com/hn/app/purple-lite-iptv-player/id6749171817');
++});
++
++test('Baúl: alta/edición validadas, mismo código no se reutiliza en otra app, desactivar antes de eliminar, auditoría', async () => {
++  const db = fakeFirestore(); baul._limpiarCache();
++  await assert.rejects(baul.guardarEnlace(db, { plataformas: ['stellatv'], dispositivo: 'iphone', metodo: 'web', url: 'https://x.hn', appId: 'stellatv' }, 'naara'), /Stella TV no se ofrece/);
++  await assert.rejects(baul.guardarEnlace(db, { plataformas: ['liontv'], dispositivo: 'android_tv', metodo: 'apk', url: 'javascript:alert(1)', appId: 'sublicuentas' }, 'naara'), /URL inválida/);
++  await assert.rejects(baul.guardarEnlace(db, { plataformas: ['liontv'], dispositivo: 'android_tv', metodo: 'downloader', url: 'http://aftv.news/1', codigo: '298863', appNombre: 'Otra App' }, 'naara'), /ya pertenece a otra aplicación/);
++  await assert.rejects(baul.guardarEnlace(db, { plataformas: ['liontv'], dispositivo: 'android_tv', metodo: 'apk', url: '', appId: 'sublicuentas' }, 'naara'), /Falta la URL/);
++  const r = await baul.guardarEnlace(db, { id: 'subli-atv', plataformas: ['liontv', 'icomplay', 'latintv', 'evoutouch'], dispositivo: 'android_tv', metodo: 'downloader', url: 'http://aftv.news/298863', codigo: '298863', appId: 'sublicuentas', nota: 'Probado' }, 'naara');
++  assert.equal(r.despues.revision, 2); assert.equal(r.antes.revision, 1);
++  await assert.rejects(baul.eliminarEnlace(db, 'subli-atv', 'naara'), /Primero desactívelo/);
++  await baul.activarEnlace(db, 'subli-atv', false, 'naara');
++  const b = await baul.leerBaul(db, { fresco: true });
++  assert.equal(baul.vistaPlataforma(b, 'liontv').dispositivos.find((d) => d.id === 'android_tv'), undefined, 'desactivado: no se ofrece');
++  await baul.eliminarEnlace(db, 'subli-atv', 'naara');
++  assert.equal((await baul.leerBaul(db, { fresco: true })).enlaces.some((e) => e.id === 'subli-atv'), false);
++  assert.equal([...db._data.keys()].filter((k) => k.startsWith('auditoria_eventos/')).length, 3, 'editar + desactivar + eliminar');
++});
++
++test('URLs de conexión: desactivar no rompe entregas; eliminar solo agregadas, desactivadas y sin clientes; historial', async () => {
++  const db = fakeFirestore({ clientes: { c1: { servicios: [{ plataforma: 'icomplay2', iptvProveedor: 'icomplay' }] }, c2: { servicios: [{ plataforma: 'netflix' }] } } });
++  await tv.guardarUrlTv(db, { proveedor: 'latintv3', nombre: 'LatinTV 3', url: 'http://nuevo.latin.hn:8080', usuario: 'naara' });
++  await tv.activarUrlTv(db, { proveedor: 'icomplay', activo: false, usuario: 'naara' });
++  const urls = await tv.leerUrlsTv(db, { fresco: true });
++  assert.equal(urls.icomplay.activo, false); assert.equal(urls.icomplay.nombre, 'ICOMPLAY');
++  assert.equal(tv.urlTvPara({ plataforma: 'icomplay2' }, urls), 'http://latinostream.xyz:80', 'el cliente que ya la tiene la sigue viendo');
++  await assert.rejects(tv.eliminarUrlTv(db, { proveedor: 'icomplay' }), /proveedor base/);
++  await assert.rejects(tv.eliminarUrlTv(db, { proveedor: 'latintv3' }), /Primero desactívela/);
++  await tv.activarUrlTv(db, { proveedor: 'latintv3', activo: false, usuario: 'naara' });
++  await tv.eliminarUrlTv(db, { proveedor: 'latintv3', usuario: 'naara' });
++  assert.equal((await tv.leerUrlsTv(db, { fresco: true })).latintv3, undefined);
++  assert.equal(await tv.clientesConProveedor(db, 'icomplay'), 1);
++  const h = await tv.historialUrlsTv(db);
++  assert.deepEqual(h.map((x) => x.accion), ['eliminar', 'desactivar', 'desactivar', 'agregar']);
++});
++
++test('cableado: Web, servidor y permisos (editores Sublicuentas/Relojes; Baúl por módulo)', () => {
++  const inv = fs.readFileSync(new URL('../api/inventario.js', import.meta.url), 'utf8');
++  for (const a of ['planesTv', 'guardarPrecioPlanTv', 'baulApks', 'baulGuardarEnlace', 'baulActivarEnlace', 'baulEliminarEnlace', 'activarTvUrl', 'eliminarTvUrl']) assert.match(inv, new RegExp(`"${a}"`));
++  assert.match(inv, /PERMISOS\.aplicar\(permisosCtx, "baul-apks"/);
++  const per = fs.readFileSync(new URL('../api/_permisos.js', import.meta.url), 'utf8');
++  assert.match(per, /id: 'baul-apks'/);
++  const web = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
++  assert.match(web, /2:\{1:219,3:599,6:1149,12:2149\}/); assert.match(web, /icomplay2:"ICOMPLAY \(2 pantallas\)"/); assert.doesNotMatch(web, /"ICOMPLAY MAX/);
++  assert.match(web, /async function invBaulApks\(\)/);
++  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
++  assert.match(html, /id="invBaulBtn"/);
++  const mc = fs.readFileSync(new URL('../api/mobile-core.js', import.meta.url), 'utf8');
++  assert.match(mc, /config\.planesTv = \{ icomplay: pl\.icomplay\.precios/);
++});
+--- R186/tests/r150-sincronizacion-total.test.mjs
++++ R187/tests/r150-sincronizacion-total.test.mjs
+@@ -138,9 +138,9 @@
+   assert.throws(() => f.calcularRenovacionPorDuracion(futuro, { unidad: 'meses', cantidad: 25 }));
+ });
+ 
+-test('ICOMPLAY MAX: planes 1/3/5/7 pantallas × 1/3/6/12 meses en Web; meses válidos en el servidor', () => {
++test('ICOMPLAY (R187): planes 1/2/3/5/7 pantallas × 1/3/6/12 meses en Web; meses válidos en el servidor', () => {
+   const web = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
+-  assert.match(web, /ICOMPLAY_PRECIOS=\{1:\{1:179,3:499,6:949,12:1799\},3:\{1:249,3:699,6:1349,12:2499\},5:\{1:329,3:929,6:1799,12:3399\},7:\{1:399,3:1129,6:2199,12:4199\}\}/);
++  assert.match(web, /ICOMPLAY_PRECIOS=\{1:\{1:179,3:499,6:949,12:1799\},2:\{1:219,3:599,6:1149,12:2149\},3:\{1:249,3:699,6:1349,12:2499\},5:\{1:329,3:929,6:1799,12:3399\},7:\{1:399,3:1129,6:2199,12:4199\}\}/);
+   const api = fs.readFileSync(new URL('../api/renovar.js', import.meta.url), 'utf8');
+   assert.match(api, /icomplay:\[1,3,6,12\]/);
+ });
