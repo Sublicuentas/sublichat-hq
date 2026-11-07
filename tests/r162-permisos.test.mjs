@@ -90,11 +90,12 @@ test('las APIs de los módulos consultan los permisos', () => {
   }
 });
 
-test('diseño nuevo: apagado por defecto, sin Activar TV, assets livianos', () => {
+test('diseño nuevo: único para todos (R184), sin volver al anterior, sin Activar TV, assets livianos', () => {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const js = fs.readFileSync(new URL('../ui-v2.js', import.meta.url), 'utf8');
   assert.match(html, /ui-v2\.css\?v=/); assert.match(html, /ui-v2\.js\?v=/); assert.match(html, /ui-v2-inicio\.js\?v=/); assert.match(html, /permisos-admin\.js\?v=/);
-  assert.match(js, /if \(!activo\) return;/);
+  assert.ok(!/if \(!activo\) return;/.test(js)); assert.match(html, /<html[^>]*class="ui-v2"/);
+  assert.ok(!/usarAnterior\(\)|data-v2-anterior|>Diseño anterior</.test(js)); assert.match(js, /removeItem\('sublichat_ui_v2'\)/);
   assert.ok(!/activar\s*tv/i.test(js));
   for (const a of ['sublirobot-96.webp', 'sublirobot-240.webp', 'sublicuentas-logo-claro-ui.webp']) {
     assert.ok(fs.statSync(new URL('../assets/' + a, import.meta.url)).size < 40000, a);
