@@ -1347,7 +1347,9 @@ html.sj-sala-expandida #screen-sala-juntas,html.sj-sala-expandida .screen-sala-j
   // R168 · Enlace de Telegram: /?sala=<id> abre la Sala (con el login normal de Sublichat) y la antesala de esa reunión.
   (function enlace() {
     let id = ''; try { id = new URLSearchParams(location.search).get('sala') || ''; } catch (_) {}
-    if (!/^[A-Za-z0-9_-]{6,60}$/.test(id)) return;
+    // R192 · desde la APK: «Mi avatar» y «Escenarios» abren esas vistas sin entrar a ninguna reunión (mismos permisos).
+    const vistaDirecta = ['personaje', 'escenarios'].includes(id) ? id : '';
+    if (!vistaDirecta && !/^[A-Za-z0-9_-]{6,60}$/.test(id)) return;
     let n = 0; const iv = setInterval(async () => {
       n++; const R = window.SublichatRBAC;
       if (n > 240) return clearInterval(iv);
@@ -1357,6 +1359,7 @@ html.sj-sala-expandida #screen-sala-juntas,html.sj-sala-expandida .screen-sala-j
       R.ir('sala-juntas');
       for (let i = 0; i < 40 && !st.data; i++) await new Promise((r) => setTimeout(r, 250));
       if (!st.data) return;
+      if (vistaDirecta) { if (vistaDirecta === 'escenarios') await cargarEscenarios(); if (vistaDirecta === 'personaje') { st.pers = null; st.volverAnte = false; } st.vista = vistaDirecta; pintar(); return; }
       try { const j = await api({ accion: 'antesala', id }); st.ante = j.reunion; st.data.tiempoReal = j.tiempoReal; st.vista = 'antesala'; pintar(); }
       catch (e) { toast(e.message, true); }
     }, 250);
