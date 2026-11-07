@@ -1517,6 +1517,39 @@ async function invBaulApks(){
   box.querySelector("#bfSave")?.addEventListener("click",()=>{const q=id=>box.querySelector(id);post({accion:"baulGuardarEnlace",enlace:{id:ed.id||"",appId:q("#bfApp").value,appNombre:q("#bfAppNombre").value.trim(),plataformas:[...box.querySelectorAll("[data-bfp]:checked")].map(x=>x.dataset.bfp),dispositivo:q("#bfDisp").value,metodo:q("#bfMet").value,url:q("#bfUrl").value.trim(),codigo:q("#bfCod").value.trim(),nota:q("#bfNota").value.trim(),prioridad:ed.prioridad||50}},"✅ Enlace guardado");});
   box.querySelectorAll("[data-tp]").forEach(inp=>inp.addEventListener("change",()=>{const [p,m]=inp.dataset.tp.split("x");if(!confirm(`¿Cambiar ICOMPLAY ${p} pantalla(s) · ${m} mes(es) a L${inp.value}?\n\nSolo para ventas futuras.`)){invBaulApks();return;}post({accion:"guardarPrecioPlanTv",pantallas:Number(p),meses:Number(m),precio:Number(inp.value)},"✅ Tarifa actualizada");}));
 }
+// R188 · Spotify Familiar: 1 correo madre + 5 espacios. Crear familia, vincular existentes (sin duplicar ficha), agregar invitado,
+// mover entre madres y desvincular (nunca borra al cliente). Reglas y auditoría en el servidor (_spotify-familias.js).
+async function invSpotifyFamilias(){
+  const box=document.getElementById("invAuditBox");if(!box)return;
+  box.style.display="block";box.innerHTML="Cargando Spotify Familiar…";
+  let j=null;try{j=await invPost({accion:"spotifyFamilias"});}catch(_){}
+  if(!j||!j.ok){box.innerHTML="⚠️ "+clienteEsc(j&&j.error||"No pude leer las familias.");return;}
+  const st=window._spfSt=window._spfSt||{abierta:"",busqueda:null};
+  const fam=j.familias.find(f=>f.id===st.abierta);
+  const lista=j.familias.map(f=>`<button class="cobro-btn" data-spf="${clienteEsc(f.id)}" type="button" style="width:100%;margin:4px 0;text-align:left;${f.id===st.abierta?"border-color:#e2231a":""}"><b>${clienteEsc(f.codigo)}</b> · ${clienteEsc(f.madreCorreo)} · <b>${f.ocupados}/${f.capacidad}</b>${f.estado==="inactiva"?" · inactiva":""}</button>`).join("")||`<p class="cr-hint">Todavía no hay familias.</p>`;
+  const otras=j.familias.filter(f=>fam&&f.id!==fam.id&&f.libres>0);
+  const detalle=fam?`<div class="cr-label" style="margin-top:12px">${clienteEsc(fam.codigo)} · Madre: ${clienteEsc(fam.madreCorreo)} · Invitados ${fam.ocupados}/${fam.capacidad}</div>
+    ${fam.miembros.filter(m=>m.estado==="activo").map(m=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(m.correo)}${m.clienteNombre?` · ${clienteEsc(m.clienteNombre)}`:" · <i>sin ficha</i>"} · <b style="color:#15803d">Vinculada</b></span>
+      ${otras.length?`<select class="serv-input" data-spm-dest="${clienteEsc(m.correo)}" style="width:auto;margin:0"><option value="">Mover a…</option>${otras.map(o=>`<option value="${clienteEsc(o.id)}">${clienteEsc(o.codigo)} (${o.ocupados}/${o.capacidad})</option>`).join("")}</select>`:""}
+      <button class="cobro-btn" data-spd="${clienteEsc(m.correo)}" type="button" style="width:auto;margin:0">Desvincular</button></div>`).join("")}
+    ${Array.from({length:fam.libres}).map(()=>`<div class="iv-row"><span class="cr-hint">+ Espacio disponible</span></div>`).join("")}
+    ${fam.libres?`<div class="cr-label" style="margin-top:10px">Vincular cuenta existente</div>
+      <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfQ" placeholder="Buscar ficha Spotify por correo o ID" style="flex:1;margin:0"><button class="cobro-btn" id="spfBuscar" type="button" style="width:auto;margin:0">Buscar</button></div>
+      ${st.busqueda?(st.busqueda.length?st.busqueda.map(s=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1">${clienteEsc(s.correo)} · ${clienteEsc(s.clienteNombre)} · vence ${clienteEsc(s.fechaRenovacion||"—")}${s.spotifyFamiliaId?" · ya tiene familia":""}</span>${s.spotifyFamiliaId?"":`<button class="cobro-btn renew" data-spv="${clienteEsc(s.correo)}" data-cli="${clienteEsc(s.clienteId)}" data-com="${clienteEsc(s.compraId)}" type="button" style="width:auto;margin:0">Vincular</button>`}</div>`).join(""):`<p class="cr-hint">Sin fichas Spotify con ese dato.</p>`):""}
+      <div class="cr-label" style="margin-top:10px">Agregar cuenta nueva</div>
+      <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfNuevo" placeholder="correo invitado" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfAgregar" type="button" style="width:auto;margin:0">Agregar</button></div>
+      <div class="cr-hint">Si el correo ya tiene ficha, use «Vincular cuenta existente» para no duplicar. Sublichat no envía invitaciones ni revisa Spotify.</div>`:`<p class="cr-hint">Familia completa (5 de 5).</p>`}`:"";
+  box.innerHTML=`<div class="cr-label">🎵 Spotify Familiar · ${j.familias.length} familia${j.familias.length===1?"":"s"}</div>${lista}
+    <div class="iv-row" style="gap:8px;margin-top:8px"><input class="serv-input" id="spfMadre" placeholder="correo madre (administradora)" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfCrear" type="button" style="width:auto;margin:0">Crear familia</button></div>${detalle}`;
+  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok+(r.advertencia?` · ${r.advertencia}`:""));if(r.familia&&r.familia.id)st.abierta=r.familia.id;st.busqueda=null;invSpotifyFamilias();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
+  box.querySelectorAll("[data-spf]").forEach(b=>b.addEventListener("click",()=>{st.abierta=b.dataset.spf;st.busqueda=null;invSpotifyFamilias();}));
+  box.querySelector("#spfCrear")?.addEventListener("click",()=>{const m=box.querySelector("#spfMadre").value.trim();if(!m){mostrarToast("Escriba el correo madre.");return;}post({accion:"spotifyCrear",madreCorreo:m},"✅ Familia creada");});
+  box.querySelector("#spfBuscar")?.addEventListener("click",async()=>{const q=box.querySelector("#spfQ").value.trim();try{const r=await invPost({accion:"spotifyBuscar",q});st.busqueda=r.ok?r.servicios:[];}catch(_){st.busqueda=[];}invSpotifyFamilias();});
+  box.querySelectorAll("[data-spv]").forEach(b=>b.addEventListener("click",()=>post({accion:"spotifyVincular",familiaId:fam.id,correo:b.dataset.spv,clienteId:b.dataset.cli,compraId:b.dataset.com},"✅ Vinculada (misma ficha e historial)")));
+  box.querySelector("#spfAgregar")?.addEventListener("click",async()=>{const c=box.querySelector("#spfNuevo").value.trim();if(!c)return;try{const r=await invPost({accion:"spotifyBuscar",q:c});const ya=(r.servicios||[]).find(s=>s.correo===c.toLowerCase());if(ya&&!ya.spotifyFamiliaId&&confirm(`Ese correo ya tiene ficha (${ya.clienteNombre}). ¿Vincular esa misma ficha?`)){post({accion:"spotifyVincular",familiaId:fam.id,correo:c,clienteId:ya.clienteId,compraId:ya.compraId},"✅ Vinculada");return;}}catch(_){}post({accion:"spotifyVincular",familiaId:fam.id,correo:c},"✅ Invitado agregado");});
+  box.querySelectorAll("[data-spm-dest]").forEach(sel=>sel.addEventListener("change",()=>{if(!sel.value)return;if(!confirm(`¿Mover ${sel.dataset.spmDest}? Se libera su espacio aquí y ocupa uno en la familia destino.`)){sel.value="";return;}post({accion:"spotifyMover",correo:sel.dataset.spmDest,destinoId:sel.value},"✅ Movido");}));
+  box.querySelectorAll("[data-spd]").forEach(b=>b.addEventListener("click",()=>{if(confirm(`¿Desvincular ${b.dataset.spd}? El cliente y su historial NO se borran.`))post({accion:"spotifyDesvincular",correo:b.dataset.spd},"✅ Desvinculado");}));
+}
 async function invCargarPlanesTv(){try{const j=await invPost({accion:"planesTv"});if(j&&j.ok&&typeof window.sublichatAplicarPlanesTv==="function")window.sublichatAplicarPlanesTv(j.planes);}catch(_){}}
 // Validar (solo lee) y Reparar (idempotente) Bodega ↔ fichas.
 async function invAuditar(aplicar){
@@ -1554,6 +1587,7 @@ async function invAuditar(aplicar){
   const v=document.getElementById("invValidarBtn");if(v&&!v._w){v._w=true;v.addEventListener("click",()=>invAuditar(false));}
   const u=document.getElementById("invUrlsTvBtn");if(u&&!u._w){u._w=true;u.addEventListener("click",invEditarUrlsTv);}
   const bz=document.getElementById("invBaulBtn");if(bz&&!bz._w){bz._w=true;bz.addEventListener("click",invBaulApks);} // R187
+  const bsp=document.getElementById("invSpotifyBtn");if(bsp&&!bsp._w){bsp._w=true;bsp.addEventListener("click",invSpotifyFamilias);} // R188
   setTimeout(invCargarUrlsTv,2500);setTimeout(invCargarUrlsTv,15000);setTimeout(invCargarPlanesTv,3000); // R187: tarifas centrales
 })();
 
@@ -4936,6 +4970,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
 ✔️ Garantía vigente durante todo el periodo adquirido.
 
+⚠️ Código de hogar · HBO Max:
+HBO Max puede pedir un código de hogar en cualquier momento, incluso apenas inicie sesión. Si le aparece, escríbanos y le ayudamos a ingresarlo.
+
 🚀 Sublicuentas`,
     primevideo:
 `*🍿🎬 Entrega de su acceso Prime Video 🎬🍿*
@@ -4955,6 +4992,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 ⚠️ Importante
 📌 Compras y rentas de películas no disponible.
 📌 Acceso exclusivo al catálogo oficial de Prime Video.
+
+*⚠️ Importante: Solo disponible para la aplicación Prime Video. Prohibido ingresar en Amazon.*
 
 🚀 Sublicuentas`,
     crunchyroll:
@@ -5089,8 +5128,8 @@ Ingrese estos datos manualmente en su app:
 `*🤖 Acceso Exclusivo: Gemini Pro ✨*
 
 *👤 Cliente: {perfil}*
-*📧 Invitación enviada a:*
-*{correo}*
+*📧 {correoTitulo}*
+*{correo}*{claveLine}
 *⏳ Próximo pago: {fecha}*
 
 ⚠️ Condiciones del servicio:
@@ -5106,7 +5145,7 @@ Ingrese estos datos manualmente en su app:
 Estimad@ *_{nombre}_*, le comparto su acceso:
 
 *👤 Perfil / cliente: {perfil}*
-*📧 Correo: {correo}*
+*📧 Correo: {correo}*{claveLine}
 *📅 Renovación: {renovTexto}*
 
 🚨 Condiciones del servicio:
@@ -5195,7 +5234,7 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 ¡Su invitación premium ya fue enviada! Revise su bandeja de correo para aceptar y activar el acceso.
 
 *👤 Cliente: {perfil}*
-*📧 Correo activado: {correo}*
+*📧 Correo activado: {correo}*{claveLine}
 🎉 Beneficio: 1 mes de funciones Plus activas 📕
 *🔄 Renovable hasta: {fecha}*
 
@@ -5317,7 +5356,10 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 📌 No se modifican los perfiles.
 📌 Conexión válida únicamente para Honduras.
 
-✔️ Garantía vigente durante todo el periodo adquirido.`,
+✔️ Garantía vigente durante todo el periodo adquirido.
+
+⚠️ Código de hogar · HBO Max:
+HBO Max puede pedir un código de hogar en cualquier momento, incluso apenas inicie sesión. Si le aparece, escríbanos y le ayudamos a ingresarlo.`,
     primevideo:
 `*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
 _No se puede usar en dos dispositivos al mismo tiempo._
@@ -5329,7 +5371,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
 ⚠️ Importante:
 📌 Compras y rentas de películas no disponibles.
-📌 Acceso exclusivo al catálogo oficial de Prime Video.`,
+📌 Acceso exclusivo al catálogo oficial de Prime Video.
+
+*⚠️ Importante: Solo disponible para la aplicación Prime Video. Prohibido ingresar en Amazon.*`,
     crunchyroll:
 `*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
 _No se puede usar en dos dispositivos al mismo tiempo._
@@ -5532,7 +5576,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     return cand.toISOString().slice(0,10);
   };
   const fichaEsCuentaCompleta=()=>fichaGetVal("fichaCategoria")==="cuentas_completas"; // R112
-  const fichaNeedsClave=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));
+  // R188 · ChatGPT lleva contraseña; Gemini/Duolingo según modalidad (correo propio del cliente = sin contraseña, nunca se pide).
+  const fichaModalidadDe=plat=>{const b=fichaBaseRegla(plat);if(b==="chatgpt")return "proveedor";if(b==="gemini"||b==="duolingo")return fichaGetVal("fichaModalidad")==="proveedor"?"proveedor":"correo_cliente";return "";};
+  const fichaNeedsClave=plat=>{const m=fichaModalidadDe(plat);if(m)return m==="proveedor";return fichaEsCuentaCompleta()||!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));};
   const fichaNeedsPin=plat=>!fichaEsCuentaCompleta()&&!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
   const fichaNeedsCorreo=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
   // R112 · Categorías: primero la categoría, después solo sus plataformas (mismo contrato que APK y bot).
@@ -6122,7 +6168,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const perfiles=fichaRecolectarPerfiles();
     const variables={
       plat:fichaPlatformLabel(plat),nombre:nombre||"Cliente",perfil:perfil||nombre||"Cliente",correo,clave:clave||"—",pin:pin||"—",
-      claveLine,pinLine,urlcuentaLine,iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
+      claveLine,pinLine,urlcuentaLine,correoTitulo:fichaModalidadDe(plat)==="proveedor"?"Correo de acceso:":"Invitación enviada a:",iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
       dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
     };
     const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
@@ -6276,6 +6322,26 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     return s.replace(/\n/g,"<br>");
   }
 
+  // R188 · Equipos de TV Digital = los del Baúl (Stella sin iPhone/PC). Se guarda en ESTE servicio (equipoTv).
+  const FICHA_EQUIPOS_TV={android_tv:"Android TV / TV Box",fire_tv:"Fire TV / Fire Stick",android_movil:"Celular / tableta Android",smart_tv:"Smart TV Samsung / LG",iphone:"iPhone / iPad",pc:"PC / Laptop"};
+  function fichaFamiliaTv(plat){const p=String(plat||"").toLowerCase().replace(/[^a-z0-9]/g,"");const f=[["stella","stellatv"],["oleada","oleada"],["latintv","latintv"],["liontv","liontv"],["evoutouch","evoutouch"],["icomplay","icomplay"]].find(([x])=>p.startsWith(x));return f?f[1]:"";}
+  function fichaR188Campos(plat){
+    const fam=fichaFamiliaTv(plat),eqBox=fichaQ("fichaEquipoTvBox"),eq=fichaQ("fichaEquipoTv"),modBox=fichaQ("fichaModalidadBox");
+    if(eqBox)eqBox.style.display=fam?"block":"none";
+    if(eq){const actual=eq.dataset.valor!=null?eq.dataset.valor:eq.value;const ids=Object.keys(FICHA_EQUIPOS_TV).filter(k=>!(fam==="stellatv"&&(k==="iphone"||k==="pc")));
+      eq.innerHTML=`<option value="">Pendiente de seleccionar</option>`+ids.map(k=>`<option value="${k}">${FICHA_EQUIPOS_TV[k]}</option>`).join("");eq.value=ids.includes(actual)?actual:"";delete eq.dataset.valor;}
+    const b=fichaBaseRegla(plat);if(modBox)modBox.style.display=(b==="gemini"||b==="duolingo")?"block":"none";
+  }
+  // R188 · Ficha Spotify: al escribir el correo invitado se busca su familia (madre, código y espacio). Solo personal con permiso.
+  async function fichaSpotifyResolver(){
+    const box=fichaQ("fichaSpotifyBox");if(!box)return;
+    const esSp=/spotify/i.test(fichaGetVal("fichaPlat")),correo=fichaGetVal("fichaCorreo");
+    if(!esSp||!/@/.test(correo)){box.style.display="none";return;}
+    box.style.display="block";box.textContent="🎵 Buscando familia Spotify…";
+    try{const r=await invPost({accion:"spotifyResolver",correo});const f=r&&r.ok?r.familia:null;
+      box.innerHTML=!r||!r.ok?`🎵 ${clienteEsc((r&&r.error)||"Sin acceso a Spotify Familiar.")}`:f&&f.tipo==="invitado"?`🎵 Familia <b>${clienteEsc(f.codigo)}</b> · Madre: <b>${clienteEsc(f.madreCorreo)}</b> · Espacio ${f.posicion} de ${f.capacidad}. Se asigna sola al guardar.`:f&&f.tipo==="madre"?`🎵 Ese correo es la <b>madre</b> de ${clienteEsc(f.codigo)}.`:`🎵 Ese correo no está en ninguna familia. Vincúlelo desde Bodega → 🎵 Spotify Familiar.`;
+    }catch(_){box.textContent="🎵 No pude consultar la familia.";}
+  }
   function fichaRefreshTemplate(){
     fichaSetPrecioDefault(false);
     const plat=fichaGetVal("fichaPlat");
@@ -6293,6 +6359,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
           iptvListaBox=fichaQ("fichaIptvListaBox"), iptvHoraBox=fichaQ("fichaIptvHoraBox"), iptvPantallasBox=fichaQ("fichaIptvPantallasBox"), oleadaBox=fichaQ("fichaOleadaBox");
     const dispositivoBox=fichaQ("fichaDispositivoBox"),rokuBox=fichaQ("fichaRokuBox"),dispositivoEl=fichaQ("fichaDispositivo"),rokuEl=fichaQ("fichaEsRoku");
     if(dispositivoBox)dispositivoBox.style.display=showDispositivo?"block":"none";
+    fichaR188Campos(plat); // R188 · dispositivo de TV Digital y modalidad de acceso (por servicio)
     if(!showDispositivo){
       if(dispositivoEl)dispositivoEl.value="";
       if(rokuEl)rokuEl.value="no";
@@ -6403,6 +6470,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       dispositivo:fichaUsaSelectorDispositivo(plat)?(principal.dispositivo||""):"",
       esRoku:fichaUsaSelectorDispositivo(plat)&&principal.dispositivo==="tv"&&principal.esRoku===true
     };
+    if(fichaFamiliaTv(plat))servicio.equipoTv=fichaGetVal("fichaEquipoTv")||""; // R188 · dispositivo de ESTE servicio
+    if(fichaModalidadDe(plat))servicio.modalidadAcceso=fichaModalidadDe(plat);
     if(fichaEsIptv(plat)){
       servicio.iptvProveedor=fichaGetVal("fichaIptvProveedor")||fichaBaseRegla(plat);
       servicio.iptvPantallas=Number(fichaGetVal("fichaIptvPantallas")||1);
@@ -6765,6 +6834,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
     const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
+    { const eq=fichaQ("fichaEquipoTv"); if(eq){ eq.dataset.valor=String(s.equipoTv||""); eq.value=String(s.equipoTv||""); } const md=fichaQ("fichaModalidad"); if(md) md.value=s.modalidadAcceso==="proveedor"?"proveedor":"correo_cliente"; } // R188
     fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
     fichaAplicarVisibilidadUrl(principal.visibilidadUrl||s.visibilidadUrl||{modo:"plataforma"});
     const rokuBox=fichaQ("fichaRokuBox");
@@ -7062,6 +7132,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
           <label class="ficha-field"><span>Plataforma</span><select class="ficha-select" id="fichaPlat">${FICHA_PLATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>
           <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 Perfil 1 · ¿Dónde va a usar este perfil?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
           <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>Perfil 1 · ¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
+          <label class="ficha-field" id="fichaEquipoTvBox" style="display:none"><span>📺 Dispositivo del cliente (este servicio)</span><select class="ficha-select" id="fichaEquipoTv"><option value="">Pendiente de seleccionar</option></select></label>
+          <label class="ficha-field" id="fichaModalidadBox" style="display:none"><span>🔐 Modalidad de acceso</span><select class="ficha-select" id="fichaModalidad"><option value="correo_cliente">Correo propio del cliente (sin contraseña)</option><option value="proveedor">Cuenta entregada por Sublicuentas (correo + contraseña)</option></select></label>
+          <div class="ficha-field" id="fichaSpotifyBox" style="display:none;grid-column:1/-1;background:#fff;border:1px solid #dbe3ee;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#0f2d52"></div>
           <div class="ficha-url-visibility">
             <div class="ficha-url-visibility-head"><div><b>👁️ Datos visibles en la ficha URL</b><small>Se configura solo para este servicio. No borra los datos del CRM ni cambia la ficha tradicional de WhatsApp.</small></div></div>
             <select class="ficha-select" id="fichaVisibilidadUrl">
@@ -7177,6 +7250,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       fichaRenderPerfilesExtra(); fichaRefreshTemplate();
     });
     fichaQ("fichaEsRoku").addEventListener("change",()=>{ fichaRenderPerfilesExtra(); fichaRefreshTemplate(); });
+    fichaQ("fichaEquipoTv")?.addEventListener("change",()=>fichaRefreshTemplate()); // R188
+    fichaQ("fichaCorreo")?.addEventListener("change",()=>fichaSpotifyResolver()); fichaQ("fichaPlat")?.addEventListener("change",()=>fichaSpotifyResolver()); // R188 · Spotify Familiar
+    fichaQ("fichaModalidad")?.addEventListener("change",()=>{ if(fichaGetVal("fichaModalidad")!=="proveedor"&&fichaQ("fichaClave"))fichaQ("fichaClave").value=""; fichaRefreshTemplate(); }); // R188 · correo propio: la contraseña no se guarda
     fichaQ("fichaVisibilidadUrl").addEventListener("change",()=>{fichaActualizarVisibilidadUrl(false);fichaAvisoDispositivo();});
     ["fichaVerCorreo","fichaVerClave","fichaVerPin"].forEach(id=>fichaQ(id).addEventListener("change",fichaAvisoDispositivo));
     fichaQ("fichaCopyLink").addEventListener("click",e=>fichaCopiarCampo(fichaLinkActual,e.currentTarget));

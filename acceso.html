@@ -131,6 +131,7 @@
   .terms li.term-destacado{ background:#FDECEC; border:1.5px solid #E2231A; border-radius:12px; padding:9px 11px; color:#B71914; font-size:13px; font-weight:800; }
   .term-icon{ width:18px; flex:0 0 18px; display:inline-flex; justify-content:center; font-size:14px; line-height:1.25; }
   .netflix-code-alert{ margin-top:12px; border:1.5px solid #efb04a; border-left:5px solid #e58a00; border-radius:16px; padding:13px 15px; background:#fff5d9; color:#5f3b00; font-size:12.5px; line-height:1.55; }
+  .netflix-code-alert.aviso-destacado{ margin:0 0 12px; border-color:#e2231a; border-left-color:#e2231a; background:#fff; color:#8a1410; } /* R188 · Prime: solo app */
   .netflix-code-alert b{ display:block; margin-bottom:4px; color:#9a5100; font-size:13px; }
   .vendor-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:#F8F4EC; border-radius:14px; padding:11px 15px; margin-top:18px; }
   .vendor-name{ font-size:13px; font-weight:700; }
@@ -544,16 +545,20 @@
     const termsHtml=(d.terminos||[]).map((t,i)=>{const dest=String(t).startsWith("!"),txt=dest?String(t).slice(1):t;
       return dest?`<li class="term-destacado"><span class="term-icon" aria-hidden="true">⚠️</span><span>${esc(txt)}</span></li>`:`<li><span class="term-icon" aria-hidden="true">${iconoCondicion(txt,i)}</span><span>${esc(txt)}</span></li>`;}).join("");
     const perfiles=perfilesDelServicio(d);
-    const avisoCodigoNetflix=platKey(d.plataforma)==="netflix"
-      ? `<div class="netflix-code-alert" role="note"><b>⚠️ Aviso importante de Netflix</b>Es posible que en aproximadamente 15 días Netflix solicite un código temporal. Cuando le aparezca, comuníquese con su vendedor para recibirlo al instante.</div>`
-      : "";
+    // R188 · Avisos centrales y versionados por plataforma (Netflix 15 días ≠ HBO código de hogar ≠ Prime solo app).
+    const avisos=Array.isArray(d.avisos)?d.avisos:(platKey(d.plataforma)==="netflix"?[{titulo:"Aviso importante de Netflix",texto:"Es posible que en aproximadamente 15 días Netflix solicite un código temporal. Cuando le aparezca, comuníquese con su vendedor para recibirlo al instante."}]:[]);
+    const avisoCodigoNetflix=avisos.map(a=>`<div class="netflix-code-alert${a.destacado?" aviso-destacado":""}" role="note"><b>⚠️ ${esc(a.titulo||"Aviso")}</b>${esc(a.texto||"")}</div>`).join("");
     const tvPlan=tvDigitalPlanHtml({...d,_serviceIndex:index});
-    return `${datosPerfilHtml(d,index)}
+    // R188 · D01: el dispositivo que se ve aquí es el guardado en ESTE servicio (o «Pendiente de seleccionar»; nunca uno inventado).
+    const dispReg=d.dispositivoRegistrado&&perfiles.length<=1?`<div class="profile-group">${infoRow("Dispositivo registrado",d.dispositivoRegistrado,d.dispositivoRegistrado==="Pendiente de seleccionar"?"⚙️":"📱")}</div>`:"";
+    const primeroAvisoDestacado=avisos.some(a=>a.destacado);
+    return `${primeroAvisoDestacado?avisoCodigoNetflix:""}${datosPerfilHtml(d,index)}
       ${perfiles.length>1?"":notaModo(d,perfiles[0])}
+      ${dispReg}
       ${tvPlan}
       <div class="section-title">Condiciones del servicio</div>
       <div class="terms"><ul>${termsHtml}</ul></div>
-      ${avisoCodigoNetflix}`;
+      ${primeroAvisoDestacado?"":avisoCodigoNetflix}`;
   }
 
   function tarjetaServicio(d,index,total,soporte=""){
