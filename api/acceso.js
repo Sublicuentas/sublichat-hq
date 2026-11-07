@@ -10,6 +10,7 @@
 
 import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
+import entrega from "./_entrega-plataforma.js"; // R188 · avisos centrales, modalidad y dispositivo por servicio
 import vendedoresReg from "./_vendedores.js"; // Oct-2026 · número del vendedor siempre el vigente
 // URLs vigentes de TV Digital (editables desde Bodega). Se cargan al inicio de cada solicitud (caché 60 s).
 let TV_URLS_VIGENTES = null, TV_URLS_CUENTAS = null, VENDEDORES_REG = null;
@@ -112,7 +113,9 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("adobe") || p.includes("eset")
   );
 }
-function servicioNoUsaClave(plataforma) {
+function servicioNoUsaClave(plataforma, servicio = null) {
+  const porModalidad = entrega.claveSegunModalidad(plataforma, servicio || {}); // R188 · ChatGPT con clave; Gemini/Duolingo según modalidad
+  if (porModalidad !== null) return !porModalidad;
   const p = canonPlat(plataforma);
   return p.includes("canva") || p.includes("gemini") || p.includes("chatgpt") ||
     p.includes("duolingo") || p.includes("adobeexpress");
@@ -308,7 +311,7 @@ function resolverModo(servicio = {}) {
   const dispositivo = servicio.dispositivo || "";
   const esRoku = !!servicio.esRoku;
   const platUsaPin = !servicioNoUsaPinPerfil(plataforma);
-  const platUsaClave = !servicioNoUsaClave(plataforma);
+  const platUsaClave = !servicioNoUsaClave(plataforma, servicio);
   let mostrarCorreo = servicioRequiereCorreo(plataforma), mostrarClave = platUsaClave, mostrarPin = platUsaPin, modo = "cred";
 
   // Apple TV conserva correo, clave y PIN en el CRM, pero la ficha pública
@@ -389,7 +392,7 @@ function aplicarVisibilidadUrl(servicio = {}, camposAutomaticos = {}) {
   const salida = {
     ...camposAutomaticos,
     mostrarCorreo: servicioRequiereCorreo(servicio.plataforma) && elegidos.correo,
-    mostrarClave: !servicioNoUsaClave(servicio.plataforma) && elegidos.clave,
+    mostrarClave: !servicioNoUsaClave(servicio.plataforma, servicio) && elegidos.clave,
     mostrarPin: !servicioNoUsaPinPerfil(servicio.plataforma) && elegidos.pin,
     visibilidadModo: modo
   };
@@ -606,6 +609,12 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     // 31/10/2026: el aviso de 1 dispositivo es de PERFILES; una cuenta completa no lo lleva.
     terminos: servicio.tipoVenta === "cuenta_completa" ? termsFor(plataforma).filter((t) => !/^!Cuenta solo para 1 dispositivo/.test(t)) : termsFor(plataforma),
+    // R188 · lo que se ve en la URL sale del SERVICIO confirmado (nunca del cliente global ni de un valor por defecto).
+    dispositivoRegistrado: entrega.etiquetaDispositivo(servicio, perfiles[0] || null),
+    avisos: entrega.avisosPara(plataforma),
+    avisosVersion: entrega.VERSION,
+    modalidadAcceso: entrega.modalidadAcceso(plataforma, servicio),
+    fichaVersion: Number(servicio.fichaVersion || 0),
     vendedor,
     vendedorTelefono
   };
@@ -718,3 +727,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "Error del servidor. Intente de nuevo." });
   }
 }
+export const __r188 = { servicioPublico }; // pruebas R188

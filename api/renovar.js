@@ -11,6 +11,8 @@ import { randomBytes } from "node:crypto";
 import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
 import { prepararPago, leerPago, escribirPago, esUsuarioLibro } from "./_finanzas-operacion.js";
 import { sumarPeriodo, sigueVencida, aCentavos, deCentavos } from "./_renovacion-motor.js"; // R186 · motor único de fechas
+import entrega from "./_entrega-plataforma.js";
+import spotifyFam from "./_spotify-familias.js"; // R188 · ficha Spotify → familia del correo invitado // R188 · avisos, modalidad de acceso y dispositivo por servicio
 import { clasificarServicio, normalizarServicioVenta } from "./_catalogo-categorias.js"; // R112 // R107: pago en la misma transacción
 
 function getApp() {
@@ -337,7 +339,10 @@ function servicioNoUsaPinPerfil(plataforma) {
   );
 }
 
-function servicioNoUsaClave(plataforma) {
+function servicioNoUsaClave(plataforma, servicio = null) {
+  // R188 · ChatGPT lleva contraseña; Gemini/Duolingo según modalidad (correo propio del cliente = sin contraseña).
+  const porModalidad = entrega.claveSegunModalidad(plataforma, servicio || {});
+  if (porModalidad !== null) return !porModalidad;
   const p = normPlat(plataforma).replace(/\s+/g, "");
   return (
     p.includes("canva") ||
@@ -705,7 +710,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
   const prev = perfilesOperativos(anterior, nombreTitular);
   const plataforma = servicio.plataforma || anterior.plataforma || "";
   const sinCorreo = !servicioRequiereCorreo(plataforma);
-  const sinClave = servicioNoUsaClave(plataforma);
+  const sinClave = servicioNoUsaClave(plataforma, { ...anterior, ...servicio });
   const sinPin = servicioNoUsaPinPerfil(plataforma);
   const usaDispositivo = servicioUsaSelectorDispositivo(plataforma);
 
@@ -727,7 +732,10 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
       correo: sinCorreo ? "" : String(topCorreo ?? raw.correo ?? previo.correo ?? servicio.correo ?? anterior.correo ?? "").trim(),
       clave: sinClave ? "" : String(topClave ?? raw.clave ?? raw.password ?? raw.contrasena ?? previo.clave ?? servicio.clave ?? anterior.clave ?? "").trim()
     };
-    const dispositivoRaw = raw.dispositivo != null
+    // R188 · D01/D02: el dispositivo que se ELIGE para el servicio en esta solicitud manda sobre el que traía guardado el
+    // perfil principal (antes ganaba el viejo y la URL seguía mostrando el dispositivo anterior).
+    const dispExplicito = index === 0 && servicio._dispositivoElegido !== false && servicio.dispositivo != null && String(servicio.dispositivo) !== "" && !tieneListaNueva;
+    const dispositivoRaw = dispExplicito ? servicio.dispositivo : raw.dispositivo != null
       ? raw.dispositivo
       : (previo.dispositivo != null ? previo.dispositivo : (servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo));
     out.dispositivo = usaDispositivo && ["tv", "cel"].includes(String(dispositivoRaw || "")) ? String(dispositivoRaw) : "";
@@ -735,7 +743,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
     // si el usuario mueve el perfil a otro correo, el enlace se recalcula al sincronizar Bodega.
     const invPrevio = String(raw.inventarioId || previo.inventarioId || "").trim();
     if (invPrevio && (!previo.correo || normCorreo(previo.correo) === normCorreo(out.correo))) out.inventarioId = invPrevio;
-    const esRokuRaw = raw.esRoku != null
+    const esRokuRaw = dispExplicito && servicio.esRoku != null ? servicio.esRoku : raw.esRoku != null
       ? raw.esRoku
       : (previo.esRoku != null ? previo.esRoku : (servicio.esRoku != null ? servicio.esRoku : anterior.esRoku));
     out.esRoku = out.dispositivo === "tv" && esRokuRaw === true;
@@ -1106,7 +1114,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
   const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
-  const sinClave = servicio.sinClave === true || servicio.removeClave === true || servicioNoUsaClave(servicio.plataforma);
+  const sinClave = servicio.sinClave === true || servicio.removeClave === true || servicioNoUsaClave(servicio.plataforma || anterior.plataforma, { ...anterior, ...servicio });
 
   const clave = sinClave ? "" : (servicio.clave != null
     ? String(servicio.clave || "")
@@ -1222,6 +1230,14 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   // R112: categoría y tipo de venta GUARDADOS en la compra (mismo contrato en APK, Web, Telegram y Finanzas).
   { const cls = clasificarServicio({ plataforma: plataformaFinal, categoria: servicio.categoria ?? anterior.categoria, tipoVenta: servicio.tipoVenta ?? anterior.tipoVenta });
     out.categoria = cls.categoria; out.tipoVenta = cls.tipoVenta; }
+  // R188 · modalidad de acceso (Gemini/Duolingo/ChatGPT) y dispositivo de TV Digital: del SERVICIO, versionados con la ficha.
+  { const mod = entrega.modalidadAcceso(plataformaFinal, { ...anterior, ...servicio });
+    if (mod) out.modalidadAcceso = mod;
+    if (entrega.familiaTv(plataformaFinal)) {
+      const eq = servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv;
+      try { out.equipoTv = entrega.validarEquipoTv(plataformaFinal, eq, servicio._baulVistas || null); } catch (e) { throw crmUserError(e.message); }
+    }
+    out.fichaVersion = Number(anterior.fichaVersion || 0) + 1; }
   if (sinClave) out.sinClave = true;
   if (sinPinPerfil || out.tipoVenta === "cuenta_completa") out.sinPinPerfil = true;
   else if (principal.pinPerfil || pinPerfil) out.pinPerfil = principal.pinPerfil || pinPerfil;
@@ -1267,7 +1283,7 @@ function limpiarServicioCRM(servicio = {}) {
   if (!tieneClave && s.pin != null) s.clave = String(s.pin || "");
   if (tieneClave && (s.pinPerfil == null || s.pinPerfil === "") && s.pin != null) s.pinPerfil = String(s.pin || "");
 
-  if (servicioNoUsaClave(s.plataforma)) s.clave = "";
+  if (servicioNoUsaClave(s.plataforma, s)) s.clave = "";
   if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
   if (!servicioRequiereCorreo(s.plataforma)) s.correo = "";
   if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
@@ -1279,7 +1295,7 @@ function limpiarServicioCRM(servicio = {}) {
       p.nombre = String(p.nombre || p.nombrePerfil || p.perfil || `Perfil ${index + 1}`).trim();
       p.perfil = String(p.perfil || p.nombrePerfil || p.nombre || "").trim();
       p.correo = servicioRequiereCorreo(s.plataforma) ? String(p.correo ?? s.correo ?? "").trim() : "";
-      p.clave = servicioNoUsaClave(s.plataforma) ? "" : String(p.clave ?? p.password ?? p.contrasena ?? s.clave ?? "").trim();
+      p.clave = servicioNoUsaClave(s.plataforma, s) ? "" : String(p.clave ?? p.password ?? p.contrasena ?? s.clave ?? "").trim();
       const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
       if (pPin) p.pinPerfil = pPin;
       else delete p.pinPerfil;
@@ -1304,7 +1320,7 @@ function limpiarServicioCRM(servicio = {}) {
     if (!s.compraId) s.compraId = recordId("compra");
     const principal = s.perfiles[0];
     s.correo = servicioRequiereCorreo(s.plataforma) ? (principal.correo || s.correo || "") : "";
-    s.clave = servicioNoUsaClave(s.plataforma) ? "" : (principal.clave || s.clave || "");
+    s.clave = servicioNoUsaClave(s.plataforma, s) ? "" : (principal.clave || s.clave || "");
     s.perfil = principal.perfil || principal.nombre || s.perfil || "";
     if (principal.pinPerfil) s.pinPerfil = principal.pinPerfil;
     else delete s.pinPerfil;
@@ -1579,7 +1595,7 @@ async function handlerCore(req, res) {
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
 
@@ -1736,11 +1752,17 @@ async function handlerCore(req, res) {
       } catch (e) { /* se completa con el próximo guardado o con Reparar inventario */ }
 
       const perfilesGuardados = perfilesOperativos(servicioGuardado, nombreFinal);
+      // R188 · Alta/edición de ficha Spotify: si el correo invitado ya pertenece a una familia, se asigna sola (madre, familia, espacio).
+      let spotifyFamilia = null;
+      if (spotifyFam.esPlataformaSpotify(servicioGuardado?.plataforma) && servicioGuardado?.correo) {
+        try { spotifyFamilia = await spotifyFam.asignarServicio(db, { correo: servicioGuardado.correo, clienteId: docRef.id, compraId: String(servicioGuardado.compraId || ""), usuario: String(authUser?.usuario || "") }); } catch (_) { spotifyFamilia = null; }
+      }
 
       return res.status(200).json({
         ok: true,
         accion: acc,
         guardadoEnFirebase: true,
+        ...(spotifyFamilia ? { spotifyFamilia } : {}),
         ...(fichaResultado.pagoOperacion ? { pagoOperacion: fichaResultado.pagoOperacion } : {}),
         schemaVersion: Number(servicioGuardado?.schemaVersion) || 2,
         compraId: String(servicioGuardado?.compraId || servicio.compraId || ""),
@@ -1965,7 +1987,7 @@ async function handlerCore(req, res) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) throw crmUserError(`Complete los datos requeridos del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma) && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`); // R142
         }
         touchedIndex = servicios.length;
@@ -2000,6 +2022,10 @@ async function handlerCore(req, res) {
           beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
           dispositivo: servicio.dispositivo != null ? servicio.dispositivo : anterior.dispositivo,
           esRoku: servicio.esRoku != null ? servicio.esRoku : anterior.esRoku,
+          _dispositivoElegido: servicio.dispositivo != null, // R188
+          modalidadAcceso: servicio.modalidadAcceso != null ? servicio.modalidadAcceso : anterior.modalidadAcceso,
+          equipoTv: servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv,
+          _baulVistas: servicio._baulVistas,
           visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl,
           vendedor: servicio.vendedor != null ? servicio.vendedor : anterior.vendedor,
           vendedor_norm: servicio.vendedor_norm != null ? servicio.vendedor_norm : anterior.vendedor_norm,
@@ -2010,7 +2036,7 @@ async function handlerCore(req, res) {
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
         // 2026-09-17 FIX: "cuando actualizo la clave de una cuenta, se debe
@@ -2429,3 +2455,4 @@ export default async function handler(req, res) {
 }
 export const __wrapperInternal = { camposModificados, OP_ID_RE };
 export const __r186 = { renovarLote, calcularRenovacionPorDuracion }; // pruebas R186
+export const __r188 = { buildServicio }; // pruebas R188 (dispositivo por servicio, modalidad)

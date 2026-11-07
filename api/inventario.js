@@ -7,6 +7,7 @@ import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
 import baulApks from "./_baul-apks.js"; // R187 · Baúl de APKs (fuente única Web/APK/bot)
 import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (ICOMPLAY)
+import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fuente única Web/APK/bot)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -548,6 +549,21 @@ export default async function handler(req, res) {
       const baul = await baulApks.leerBaul(db);
       return res.status(200).json({ ok: true, editor: editorTv, version: baul.version, plataformas: baulApks.PLATAFORMAS, dispositivos: baulApks.DISPOSITIVOS, metodos: baulApks.METODOS, apps: baul.apps,
         vistas: baulApks.PLATAFORMAS.map((p) => baulApks.vistaPlataforma(baul, p.id, { incluirInactivos: editorTv })), ...(editorTv ? { enlaces: baul.enlaces } : {}), aviso: baulApks.AVISO_INSTALACION });
+    }
+    // R188 · Spotify Familiar: solo personal con permiso (editores o módulo «spotify-familias»). Todo se valida y audita aquí.
+    if (/^spotify[A-Z]/.test(accion)) {
+      if (!(editorTv || PERMISOS.aplicar(permisosCtx, "spotify-familias", !!(PERMISOS.porDefecto && PERMISOS.porDefecto(authUser) || {})["spotify-familias"]))) return res.status(403).json({ ok: false, error: "No tiene acceso a Spotify Familiar." });
+      const u = String(authUser.usuario || authUser.uid || "");
+      try {
+        if (accion === "spotifyFamilias") return res.status(200).json({ ok: true, capacidad: spotifyFam.CAPACIDAD, familias: await spotifyFam.listarFamilias(db) });
+        if (accion === "spotifyResolver") return res.status(200).json({ ok: true, familia: await spotifyFam.resolverCorreo(db, req.body.correo) });
+        if (accion === "spotifyBuscar") return res.status(200).json({ ok: true, servicios: await spotifyFam.buscarServiciosSpotify(db, String(req.body.q || "")) });
+        if (accion === "spotifyCrear") return res.status(200).json({ ok: true, familia: await spotifyFam.crearFamilia(db, { madreCorreo: req.body.madreCorreo, nota: req.body.nota, usuario: u }) });
+        if (accion === "spotifyVincular") return res.status(200).json({ ok: true, familia: await spotifyFam.vincularInvitado(db, { familiaId: req.body.familiaId, correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u }) });
+        if (accion === "spotifyMover") return res.status(200).json({ ok: true, ...(await spotifyFam.moverInvitado(db, { correo: req.body.correo, destinoId: req.body.destinoId, usuario: u })) });
+        if (accion === "spotifyDesvincular") return res.status(200).json({ ok: true, ...(await spotifyFam.desvincular(db, { correo: req.body.correo, usuario: u })) });
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e) }); }
+      return res.status(400).json({ ok: false, error: "Acción de Spotify desconocida." });
     }
     const puedeInventario = PERMISOS.aplicar(permisosCtx, "control-maestro", isAdminUser(authUser)) || permisosCtx.overrides?.bodega === true;
     if (!puedeInventario) {
