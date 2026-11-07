@@ -1,0 +1,410 @@
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/app/baul-apks.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/baul-apks.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/app/baul-apks.js	1969-12-31 18:00:00.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/baul-apks.js	2026-11-07 12:56:08.660415250 -0600
+@@ -0,0 +1,102 @@
++// R187 · Más › Baúl de APKs (PDF «Sublichat 5 puntos», bloque 02). Mismo directorio que Sublichat Web y el bot:
++// lo sirve /api/inventario (accion baulApks) desde Firestore configuracion_tv_digital/baul_apks.
++// · Consulta: plataforma → dispositivo → enlaces con «Copiar» (URL y código) y «Abrir» (solo https).
++// · Sublicuentas/Relojes (editores): desactivar/activar y editar URL, código y nota. El SERVIDOR valida y audita;
++//   ocultar botones no es la seguridad. Eliminar se hace desde la Web (doble confirmación).
++// · URLs de CONEXIÓN de TV Digital: aparte del Baúl. Desactivar no rompe a los clientes que ya la tienen.
++// Nada de URLs, códigos ni dispositivos inventados: si el servidor no responde, se muestra el error, no una lista fija.
++import { authPost } from '../api.js';
++import { state, esc, ui, showToast } from './core.js';
++import { operatorIdentity } from '../data.js';
++
++const ident = () => operatorIdentity(state.session?.role || '', state.session?.usuario || '');
++export function canBaul() { return ['sublicuentas', 'relojes', 'geisell'].includes(ident()); }
++export function bState() { if (!state.baul) state.baul = { data: null, urls: null, cargando: false, error: '', plat: '', disp: '', editar: '', tab: 'baul' }; return state.baul; }
++export function resetBaul() { state.baul = null; }
++
++async function inv(accion, extra = {}) {
++  let r;
++  try { r = await authPost('/api/inventario', { accion, ...extra }); }
++  catch (e) { throw new Error(Number(e?.status) === 403 ? (e?.data?.error || 'Su usuario no tiene acceso al Baúl de APKs.') : (e?.data?.error || e?.message || 'Sin conexión')); }
++  if (!r || r.ok === false || r.error) throw new Error(r?.error || 'No se pudo completar.');
++  return r;
++}
++export async function baulCargar() {
++  const s = bState(); s.cargando = true; s.error = ''; ui.render();
++  try {
++    const [b, u] = await Promise.all([inv('baulApks'), inv('tvUrlsHistorial').catch(() => null)]);
++    s.data = b; s.urls = u; if (!s.plat) s.plat = b.plataformas?.[0]?.id || '';
++  } catch (e) { s.error = e?.message || 'Sin conexión'; }
++  s.cargando = false; if (state.subview === 'baul-apks') ui.render();
++}
++
++export function enlaceHtml(e, editor = false, editando = false) {
++  const http = /^https:\/\//i.test(e.url || '');
++  const acciones = [
++    e.url ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.url)}">Copiar URL</button>` : '',
++    e.codigo ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.codigo)}">Copiar código</button>` : '',
++    http ? `<button type="button" class="se-btn ghost" data-baul-abrir="${esc(e.url)}">Abrir</button>` : '',
++    editor ? `<button type="button" class="se-btn ghost" data-baul-editar="${esc(e.id)}">Editar</button><button type="button" class="se-btn ghost" data-baul-activar="${esc(e.id)}" data-activo="${e.activo === false ? '1' : '0'}">${e.activo === false ? 'Activar' : 'Desactivar'}</button>` : '',
++  ].join('');
++  const form = editando ? `<div class="baul-form"><input class="se-input" id="baulUrl" type="url" inputmode="url" value="${esc(e.url || '')}" placeholder="https://…"><input class="se-input" id="baulCodigo" inputmode="numeric" value="${esc(e.codigo || '')}" placeholder="Código Downloader (solo números)"><input class="se-input" id="baulNota" value="${esc(e.nota || '')}" placeholder="Nota"><div class="baul-acc"><button type="button" class="se-btn" data-baul-guardar="${esc(e.id)}">Guardar</button><button type="button" class="se-btn ghost" data-baul-cancelar>Cancelar</button></div></div>` : '';
++  return `<article class="se-card baul-enlace${e.activo === false ? ' off' : ''}">
++    <b>${esc(e.app || e.appId)} · ${esc(e.metodoTxt || e.metodo)}${e.activo === false ? ' · desactivado' : ''}</b>
++    ${e.url ? `<code class="baul-url">${esc(e.url)}</code>` : e.metodo === 'tv_store' ? '<small>Buscar en la tienda del TV (sin enlace).</small>' : ''}
++    ${e.codigo ? `<small>Código Downloader: <strong>${esc(e.codigo)}</strong></small>` : ''}
++    ${editor && e.codigoPendiente ? `<small>Código por confirmar: ${esc(e.codigoPendiente)} (no se entrega)</small>` : ''}
++    ${e.costoExterno?.texto ? `<small>💲 ${esc(e.costoExterno.texto)}</small>` : ''}
++    ${e.nota ? `<small>${esc(e.nota)}</small>` : ''}
++    <div class="baul-acc">${acciones}</div>${form}</article>`;
++}
++function urlsHtml(s, editor) {
++  const urls = s.urls?.urls || {};
++  const filas = Object.entries(urls).map(([k, v]) => `<article class="se-card baul-enlace${v.activo === false ? ' off' : ''}"><b>${esc(v.nombre)}${v.activo === false ? ' · desactivada' : ''}</b><code class="baul-url">${esc(v.url)}</code>
++    <div class="baul-acc"><button type="button" class="se-btn ghost" data-baul-copiar="${esc(v.url)}">Copiar</button>${editor ? `<button type="button" class="se-btn ghost" data-baul-urltv="${esc(k)}" data-activo="${v.activo === false ? '1' : '0'}">${v.activo === false ? 'Activar' : 'Desactivar'}</button>` : ''}</div></article>`).join('');
++  return `${filas || '<div class="empty-state"><strong>Sin URLs</strong></div>'}<small class="baul-aviso">Desactivar una URL de conexión solo la quita para entregas nuevas: los clientes que ya la tienen no se tocan. Editar y eliminar: Sublichat Web → Bodega → URLs TV Digital.</small>`;
++}
++
++export function baulView() {
++  const s = bState();
++  if (!canBaul()) return ui.subPage('Baúl de APKs', 'No disponible', '<div class="empty-state"><strong>Su usuario no tiene el Baúl de APKs</strong></div>');
++  if (s.data === null && !s.cargando && !s.error) setTimeout(baulCargar, 0);
++  const d = s.data, editor = !!d?.editor;
++  const tabs = `<div class="se-filtros"><button type="button" class="se-chip ${s.tab === 'baul' ? 'on' : ''}" data-baul-tab="baul">Aplicaciones</button><button type="button" class="se-chip ${s.tab === 'urls' ? 'on' : ''}" data-baul-tab="urls">URLs de conexión</button></div>`;
++  let cuerpo = '';
++  if (s.cargando && !d) cuerpo = '<div class="loading-card"><span class="spinner"></span><strong>Cargando Baúl…</strong></div>';
++  else if (s.error && !d) cuerpo = `<div class="error-box"><span>${esc(s.error)}</span></div>`;
++  else if (d && s.tab === 'urls') cuerpo = urlsHtml(s, editor);
++  else if (d) {
++    const vista = (d.vistas || []).find((v) => v.plataforma === s.plat) || { dispositivos: [] };
++    const disp = vista.dispositivos.find((x) => x.id === s.disp) || vista.dispositivos[0];
++    cuerpo = `<div class="se-filtros">${(d.plataformas || []).map((p) => `<button type="button" class="se-chip ${p.id === s.plat ? 'on' : ''}" data-baul-plat="${esc(p.id)}">${esc(p.nombre)}</button>`).join('')}</div>
++      <div class="se-filtros">${vista.dispositivos.map((x) => `<button type="button" class="se-chip ${disp && x.id === disp.id ? 'on' : ''}" data-baul-disp="${esc(x.id)}">${esc(x.nombre)} · ${x.enlaces.length}</button>`).join('')}</div>
++      ${disp ? disp.enlaces.map((e) => enlaceHtml(e, editor, s.editar === e.id)).join('') : '<div class="empty-state"><strong>Sin enlaces para esta plataforma</strong></div>'}
++      <small class="baul-aviso">${esc(d.aviso || '')}</small>`;
++  }
++  return ui.subPage('Baúl de APKs', 'TV Digital · igual que en la web y el bot', `<section class="se-wrap">${tabs}${s.error && d ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}${cuerpo}<button type="button" class="se-btn ghost" data-baul-recargar>Actualizar</button></section>`);
++}
++
++async function accion(fn, ok) {
++  const s = bState();
++  try { await fn(); s.error = ''; s.editar = ''; showToast?.(ok); await baulCargar(); }
++  catch (e) { s.error = e?.message || 'No se pudo guardar.'; ui.render(); }
++}
++export function bindBaul() {
++  if (state.subview !== 'baul-apks') return;
++  const s = bState(), qa = (x) => document.querySelectorAll(x), val = (id) => document.getElementById(id)?.value ?? '';
++  qa('[data-baul-tab]').forEach((b) => b.addEventListener('click', () => { s.tab = b.dataset.baulTab; ui.render(); }));
++  qa('[data-baul-plat]').forEach((b) => b.addEventListener('click', () => { s.plat = b.dataset.baulPlat; s.disp = ''; s.editar = ''; ui.render(); }));
++  qa('[data-baul-disp]').forEach((b) => b.addEventListener('click', () => { s.disp = b.dataset.baulDisp; s.editar = ''; ui.render(); }));
++  qa('[data-baul-copiar]').forEach((b) => b.addEventListener('click', () => ui.copy(b.dataset.baulCopiar)));
++  qa('[data-baul-abrir]').forEach((b) => b.addEventListener('click', () => ui.openLink(b.dataset.baulAbrir)));
++  qa('[data-baul-recargar]').forEach((b) => b.addEventListener('click', baulCargar));
++  qa('[data-baul-editar]').forEach((b) => b.addEventListener('click', () => { s.editar = b.dataset.baulEditar; ui.render(); }));
++  qa('[data-baul-cancelar]').forEach((b) => b.addEventListener('click', () => { s.editar = ''; ui.render(); }));
++  qa('[data-baul-activar]').forEach((b) => b.addEventListener('click', () => accion(() => inv('baulActivarEnlace', { id: b.dataset.baulActivar, activo: b.dataset.activo === '1' }), b.dataset.activo === '1' ? 'Enlace activado' : 'Enlace desactivado')));
++  qa('[data-baul-urltv]').forEach((b) => b.addEventListener('click', () => accion(() => inv('activarTvUrl', { proveedor: b.dataset.baulUrltv, activo: b.dataset.activo === '1' }), b.dataset.activo === '1' ? 'URL activada' : 'URL desactivada (clientes actuales intactos)')));
++  qa('[data-baul-guardar]').forEach((b) => b.addEventListener('click', () => {
++    const e = (s.data?.enlaces || []).find((x) => x.id === b.dataset.baulGuardar);
++    if (!e) { s.error = 'Ese enlace ya no existe. Actualice.'; ui.render(); return; }
++    accion(() => inv('baulGuardarEnlace', { enlace: { ...e, url: val('baulUrl').trim(), codigo: val('baulCodigo').trim(), nota: val('baulNota').trim() } }), 'Enlace guardado');
++  }));
++}
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/app/core.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/core.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/app/core.js	2026-10-23 16:48:22.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/app/core.js	2026-11-07 12:55:27.782081826 -0600
+@@ -18,7 +18,7 @@
+   ['appletv','Apple TV'], ['universal','Universal+'], ['spotify','Spotify Premium'], ['youtube','YouTube Premium'], ['deezer','Deezer Premium HiFi'],
+   ['canva','Canva'], ['gemini','Gemini Pro'], ['chatgpt','ChatGPT'], ['duolingo','Duolingo'], ['viki','Viki Rakuten'], ['office','Office 365'], ['office2021','Office 2021'], ['adobeexpress','Adobe Express'],
+   ['windows10','Windows 10'], ['windows11','Windows 11'], ['eset','ESET NOD32'], ['stellatv','Stella TV'], ['oleada','Oleada TV'],
+-  ['latintv','LatinTV'], ['liontv','LionTV'], ['evoutouch','Nanotech'], ['icomplay','ICOMPLAY MAX']
++  ['latintv','LatinTV'], ['liontv','LionTV'], ['evoutouch','Nanotech'], ['icomplay','ICOMPLAY']
+ ];
+ export const CRM_NO_PIN = new Set(['vipnetflix','spotify','deezer','youtube','office','paramount','vix','canva','gemini','chatgpt','duolingo','stellatv','oleada','latintv','liontv','icomplay','icomplay1','icomplay3','icomplay5','icomplay7','evoutouch','evoutouch1','evoutouch2','evoutouch3','evoutouch4','viki','windows10','windows11','adobeexpress','eset']);
+ export const CRM_NO_PASSWORD = new Set(['canva','gemini','chatgpt','duolingo','adobeexpress']);
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/data.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/data.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/data.js	2026-10-30 14:30:22.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/data.js	2026-11-07 12:56:24.488816098 -0600
+@@ -190,7 +190,7 @@
+ 
+ // Orden de las tarjetas de "Más": Perfil siempre va de último.
+ // R100: "Nuevo CRM" ya no va en Más (sigue en Clientes → "Nuevo CRM · Registrar venta"). Nueva sección personal: Recordatorios.
+-export const MORE_MODULE_ORDER = Object.freeze(['socios-entregas','recordatorios','pelis','partidos','subli','codigos','inventario','calculadora','control-maestro','finanzas','sorteos','aula','materia','perfil']);
++export const MORE_MODULE_ORDER = Object.freeze(['socios-entregas','recordatorios','pelis','partidos','subli','codigos','baul-apks','inventario','calculadora','control-maestro','finanzas','sorteos','aula','materia','perfil']);
+ const STAFF_MORE_MODULES = Object.freeze(['recordatorios','pelis','partidos','subli','inventario','calculadora','aula','materia','perfil']);
+ 
+ // Qué ve cada usuario: pestañas de abajo, tarjetas de "Más" y herramientas del Inicio.
+@@ -199,10 +199,10 @@
+ //  · Geisell: Inicio, Clientes, Tickets, Más → Pelis, Partidos, Subli, Aula de clases, Materia cerebral, Perfil.
+ export function roleModules(role='', usuario='') {
+   const identity = operatorIdentity(role, usuario);
+-  if (identity === 'geisell') return { tabs:['inicio','clientes','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos',...STAFF_MORE_MODULES.slice(4).filter(m=>m!=='perfil'),'control-maestro','perfil'] /* R79: Códigos igual que Sublicuentas */, home:['aula','materia','clientes','tickets'] }; // R69: Control Maestro (roleCapabilities ya lo autoriza), Perfil último
+-  if (identity === 'relojes') return { tabs:['inicio','clientes','cobros','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','finanzas',...STAFF_MORE_MODULES.slice(4)], home:['aula','materia','clientes','tickets'] }; // R77: Códigos · R106: Control financiero (Finanzas nueva es de Sublicuentas y Relojes)
++  if (identity === 'geisell') return { tabs:['inicio','clientes','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks',...STAFF_MORE_MODULES.slice(4).filter(m=>m!=='perfil'),'control-maestro','perfil'] /* R79: Códigos igual que Sublicuentas */, home:['aula','materia','clientes','tickets'] }; // R69: Control Maestro (roleCapabilities ya lo autoriza), Perfil último
++  if (identity === 'relojes') return { tabs:['inicio','clientes','cobros','tickets','mas'], more:[...STAFF_MORE_MODULES.slice(0,4),'codigos','baul-apks','finanzas',...STAFF_MORE_MODULES.slice(4)], home:['aula','materia','clientes','tickets'] }; // R77: Códigos · R106: Control financiero (Finanzas nueva es de Sublicuentas y Relojes)
+   const caps = roleCapabilities(role, usuario);
+-  const gate = { codigos:caps.codigos, 'socios-entregas':caps.catalogo, 'nuevo-crm':caps.nuevoCrm, inventario:caps.inventario, 'control-maestro':caps.controlMaestro, finanzas:caps.finanzas, sorteos:caps.sorteos };
++  const gate = { 'baul-apks':identity==='sublicuentas' /* R187 · el servidor vuelve a validar */, codigos:caps.codigos, 'socios-entregas':caps.catalogo, 'nuevo-crm':caps.nuevoCrm, inventario:caps.inventario, 'control-maestro':caps.controlMaestro, finanzas:caps.finanzas, sorteos:caps.sorteos };
+   return {
+     tabs:['inicio','clientes','cobros','tickets','mas'],
+     // R106: Sublicuentas ya no ve Control Maestro en Más (el módulo sigue para quien lo use, p. ej. Geisell).
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/main.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/main.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/main.js	2026-11-07 11:42:26.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/main.js	2026-11-07 12:56:31.690011745 -0600
+@@ -85,7 +85,7 @@
+ } from './data.js';
+ import {
+   CRM_SELLERS,
+-  crmSellers, setCrmSellers, setTvDigitalUrls, crmPlanPrice, renewalDateForPick, // Oct-2026
++  crmSellers, setCrmSellers, setTvDigitalUrls, setPlanesTv, crmPlanPrice, renewalDateForPick, // Oct-2026
+   buildChargeMessage,
+   crmDefaultPrice,
+   crmStoredPlatform,
+@@ -126,7 +126,7 @@
+ import { codigosView, bindCodigos, openCodigosFor, canCodigos, resetCodigos } from './app/codigos.js'; // R77
+ import { scheduleCobroReminders, syncCobroReminders, updateHomeWidget, reminderSettingsHtml, openCobrosFromReminder } from './app/avisos.js';
+ import { renewalGroups, renewView, activeRenewGroup, renewChargeGroup, renewalSheet, openRenewGroup, openRenewForRow, renewPickLabel, bindRenewDurations } from './app/cobros.js'; import { pushIniciar, pushBaja, pushDestino } from './app/push.js'; // Fase 2 · push
+-import { crmToggleAccountPicker } from './app/selector-cuenta.js'; import { crmNotasInternasHtml } from './app/notas-internas.js'; import { sociosEntregasView, bindSociosEntregas, sociosOfrecerEntrega, resetSociosEntregas } from './app/socios-entregas.js'; // Oct-2026 · notas internas · Pedidos de socios
++import { crmToggleAccountPicker } from './app/selector-cuenta.js'; import { crmNotasInternasHtml } from './app/notas-internas.js'; import { sociosEntregasView, bindSociosEntregas, sociosOfrecerEntrega, resetSociosEntregas } from './app/socios-entregas.js'; import { baulView, bindBaul } from './app/baul-apks.js'; // Oct-2026 · notas internas · Pedidos de socios
+ import { dashboardView } from './app/inicio.js';
+ import { ajustarInicio } from './app/inicio-ajuste.js'; // R121
+ import { recordatoriosView, bindRecordatorios, rpCerrarSesion } from './recordatorios-personales/modulo.js'; // R100 · Más › Recordatorios (sección personal independiente)
+@@ -335,8 +335,8 @@
+ });
+ // R69 · configuración remota no sensible (versión de API, build mínimo, teléfonos, precios base, reglas).
+ const REMOTE_CFG_KEY='sublicuentas-remote-config';
+-function sanitizeRemoteConfig(cfg){ if(!cfg||typeof cfg!=='object')return null; const out={}; for(const k of ['configVersion','apiVersion','minAppBuild','syncStaleSeconds','sellerPhones','sellerPhonesKnown','sellerAliases','sellers','tvDigitalUrls','calculatorBasePrices','tvDigitalRules','featureFlags'])if(k in cfg)out[k]=cfg[k]; return JSON.stringify(out).match(/token|secret|password|private_key/i)?null:out; }
+-function applyRemoteConfig(cfg){ if(!cfg)return; state.remoteConfig=cfg; setCompatibility(cfg); if(cfg.sellerPhones)setSellerPhones(cfg.sellerPhones); setSellerRegistry({known:cfg.sellerPhonesKnown,aliases:cfg.sellerAliases}); if(Array.isArray(cfg.sellers))setCrmSellers(cfg.sellers); if(cfg.tvDigitalUrls&&typeof cfg.tvDigitalUrls==='object')setTvDigitalUrls(cfg.tvDigitalUrls); }
++function sanitizeRemoteConfig(cfg){ if(!cfg||typeof cfg!=='object')return null; const out={}; for(const k of ['configVersion','apiVersion','minAppBuild','syncStaleSeconds','sellerPhones','sellerPhonesKnown','sellerAliases','sellers','tvDigitalUrls','tvDigitalUrlsActivas','planesTv','calculatorBasePrices','tvDigitalRules','featureFlags'])if(k in cfg)out[k]=cfg[k]; return JSON.stringify(out).match(/token|secret|password|private_key/i)?null:out; }
++function applyRemoteConfig(cfg){ if(!cfg)return; state.remoteConfig=cfg; setCompatibility(cfg); if(cfg.sellerPhones)setSellerPhones(cfg.sellerPhones); setSellerRegistry({known:cfg.sellerPhonesKnown,aliases:cfg.sellerAliases}); if(Array.isArray(cfg.sellers))setCrmSellers(cfg.sellers); if(cfg.tvDigitalUrls&&typeof cfg.tvDigitalUrls==='object')setTvDigitalUrls(cfg.tvDigitalUrls); if(cfg.planesTv&&typeof cfg.planesTv==='object')setPlanesTv(cfg.planesTv); /* R187 · tarifas ICOMPLAY del catálogo central */ }
+ try{ applyRemoteConfig(sanitizeRemoteConfig(JSON.parse(localStorage.getItem(REMOTE_CFG_KEY)||'null'))); }catch(_){}
+ let remoteCfgAt=0;
+ async function loadRemoteConfig(force=false){
+@@ -1238,7 +1238,7 @@
+   if (state.subview==='aula') return state.academiaLesson!=null ? academiaLessonView(state.academiaLesson) : academiaListView();
+   if (state.subview==='objetivos') return preservedModuleView(state.subview);
+   if (state.subview==='materia') return juegosView();
+-  if (state.subview==='codigos') return codigosView(); /* R77 */ if (state.subview==='socios-entregas') return sociosEntregasView(); // Oct-2026
++  if (state.subview==='codigos') return codigosView(); /* R77 */ if (state.subview==='socios-entregas') return sociosEntregasView(); if (state.subview==='baul-apks') return baulView(); // Oct-2026 · R187 Baúl
+   if (state.subview==='recordatorios') return recordatoriosView(); // R100
+   const items=roleModules(state.session?.role || '', state.session?.usuario || '').more.map(id=>[id]);
+   const syncText=state.sync==='online'?'En línea':state.sync==='syncing'?'Sincronizando':state.sync==='partial'?'Parcial':'Listo';
+@@ -1552,7 +1552,7 @@
+ async function crmCopyText(text,ok,fail){ try{await navigator.clipboard.writeText(text);showToast(ok);}catch(_){showToast(fail);} }
+ 
+ function bindEvents() {
+-  bindCodigos(); bindSociosEntregas(); // R77 · Oct-2026 Pedidos de socios
++  bindCodigos(); bindSociosEntregas(); bindBaul(); // R77 · R187 · Oct-2026 Pedidos de socios
+   bindRecordatorios(); // R100
+   const login=document.querySelector('#loginForm');
+   if(login)login.addEventListener('submit',async e=>{e.preventDefault();const usuario=document.querySelector('#loginUser').value.trim();const clave=document.querySelector('#loginPassword').value;if(!usuario||!clave){state.errors.login='Escriba usuario y clave.';render();return;}state.loading=true;delete state.errors.login;render();try{state.session=await loginUser(usuario,clave);state.loading=false;state.active='inicio';state.crmDraft=null;restoreCoreCache();render();loadRemoteConfig(true);await loadCoreData({force:true});}catch(err){state.loading=false;const base=err.message||'No se pudo iniciar sesión.';state.errors.login=err.status===401?`Acceso no autorizado para ${usuario}. Verifique la clave exacta.`:base;render();}return;});
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/operations.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/operations.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/operations.js	2026-11-07 11:42:26.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/operations.js	2026-11-07 12:55:27.781418519 -0600
+@@ -14,7 +14,7 @@
+   crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
+   youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, stellatv:0,
+   oleada:90, evoutouch:0, evoutouch1:0, evoutouch2:0, evoutouch3:0, iptv:130, office2021:0, viki:0, appletv:0,
+-  icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399,
++  icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399,
+   adobeexpress:0, windows10:0, windows11:0, eset:0,
+ });
+ 
+@@ -24,12 +24,19 @@
+   canva:69, gemini:170, duolingo:89, office:449, office2021:449, eset:399,
+   oleada1:90, oleada3:200, latintv1:99, latintv2:149, latintv3:199, latintv4:249,
+   liontv1:250, liontv2:275, liontv3:300, liontv5:350, evoutouch1:0, evoutouch2:0, evoutouch3:0, evoutouch4:0, evoutouch:0,
+-  icomplay1:179, icomplay3:249, icomplay5:329, icomplay7:399,
++  icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399,
+ });
+-// ICOMPLAY MAX (oct-2026) · precio por pantallas × meses (Max Player incluido).
+-export const ICOMPLAY_PRECIOS = Object.freeze({1:{1:179,3:499,6:949,12:1799},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}});
++// ICOMPLAY (nombre oficial, R187; NO "Max": Max Player es otro reproductor) · 1, 2, 3, 5, 7 pantallas × 1, 3, 6, 12 meses.
++// Respaldo local; las tarifas vigentes llegan del catálogo central (configuración remota planesTv, Sublichat HQ).
++export const ICOMPLAY_PRECIOS = {1:{1:179,3:499,6:949,12:1799},2:{1:219,3:599,6:1149,12:2149},3:{1:249,3:699,6:1349,12:2499},5:{1:329,3:929,6:1799,12:3399},7:{1:399,3:1129,6:2199,12:4199}};
++// Aplica el catálogo central: solo combinaciones permitidas y precios > 0 (nunca deja un 0 silencioso).
++export function setPlanesTv(planes = {}) {
++  const t = planes && planes.icomplay; if (!t || typeof t !== 'object') return false; let n = 0;
++  for (const p of [1,2,3,5,7]) for (const m of [1,3,6,12]) { const v = Number(t?.[p]?.[m]); if (v > 0 && v < 100000) { ICOMPLAY_PRECIOS[p][m] = v; n++; } }
++  return n > 0;
++}
+ export function crmPlanPrice(platform='', months=1) {
+-  const key=platformKey(platform); const m=key.match(/^icomplay([1357])$/);
++  const key=platformKey(platform); const m=key.match(/^icomplay([12357])$/);
+   if(!m) return 0;
+   const meses=[1,3,6,12].reduce((a,b)=>Math.abs(b-Number(months||1))<Math.abs(a-Number(months||1))?b:a,1);
+   return Number(ICOMPLAY_PRECIOS[m[1]][meses]||0);
+@@ -125,7 +132,7 @@
+   if(/^latintv[1234]$/.test(p)) return 'latintv';
+   if(/^liontv[1235]$/.test(p)) return 'liontv';
+   if(/^evoutouch[1-4]$/.test(p)) return 'evoutouch';
+-  if(/^icomplay(max)?[1357]?$/.test(p)) return 'icomplay';
++  if(/^icomplay(max)?[12357]?$/.test(p)) return 'icomplay';
+   return p;
+ }
+ 
+@@ -136,7 +143,7 @@
+   // Nanotech (antes EvouTouch): evoutouch1/2/3 = dispositivos. evoutouch4 es alias legado de Nanotech 1.
+   const nano=p.match(/^evoutouch([1-3])$/);
+   if(nano)return Number(nano[1]);
+-  const icom=p.match(/^icomplay([1357])$/);
++  const icom=p.match(/^icomplay([12357])$/);
+   if(icom)return Number(icom[1]);
+   return 1;
+ }
+@@ -149,7 +156,7 @@
+   if(base==='latintv')return `latintv${[1,2,3,4].includes(n)?n:1}`;
+   if(base==='liontv')return `liontv${[1,2,3,5].includes(n)?n:1}`;
+   if(base==='evoutouch')return `evoutouch${[1,2,3].includes(n)?n:1}`;
+-  if(base==='icomplay')return `icomplay${[1,3,5,7].includes(n)?n:1}`;
++  if(base==='icomplay')return `icomplay${[1,2,3,5,7].includes(n)?n:1}`;
+   return base;
+ }
+ 
+@@ -165,7 +172,7 @@
+   if(base==='latintv')return [1,2,3,4];
+   if(base==='liontv')return [1,2,3,5];
+   if(base==='evoutouch')return [1,2,3];
+-  if(base==='icomplay')return [1,3,5,7];
++  if(base==='icomplay')return [1,2,3,5,7];
+   return [];
+ }
+ 
+@@ -948,7 +955,7 @@
+     if (/^[a-z0-9]{2,30}$/.test(k) && /^https?:\/\/[^\s<>"'`]+$/i.test(url) && url.length <= 300) IPTV_URLS[k] = url;
+   }
+ }
+-const IPTV_NAMES = Object.freeze({latintv:'LatinTV',latintv2:'LatinTV 2',liontv:'LionTV',evoutouch:'Nanotech',icomplay:'ICOMPLAY MAX'});
++const IPTV_NAMES = Object.freeze({latintv:'LatinTV',latintv2:'LatinTV 2',liontv:'LionTV',evoutouch:'Nanotech',icomplay:'ICOMPLAY'});
+ // R56: el proveedor se escribe a mano ("Nanotech", "Lion", "latintv2"…). Antes se buscaba tal cual en la tabla y
+ // al no encontrar "Nanotech" caía en la URL de LatinTV. Ahora la plataforma manda y el texto solo elige LatinTV 2.
+ export function iptvProviderKey(base='', raw='') {
+@@ -1304,7 +1311,7 @@
+   oleada:'Oleada TV', oleadatv:'Oleada TV', oleada1:'Oleada TV (1)', oleada3:'Oleada TV (3)', oleadatv1:'Oleada TV (1)', oleadatv3:'Oleada TV (3)',
+   latintv:'LatinTV', latintv1:'LatinTV (1 dispositivo)', latintv2:'LatinTV (2 dispositivos)', latintv3:'LatinTV (3 dispositivos)', latintv4:'LatinTV (4 dispositivos)',
+   liontv:'LionTV', liontv1:'LionTV (1 dispositivo)', liontv2:'LionTV (2 dispositivos)', liontv3:'LionTV (3 dispositivos)', liontv5:'LionTV (5 dispositivos)',
+-  icomplay:'ICOMPLAY MAX', icomplay1:'ICOMPLAY MAX (1 pantalla)', icomplay3:'ICOMPLAY MAX (3 pantallas)', icomplay5:'ICOMPLAY MAX (5 pantallas)', icomplay7:'ICOMPLAY MAX (7 pantallas)',
++  icomplay:'ICOMPLAY', icomplay1:'ICOMPLAY (1 pantalla)', icomplay2:'ICOMPLAY (2 pantallas)', icomplay3:'ICOMPLAY (3 pantallas)', icomplay5:'ICOMPLAY (5 pantallas)', icomplay7:'ICOMPLAY (7 pantallas)',
+   evoutouch:'Nanotech', evoutouch1:'Nanotech (1 dispositivo)', evoutouch2:'Nanotech (2 dispositivos)', evoutouch3:'Nanotech (3 dispositivos)', evoutouch4:'Nanotech (1 dispositivo)',
+   iptv:'IPTV anterior', iptv1:'IPTV anterior (1)', iptv3:'IPTV anterior (3)', iptv4:'IPTV anterior (4)',
+   canva:'Canva', gemini:'Gemini Pro', chatgpt:'ChatGPT', star:'Star+', office:'Office 365', office2021:'Office 2021', microsoft:'Office 365',
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/screens.js /home/claude/w/apk187/sublicuentas-android-bootstrap/src/screens.js
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/screens.js	2026-10-30 14:30:22.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/screens.js	2026-11-07 12:56:24.488008510 -0600
+@@ -38,6 +38,7 @@
+   sorteos: { title: 'Sorteos', sub: 'Promociones y dinámicas', img: 'mas-sorteos', tint: 'blue' },
+   aula: { title: 'Aula de clases', sub: 'Capacitaciones', img: 'mas-aula', tint: 'pink' },
+   materia: { title: 'Materia cerebral', sub: 'Ideas y recursos', img: 'mas-materia', tint: 'white' },
++  'baul-apks': { title: 'Baúl de APKs', sub: 'Apps y URLs de TV Digital', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="16" width="36" height="24" rx="5" fill="#0a1f3a"/><path d="M6 24h36" stroke="#fff" stroke-width="3"/><rect x="19" y="10" width="10" height="8" rx="2" fill="none" stroke="#E2231A" stroke-width="3"/><rect x="21" y="21" width="6" height="7" rx="1.5" fill="#E2231A"/></svg>', tint: 'white' }, // R187 · PDF 5 puntos (solo se agrega; no cambia las demás)
+ });
+ 
+ export function masHomeHtml({ modules = [], sessionLabel = 'Sublicuentas', online = true, syncText = 'En línea', version = '1.0' } = {}) {
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/styles.css /home/claude/w/apk187/sublicuentas-android-bootstrap/src/styles.css
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/src/styles.css	2026-10-30 15:16:44.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 12:56:31.690011745 -0600
+@@ -2355,3 +2355,10 @@
+ .fl-parte{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px;align-items:end;margin-top:8px}
+ .fl-parte .fl-x{align-self:end;margin-bottom:4px}
+ .fl-link{background:none;border:0;color:#1d6fd8;font-weight:800;font-size:.92rem;padding:8px 0;text-align:left;display:block}
++/* R187 · Baúl de APKs (fondo blanco, sin degradados) */
++.baul-enlace.off{opacity:.6}
++.baul-url{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:.85rem;overflow-wrap:anywhere;user-select:all}
++.baul-acc{display:flex;flex-wrap:wrap;gap:8px}
++.baul-acc .se-btn{min-height:44px}
++.baul-form{display:grid;gap:8px;margin-top:4px}
++.baul-aviso{color:var(--muted);font-size:.82rem;line-height:1.35;display:block}
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs	1969-12-31 18:00:00.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs	2026-11-07 12:59:16.991278308 -0600
+@@ -0,0 +1,73 @@
++// R187 · APK: ICOMPLAY oficial (1/2/3/5/7 pantallas, tarifas del catálogo central) y Más › Baúl de APKs (datos ficticios del servidor).
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { bootApp } from './helpers/ui-harness.mjs';
++import { crmPlanPrice, crmAllowedDevices, crmStoredPlatform, crmStoredDeviceCount, setPlanesTv, ICOMPLAY_PRECIOS } from '../src/operations.js';
++import { roleModules } from '../src/data.js';
++import { MAS_MODULES } from '../src/screens.js';
++
++test('ICOMPLAY: 2 pantallas existe (L219 / L599), regex [12357], catálogo central válido y nada de 0 silencioso', () => {
++  assert.deepEqual(crmAllowedDevices('icomplay'), [1, 2, 3, 5, 7]);
++  assert.equal(crmStoredPlatform('icomplay', 2), 'icomplay2');
++  assert.equal(crmStoredDeviceCount('icomplay2'), 2);
++  assert.equal(crmPlanPrice('icomplay2', 1), 219); assert.equal(crmPlanPrice('icomplay2', 3), 599); assert.equal(crmPlanPrice('icomplay7', 12), 4199);
++  assert.equal(setPlanesTv({ icomplay: { 2: { 3: 649, 6: 0 }, 4: { 1: 1 } } }), true);
++  assert.equal(ICOMPLAY_PRECIOS[2][3], 649); assert.equal(ICOMPLAY_PRECIOS[2][6], 1149, 'un 0 no pisa la tarifa'); assert.equal(ICOMPLAY_PRECIOS[4], undefined, 'no inventa 4 pantallas');
++  setPlanesTv({ icomplay: { 2: { 3: 599 } } });
++  for (const f of ['../src/operations.js', '../src/app/core.js']) assert.doesNotMatch(fs.readFileSync(new URL(f, import.meta.url), 'utf8'), /ICOMPLAY MAX/);
++  const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
++  assert.match(main, /'planesTv'/); assert.match(main, /setPlanesTv\(cfg\.planesTv\)/);
++  assert.ok(main.split('\n').length < 2000, 'main.js < 2000 líneas');
++});
++
++test('Más: solo se AGREGA Baúl de APKs (Sublicuentas, Relojes, Geisell); un rol desconocido no lo ve', () => {
++  assert.ok(MAS_MODULES['baul-apks']?.svg);
++  for (const [r, u] of [['sublicuentas', 'sublicuentas'], ['relojes', 'relojes'], ['geisell', 'geisell']]) assert.ok(roleModules(r, u).more.includes('baul-apks'), r);
++  assert.equal(roleModules('otro', 'otro').more.includes('baul-apks'), false);
++  assert.deepEqual(roleModules('relojes', 'relojes').tabs, ['inicio', 'clientes', 'cobros', 'tickets', 'mas'], 'navbar intacto');
++});
++
++test('enlace: «Abrir» solo https; el código por confirmar solo para el editor; sin URL inventada en tienda del TV', () => {
++  const src = fs.readFileSync(new URL('../src/app/baul-apks.js', import.meta.url), 'utf8');
++  assert.match(src, /const http = \/\^https:\\\/\\\/\/i\.test/);
++  assert.match(src, /editor && e\.codigoPendiente \?/);
++  assert.match(src, /e\.metodo === 'tv_store' \? '<small>Buscar en la tienda del TV \(sin enlace\)\.<\/small>'/);
++  assert.doesNotMatch(src, /aftv\.news|dldsrvs|bit\.ly/, 'la APK no trae una lista fija: la sirve el servidor');
++});
++
++const BAUL = {
++  ok: true, editor: true, version: 3, aviso: 'Para APK externas…',
++  plataformas: [{ id: 'oleada', nombre: 'Oleada TV' }, { id: 'stellatv', nombre: 'Stella TV' }],
++  vistas: [
++    { plataforma: 'oleada', dispositivos: [{ id: 'fire_tv', nombre: 'Fire TV', enlaces: [{ id: 'oleada-fire', app: 'Oleada', appId: 'oleada', metodo: 'apk', metodoTxt: 'APK directo', url: 'https://dldsrvs.com/apks/firestick/mgs_pro.apk', codigo: '1290332', activo: true }] }] },
++    { plataforma: 'stellatv', dispositivos: [] },
++  ],
++  enlaces: [{ id: 'oleada-fire', appId: 'oleada', plataformas: ['oleada'], dispositivo: 'fire_tv', metodo: 'apk', url: 'https://dldsrvs.com/apks/firestick/mgs_pro.apk', codigo: '1290332', activo: true, revision: 1 }],
++};
++
++test('Más › Baúl: carga del servidor, muestra 1290332, editor guarda y desactiva por /api/inventario', async () => {
++  const app = await bootApp({ role: 'sublicuentas', fetchExtra: async (path, body) => {
++    if (path !== '/api/inventario') return undefined;
++    if (body.accion === 'baulApks') return BAUL;
++    if (body.accion === 'tvUrlsHistorial') return { ok: true, urls: { icomplay: { nombre: 'ICOMPLAY', url: 'http://latinostream.xyz:80', activo: true } }, historial: [] };
++    return { ok: true };
++  } });
++  try {
++    await app.click('[data-tab="mas"]', 300);
++    await app.click('[data-open="baul-apks"]', 400);
++    await app.waitFor(() => /1290332/.test(app.$('.se-wrap')?.textContent || ''));
++    assert.match(app.$('.se-wrap').textContent, /mgs_pro\.apk/);
++    assert.ok(app.$('[data-baul-abrir="https://dldsrvs.com/apks/firestick/mgs_pro.apk"]') && app.$('[data-baul-copiar="1290332"]'));
++    await app.click('[data-baul-editar="oleada-fire"]', 150);
++    app.$('#baulNota').value = 'Probado en Fire TV Stick';
++    await app.click('[data-baul-guardar="oleada-fire"]', 300);
++    const g = app.bodies.find((b) => b?.accion === 'baulGuardarEnlace');
++    assert.equal(g.enlace.id, 'oleada-fire'); assert.equal(g.enlace.nota, 'Probado en Fire TV Stick'); assert.equal(g.enlace.codigo, '1290332');
++    await app.click('[data-baul-activar="oleada-fire"]', 300);
++    assert.deepEqual((({ id, activo }) => ({ id, activo }))(app.bodies.find((b) => b?.accion === 'baulActivarEnlace')), { id: 'oleada-fire', activo: false });
++    await app.click('[data-baul-tab="urls"]', 150);
++    assert.match(app.$('.se-wrap').textContent, /latinostream\.xyz/);
++    assert.match(app.$('.se-wrap').textContent, /clientes que ya la tienen no se tocan/);
++  } finally { app.close(); }
++});
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs	2026-10-30 14:47:26.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r37-mas-clientes-rediseno.test.mjs	2026-11-07 12:58:39.294349814 -0600
+@@ -18,7 +18,7 @@
+   const d = dom(masHomeHtml({ modules: all, sessionLabel: 'Sublicuentas', online: true, syncText: 'En línea' }));
+   const cards = [...d.querySelectorAll('.mas-card[data-open]')];
+   assert.deepEqual(cards.map(c => c.dataset.open), all);
+-  assert.equal(cards.length, 14); // R77: + Códigos · Oct-2026: + Pedidos de socios (ícono SVG)
++  assert.equal(cards.length, 15); // R77: + Códigos · Oct-2026: + Pedidos de socios (ícono SVG) · R187: + Baúl de APKs (SVG)
+   for (const m of Object.values(MAS_MODULES)) if (m.img) assert.ok(exists(`/assets/mas/${m.img}.png`), `falta ${m.img}.png`); else assert.ok(m.svg, 'icono propio (SVG)');
+   assert.ok(exists('/assets/mas/mas-resultados.png') && exists('/assets/mas/robot-sentado.webp') && exists('/assets/clientes-hero.png'));
+   assert.match(d.body.textContent, /Películas y series/);
+diff -ruN '--exclude=node_modules' '--exclude=dist' /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs
+--- /tmp/claude-0/r186apk/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs	2026-10-23 16:28:38.000000000 -0600
++++ /home/claude/w/apk187/sublicuentas-android-bootstrap/tests/r39-roles-y-acciones.test.mjs	2026-11-07 12:58:39.292012825 -0600
+@@ -7,7 +7,7 @@
+ import { MORE_MODULE_ORDER, roleModules } from '../src/data.js';
+ 
+ const STAFF = ['pelis', 'partidos', 'subli', 'inventario', 'calculadora', 'aula', 'materia', 'perfil'];
+-const RELOJES = ['recordatorios', 'pelis', 'partidos', 'subli', 'codigos', 'finanzas', 'inventario', 'calculadora', 'aula', 'materia', 'perfil']; // R77: Relojes también ve Códigos
++const RELOJES = ['recordatorios', 'pelis', 'partidos', 'subli', 'codigos', 'baul-apks', 'finanzas', 'inventario', 'calculadora', 'aula', 'materia', 'perfil']; // R77: Relojes también ve Códigos · R187: + Baúl de APKs
+ const SUBLI_MAS = MORE_MODULE_ORDER.filter(m => m !== 'control-maestro'); // R106: Sublicuentas sin Control Maestro en Más
+ const GEISELL_MAS = [...RELOJES.filter(m => m !== 'perfil' && m !== 'finanzas'), 'control-maestro', 'perfil']; // R106: Control financiero solo Sublicuentas y Relojes
+ const masModules = app => app.$$('.mas-card[data-open]').map(b => b.dataset.open);
