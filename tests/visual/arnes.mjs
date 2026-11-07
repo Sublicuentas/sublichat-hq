@@ -22,21 +22,27 @@ export function clientesFicticios(n = 36) {
   return out;
 }
 
-export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto = 900, permisos = null, salida = null, salaDb = null, ahora = null, salaEnv = {}, video = null } = {}) {
+export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto = 900, permisos = null, salida = null, salaDb = null, ahora = null, salaEnv = {}, video = null, datos = null } = {}) {
   const { crearFakeDb } = require(path.join(ROOT, 'tests/helpers/fake-firestore.cjs'));
   const dbSala = salaDb || crearFakeDb(); const salaHandler = require(path.join(ROOT, 'api/sala-juntas.js'));
   const app = await crearApp(); const srv = app.listen(0); await new Promise((r) => srv.once('listening', r));
   const base = `http://127.0.0.1:${srv.address().port}`;
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: ancho, height: alto }, deviceScaleFactor: 1, ...(video ? { recordVideo: { dir: video, size: { width: ancho, height: alto } } } : {}) }); // R183: video opcional
-  const docs = clientesFicticios();
+  // R184 · volumen y latencia simulados para medir Inicio / Control Maestro (datos FICTICIOS; la latencia es una suposición)
+  const D = datos ? { clientes: 36, inventario: 0, finanzas: 0, latFs: 0, latApi: 0, msPorDoc: 0, ...datos } : null;
+  const docs = clientesFicticios(D ? D.clientes : 36);
+  const invDocs = D ? Array.from({ length: D.inventario }, (_, i) => ({ id: `inv${i}`, data: { plataforma: PLATS[i % PLATS.length][0], correo: `cuenta${i}@ejemplo.test`, capacidad: 5, perfiles: [] } })) : [];
+  const finDocs = D ? Array.from({ length: D.finanzas }, (_, i) => ({ id: `fin${i}`, data: { tipo: i % 4 ? 'venta' : 'egreso', monto: 100 + (i % 9) * 10, fecha: new Date(Date.now() - (i % 60) * 86400000).toISOString().slice(0, 10), banco: 'BAC' } })) : [];
+  const espera = (n, extra = 0) => new Promise((ok) => setTimeout(ok, n + extra));
+  const red = { fs: 0, api: 0, bytes: 0 }; if (D) globalThis.__redArnes = red;
   const fakeApp = `export const initializeApp=(c)=>({name:'[DEFAULT]',options:c});export const getApps=()=>[{}];export const getApp=()=>({name:'[DEFAULT]'});`;
   const fakeAuth = `const user={uid:'asesor-${usuario}',getIdToken:async()=>'token-ficticio',getIdTokenResult:async()=>({claims:{usuario:'${usuario}',role:'asesor'}})};
     export const getAuth=()=>({currentUser:user});export const onAuthStateChanged=(a,cb)=>{setTimeout(()=>cb(user),10);return()=>{}};
     export const signInWithCustomToken=async()=>({user});export const signOut=async()=>{};`;
-  const fakeFs = `const DOCS=${JSON.stringify(docs)};const snap=(n)=>({docs:(n==='clientes'?DOCS:[]).map(d=>({id:d.id,data:()=>d.data})),size:n==='clientes'?DOCS.length:0,empty:n!=='clientes',docChanges:()=>[],metadata:{fromCache:false,hasPendingWrites:false}});
-    export const getFirestore=()=>({});export const collection=(db,n)=>({n});export const getDocs=async(r)=>snap(r.n);export const getDocsFromServer=async(r)=>snap(r.n);
-    export const onSnapshot=(r,a,b)=>{const cb=typeof a==='function'?a:b;setTimeout(()=>cb(snap(r.n)),20);return()=>{}};export const doc=()=>({});export const getDoc=async()=>({exists:()=>false,data:()=>({})});`;
+  const fakeFs = `const DOCS=${JSON.stringify(docs)};const FIN=${JSON.stringify(finDocs)};const LAT=${D ? D.latFs : 0},MSD=${D ? D.msPorDoc : 0};const col=(n)=>n==='clientes'?DOCS:(n==='finanzas_movimientos'?FIN:[]);const esp=(n)=>new Promise(r=>setTimeout(r,LAT?LAT+col(n).length*MSD:0));window.__fsLecturas=window.__fsLecturas||[];const snap=(n)=>({docs:col(n).map(d=>({id:d.id,data:()=>d.data})),size:col(n).length,empty:!col(n).length,docChanges:()=>[],metadata:{fromCache:false,hasPendingWrites:false}});
+    export const getFirestore=()=>({});export const collection=(db,n)=>({n});export const getDocs=async(r)=>{window.__fsLecturas.push(['get',r.n,performance.now()]);await esp(r.n);return snap(r.n)};export const getDocsFromServer=async(r)=>{window.__fsLecturas.push(['get',r.n,performance.now()]);await esp(r.n);return snap(r.n)};
+    export const onSnapshot=(r,a,b)=>{const cb=typeof a==='function'?a:b;window.__fsLecturas.push(['live',r.n,performance.now()]);esp(r.n).then(()=>setTimeout(()=>cb(snap(r.n)),20));return()=>{}};export const doc=()=>({});export const getDoc=async()=>({exists:()=>false,data:()=>({})});`;
   await ctx.route('https://www.gstatic.com/firebasejs/**', (r) => {
     const u = r.request().url(); const body = u.includes('firebase-auth') ? fakeAuth : u.includes('firebase-firestore') ? fakeFs : fakeApp;
     r.fulfill({ status: 200, contentType: 'text/javascript', body });
@@ -63,8 +69,11 @@ export async function abrir({ usuario = 'naara', ui = 'v1', ancho = 1440, alto =
         salaHandler({ method: 'POST', headers: { authorization: 'Bearer t' }, body }, res, { auth: () => ({ verifyIdToken: async () => ({ uid: 'asesor-' + usuario, usuario, role: 'asesor' }) }), db: () => dbSala, env: salaEnv, fetch: async () => ({ ok: true, status: 200 }), ahora: ahora ? () => ahora : undefined }); });
       return r.fulfill({ status: out.code, json: out.body });
     }
-    if (nombre === 'mobile-core') return r.fulfill({ json: { ok: true, items: [], nextCursor: '' } });
-    if (nombre === 'importar' && body.accion === 'control_datos') return r.fulfill({ json: { ok: true, coleccion: body.coleccion, documentos: body.coleccion === 'clientes' ? docs.map((d) => ({ id: d.id, data: d.data })) : [], nextCursor: '' } });
+    if (D) red.api++;
+    const pagina = (lista, cursor, tam = 200) => { const i = cursor ? lista.findIndex((d) => d.id === cursor) + 1 : 0; const trozo = lista.slice(i, i + tam); return { trozo, next: i + tam < lista.length ? trozo[trozo.length - 1].id : '' }; };
+    if (nombre === 'mobile-core') { if (!D) return r.fulfill({ json: { ok: true, items: [], nextCursor: '' } }); const pg = pagina(invDocs, body.cursor); await espera(D.latApi, pg.trozo.length * D.msPorDoc); return r.fulfill({ json: { ok: true, items: pg.trozo.map((d) => ({ id: d.id, ...d.data })), nextCursor: pg.next } }); }
+    if (nombre === 'importar' && body.accion === 'control_datos') { const lista = body.coleccion === 'clientes' ? docs : body.coleccion === 'inventario' ? invDocs : []; if (!D) return r.fulfill({ json: { ok: true, coleccion: body.coleccion, documentos: lista.map((d) => ({ id: d.id, data: d.data })), nextCursor: '' } }); const pg = pagina(lista, body.cursor, Math.max(50, Math.min(500, Number(body.pageSize) || 200))); await espera(D.latApi, pg.trozo.length * D.msPorDoc); const json = { ok: true, coleccion: body.coleccion, documentos: pg.trozo.map((d) => ({ id: d.id, data: d.data })), nextCursor: pg.next }; red.bytes += JSON.stringify(json).length; return r.fulfill({ json }); }
+    if (D) await espera(Math.round(D.latApi / 2));
     return r.fulfill({ json: { ok: true, items: [], data: [], tickets: [], avisos: [] } });
   });
   await ctx.route(/open-meteo|api\.|fonts\.g|cdn|unsplash|picsum/i, (r) => { const u = r.request().url(); if (u.startsWith(base)) return r.continue(); if (/cdnjs|jsdelivr|unpkg/.test(u)) return r.continue(); r.fulfill({ status: 200, body: '' }); });

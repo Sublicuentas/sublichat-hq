@@ -16,11 +16,11 @@ r = await h.page.evaluate(() => document.querySelector('#v2User img').src); asse
 await h.page.reload(); await h.page.waitForFunction(() => document.body.classList.contains('ready')); await h.page.waitForTimeout(2500);
 r = await h.page.evaluate(() => document.querySelector('#v2User img').src); assert.ok(r.includes('36c'), 'recargar'); console.log('ok 3 recargar conserva la foto');
 const fila = await h.page.evaluate(() => { const t = [...document.querySelectorAll('#v2Fila > *:not([hidden])')].map(e => e.getBoundingClientRect()); const gaps = t.slice(1).map((b, i) => Math.round(b.left - t[i].right)); return { n: t.length, gaps, texto: [...document.querySelectorAll('#v2Fila > *:not([hidden]) > .v2-tab, #v2Fila > .v2-tab')].map(b => b.textContent.trim()).join(' · ') }; });
-assert.equal(fila.n, 9); assert.ok(fila.gaps.every((g) => g >= 6 && g <= 10), 'gaps ' + fila.gaps);
-console.log('ok 4 nueve botones seguidos:', fila.texto, '| espacios', fila.gaps.join(','));
+assert.equal(fila.n, 10, 'R179 sumó Sala de Juntas: ' + fila.texto); assert.ok(fila.gaps.every((g) => g >= 6 && g <= 10), 'gaps ' + fila.gaps);
+console.log('ok 4 diez botones seguidos:', fila.texto, '| espacios', fila.gaps.join(','));
 await h.page.screenshot({ path: out + '/nav-1440.png', clip: { x: 0, y: 0, width: 1440, height: 140 } });
 await h.page.click('#v2Fila .v2-tab-g >> text=Operación'); await h.page.waitForTimeout(300);
-const pos = await h.page.evaluate(() => { const b = document.querySelector('[aria-controls="v2G6"]').getBoundingClientRect(), p = document.getElementById('v2G6').getBoundingClientRect(); return [Math.round(b.left), Math.round(p.left)]; });
+const pos = await h.page.evaluate(() => { const bt = [...document.querySelectorAll('#v2Fila .v2-tab-g')].find((x) => x.textContent.includes('Operación')); const b = bt.getBoundingClientRect(), p = document.getElementById(bt.getAttribute('aria-controls')).getBoundingClientRect(); return [Math.round(b.left), Math.round(p.left)]; });
 assert.equal(pos[0], pos[1], 'panel alineado'); console.log('ok 5 panel alineado al botón');
 await h.page.screenshot({ path: out + '/nav-1440-operacion.png', clip: { x: 0, y: 0, width: 1440, height: 480 } });
 await h.cerrar();

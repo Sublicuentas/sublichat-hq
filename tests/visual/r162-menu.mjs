@@ -1,4 +1,4 @@
-// R162 · Prueba de navegador: el menú (diseño nuevo y anterior) respeta los módulos que define Sublicuentas.
+// R162 · Prueba de navegador: el menú (diseño único desde R184) respeta los módulos que define Sublicuentas.
 // Datos y API simulados (arnes.mjs). Uso: node tests/visual/r162-menu.mjs [carpetaCapturas]
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -52,10 +52,11 @@ if (salida) { // menú móvil abierto y menú del usuario
   const k = await abrir({ usuario: 'naara', ui: 'v2', ancho: 1366 });
   await k.page.click('#v2User'); await k.page.waitForTimeout(300);
   await k.page.screenshot({ path: path.join(salida, 'v2-naara-1366-menu-usuario.png') });
-  await k.page.click('[data-v2a="anterior"]'); await k.page.waitForTimeout(3000);
-  const v = await k.page.evaluate(() => ({ clase: document.documentElement.classList.contains('ui-v2'), flag: localStorage.getItem('sublichat_ui_v2') }));
-  assert.deepEqual(v, { clase: false, flag: null }, '"Diseño anterior" debe volver al diseño actual');
-  console.log('ok Diseño anterior vuelve al diseño actual');
+  assert.equal(await k.page.locator('[data-v2a="anterior"]').count(), 0, 'R184: ya no existe "Diseño anterior"');
+  await k.page.evaluate(() => { try { localStorage.setItem('sublichat_ui_v2', '0'); } catch (_) {} }); await k.page.goto(k.page.url().split('?')[0] + '?ui=v1'); await k.page.waitForFunction(() => document.body.classList.contains('ready')); await k.page.waitForTimeout(1500);
+  const v = await k.page.evaluate(() => ({ clase: document.documentElement.classList.contains('ui-v2'), barra: !!document.querySelector('#v2Fila'), flag: localStorage.getItem('sublichat_ui_v2') }));
+  assert.deepEqual(v, { clase: true, barra: true, flag: null }, 'R184: ni ?ui=v1 ni la preferencia vieja vuelven al diseño anterior');
+  console.log('ok R184 sin vuelta al diseño anterior (?ui=v1 y preferencia vieja ignorados)');
   await k.cerrar();
 }
 console.log(`R162 menú por permisos: ${n}/${casos.length} casos OK`);
