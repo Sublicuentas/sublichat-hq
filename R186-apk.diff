@@ -1,0 +1,262 @@
+diff -ru -x node_modules /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/app/finanzas-libro.js src/app/finanzas-libro.js
+--- /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/app/finanzas-libro.js	2026-10-30 15:16:40.000000000 -0600
++++ src/app/finanzas-libro.js	2026-11-07 11:42:25.633699262 -0600
+@@ -31,9 +31,11 @@
+   if (L.loading) return;
+   L.loading = true; if (!silent) ctx.render();
+   try {
+-    const r = await ctx.authPost('/api/finanzas', { accion: 'finanzas_resumen' });
++    // R186 · el mes calendario de Honduras viene del servidor (misma consulta que el Excel del mes).
++    const [r, mes] = await Promise.all([ctx.authPost('/api/finanzas', { accion: 'finanzas_resumen' }), ctx.authPost('/api/finanzas', { accion: 'finanzas_mes' }).catch(() => null)]);
+     if (!r?.ok) throw new Error(r?.error || 'No se pudo leer Finanzas.');
+     L.data = r; L.error = ''; rememberMethods(r.metodos);
++    L.mes = mes?.ok ? mes : null;
+   } catch (e) { L.error = e?.message || 'Sin conexión con Finanzas.'; }
+   finally { L.loading = false; ctx.render(); }
+ }
+@@ -74,12 +76,29 @@
+   return tabs + (L.error ? `<p class="fl-err">⚠️ ${esc(L.error)}</p>` : '') + body(L);
+ }
+ 
++const MESES_TXT = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
++// R186 · Tarjeta del MES CALENDARIO (hora de Honduras): solo cobros de este mes, sin arrastre; un pago = una vez.
++export function mesHtml(m, busy = false) {
++  if (!m) return '';
++  const [y, mm] = String(m.periodo || '').split('-');
++  const nombre = `${(MESES_TXT[Number(mm) - 1] || '').replace(/^./, (c) => c.toUpperCase())} ${y || ''}`;
++  const plats = (m.porPlataforma || []).slice(0, 6);
++  return `<section class="fl-card fl-c2 fl-mes" aria-label="Finanzas del mes">
++    <div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_resumen')}" alt="">Este mes · ${esc(nombre)}</b><span class="fl-pill">hora de Honduras</span></div>
++    <div class="fl-io"><div class="fl-in"><img src="${FL_ICON('icon_ingresos')}" alt=""><span>Ingresos cobrados<b>${lps(m.ingresos)}</b></span></div><div class="fl-out"><img src="${FL_ICON('icon_egresos')}" alt=""><span>Egresos<b>${lps(m.egresos)}</b></span></div></div>
++    <p class="fl-muted">${Number(m.pagosUnicos) || 0} pago${Number(m.pagosUnicos) === 1 ? '' : 's'} real${Number(m.pagosUnicos) === 1 ? '' : 'es'} · ${Number(m.serviciosRenovadosOVendidos) || 0} servicio(s) renovados o vendidos${m.anulados ? ` · ${m.anulados} anulado(s) fuera` : ''}</p>
++    ${plats.length ? `<div class="fl-rows2 fl-box">${plats.map((p) => `<div class="fl-r2"><span>${esc(p.plataforma)}</span><b>${lps(p.monto)}</b></div>`).join('')}</div>` : ''}
++    ${m.conciliacion && m.conciliacion.ingresosVsPagos === false ? '<p class="fl-err">⚠️ Los cobros por banco no cuadran con los pagos: revise Movimientos.</p>' : ''}
++    <button class="fl-btn" data-fl-mes-xls ${busy ? 'disabled' : ''}>${busy ? 'Preparando Excel…' : '⬇️ Descargar Excel del mes'}</button>
++  </section>`;
++}
++
+ function resumenHtml(L) {
+   // R116 · Render "Control financiero": tarjetas reales, cifras dinámicas, pendientes APARTE (no son dinero).
+   const d = L.data, t = d.totales || {}, c = d.cartera || {};
+   const fila = (ic, txt, val, cls = '') => `<div class="fl-r2"><img src="${FL_ICON(ic)}" alt=""><span>${txt}</span><b class="${cls}">${val}</b></div>`;
+   const bancos = bancosOrdenados(d.bancos || []).filter((b) => b.movimientos || !b.sinSaldoInicial || Number(b.saldo));
+-  return `<section class="fl-card fl-c2">
++  return `${mesHtml(L.mes, L.mesXlsBusy)}<section class="fl-card fl-c2">
+     <div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_cierre')}" alt="">Ciclo abierto</b><span class="fl-pill">desde ${esc(d.ciclo?.inicio || '')} · día ${esc(d.ciclo?.dias ?? '')}</span></div>
+     <div class="fl-io"><div class="fl-in"><img src="${FL_ICON('icon_ingresos')}" alt=""><span>Ingresos<b>${lps(t.ingresos)}</b></span></div><div class="fl-out"><img src="${FL_ICON('icon_egresos')}" alt=""><span>Egresos operativos<b>${lps(t.egresosOperativos)}</b></span></div></div>
+     <div class="fl-rows2">${fila('icon_disponible', 'Disponible antes de planilla', lps(t.disponibleAntesPlanilla))}${fila('icon_planilla_comisiones', 'Planilla / comisiones', lps(t.planilla), 'fl-neg')}${fila('icon_resultado', 'Resultado después de planilla', lps(t.resultado))}</div>
+@@ -207,6 +226,7 @@
+ export function bindLibro(root, ctx) {
+   const L = ctx.state.libro; if (!L || !root) return;
+   const q = (s) => root.querySelector(s), qa = (s) => root.querySelectorAll(s);
++  q('[data-fl-mes-xls]')?.addEventListener('click', () => { if (typeof ctx.descargarExcelMes === 'function' && L.mes) ctx.descargarExcelMes(L.mes); }); // R186
+   { const on = root.querySelector('.fl-tabs .fl-tab.on'); if (on && on.scrollIntoView) try { on.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (_) {} } // R119: la pestaña elegida queda visible
+   qa('[data-fl-tab]').forEach((b) => b.addEventListener('click', () => { L.tab = b.dataset.flTab; if (L.tab === 'movimientos' && !L.movs && L.data) loadMovs(ctx); if (L.tab === 'pendientes' && L.data) loadPend(ctx); ctx.render(); }));
+   // Pendientes / abonos
+@@ -546,3 +566,15 @@
+   const m = rowPaymentState(s, key), pp = (s.pagosPorFila || {})[key]; // Oct-2026 · pago en 2+ bancos
+   return { accion: 'registrar_operacion_pago', tipoOrigen: s.tipo === 'compra' ? 'compra' : 'renovacion', montoTotal: Number(m.total || 0), recibido: Number(m.recibido || 0), bancoId: Number(m.recibido || 0) > 0 ? (pp && pp[0] ? pp[0].bancoId : (s.bancoId || '')) : '', ...(pp && pp.length > 1 ? { pagos: pp } : {}), responsable: s.responsable === 'vendedor' ? 'vendedor' : 'cliente', vendedorNombre: s.responsable === 'vendedor' ? String(s.vendedor || '').trim() : '', origen: 'apk', fechaPago: s.fechaPago || ymdLocal(), ...extra };
+ }
++
++// R186 · Renovación múltiple: UN pago con el monto de cada servicio (asignaciones). Suma exacta en centavos.
++export function pagoLoteBody(s, extra = {}) {
++  let total = 0, recibido = 0; const porBanco = {}; const montos = {};
++  for (const r of s.rows || []) {
++    const m = rowPaymentState(s, r.key); const t = Math.round(Number(m.total || 0) * 100), rc = Math.round(Number(m.recibido || 0) * 100);
++    montos[r.key] = t / 100; total += t; recibido += rc;
++    for (const p of ((s.pagosPorFila || {})[r.key] || [])) porBanco[p.bancoId] = (porBanco[p.bancoId] || 0) + Math.round(Number(p.monto || 0) * 100);
++  }
++  const pagos = Object.entries(porBanco).filter(([, c]) => c > 0).map(([bancoId, c]) => ({ bancoId, monto: c / 100 }));
++  return { montos, pago: { montoTotal: total / 100, recibido: recibido / 100, bancoId: recibido > 0 ? (pagos[0]?.bancoId || s.bancoId || '') : '', ...(pagos.length > 1 ? { pagos } : {}), responsable: s.responsable, vendedorNombre: s.vendedor, fechaPago: s.fechaPago || '', origen: 'apk', ...extra } };
++}
+Only in src/app: renovacion-motor.js
+Only in src/app: renovar-lote.js
+diff -ru -x node_modules /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/finanzas-file.js src/finanzas-file.js
+--- /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/finanzas-file.js	2026-10-23 16:28:36.000000000 -0600
++++ src/finanzas-file.js	2026-11-07 11:42:25.631649097 -0600
+@@ -46,3 +46,23 @@
+   await Share.share({ title: filename, text, files: [written.uri], dialogTitle: 'Guardar o compartir reporte' });
+   return { mode: 'native', uri: written.uri };
+ }
++
++// R186 · "Descargar Excel": va DIRECTO a la carpeta Descargas del teléfono (no abre la hoja de Compartir).
++// Usa el método nativo SubliWidget.guardarDescarga (MediaStore.Downloads). Si no existe (build viejo), cae al guardado anterior.
++export async function guardarEnDescargas(filename, buffer, mime = XLSX_MIME) {
++  const { Capacitor, registerPlugin } = await import('@capacitor/core');
++  if (!Capacitor.isNativePlatform()) {
++    const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
++    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
++    setTimeout(() => URL.revokeObjectURL(url), 4000);
++    return { mode: 'browser', guardadoEn: 'Descargas' };
++  }
++  const plugin = registerPlugin('SubliWidget');
++  try {
++    const r = await plugin.guardarDescarga({ nombre: filename, mime, data: bufferToBase64(buffer) });
++    return { mode: 'native', uri: r?.uri || '', guardadoEn: `${r?.carpeta || 'Descargas'}/${r?.nombre || filename}`, bytes: r?.bytes || 0 };
++  } catch (e) {
++    if (/not implemented|no implementado|UNIMPLEMENTED/i.test(String(e?.message || e?.code || ''))) return saveAndShareXlsx(filename, buffer);
++    throw e;
++  }
++}
+diff -ru -x node_modules /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/main.js src/main.js
+--- /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/main.js	2026-10-30 15:16:40.000000000 -0600
++++ src/main.js	2026-11-07 11:42:25.629434356 -0600
+@@ -53,8 +53,8 @@
+ import { dartsTimeUp, dartsTimeLeft, dartsGameCreate, applyHit as dartsApplyHit, dartsGameSubmission, dartsProScreenHtml, attachDartsControls, hitLabel as dartsHitLabel } from './dardos.js';
+ import { aulaDashboardHtml, aulaLessonHtml, aulaSettingsHtml, aulaLoadingHtml, aulaErrorHtml, aulaDefaultAvatar } from './aula.js';
+ import { cierreDelMes, mergeFinanceSources, parseAllFinance, financeContentHtml, periodRange, filterMovs, totalsOf, weekRange, buildFinanceWorkbook, financeFileName, isoDay } from './finanzas.js';
+-import { saveAndShareXlsx, saveAndShareFile, XLSX_MIME } from './finanzas-file.js';
+-import { isLibroUser, initLibroState, loadLibro, libroViewHtml, bindLibro, renewPaySheetHtml, bindRenewPay, cachedMethods, operacionPagoBody } from './app/finanzas-libro.js'; // R104 · R106
++import { saveAndShareXlsx, saveAndShareFile, XLSX_MIME, guardarEnDescargas } from './finanzas-file.js'; // R186
++import { isLibroUser, initLibroState, loadLibro, libroViewHtml, bindLibro, renewPaySheetHtml, bindRenewPay, cachedMethods, operacionPagoBody } from './app/finanzas-libro.js'; import * as R186 from './app/renovar-lote.js'; // R104 · R106 · R186 lote + Excel del mes
+ import { buildExportDataset, buildExportWorkbook, servicesToCsv, servicesToTxt, exportFileName, exportSheetHtml } from './exportar.js';
+ import { mdToPlain } from './markdown.js';
+ import { calcScreenHtml, calcSummaryHtml, calcHintsHtml, effectiveCatalog, computeTotals, calcInitialState, calcAddCatalog, calcAddManual, calcStep, calcRemove, quoteText, pushCalcHistory, loadCalcPrices, saveCalcPrices, sanitizePrices, parseAmount, remoteBaseCatalog } from './calculadora.js';
+@@ -1036,7 +1036,7 @@
+   return state.finParsed;
+ }
+ const libroUser=()=>isLibroUser(operatorIdentity(state.session?.role,state.session?.usuario)); // R104: solo Sublicuentas y Relojes
+-const libroCtx=()=>({state,render,showToast,authPost,newOperationId});
++const libroCtx=()=>({state,render,showToast,authPost,newOperationId,descargarExcelMes:(mes)=>R186.descargarExcelMes(loteCtx(),mes)}), loteCtx=()=>({state,render,showToast,authPost,newOperationId,realClientId,persistCoreCache,loadCoreData,crmPlatformLabel,isOfflineError,libroUser,libroMethods,initLibroState,loadLibro,libroCtx,canOffline,deviceOffline,rowKey});
+ const libroMethods=()=>state.libro?.data?.metodos||cachedMethods();
+ async function registrarPagoCompra(pay,rel){const body={...operacionPagoBody(pay,'compra',rel),operationId:pay.opId};try{const r=await authPost('/api/finanzas',body);if(!r?.ok)throw new Error(r?.error||'Finanzas no confirmó el pago.');showToast(r.estado==='pagado'?'💵 Compra pagada y registrada en Finanzas.':`💵 Compra registrada · pendiente ${r.saldo} (${r.estado}).`);}catch(e){if(canOffline()&&isOfflineError(e)){await enqueueOp({kind:'cobro',path:'/api/finanzas',body,label:`Pago compra ${rel.clienteNombre}`});showToast('📴 Pago de la compra en cola.');}else showToast(`⚠️ La compra se guardó, pero Finanzas falló: ${e?.message||e}. Avise para registrarlo.`);}}
+ function financeView() {
+@@ -1054,7 +1054,7 @@
+ async function exportFinanceExcel(scope) {
+   if (state.finBusy) return;
+   const range=periodRange(state.finPeriod,new Date(),{desde:state.finDesde,hasta:state.finHasta});
+-  if (libroUser()) { state.finBusy=true; render(); try { const out=await (await import('./app/excel-saiyajin.js')).exportarSaiyajin({authPost,saveAndShareXlsx,scope,range}); showToast(out?.guardadoEn?`📊 Excel Saiyajin guardado en ${out.guardadoEn}`:'📊 Excel Saiyajin listo.'); } catch(e){ showToast(e?.message||'No se pudo generar el Excel.'); } finally { state.finBusy=false; render(); } return; } /* R117: mismo formato y data que el Saiyajin del bot */ const all=financeParsed();
++  if (libroUser()) { state.finBusy=true; render(); try { const out=await (await import('./app/excel-saiyajin.js')).exportarSaiyajin({authPost,saveAndShareXlsx:guardarEnDescargas,scope,range}); showToast(out?.guardadoEn?`📊 Excel Saiyajin guardado en ${out.guardadoEn}`:'📊 Excel Saiyajin listo.'); } catch(e){ showToast(e?.message||'No se pudo generar el Excel.'); } finally { state.finBusy=false; render(); } return; } /* R117: mismo formato y data que el Saiyajin del bot */ const all=financeParsed();
+   const list=scope==='todo'?all:filterMovs(all,{desde:range.desde,hasta:range.hasta});
+   if (!list.length) { showToast('No hay movimientos para exportar.'); return; }
+   state.finBusy=true; render();
+@@ -1062,8 +1062,7 @@
+     const mod=await import('exceljs/dist/exceljs.min.js'); const ExcelJS=mod.default||mod;
+     const wb=buildFinanceWorkbook(ExcelJS,list,{label:scope==='todo'?'Todo':range.label,now:new Date(),cierre:cierreDelMes(allRows(),new Date())});
+     const buffer=await wb.xlsx.writeBuffer();
+-    const out=await saveAndShareXlsx(financeFileName(scope,new Date()),buffer);
+-    showToast(out.mode==='native'?'📊 Excel listo: elija dónde guardarlo o enviarlo.':'📊 Excel descargado.');
++    const out=await guardarEnDescargas(financeFileName(scope,new Date()),buffer); showToast(`⬇️ Excel guardado en ${out?.guardadoEn||'Descargas'}`);
+   } catch (e) { showToast(e?.message||'No se pudo generar el Excel.'); }
+   state.finBusy=false; render();
+ }
+@@ -1928,7 +1927,8 @@
+   const g=activeRenewGroup();if(!g||state.mutating)return;
+   const selected=new Set(state.renewSelection.length?state.renewSelection:g.servicios.map(rowKey));
+   const rows=g.serviciosCliente.filter(r=>selected.has(rowKey(r)));if(!rows.length){showToast('Marque al menos un servicio para renovar.');return;}
+-  const label=renewPickLabel(options);
++  const label=renewPickLabel(options); if(await R186.intentarLote(loteCtx(),{g,rows,options,pago,label}))return; // R186: una sola operación en el servidor (todo o nada, 1 pago)
++
+   if(libroUser()&&!pago){ // R110: el cobro se registra UNA sola vez para todo el grupo (monto total escrito una vez)
+     const plataformas=rows.map(r=>crmPlatformLabel(r.plataforma)||r.plataforma).filter(Boolean);
+     state.renewPay={options,cliente:g.nombre,label:`${rows.length} servicio${rows.length===1?'':'s'} ${label}`,tipo:'renovacion',rows:[{key:'renovacion',label:plataformas.join(' + ')||`${rows.length} servicios`}],montos:{},bancoId:'',responsable:'cliente',vendedor:rows[0]?.vendedor||'',modo:'pago',motivo:'',servicios:rows.map(r=>({key:rowKey(r),compraId:r.compraId||r.raw?.compraId||'',plataforma:r.plataforma||'',fechaAnterior:r.fechaRenovacion||''}))};
+diff -ru -x node_modules /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/operations.js src/operations.js
+--- /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/src/operations.js	2026-10-29 11:29:02.000000000 -0600
++++ src/operations.js	2026-11-07 11:42:25.627360294 -0600
+@@ -1,3 +1,4 @@
++import { sumarPeriodo } from './app/renovacion-motor.js'; // R186 · motor único de fechas
+ import { normalizeText, parseDateDMY, telefonoClave } from './data.js';
+ 
+ export const CRM_SELLERS = Object.freeze([
+@@ -196,12 +197,16 @@
+   return d>=t?String(fechaDMY).trim():hoy;
+ }
+ export function renewalDateForPick(fechaDMY='', pick={}, today=new Date()) {
++  // R186 · Misma regla que el servidor (motor único): SIEMPRE desde el vencimiento (aunque ya venció; "desde hoy" solo si se
++  // pide explícitamente), 1 mes = 30 días, 2+ meses = meses calendario con día ancla. En línea manda el servidor; esto es
++  // la vista previa y la cola sin conexión.
+   if(pick.exactDate)return String(pick.exactDate);
+-  const base=renewalBaseDate(fechaDMY,pick.base||'auto',today);
+-  if(pick.months)return renewalDateForMonths(base,pick.months);
+-  const m=base.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(!m)return '';
+-  const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12); d.setDate(d.getDate()+Math.max(1,Number(pick.days||30)));
+-  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
++  const valida=/^(\d{2})\/(\d{2})\/(\d{4})$/.test(String(fechaDMY||'').trim());
++  const base=pick.base==='hoy'||!valida?renewalBaseDate(fechaDMY,'hoy',today):String(fechaDMY).trim();
++  try{
++    const r=sumarPeriodo(base,pick.months?{unidad:'meses',cantidad:Number(pick.months),diaAncla:valida&&pick.base!=='hoy'?pick.diaAncla:undefined}:{unidad:'dias',cantidad:Math.max(1,Number(pick.days||30))});
++    return r.fechaNueva;
++  }catch(_){return '';}
+ }
+ 
+ export function dmyToIsoDate(fechaDMY='') {
+diff -ru /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/android-native/java/SubliWidgetPlugin.java android-native/java/SubliWidgetPlugin.java
+--- /tmp/claude-0/apkbase/sublicuentas-android-bootstrap/android-native/java/SubliWidgetPlugin.java	2026-10-23 16:28:36.000000000 -0600
++++ android-native/java/SubliWidgetPlugin.java	2026-11-07 11:42:25.639516259 -0600
+@@ -4,6 +4,19 @@
+ import android.content.ComponentName;
+ import android.content.Context;
+ import android.content.SharedPreferences;
++import android.content.ContentResolver;
++import android.content.ContentValues;
++import android.net.Uri;
++import android.os.Build;
++import android.os.Environment;
++import android.provider.MediaStore;
++import android.util.Base64;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.OutputStream;
++
++import com.getcapacitor.JSObject;
+ 
+ import com.getcapacitor.Plugin;
+ import com.getcapacitor.PluginCall;
+@@ -30,6 +43,56 @@
+         call.resolve();
+     }
+ 
++    /**
++     * R186 · "Descargar Excel": guarda el archivo en la carpeta pública DESCARGAS del teléfono (no abre "Compartir").
++     * Android 10+ usa MediaStore.Downloads (no pide permisos). Android 9 o menos: carpeta Descargas de la app.
++     * data = contenido en base64 (el Excel se arma en la app con los datos del servidor). Nunca recibe tokens.
++     */
++    @PluginMethod
++    public void guardarDescarga(PluginCall call) {
++        String nombre = call.getString("nombre", "archivo.xlsx");
++        String mime = call.getString("mime", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
++        String data = call.getString("data");
++        if (data == null || data.isEmpty()) { call.reject("Archivo vacío"); return; }
++        nombre = nombre.replaceAll("[^A-Za-z0-9._ -]", "_");
++        if (nombre.length() > 120) nombre = nombre.substring(0, 120);
++        byte[] bytes;
++        try { bytes = Base64.decode(data, Base64.DEFAULT); } catch (Exception e) { call.reject("Contenido inválido"); return; }
++        Context ctx = getContext();
++        try {
++            JSObject out = new JSObject();
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++                ContentResolver cr = ctx.getContentResolver();
++                ContentValues v = new ContentValues();
++                v.put(MediaStore.MediaColumns.DISPLAY_NAME, nombre);
++                v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
++                v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
++                v.put(MediaStore.MediaColumns.IS_PENDING, 1);
++                Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
++                if (uri == null) { call.reject("No se pudo crear el archivo en Descargas"); return; }
++                try (OutputStream os = cr.openOutputStream(uri)) { if (os == null) throw new Exception("sin flujo"); os.write(bytes); }
++                ContentValues fin = new ContentValues();
++                fin.put(MediaStore.MediaColumns.IS_PENDING, 0);
++                cr.update(uri, fin, null, null);
++                out.put("uri", uri.toString());
++                out.put("carpeta", "Descargas");
++            } else {
++                File dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
++                if (dir == null) dir = ctx.getFilesDir();
++                if (!dir.exists()) dir.mkdirs();
++                File f = new File(dir, nombre);
++                try (FileOutputStream fos = new FileOutputStream(f)) { fos.write(bytes); }
++                out.put("uri", Uri.fromFile(f).toString());
++                out.put("carpeta", "Descargas de la app (Android 9 o menos)");
++            }
++            out.put("nombre", nombre);
++            out.put("bytes", bytes.length);
++            call.resolve(out);
++        } catch (Exception e) {
++            call.reject("No se pudo guardar en Descargas: " + e.getMessage());
++        }
++    }
++
+     static void refresh(Context ctx) {
+         AppWidgetManager manager = AppWidgetManager.getInstance(ctx);
+         int[] ids = manager.getAppWidgetIds(new ComponentName(ctx, CobrosWidgetProvider.class));
