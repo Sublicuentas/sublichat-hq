@@ -13,6 +13,7 @@ import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-c
 import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
 import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
 import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
+import { periodoHN, resumenMes, diagnosticarDuplicados } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
@@ -286,6 +287,20 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   }
 
   // R117 · Datos del Excel Saiyajin para la APK (misma data y reglas que el reporte del bot).
+  // R186 · Mes calendario de Honduras: tarjeta de la APK/Web y el Excel salen de esta misma consulta.
+  if (accion === "finanzas_mes") {
+    const per = periodoHN(new Date(), String(body.periodo || ""));
+    const all = rowsOf(await movementsRangoQuery(db, per.desde, per.hasta).limit(20000).get());
+    return res.status(200).json({ ok: true, accion, periodo: per.periodo, zona: "America/Tegucigalpa", generado: isoNow(), ...resumenMes(all, per), excel: { desde: per.desde, hasta: per.hasta, nombre: `finanzas_${per.periodo}.xlsx` } });
+  }
+  // R186 · Diagnóstico de cobros duplicados: SOLO LECTURA, nunca borra ni anula.
+  if (accion === "diagnostico_duplicados") {
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : "2026-10-01";
+    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(body.hasta || "")) ? body.hasta : hoyYmdHN();
+    const all = rowsOf(await movementsRangoQuery(db, desde, hasta).limit(20000).get());
+    return res.status(200).json({ ok: true, accion, desde, hasta, ...diagnosticarDuplicados(all) });
+  }
+
   if (accion === "finanzas_reporte") {
     const { methods, libro, saldos } = await estadoLibro(db);
     const hoyR = hoyYmdHN();
@@ -842,7 +857,7 @@ export default async function handler(req, res) {
       await db.collection("auditoria_eventos").add({ actorUsuario: identity.usuario, rol: identity.role, origen: cleanText(body.origen || "web").slice(0, 20), modulo: "finanzas", accion: "exportar_excel_finanzas", tipo: "finanzas_exportar_excel_finanzas", detalle: `${desde} a ${hasta} · ${data.version}`, resultado: "ok", createdAt: isoNow() }).catch(() => {});
       return res.status(200).json({ ok: true, accion, filename: data.filename, version: data.version, base64: data.base64 });
     }
-    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion)) {
+    if (["finanzas_reporte", "finanzas_metodos", "finanzas_resumen", "estados_financieros", "finanzas_movimientos", "registrar_saldo_inicial", "registrar_ajuste_saldo", "confirmar_pago_planilla", "guardar_cierre_ciclo"].includes(accion) || ["finanzas_mes", "diagnostico_duplicados"].includes(accion) /* R186 */) {
       const handled = await handleLibro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }
