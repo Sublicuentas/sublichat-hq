@@ -1,0 +1,737 @@
+Binary files r189src/sublicuentas-android-bootstrap/public/assets/sala/sala-escenario-c.webp and r192src/sublicuentas-android-bootstrap/public/assets/sala/sala-escenario-c.webp differ
+diff -ruN r189src/sublicuentas-android-bootstrap/src/app/baul-apks.js r192src/sublicuentas-android-bootstrap/src/app/baul-apks.js
+--- r189src/sublicuentas-android-bootstrap/src/app/baul-apks.js	2026-11-07 12:56:08.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/src/app/baul-apks.js	2026-11-07 16:16:55.000000000 -0600
+@@ -1,10 +1,12 @@
+-// R187 · Más › Baúl de APKs (PDF «Sublichat 5 puntos», bloque 02). Mismo directorio que Sublichat Web y el bot:
++// R187 · R192 · Más › Baúl de APKs (PDF «Sublichat APK correcciones», P2). Mismo directorio que Sublichat Web y el bot:
+ // lo sirve /api/inventario (accion baulApks) desde Firestore configuracion_tv_digital/baul_apks.
+-// · Consulta: plataforma → dispositivo → enlaces con «Copiar» (URL y código) y «Abrir» (solo https).
+-// · Sublicuentas/Relojes (editores): desactivar/activar y editar URL, código y nota. El SERVIDOR valida y audita;
+-//   ocultar botones no es la seguridad. Eliminar se hace desde la Web (doble confirmación).
+-// · URLs de CONEXIÓN de TV Digital: aparte del Baúl. Desactivar no rompe a los clientes que ya la tienen.
++// Navegación en TRES niveles: 1) plataforma (logo) → 2) dispositivos con apps registradas → 3) app(s) de instalación.
++// En el nivel 3: «Copiar instrucciones completas» y «Enviar al cliente» (abre Compartir de Android: la persona elige
++// WhatsApp y confirma; nunca se envía solo). El mensaje lo arma el SERVIDOR desde el mismo registro (igual en bot y Web).
++// Código y enlace solo cuando corresponden; la URL técnica la ve solo el personal autorizado.
++// Sublicuentas/Relojes (editores): editar URL/código/nota y activar/desactivar; el servidor valida y audita.
+ // Nada de URLs, códigos ni dispositivos inventados: si el servidor no responde, se muestra el error, no una lista fija.
++import { Share } from '@capacitor/share';
+ import { authPost } from '../api.js';
+ import { state, esc, ui, showToast } from './core.js';
+ import { operatorIdentity } from '../data.js';
+@@ -14,6 +16,11 @@
+ export function bState() { if (!state.baul) state.baul = { data: null, urls: null, cargando: false, error: '', plat: '', disp: '', editar: '', tab: 'baul' }; return state.baul; }
+ export function resetBaul() { state.baul = null; }
+ 
++// Logos que YA existen en la app (catálogo). Lion TV y Nanotech todavía no tienen logo autorizado: marcador con su inicial.
++export const LOGOS_TV = Object.freeze({ icomplay: '/assets/plataformas/icomplay.webp', latintv: '/assets/plataformas/latin-tv.webp', oleada: '/assets/plataformas/oleada-tv.webp', stellatv: '/assets/plataformas/stella-tv.webp' });
++const ICONO_DISP = Object.freeze({ android_tv: '📺', fire_tv: '🔥', android_movil: '📱', smart_tv: '🖥️', iphone: '', pc: '💻' });
++const icoDisp = (id) => ICONO_DISP[id] || '📲';
++
+ async function inv(accion, extra = {}) {
+   let r;
+   try { r = await authPost('/api/inventario', { accion, ...extra }); }
+@@ -25,28 +32,47 @@
+   const s = bState(); s.cargando = true; s.error = ''; ui.render();
+   try {
+     const [b, u] = await Promise.all([inv('baulApks'), inv('tvUrlsHistorial').catch(() => null)]);
+-    s.data = b; s.urls = u; if (!s.plat) s.plat = b.plataformas?.[0]?.id || '';
++    s.data = b; s.urls = u;
+   } catch (e) { s.error = e?.message || 'Sin conexión'; }
+   s.cargando = false; if (state.subview === 'baul-apks') ui.render();
+ }
+ 
+-export function enlaceHtml(e, editor = false, editando = false) {
+-  const http = /^https:\/\//i.test(e.url || '');
+-  const acciones = [
+-    e.url ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.url)}">Copiar URL</button>` : '',
+-    e.codigo ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.codigo)}">Copiar código</button>` : '',
+-    http ? `<button type="button" class="se-btn ghost" data-baul-abrir="${esc(e.url)}">Abrir</button>` : '',
+-    editor ? `<button type="button" class="se-btn ghost" data-baul-editar="${esc(e.id)}">Editar</button><button type="button" class="se-btn ghost" data-baul-activar="${esc(e.id)}" data-activo="${e.activo === false ? '1' : '0'}">${e.activo === false ? 'Activar' : 'Desactivar'}</button>` : '',
+-  ].join('');
++const logoHtml = (p) => LOGOS_TV[p.id] ? `<img src="${LOGOS_TV[p.id]}" alt="" loading="lazy">` : `<span class="baul-ini" aria-hidden="true">${esc((p.nombre || '?').charAt(0))}</span>`;
++function nivelPlataformas(d) {
++  return `<p class="baul-paso">Paso 1 de 3 · elija la plataforma</p><div class="baul-grid">${(d.plataformas || []).map((p) => {
++    const v = (d.vistas || []).find((x) => x.plataforma === p.id) || { dispositivos: [] };
++    return `<button type="button" class="baul-plat" data-baul-plat="${esc(p.id)}"><span class="baul-logo">${logoHtml(p)}</span><b>${esc(p.nombre)}</b><small>${v.dispositivos.length} dispositivo${v.dispositivos.length === 1 ? '' : 's'}</small></button>`;
++  }).join('')}</div>`;
++}
++function nivelDispositivos(d, vista, p) {
++  return `<p class="baul-paso">Paso 2 de 3 · ${esc(p.nombre)} · elija el dispositivo del cliente</p>
++    ${vista.dispositivos.length ? `<div class="baul-disps">${vista.dispositivos.map((x) => `<button type="button" class="baul-disp" data-baul-disp="${esc(x.id)}"><span aria-hidden="true">${icoDisp(x.id)}</span><b>${esc(x.nombre)}</b><small>${x.enlaces.length} opción${x.enlaces.length === 1 ? '' : 'es'}</small><i aria-hidden="true">›</i></button>`).join('')}</div>`
++      : '<div class="empty-state"><strong>Sin dispositivos registrados para esta plataforma</strong></div>'}`;
++}
++export function enlaceHtml(e, editor = false, editando = false, n = 1, total = 1) {
++  const https = /^https:\/\//i.test(e.url || '');
++  const ios = e.dispositivo === 'iphone';
+   const form = editando ? `<div class="baul-form"><input class="se-input" id="baulUrl" type="url" inputmode="url" value="${esc(e.url || '')}" placeholder="https://…"><input class="se-input" id="baulCodigo" inputmode="numeric" value="${esc(e.codigo || '')}" placeholder="Código Downloader (solo números)"><input class="se-input" id="baulNota" value="${esc(e.nota || '')}" placeholder="Nota"><div class="baul-acc"><button type="button" class="se-btn" data-baul-guardar="${esc(e.id)}">Guardar</button><button type="button" class="se-btn ghost" data-baul-cancelar>Cancelar</button></div></div>` : '';
+-  return `<article class="se-card baul-enlace${e.activo === false ? ' off' : ''}">
+-    <b>${esc(e.app || e.appId)} · ${esc(e.metodoTxt || e.metodo)}${e.activo === false ? ' · desactivado' : ''}</b>
+-    ${e.url ? `<code class="baul-url">${esc(e.url)}</code>` : e.metodo === 'tv_store' ? '<small>Buscar en la tienda del TV (sin enlace).</small>' : ''}
++  return `<article class="se-card baul-enlace${e.activo === false ? ' off' : ''}" data-baul-enlace="${esc(e.id)}">
++    <b class="baul-app">${total > 1 ? `<span class="baul-op">Opción ${n}</span>` : ''}${esc(e.app || e.appId)}${e.activo === false ? ' · desactivado' : ''}</b>
++    <small>Método: ${esc(e.metodoTxt || e.metodo)}</small>
++    ${e.metodo === 'tv_store' ? '<small>Buscar en la tienda del TV (sin enlace).</small>' : ''}
++    ${ios ? '<small class="baul-ios">No instalar archivos APK en iPhone: solo App Store o web.</small>' : ''}
+     ${e.codigo ? `<small>Código Downloader: <strong>${esc(e.codigo)}</strong></small>` : ''}
++    ${editor && e.url ? `<code class="baul-url" title="Visible solo para personal autorizado">${esc(e.url)}</code>` : ''}
+     ${editor && e.codigoPendiente ? `<small>Código por confirmar: ${esc(e.codigoPendiente)} (no se entrega)</small>` : ''}
+-    ${e.costoExterno?.texto ? `<small>💲 ${esc(e.costoExterno.texto)}</small>` : ''}
+-    ${e.nota ? `<small>${esc(e.nota)}</small>` : ''}
+-    <div class="baul-acc">${acciones}</div>${form}</article>`;
++    ${e.costoExterno?.texto ? `<p class="baul-costo"><b>Nota de costo:</b> ${esc(e.costoExterno.texto)}</p>` : ''}
++    ${e.nota && editor ? `<small>${esc(e.nota)}</small>` : ''}
++    ${e.mensaje ? `<div class="baul-msg" aria-label="Mensaje listo para el cliente"><b>Mensaje listo para el cliente</b><pre>${esc(e.mensaje)}</pre></div>` : ''}
++    <div class="baul-acc baul-acc-pri">${e.mensaje ? `<button type="button" class="se-btn" data-baul-copiar-msg="${esc(e.id)}">Copiar instrucciones completas</button><button type="button" class="se-btn baul-enviar" data-baul-enviar="${esc(e.id)}">Enviar al cliente</button>` : ''}</div>
++    <div class="baul-acc">${e.codigo ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.codigo)}">Copiar código</button>` : ''}${editor && e.url ? `<button type="button" class="se-btn ghost" data-baul-copiar="${esc(e.url)}">Copiar enlace</button>` : ''}${https ? `<button type="button" class="se-btn ghost" data-baul-abrir="${esc(e.url)}">Abrir</button>` : ''}
++      ${editor ? `<button type="button" class="se-btn ghost" data-baul-editar="${esc(e.id)}">Editar</button><button type="button" class="se-btn ghost" data-baul-activar="${esc(e.id)}" data-activo="${e.activo === false ? '1' : '0'}">${e.activo === false ? 'Activar' : 'Desactivar'}</button>` : ''}</div>${form}</article>`;
++}
++function nivelApps(d, vista, p, disp, s) {
++  const editor = !!d.editor;
++  if (!disp) return '<div class="empty-state"><strong>No disponible para este dispositivo</strong></div>';
++  return `<p class="baul-paso">Paso 3 de 3 · ${esc(p.nombre)} › ${esc(disp.nombre)}</p>${disp.enlaces.map((e, i) => enlaceHtml(e, editor, s.editar === e.id, i + 1, disp.enlaces.length)).join('')}
++    <small class="baul-aviso">${esc(d.aviso || '')}</small>`;
+ }
+ function urlsHtml(s, editor) {
+   const urls = s.urls?.urls || {};
+@@ -60,20 +86,19 @@
+   if (!canBaul()) return ui.subPage('Baúl de APKs', 'No disponible', '<div class="empty-state"><strong>Su usuario no tiene el Baúl de APKs</strong></div>');
+   if (s.data === null && !s.cargando && !s.error) setTimeout(baulCargar, 0);
+   const d = s.data, editor = !!d?.editor;
+-  const tabs = `<div class="se-filtros"><button type="button" class="se-chip ${s.tab === 'baul' ? 'on' : ''}" data-baul-tab="baul">Aplicaciones</button><button type="button" class="se-chip ${s.tab === 'urls' ? 'on' : ''}" data-baul-tab="urls">URLs de conexión</button></div>`;
+-  let cuerpo = '';
++  let cuerpo = '', titulo = 'Baúl de APKs', sub = 'Primero la plataforma, luego el dispositivo';
+   if (s.cargando && !d) cuerpo = '<div class="loading-card"><span class="spinner"></span><strong>Cargando Baúl…</strong></div>';
+   else if (s.error && !d) cuerpo = `<div class="error-box"><span>${esc(s.error)}</span></div>`;
+-  else if (d && s.tab === 'urls') cuerpo = urlsHtml(s, editor);
++  else if (d && s.tab === 'urls') { titulo = 'URLs de conexión'; sub = 'TV Digital · aparte del Baúl'; cuerpo = `<button type="button" class="se-btn ghost baul-volver" data-baul-tab="baul">‹ Aplicaciones</button>${urlsHtml(s, editor)}`; }
+   else if (d) {
+-    const vista = (d.vistas || []).find((v) => v.plataforma === s.plat) || { dispositivos: [] };
+-    const disp = vista.dispositivos.find((x) => x.id === s.disp) || vista.dispositivos[0];
+-    cuerpo = `<div class="se-filtros">${(d.plataformas || []).map((p) => `<button type="button" class="se-chip ${p.id === s.plat ? 'on' : ''}" data-baul-plat="${esc(p.id)}">${esc(p.nombre)}</button>`).join('')}</div>
+-      <div class="se-filtros">${vista.dispositivos.map((x) => `<button type="button" class="se-chip ${disp && x.id === disp.id ? 'on' : ''}" data-baul-disp="${esc(x.id)}">${esc(x.nombre)} · ${x.enlaces.length}</button>`).join('')}</div>
+-      ${disp ? disp.enlaces.map((e) => enlaceHtml(e, editor, s.editar === e.id)).join('') : '<div class="empty-state"><strong>Sin enlaces para esta plataforma</strong></div>'}
+-      <small class="baul-aviso">${esc(d.aviso || '')}</small>`;
++    const p = (d.plataformas || []).find((x) => x.id === s.plat);
++    const vista = p ? ((d.vistas || []).find((v) => v.plataforma === p.id) || { dispositivos: [] }) : null;
++    const disp = vista && s.disp ? vista.dispositivos.find((x) => x.id === s.disp) : null;
++    if (!p) cuerpo = `${nivelPlataformas(d)}<button type="button" class="se-btn ghost" data-baul-tab="urls">URLs de conexión de TV Digital</button>`;
++    else if (!s.disp) { titulo = p.nombre; cuerpo = `<button type="button" class="se-btn ghost baul-volver" data-baul-atras="plat">‹ Plataformas</button>${nivelDispositivos(d, vista, p)}`; }
++    else { titulo = `${p.nombre} › ${disp?.nombre || 'Dispositivo'}`; cuerpo = `<button type="button" class="se-btn ghost baul-volver" data-baul-atras="disp">‹ Dispositivos de ${esc(p.nombre)}</button>${nivelApps(d, vista, p, disp, s)}`; }
+   }
+-  return ui.subPage('Baúl de APKs', 'TV Digital · igual que en la web y el bot', `<section class="se-wrap">${tabs}${s.error && d ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}${cuerpo}<button type="button" class="se-btn ghost" data-baul-recargar>Actualizar</button></section>`);
++  return ui.subPage(titulo, sub, `<section class="se-wrap baul-wrap">${s.error && d ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}${cuerpo}<button type="button" class="se-btn ghost" data-baul-recargar>Actualizar</button></section>`);
+ }
+ 
+ async function accion(fn, ok) {
+@@ -81,13 +106,25 @@
+   try { await fn(); s.error = ''; s.editar = ''; showToast?.(ok); await baulCargar(); }
+   catch (e) { s.error = e?.message || 'No se pudo guardar.'; ui.render(); }
+ }
++function enlaceActual(id) {
++  const s = bState(); const v = (s.data?.vistas || []).find((x) => x.plataforma === s.plat);
++  return v ? v.dispositivos.flatMap((x) => x.enlaces).find((x) => x.id === id) : null;
++}
++export async function compartirMensaje(texto) {
++  try { await Share.share({ title: 'Instalación', text: texto, dialogTitle: 'Enviar al cliente' }); return true; }
++  catch (e) { if (/cancel/i.test(String(e?.message || e))) return false; ui.copy(texto); showToast?.('No se pudo abrir Compartir: el mensaje quedó copiado.'); return false; }
++}
+ export function bindBaul() {
+   if (state.subview !== 'baul-apks') return;
+   const s = bState(), qa = (x) => document.querySelectorAll(x), val = (id) => document.getElementById(id)?.value ?? '';
+-  qa('[data-baul-tab]').forEach((b) => b.addEventListener('click', () => { s.tab = b.dataset.baulTab; ui.render(); }));
+-  qa('[data-baul-plat]').forEach((b) => b.addEventListener('click', () => { s.plat = b.dataset.baulPlat; s.disp = ''; s.editar = ''; ui.render(); }));
+-  qa('[data-baul-disp]').forEach((b) => b.addEventListener('click', () => { s.disp = b.dataset.baulDisp; s.editar = ''; ui.render(); }));
++  const arriba = () => { try { window.scrollTo(0, 0); } catch (_) {} };
++  qa('[data-baul-tab]').forEach((b) => b.addEventListener('click', () => { s.tab = b.dataset.baulTab; s.plat = ''; s.disp = ''; ui.render(); arriba(); }));
++  qa('[data-baul-plat]').forEach((b) => b.addEventListener('click', () => { s.plat = b.dataset.baulPlat; s.disp = ''; s.editar = ''; ui.render(); arriba(); }));
++  qa('[data-baul-disp]').forEach((b) => b.addEventListener('click', () => { s.disp = b.dataset.baulDisp; s.editar = ''; ui.render(); arriba(); }));
++  qa('[data-baul-atras]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.baulAtras === 'disp') s.disp = ''; else { s.plat = ''; s.disp = ''; } s.editar = ''; ui.render(); arriba(); }));
+   qa('[data-baul-copiar]').forEach((b) => b.addEventListener('click', () => ui.copy(b.dataset.baulCopiar)));
++  qa('[data-baul-copiar-msg]').forEach((b) => b.addEventListener('click', () => { const e = enlaceActual(b.dataset.baulCopiarMsg); if (e?.mensaje) ui.copy(e.mensaje, 'Instrucciones copiadas.'); }));
++  qa('[data-baul-enviar]').forEach((b) => b.addEventListener('click', () => { const e = enlaceActual(b.dataset.baulEnviar); if (e?.mensaje) compartirMensaje(e.mensaje); }));
+   qa('[data-baul-abrir]').forEach((b) => b.addEventListener('click', () => ui.openLink(b.dataset.baulAbrir)));
+   qa('[data-baul-recargar]').forEach((b) => b.addEventListener('click', baulCargar));
+   qa('[data-baul-editar]').forEach((b) => b.addEventListener('click', () => { s.editar = b.dataset.baulEditar; ui.render(); }));
+diff -ruN r189src/sublicuentas-android-bootstrap/src/app/finanzas-libro.js r192src/sublicuentas-android-bootstrap/src/app/finanzas-libro.js
+--- r189src/sublicuentas-android-bootstrap/src/app/finanzas-libro.js	2026-11-07 11:42:26.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/src/app/finanzas-libro.js	2026-11-07 16:03:25.000000000 -0600
+@@ -3,6 +3,7 @@
+ // Además: hoja de pago REAL al renovar (monto escrito + dónde pagó, o ajuste sin pago con motivo).
+ // El servidor (/api/finanzas) es la fuente de verdad: aquí solo se muestra y se arma el borrador.
+ import { validatePlanilla, PLANILLA_CONCEPTOS, money, estadoPago, repartoPagos } from './finanzas-reglas.js';
++import { chargePlatformName } from '../operations.js'; // R192 · nombre legible de la plataforma
+ 
+ const esc = (v = '') => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+ const lps = (n) => `L${money(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+@@ -39,9 +40,25 @@
+   } catch (e) { L.error = e?.message || 'Sin conexión con Finanzas.'; }
+   finally { L.loading = false; ctx.render(); }
+ }
+-async function loadMovs(ctx) {
++// R192 · Editar sin saltar: la fila que se corrige/anula queda en el MISMO lugar de la pantalla. Se guarda un ancla
++// (id del movimiento + su posición en pantalla) y después de cada repintado se devuelve el scroll; al recargar después de
++// guardar, la lista vieja se conserva mientras llega la nueva (antes se vaciaba y la pantalla subía al inicio).
++export function anclaMov(id) {
++  const el = id ? document.querySelector(`[data-fl-row="${CSS.escape(id)}"]`) : null;
++  return { id: id || '', top: el ? el.getBoundingClientRect().top : 0, y: window.scrollY || 0 };
++}
++export function restaurarAncla(a) {
++  if (!a) return;
++  const el = a.id ? document.querySelector(`[data-fl-row="${CSS.escape(a.id)}"]`) : null;
++  if (el) { const delta = el.getBoundingClientRect().top - a.top; if (Math.abs(delta) > 1) window.scrollBy(0, delta); }
++  else window.scrollTo(0, a.y);
++}
++function conAncla(ctx, a) { return { ...ctx, render: () => { ctx.render(); restaurarAncla(a); } }; }
++async function loadMovs(ctx, { silent = false } = {}) {
+   const L = ctx.state.libro;
+-  L.movs = { loading: true, rows: [] }; ctx.render();
++  if (silent && L.movs && Array.isArray(L.movs.rows)) L.movs = { ...L.movs, refreshing: true };
++  else { L.movs = { loading: true, rows: [] }; }
++  ctx.render();
+   try {
+     const r = await ctx.authPost('/api/finanzas', { accion: 'finanzas_movimientos', ...L.movFiltro });
+     if (!r?.ok) throw new Error(r?.error || 'No se pudieron leer los movimientos.');
+@@ -50,7 +67,7 @@
+     // en Movimientos (ni como "Sin banco · venta"). Los datos siguen existiendo para Resumen/Auditoría.
+     const rows = (r.movimientos || []).filter((m) => m?.kind !== 'venta' && String(m?.tipo || '').toLowerCase() !== 'venta');
+     L.movs = { loading: false, rows, total: rows.length };
+-  } catch (e) { L.movs = { loading: false, rows: [], error: e?.message || 'Error' }; }
++  } catch (e) { L.movs = silent && L.movs?.rows?.length ? { ...L.movs, refreshing: false, aviso: e?.message || 'No se pudo actualizar' } : { loading: false, rows: [], error: e?.message || 'Error' }; }
+   ctx.render();
+ }
+ 
+@@ -77,37 +94,49 @@
+ }
+ 
+ const MESES_TXT = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+-// R186 · Tarjeta del MES CALENDARIO (hora de Honduras): solo cobros de este mes, sin arrastre; un pago = una vez.
+-export function mesHtml(m, busy = false) {
++// R192 · RESUMEN = solo el MES CALENDARIO actual en hora de Honduras (01 → 01 del mes siguiente). El ciclo (que puede
++// abarcar varios meses) vive en la pestaña Cierre. Cobrado, egresos, ventas generadas y pendientes van SEPARADOS.
++// Ingresos por plataforma: cada pago único cuenta UNA vez (la suma es igual a «Ingresos cobrados»).
++const ultimoDia = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
++export function nombrePlataformaFin(p = '') { const t = String(p || '').trim(); if (!t || /^sin plataforma$/i.test(t)) return 'Sin plataforma'; if (/^Pago combinado/i.test(t)) return t; return /\s\+\s/.test(t) ? t.split(/\s\+\s/).map((x) => chargePlatformName(x)).join(' + ') : chargePlatformName(t); }
++export function mesHtml(m, busy = false, cartera = null) {
+   if (!m) return '';
+   const [y, mm] = String(m.periodo || '').split('-');
+   const nombre = `${(MESES_TXT[Number(mm) - 1] || '').replace(/^./, (c) => c.toUpperCase())} ${y || ''}`;
+-  const plats = (m.porPlataforma || []).slice(0, 6);
++  const rango = y && mm ? `01 ${MESES_TXT[Number(mm) - 1].slice(0, 3)} – ${ultimoDia(+y, +mm)} ${MESES_TXT[Number(mm) - 1].slice(0, 3)} ${y}` : '';
++  const cobros = Array.isArray(m.cobrosPorPlataforma) ? m.cobrosPorPlataforma : null;
++  const lista = (cobros || m.porPlataforma || []);
++  const fila = (p) => `<li class="fl-plat"><span>${esc(nombrePlataformaFin(p.plataforma))}</span><b>${lps(p.monto)}</b></li>`;
++  const pend = cartera ? Number(cartera.pendienteTotal || 0) : null;
+   return `<section class="fl-card fl-c2 fl-mes" aria-label="Finanzas del mes">
+     <div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_resumen')}" alt="">Este mes · ${esc(nombre)}</b><span class="fl-pill">hora de Honduras</span></div>
++    ${rango ? `<p class="fl-muted fl-rango">${esc(rango)}</p>` : ''}
+     <div class="fl-io"><div class="fl-in"><img src="${FL_ICON('icon_ingresos')}" alt=""><span>Ingresos cobrados<b>${lps(m.ingresos)}</b></span></div><div class="fl-out"><img src="${FL_ICON('icon_egresos')}" alt=""><span>Egresos<b>${lps(m.egresos)}</b></span></div></div>
++    <ul class="fl-plats fl-plats-res">
++      <li class="fl-plat"><span>Planilla / comisiones del mes</span><b class="fl-neg">−${lps(m.planilla || 0)}</b></li>
++      <li class="fl-plat fl-plat-total"><span>Resultado del mes</span><b>${lps(m.resultado != null ? m.resultado : (Number(m.ingresos || 0) - Number(m.egresos || 0) - Number(m.planilla || 0)))}</b></li>
++      <li class="fl-plat"><span>Ventas generadas <small>(valor vendido, no es efectivo)</small></span><b>${lps(m.ventasGeneradas || 0)}</b></li>
++      ${pend != null ? `<li class="fl-plat fl-warn2"><span>Pendiente total hoy <small>(NO es dinero disponible)</small></span><b>${lps(pend)}</b></li>` : ''}
++    </ul>
+     <p class="fl-muted">${Number(m.pagosUnicos) || 0} pago${Number(m.pagosUnicos) === 1 ? '' : 's'} real${Number(m.pagosUnicos) === 1 ? '' : 'es'} · ${Number(m.serviciosRenovadosOVendidos) || 0} servicio(s) renovados o vendidos${m.anulados ? ` · ${m.anulados} anulado(s) fuera` : ''}</p>
+-    ${plats.length ? `<div class="fl-rows2 fl-box">${plats.map((p) => `<div class="fl-r2"><span>${esc(p.plataforma)}</span><b>${lps(p.monto)}</b></div>`).join('')}</div>` : ''}
++    ${lista.length ? `<b class="fl-sub-t">${cobros ? 'Ingresos cobrados por plataforma' : 'Ventas por plataforma'}</b><ul class="fl-plats">${lista.map(fila).join('')}</ul>` : ''}
+     ${m.conciliacion && m.conciliacion.ingresosVsPagos === false ? '<p class="fl-err">⚠️ Los cobros por banco no cuadran con los pagos: revise Movimientos.</p>' : ''}
+     <button class="fl-btn" data-fl-mes-xls ${busy ? 'disabled' : ''}>${busy ? 'Preparando Excel…' : '⬇️ Descargar Excel del mes'}</button>
+   </section>`;
+ }
+ 
+ function resumenHtml(L) {
+-  // R116 · Render "Control financiero": tarjetas reales, cifras dinámicas, pendientes APARTE (no son dinero).
+-  const d = L.data, t = d.totales || {}, c = d.cartera || {};
+-  const fila = (ic, txt, val, cls = '') => `<div class="fl-r2"><img src="${FL_ICON(ic)}" alt=""><span>${txt}</span><b class="${cls}">${val}</b></div>`;
++  const d = L.data, c = d.cartera || {};
+   const bancos = bancosOrdenados(d.bancos || []).filter((b) => b.movimientos || !b.sinSaldoInicial || Number(b.saldo));
+-  return `${mesHtml(L.mes, L.mesXlsBusy)}<section class="fl-card fl-c2">
+-    <div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_cierre')}" alt="">Ciclo abierto</b><span class="fl-pill">desde ${esc(d.ciclo?.inicio || '')} · día ${esc(d.ciclo?.dias ?? '')}</span></div>
+-    <div class="fl-io"><div class="fl-in"><img src="${FL_ICON('icon_ingresos')}" alt=""><span>Ingresos<b>${lps(t.ingresos)}</b></span></div><div class="fl-out"><img src="${FL_ICON('icon_egresos')}" alt=""><span>Egresos operativos<b>${lps(t.egresosOperativos)}</b></span></div></div>
+-    <div class="fl-rows2">${fila('icon_disponible', 'Disponible antes de planilla', lps(t.disponibleAntesPlanilla))}${fila('icon_planilla_comisiones', 'Planilla / comisiones', lps(t.planilla), 'fl-neg')}${fila('icon_resultado', 'Resultado después de planilla', lps(t.resultado))}</div>
+-    <div class="fl-rows2 fl-box">${fila('icon_ventas', 'Ventas generadas', lps(t.ventasGeneradas || 0))}${fila('icon_pendiente_clientes', 'Pendiente clientes', lps(c.pendienteClientes || 0), 'fl-neg')}${fila('icon_pendiente_vendedores', 'Pendiente vendedores', lps(c.pendienteVendedores || 0), 'fl-neg')}
+-      <div class="fl-r2 fl-warn2"><img src="${FL_ICON('icon_pendiente_total')}" alt=""><span>Pendiente total (NO es dinero disponible)</span><b>${lps(c.pendienteTotal || 0)}</b></div></div>
+-  </section>
++  const mes = L.mes ? mesHtml(L.mes, L.mesXlsBusy, c) : `<section class="fl-card"><p class="fl-muted">Cargando el mes actual…</p></section>`;
++  const fila = (ic, txt, val, cls = '') => `<div class="fl-r2"><img src="${FL_ICON(ic)}" alt=""><span>${txt}</span><b class="${cls}">${val}</b></div>`;
++  return `${mes}
++  <section class="fl-card fl-c2"><div class="fl-rows2 fl-box">${fila('icon_pendiente_clientes', 'Pendiente clientes', lps(c.pendienteClientes || 0), 'fl-neg')}${fila('icon_pendiente_vendedores', 'Pendiente vendedores', lps(c.pendienteVendedores || 0), 'fl-neg')}
++    <div class="fl-r2 fl-warn2"><img src="${FL_ICON('icon_pendiente_total')}" alt=""><span>Pendiente total (NO es dinero disponible)</span><b>${lps(c.pendienteTotal || 0)}</b></div></div></section>
+   <section class="fl-card fl-c2"><div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_bancos')}" alt="">Saldo real en bancos</b><b class="fl-big">${lps(d.totalBancos)}</b></div>
+     ${bancos.map((b) => `<button type="button" class="fl-bank2" data-fl-tab="bancos">${bancoLogo(b)}<span>${esc(b.nombre)}</span><b>${lps(b.saldo)}</b><i>›</i></button>`).join('') || '<p class="fl-muted">Sin movimientos en bancos todavía.</p>'}
+   </section>
++  <p class="fl-muted">Meses anteriores y el ciclo completo: pestañas Cierre y Reportes.</p>
+   <button class="fl-btn ghost" data-fl-reload>↻ Actualizar</button>`;
+ }
+ 
+@@ -195,7 +224,7 @@
+       const corr = canEdit && L.corr?.id === r.id ? `<span class="fl-inline col"><input class="fl-input" id="flCoM" type="number" inputmode="decimal" placeholder="Monto correcto" value="${esc(r.monto)}"><select class="fl-input" id="flCoB">${d.metodos.map((b) => `<option value="${esc(b.id)}" ${b.id === r.bancoId ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('')}</select><input class="fl-input" id="flCoMo" placeholder="Motivo (obligatorio)"><span class="fl-inline"><button class="fl-btn" id="flCoOk">Guardar corrección</button><button class="fl-btn ghost" data-fl-cox>Cancelar</button></span></span>` : '';
+       const fecha = canEdit && L.fechaCorr?.id === r.id ? `<span class="fl-inline col"><label class="fl-label">Fecha REAL del pago<input class="fl-input" id="flFeD" type="date" value="${esc(r.fecha || '')}" max="${esc(d.hoy)}"></label><input class="fl-input" id="flFeMo" placeholder="Motivo" value="Ajuste manual de fecha de pago"><small class="fl-muted">La fecha de renovación/corte del cliente es independiente. Aquí va el día en que el dinero realmente entró o salió.</small><span class="fl-inline"><button class="fl-btn" id="flFeOk">Guardar fecha</button><button class="fl-btn ghost" data-fl-fex>Cancelar</button></span></span>` : '';
+       const acts = canEdit && !corr && !fecha ? (grupo ? `<span class="fl-acts"><button class="fl-link" data-fl-fe="${esc(r.id)}" data-fl-fe-ids="${esc(r.ids.join(','))}">Fecha</button><small class="fl-muted">Pago único de ${r.n} servicios</small></span>` : `<span class="fl-acts"><button class="fl-link" data-fl-co="${esc(r.id)}">Corregir</button><button class="fl-link" data-fl-fe="${esc(r.id)}">Fecha</button><button class="fl-link danger" data-fl-an="${esc(r.id)}">Anular</button></span>`) : '';
+-      return `<div class="fl-mov ${r.kind} ${r.estadoFinanciero || r.reversaDe ? 'fl-off' : ''}"><span><b>${esc(r.detalle || r.cliente || r.beneficiario || kinds[r.kind] || r.tipo)}</b><small>${esc(r.fecha)} · ${esc(r.banco)} · ${esc(kinds[r.kind] || r.kind)}${r.cliente ? ` · ${esc(r.cliente)}` : ''}${r.usuario ? ` · ${esc(actorLabel(r.usuario, r.origen))}` : ''}${r.origen ? ` · ${esc(r.origen)}` : ''}${r.estadoFinanciero ? ` · <i class="fl-pill warn">${esc(r.estadoFinanciero)}</i>` : ''}${r.reversaDe ? ' · reversa' : ''}</small>${corr}${fecha}${acts}</span><b>${['egreso', 'planilla'].includes(r.kind) ? '−' : ''}${lps(r.monto)}</b></div>`;
++      return `<div class="fl-mov ${r.kind} ${r.estadoFinanciero || r.reversaDe ? 'fl-off' : ''} ${L.corr?.id === r.id || L.fechaCorr?.id === r.id ? 'fl-editando' : ''}" data-fl-row="${esc(r.id)}"><span><b>${esc(r.detalle || r.cliente || r.beneficiario || kinds[r.kind] || r.tipo)}</b><small>${esc(r.fecha)} · ${esc(r.banco)} · ${esc(kinds[r.kind] || r.kind)}${r.cliente ? ` · ${esc(r.cliente)}` : ''}${r.usuario ? ` · ${esc(actorLabel(r.usuario, r.origen))}` : ''}${r.origen ? ` · ${esc(r.origen)}` : ''}${r.estadoFinanciero ? ` · <i class="fl-pill warn">${esc(r.estadoFinanciero)}</i>` : ''}${r.reversaDe ? ' · reversa' : ''}</small>${corr}${fecha}${acts}</span><b>${['egreso', 'planilla'].includes(r.kind) ? '−' : ''}${lps(r.monto)}</b></div>`;
+     }).join('') + (m.total > m.rows.length ? `<p class="fl-muted">Mostrando ${m.rows.length} de ${m.total}.</p>` : '') : '<p class="fl-muted">Sin movimientos con esos filtros.</p>');
+   return `<section class="fl-card"><b>＋ Egreso operativo</b>
+     <div class="fl-inline col"><input class="fl-input" id="flEgMot" placeholder="Concepto (proveedor, publicidad…)"><div class="fl-inline"><input class="fl-input" id="flEgMonto" type="number" inputmode="decimal" placeholder="Monto (L)"><select class="fl-input" id="flEgBanco"><option value="">¿De qué banco salió?</option>${d.metodos.map((b) => `<option value="${esc(b.id)}">${esc(b.nombre)}</option>`).join('')}</select></div><label class="fl-label">Fecha del egreso<input class="fl-input" type="date" id="flEgFecha" value="${esc(d.hoy)}" max="${esc(d.hoy)}"></label><button class="fl-btn" id="flEgSave">Guardar egreso</button></div></section>
+@@ -209,17 +238,35 @@
+     <input class="fl-input" id="flMTexto" placeholder="Cliente, beneficiario, detalle…" value="${esc(f.texto)}"><button class="fl-btn" id="flMBuscar">Buscar</button></div>${list}</section>`;
+ }
+ 
++// R192 · Estado del ciclo y conciliación con el cierre REAL guardado (finanzas_ciclos). El «Cierre de caja» del bot de Telegram
++// es un reporte del día y nunca guardó un cierre: si el ciclo vigente empezó antes de este mes y no hay cierre al último día
++// del mes anterior, se avisa (no se cierra solo) y se ofrece cerrarlo con confirmación.
++export function conciliacionCiclo(d = {}) {
++  const hoy = String(d.hoy || ''), ini = String(d.ciclo?.inicio || ''); if (!hoy || !ini) return null;
++  const [y, m] = hoy.split('-').map(Number); const fin = new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10);
++  const cierres = Array.isArray(d.cierres) ? d.cierres : [];
++  const cerrado = cierres.find((c) => c.estado !== 'abierto' && c.fechaFin === fin);
++  return { fechaSugerida: ini <= fin ? fin : hoy, mesAnteriorAbierto: ini <= fin && !cerrado, ultimoDiaMesAnterior: fin, ultimo: cierres[0] || null };
++}
++const dmy = (ymd = '') => { const [a, b, c] = String(ymd).split('-'); return a && b && c ? `${c}/${b}/${a}` : ymd; };
+ function cierreHtml(L) {
+-  const d = L.data, t = d.totales;
+-  return `<section class="fl-card"><b>Cerrar ciclo</b><p class="fl-muted">Usted decide cuándo cerrar (día 8, 10, 15…). El cierre congela el periodo; los bancos conservan su saldo y empieza un ciclo nuevo.</p>
+-    <div class="fl-lines"><div><span>Inicio</span><b>${esc(d.ciclo.inicio)}</b></div><div><span>Ingresos</span><b>${lps(t.ingresos)}</b></div><div><span>Egresos operativos</span><b>${lps(t.egresosOperativos)}</b></div>
++  const d = L.data, t = d.totales, k = conciliacionCiclo(d) || {};
++  const origen = (c) => c?.origenCanal === 'tg' ? 'Telegram' : c?.origenCanal === 'web' ? 'Web' : c?.origenCanal ? 'APK' : '';
++  const finSel = L.cierreFin || d.hoy;
++  return `${k.mesAnteriorAbierto ? `<section class="fl-card fl-alerta" role="alert"><b>⚠️ No hay cierre registrado al ${esc(dmy(k.ultimoDiaMesAnterior))}</b>
++      <p class="fl-muted">El ciclo sigue abierto desde el ${esc(dmy(d.ciclo.inicio))}. En el sistema no existe ningún cierre de esa fecha: el «🧾 Cierre de caja» del bot de Telegram es un reporte del día y no cierra el ciclo. Nada se cerró solo y no se cambió ningún saldo.</p>
++      <button class="fl-btn" data-fl-cierre-sug="${esc(k.ultimoDiaMesAnterior)}">Revisar cierre al ${esc(dmy(k.ultimoDiaMesAnterior))}</button></section>` : ''}
++  <section class="fl-card fl-c2"><div class="fl-row"><b class="fl-h2"><img src="${FL_ICON('icon_cierre')}" alt="">Ciclo vigente</b><span class="fl-pill fl-pill-abierto">ABIERTO</span></div>
++    <p class="fl-muted">Desde ${esc(dmy(d.ciclo?.inicio || ''))} · día ${esc(d.ciclo?.dias ?? '')}${d.ciclo?.ultimoCierreFin ? ` · último cierre ${esc(dmy(d.ciclo.ultimoCierreFin))}` : ''}</p>
++    <div class="fl-lines"><div><span>Ingresos</span><b>${lps(t.ingresos)}</b></div><div><span>Egresos operativos</span><b>${lps(t.egresosOperativos)}</b></div>
+     <div class="fl-sub"><span>Disponible antes de planilla</span><b>${lps(t.disponibleAntesPlanilla)}</b></div><div><span>Planilla / comisiones</span><b>${lps(t.planilla)}</b></div>
+-    <div class="fl-total"><span>Resultado final</span><b>${lps(t.resultado)}</b></div><div><span>Saldo retenido en bancos</span><b>${lps(d.totalBancos)}</b></div></div>
++    <div class="fl-total"><span>Resultado final</span><b>${lps(t.resultado)}</b></div><div><span>Saldo retenido en bancos</span><b>${lps(d.totalBancos)}</b></div></div></section>
++  <section class="fl-card" id="flCierreForm"><b>Cerrar ciclo</b><p class="fl-muted">Usted decide cuándo cerrar (día 8, 10, 15…). El cierre congela el periodo; los bancos conservan su saldo y empieza un ciclo nuevo. Lo mismo se ve en Sublichat Web y en el bot de Telegram.</p>
+     <label class="fl-label">Cerrar desde (incluye este día)<input class="fl-input" type="date" id="flCierreIni" value="${esc(d.ciclo?.inicio || '')}" min="${esc(d.ciclo?.inicio || '')}" max="${esc(d.hoy)}"></label>
+-    <label class="fl-label">Cerrar hasta (incluye este día)<input class="fl-input" type="date" id="flCierreFin" value="${esc(d.hoy)}" max="${esc(d.hoy)}"></label>
++    <label class="fl-label">Cerrar hasta (incluye este día)<input class="fl-input" type="date" id="flCierreFin" value="${esc(finSel)}" min="${esc(d.ciclo?.inicio || '')}" max="${esc(d.hoy)}"></label>
+     <label class="fl-label">Nota (opcional)<input class="fl-input" id="flCierreNota" maxlength="300"></label>
+     <button class="fl-btn" id="flCierreOk" ${L.sending ? 'disabled' : ''}>Confirmar cierre</button></section>
+-  ${d.cierres.length ? `<section class="fl-card"><b>Cierres anteriores</b>${d.cierres.map((c) => `<div class="fl-bank"><span>${esc(c.fechaInicio)} → ${esc(c.fechaFin)}<small>Ingresos ${lps(c.ingresos)} · Gastos ${lps(c.egresosOperativos)} · Planilla ${lps(c.planilla)} · por ${esc(c.cerradoPor)}</small></span><b>${lps(c.resultado)}</b></div>`).join('')}</section>` : ''}`;
++  <section class="fl-card"><b>Cierres registrados</b>${d.cierres.length ? d.cierres.map((c) => `<div class="fl-bank fl-cierre-h"><span>${esc(dmy(c.fechaInicio))} → ${esc(dmy(c.fechaFin))} <i class="fl-pill fl-pill-cerrado">CERRADO</i><small>Ingresos ${lps(c.ingresos)} · Gastos ${lps(c.egresosOperativos)} · Planilla ${lps(c.planilla)} · por ${esc(c.cerradoPor)}${origen(c) ? ` · ${origen(c)}` : ''}</small></span><b>${lps(c.resultado)}</b></div>`).join('') : '<p class="fl-muted">Todavía no hay cierres guardados.</p>'}</section>`;
+ }
+ 
+ // ---------------------------------------------------------------- eventos
+@@ -248,23 +295,27 @@
+     if (await post({ accion: 'registrar_transferencia', origenId, destinoId, monto, nota: q('#flTrN')?.value || '', operationId: ctx.newOperationId() }, '✅ Transferencia registrada.')) loadLibro(ctx, { silent: true });
+   });
+   // Corregir / anular movimientos
+-  qa('[data-fl-co]').forEach((b) => b.addEventListener('click', () => { L.corr = { id: b.dataset.flCo, opId: ctx.newOperationId() }; ctx.render(); }));
+-  q('[data-fl-cox]')?.addEventListener('click', () => { L.corr = null; ctx.render(); });
++  const enfocar = (sel) => { try { root.ownerDocument.querySelector(sel)?.focus({ preventScroll: true }); } catch (_) {} };
++  qa('[data-fl-co]').forEach((b) => b.addEventListener('click', () => { const a = anclaMov(b.dataset.flCo); L.fechaCorr = null; L.corr = { id: b.dataset.flCo, opId: ctx.newOperationId() }; ctx.render(); restaurarAncla(a); enfocar('#flCoM'); }));
++  q('[data-fl-cox]')?.addEventListener('click', () => { const a = anclaMov(L.corr?.id); L.corr = null; ctx.render(); restaurarAncla(a); });
+   q('#flCoOk')?.addEventListener('click', async () => {
+     const motivo = String(q('#flCoMo')?.value || '').trim(); if (motivo.length < 4) return ctx.showToast('Escriba el motivo de la corrección.');
+-    if (await post({ accion: 'corregir_movimiento', movimientoId: L.corr.id, monto: Number(q('#flCoM')?.value || 0), bancoId: q('#flCoB')?.value || '', motivo, operationId: L.corr.opId }, '✅ Corregido. El original queda en el historial.')) { L.corr = null; await loadLibro(ctx, { silent: true }); loadMovs(ctx); }
++    const a = anclaMov(L.corr.id), cx = conAncla(ctx, a);
++    if (await post({ accion: 'corregir_movimiento', movimientoId: L.corr.id, monto: Number(q('#flCoM')?.value || 0), bancoId: q('#flCoB')?.value || '', motivo, operationId: L.corr.opId }, '✅ Corregido. El original queda en el historial.', a)) { L.corr = null; await loadLibro(cx, { silent: true }); await loadMovs(cx, { silent: true }); }
+   });
+-  qa('[data-fl-fe]').forEach((b) => b.addEventListener('click', () => { L.corr = null; L.fechaCorr = { id: b.dataset.flFe, ids: String(b.dataset.flFeIds || '').split(',').filter(Boolean) }; ctx.render(); }));
+-  q('[data-fl-fex]')?.addEventListener('click', () => { L.fechaCorr = null; ctx.render(); });
++  qa('[data-fl-fe]').forEach((b) => b.addEventListener('click', () => { const a = anclaMov(b.dataset.flFe); L.corr = null; L.fechaCorr = { id: b.dataset.flFe, ids: String(b.dataset.flFeIds || '').split(',').filter(Boolean) }; ctx.render(); restaurarAncla(a); enfocar('#flFeD'); }));
++  q('[data-fl-fex]')?.addEventListener('click', () => { const a = anclaMov(L.fechaCorr?.id); L.fechaCorr = null; ctx.render(); restaurarAncla(a); });
+   q('#flFeOk')?.addEventListener('click', async () => {
+     const fechaPago = String(q('#flFeD')?.value || '').trim(), motivo = String(q('#flFeMo')?.value || '').trim() || 'Ajuste manual de fecha de pago';
+     if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPago)) return ctx.showToast('Elija la fecha real del pago.');
+     if (fechaPago > String(L.data?.hoy || '')) return ctx.showToast('La fecha del pago no puede ser futura.');
+-    if (await post({ accion: 'ajustar_fecha_movimiento', movimientoId: L.fechaCorr.id, ...((L.fechaCorr.ids || []).length > 1 ? { movimientoIds: L.fechaCorr.ids } : {}), fechaPago, motivo }, '✅ Fecha financiera ajustada.')) { L.fechaCorr = null; await loadLibro(ctx, { silent: true }); loadMovs(ctx); }
++    const a = anclaMov(L.fechaCorr.id), cx = conAncla(ctx, a);
++    if (await post({ accion: 'ajustar_fecha_movimiento', movimientoId: L.fechaCorr.id, ...((L.fechaCorr.ids || []).length > 1 ? { movimientoIds: L.fechaCorr.ids } : {}), fechaPago, motivo }, '✅ Fecha financiera ajustada.', a)) { L.fechaCorr = null; await loadLibro(cx, { silent: true }); await loadMovs(cx, { silent: true }); }
+   });
+   qa('[data-fl-an]').forEach((b) => b.addEventListener('click', async () => {
+     const motivo = pedirMotivo('¿Anular este movimiento? Se crea una reversa y el original queda visible como ANULADO.'); if (motivo === null) return; if (!motivo) return ctx.showToast('El motivo es obligatorio.');
+-    if (await post({ accion: 'anular_movimiento', movimientoId: b.dataset.flAn, motivo, operationId: ctx.newOperationId() }, '✅ Anulado.')) { await loadLibro(ctx, { silent: true }); loadMovs(ctx); }
++    const a = anclaMov(b.dataset.flAn), cx = conAncla(ctx, a);
++    if (await post({ accion: 'anular_movimiento', movimientoId: b.dataset.flAn, motivo, operationId: ctx.newOperationId() }, '✅ Anulado.', a)) { await loadLibro(cx, { silent: true }); await loadMovs(cx, { silent: true }); }
+   }));
+   // Corregir / anular pagos de planilla
+   qa('[data-fl-pa]').forEach((b) => b.addEventListener('click', async () => {
+@@ -278,11 +329,12 @@
+     ctx.render();
+   }));
+   qa('[data-fl-reload]').forEach((b) => b.addEventListener('click', () => loadLibro(ctx)));
+-  const post = async (body, okMsg) => {
+-    if (L.sending) return null; L.sending = true; ctx.render();
++  const post = async (body, okMsg, ancla = null) => {
++    const pintar = () => { ctx.render(); if (ancla) restaurarAncla(ancla); };
++    if (L.sending) return null; L.sending = true; pintar();
+     try { const r = await ctx.authPost('/api/finanzas', { origen: 'apk', ...body }); if (!r?.ok) throw new Error(r?.error || 'No se pudo guardar.'); if (okMsg) ctx.showToast(okMsg); return r; }
+     catch (e) { ctx.showToast(e?.message || 'Error'); return null; }
+-    finally { L.sending = false; ctx.render(); }
++    finally { L.sending = false; pintar(); }
+   };
+   // Bancos
+   qa('[data-fl-ini-save]').forEach((b) => b.addEventListener('click', async () => {
+@@ -352,11 +404,12 @@
+     loadMovs(ctx);
+   });
+   // Cierre
++  qa('[data-fl-cierre-sug]').forEach((b) => b.addEventListener('click', () => { L.cierreFin = b.dataset.flCierreSug; ctx.render(); try { root.querySelector('#flCierreForm')?.scrollIntoView({ block: 'start' }); root.querySelector('#flCierreFin')?.focus({ preventScroll: true }); } catch (_) {} }));
+   q('#flCierreOk')?.addEventListener('click', async () => {
+     const fechaFin = q('#flCierreFin')?.value || L.data.hoy, nota = q('#flCierreNota')?.value || '';
+     const fechaInicio = q('#flCierreIni')?.value || L.data.ciclo?.inicio || ''; // R119: desde qué día
+-    if (!window.confirm(`¿Cerrar el ciclo ${L.data.ciclo.inicio} → ${fechaFin}?\nResultado: ${lps(L.data.totales.resultado)}\nLos bancos conservan su saldo.`)) return;
+-    if (await post({ accion: 'guardar_cierre_ciclo', fechaInicio, fechaFin, nota, operationId: ctx.newOperationId() }, '✅ Ciclo cerrado. Empieza uno nuevo.')) loadLibro(ctx, { silent: true });
++    if (!window.confirm(`¿Cerrar el ciclo ${dmy(fechaInicio)} → ${dmy(fechaFin)}?\nLos totales se calculan con los movimientos hasta ${dmy(fechaFin)}.\nLos bancos conservan su saldo y el ciclo nuevo empieza el día siguiente.`)) return;
++    if (await post({ accion: 'guardar_cierre_ciclo', fechaInicio, fechaFin, nota, operationId: ctx.newOperationId() }, '✅ Ciclo cerrado. Empieza uno nuevo.')) { L.cierreFin = ''; loadLibro(ctx, { silent: true }); }
+   });
+ }
+ 
+diff -ruN r189src/sublicuentas-android-bootstrap/src/app/sala-juntas.js r192src/sublicuentas-android-bootstrap/src/app/sala-juntas.js
+--- r189src/sublicuentas-android-bootstrap/src/app/sala-juntas.js	2026-11-07 14:43:24.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/src/app/sala-juntas.js	2026-11-07 16:07:16.000000000 -0600
+@@ -12,6 +12,13 @@
+ export function canSala() { return ['sublicuentas', 'relojes', 'geisell'].includes(operatorIdentity(state.session?.role || '', state.session?.usuario || '')); }
+ export function sjState() { if (!state.sj) state.sj = { data: null, actas: null, abierta: '', confirmarEntrada: '', cargando: false, error: '', guardando: '' }; return state.sj; }
+ export function urlSala(id) { return /^[A-Za-z0-9_-]{6,60}$/.test(String(id || '')) ? `${API_BASE}/?sala=${encodeURIComponent(id)}` : ''; }
++// R192 · «Mi avatar» y «Escenarios» abren esas vistas de la MISMA sala web sin entrar a ninguna reunión.
++export function urlVistaSala(v) { return ['personaje', 'escenarios'].includes(v) ? `${API_BASE}/?sala=${v}` : ''; }
++const COLOR = { naara: '#E2231A', libni: '#2879C7', geisell: '#159B62' };
++function avatarHtml(id, nombre, av) {
++  const mini = av && /^data:image\/(webp|jpeg|png);base64,/.test(av.miniatura || '') ? av.miniatura : '';
++  return `<span class="sj-m-av" style="--c:${COLOR[id] || '#475569'}">${mini ? `<img src="${mini}" alt="">` : esc(String(nombre || id || '?').charAt(0).toUpperCase())}</span>`;
++}
+ 
+ async function sala(accion, extra = {}) {
+   let r;
+@@ -34,8 +41,13 @@
+   const nombres = Object.fromEntries((d.fundadoras || []).map((f) => [f.id, f.nombre]));
+   const acta = (s.actas || []).find((a) => a.reunionId === r.id);
+   const puedeEntrar = ['programada', 'en_curso'].includes(r.estado);
++  const sol = s.solicitudes?.[r.id];
++  const esperando = r.estado === 'en_curso' && !d.permisos?.moderar && sol && sol.estado === 'pendiente';
+   const detalle = abierta ? `
+     <div class="sj-m-det">
++      <figure class="sj-m-esc"><img src="/assets/sala/sala-escenario-c.webp" alt="Sala SubliStudio 3D"><figcaption>Sala 3D real · escenario ${esc(r.escenario || 'sala-c')}${r.anfitrion ? ` · anfitriona ${esc(nombres[r.anfitrion] || r.anfitrion)}` : ''}</figcaption></figure>
++      <div class="sj-m-parts">${(r.participantes || []).map((u) => `<span class="sj-m-part">${avatarHtml(u, nombres[u], d.avatares?.[u])}<small>${esc(nombres[u] || u)}</small></span>`).join('')}</div>
++      ${esperando ? '<p class="sj-m-espera" role="status">⏳ Esperando autorización de la anfitriona para entrar.</p>' : ''}
+       ${(r.agenda || []).length ? `<small><b>Agenda:</b> ${r.agenda.map((x) => esc(typeof x === 'string' ? x : x?.titulo || '')).join(' · ')}</small>` : ''}
+       <b>Participantes e invitaciones</b>
+       ${(r.participantes || []).map((u) => `<small>${esc(nombres[u] || u)} · ${esc(INV[r.invitaciones?.[u]?.estado] || 'Pendiente')}</small>`).join('')}
+@@ -44,7 +56,7 @@
+       ${puedeEntrar && r.estado === 'programada' ? `<div class="baul-acc"><button type="button" class="se-btn ${miInv === 'aceptada' ? '' : 'ghost'}" data-sj-rsvp="aceptada" data-id="${esc(r.id)}">Asistiré</button><button type="button" class="se-btn ${miInv === 'rechazada' ? '' : 'ghost'}" data-sj-rsvp="rechazada" data-id="${esc(r.id)}">No asistiré</button></div>` : ''}
+       ${puedeEntrar ? (s.confirmarEntrada === r.id
+         ? `<div class="sj-m-aviso"><b>Antes de entrar</b><small>La sala 3D se abre en Chrome, con su sesión normal de Sublichat. El micrófono y la cámara solo se encienden cuando usted lo permite en la sala; la grabación siempre pide confirmación.</small><div class="baul-acc"><button type="button" class="se-btn" data-sj-abrir="${esc(r.id)}">Entrar a la sala 3D</button><button type="button" class="se-btn ghost" data-sj-cancelar>Cancelar</button></div></div>`
+-        : `<button type="button" class="se-btn" data-sj-entrar="${esc(r.id)}">🎙️ Entrar a la sala</button>`) : ''}
++        : `<button type="button" class="se-btn sj-m-entrar" data-sj-entrar="${esc(r.id)}">Entrar a Sala 3D</button>`) : ''}
+     </div>` : '';
+   return `<article class="se-card sj-m-reu"><button type="button" class="sj-m-cab" data-sj-ver="${esc(r.id)}"><b>${esc(r.titulo || 'Reunión')}</b><small>${esc(fechaTxt(r))} · ${r.duracionMin || 60} min</small><span class="sj-m-est e-${esc(r.estado)}">${esc(ESTADOS[r.estado] || r.estado)}</span></button>${detalle}</article>`;
+ }
+@@ -63,7 +75,9 @@
+     const pasadas = lista.filter((r) => !['programada', 'en_curso'].includes(r.estado)).slice(0, 15);
+     cuerpo = `${s.error ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}
+       <p class="baul-aviso">${esc(d.yo?.nombre || '')}${d.permisos?.crear ? ' · Anfitriona: convoca, edita y aprueba ingresos desde la sala web.' : ''}${d.tiempoReal ? '' : ' · El audio en tiempo real todavía no está configurado.'}</p>
+-      <b class="sj-m-tit">Próximas</b>${proximas.length ? proximas.map((r) => reunionHtml(r, d, s)).join('') : '<div class="empty-state"><strong>Sin reuniones próximas</strong></div>'}
++      <b class="sj-m-tit">Próximas y en curso</b>${proximas.length ? proximas.map((r) => reunionHtml(r, d, s)).join('') : '<div class="empty-state"><strong>Sin reuniones próximas</strong><small>Cuando Naara convoque, aparecerá aquí con su invitación.</small></div>'}
++      <article class="se-card sj-m-mi"><div class="sj-m-mi-cab">${avatarHtml(d.yo?.id, d.yo?.nombre, d.avatares?.[d.yo?.id])}<span><b>Mi avatar y escenarios</b><small>El mismo personaje y las mismas salas de Sublichat Web, sin entrar a ninguna reunión.</small></span></div>
++        <div class="baul-acc"><button type="button" class="se-btn ghost" data-sj-vista="personaje">Mi avatar</button><button type="button" class="se-btn ghost" data-sj-vista="escenarios">Ver salas</button></div></article>
+       ${pasadas.length ? `<b class="sj-m-tit">Concluidas y canceladas</b>${pasadas.map((r) => reunionHtml(r, d, s)).join('')}` : ''}`;
+   }
+   return ui.subPage('Sala de Juntas', 'SubliStudio 3D · la misma sala de Sublichat Web', `<section class="se-wrap">${cuerpo}<button type="button" class="se-btn ghost" data-sj-recargar>Actualizar</button></section>`);
+@@ -72,7 +86,12 @@
+ export function bindSala() {
+   if (state.subview !== 'sala-juntas') return;
+   const s = sjState(), qa = (x) => document.querySelectorAll(x);
+-  qa('[data-sj-ver]').forEach((b) => b.addEventListener('click', () => { s.abierta = s.abierta === b.dataset.sjVer ? '' : b.dataset.sjVer; s.confirmarEntrada = ''; ui.render(); }));
++  qa('[data-sj-ver]').forEach((b) => b.addEventListener('click', () => {
++    s.abierta = s.abierta === b.dataset.sjVer ? '' : b.dataset.sjVer; s.confirmarEntrada = ''; ui.render();
++    const r = (s.data?.reuniones || []).find((x) => x.id === s.abierta);
++    if (r && r.estado === 'en_curso' && !s.data?.permisos?.moderar) sala('solicitud_estado', { id: r.id }).then((j) => { s.solicitudes = { ...(s.solicitudes || {}), [r.id]: j.solicitud }; if (state.subview === 'sala-juntas') ui.render(); }).catch(() => {});
++  }));
++  qa('[data-sj-vista]').forEach((b) => b.addEventListener('click', () => { const u = urlVistaSala(b.dataset.sjVista); if (u) ui.openLink(u); }));
+   qa('[data-sj-recargar]').forEach((b) => b.addEventListener('click', sjCargar));
+   qa('[data-sj-entrar]').forEach((b) => b.addEventListener('click', () => { s.confirmarEntrada = b.dataset.sjEntrar; ui.render(); }));
+   qa('[data-sj-cancelar]').forEach((b) => b.addEventListener('click', () => { s.confirmarEntrada = ''; ui.render(); }));
+diff -ruN r189src/sublicuentas-android-bootstrap/src/screens.js r192src/sublicuentas-android-bootstrap/src/screens.js
+--- r189src/sublicuentas-android-bootstrap/src/screens.js	2026-11-07 14:43:42.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/src/screens.js	2026-11-07 16:03:59.000000000 -0600
+@@ -38,14 +38,14 @@
+   sorteos: { title: 'Sorteos', sub: 'Promociones y dinámicas', img: 'mas-sorteos', tint: 'blue' },
+   aula: { title: 'Aula de clases', sub: 'Capacitaciones', img: 'mas-aula', tint: 'pink' },
+   materia: { title: 'Materia cerebral', sub: 'Ideas y recursos', img: 'mas-materia', tint: 'white' },
+-  'baul-apks': { title: 'Baúl de APKs', sub: 'Apps y URLs de TV Digital', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="16" width="36" height="24" rx="5" fill="#0a1f3a"/><path d="M6 24h36" stroke="#fff" stroke-width="3"/><rect x="19" y="10" width="10" height="8" rx="2" fill="none" stroke="#E2231A" stroke-width="3"/><rect x="21" y="21" width="6" height="7" rx="1.5" fill="#E2231A"/></svg>', tint: 'white' }, // R187 · PDF 5 puntos (solo se agrega; no cambia las demás)
+-  'sala-juntas': { title: 'Sala de Juntas', sub: 'Reuniones SubliStudio 3D', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="12" width="36" height="22" rx="5" fill="#0a1f3a"/><circle cx="17" cy="23" r="4" fill="#fff"/><circle cx="31" cy="23" r="4" fill="#E2231A"/><path d="M14 40h20" stroke="#0a1f3a" stroke-width="3" stroke-linecap="round"/><path d="M24 34v6" stroke="#0a1f3a" stroke-width="3"/></svg>', tint: 'white' }, // R189 · PDF 5 puntos, bloque 05
++  'baul-apks': { title: 'Baúl de APKs', sub: 'Apps y URLs de TV Digital', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="16" width="36" height="24" rx="5" fill="#0a1f3a"/><path d="M6 24h36" stroke="#fff" stroke-width="3"/><rect x="19" y="10" width="10" height="8" rx="2" fill="none" stroke="#E2231A" stroke-width="3"/><rect x="21" y="21" width="6" height="7" rx="1.5" fill="#E2231A"/></svg>', tint: 'blue' }, // R187 · PDF 5 puntos (solo se agrega; no cambia las demás)
++  'sala-juntas': { title: 'Sala de Juntas', sub: 'Reuniones SubliStudio 3D', svg: '<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="12" width="36" height="22" rx="5" fill="#0a1f3a"/><circle cx="17" cy="23" r="4" fill="#fff"/><circle cx="31" cy="23" r="4" fill="#E2231A"/><path d="M14 40h20" stroke="#0a1f3a" stroke-width="3" stroke-linecap="round"/><path d="M24 34v6" stroke="#0a1f3a" stroke-width="3"/></svg>', tint: 'pink' }, // R189 · PDF 5 puntos, bloque 05
+ });
+ 
+ export function masHomeHtml({ modules = [], sessionLabel = 'Sublicuentas', online = true, syncText = 'En línea', version = '1.0' } = {}) {
+   const cards = modules.filter(id => MAS_MODULES[id]).map((id, i) => {
+     const m = MAS_MODULES[id];
+-    return `<button type="button" class="mas-card tint-${m.tint}" data-open="${esc(id)}"><span class="mas-ico">${m.svg ? m.svg : `<img src="/assets/mas/${m.img}.png" alt="" loading="lazy">`}</span><span class="mas-txt"><strong>${esc(m.title)}</strong><small>${esc(m.sub)}</small></span><span class="mas-go">${SVG.chevron}</span></button>`;
++    return `<button type="button" class="mas-card tint-${m.tint}" data-open="${esc(id)}"><span class="mas-ico${m.svg ? ' mas-ico-svg' : ''}">${m.svg ? m.svg : `<img src="/assets/mas/${m.img}.png" alt="" loading="lazy">`}</span><span class="mas-txt"><strong>${esc(m.title)}</strong><small>${esc(m.sub)}</small></span><span class="mas-go">${SVG.chevron}</span></button>`;
+   }).join('');
+   return `<header class="mas-hero">
+     <div class="mas-brand"><img src="/assets/sublicuentas-logo-oficial.png" alt="Sublicuentas"><small>Conectamos emociones, creamos experiencias</small></div>
+diff -ruN r189src/sublicuentas-android-bootstrap/src/styles.css r192src/sublicuentas-android-bootstrap/src/styles.css
+--- r189src/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 14:43:42.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 16:07:16.000000000 -0600
+@@ -2376,3 +2376,60 @@
+ .sj-m-est.e-en_curso{border-color:#15803d;color:#15803d}.sj-m-est.e-programada{border-color:#2879C7;color:#2879C7}.sj-m-est.e-cancelada{color:#b91c1c;border-color:#b91c1c}
+ .sj-m-det{display:grid;gap:6px;margin-top:6px}.sj-m-det small{color:var(--muted);overflow-wrap:anywhere}
+ .sj-m-aviso{display:grid;gap:6px;border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
++/* R192 · Finanzas: Resumen del mes legible (nombre a la izquierda en hasta 2 líneas, importe a la derecha, sin montarse) */
++.fl-plats{list-style:none;margin:6px 0 10px;padding:0;display:grid;gap:0;border:1px solid var(--line,#e3e8ef);border-radius:14px;background:#fff;overflow:hidden}
++.fl-plat{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 12px;border-top:1px solid var(--line,#eef1f5);min-height:44px}
++.fl-plat:first-child{border-top:0}
++.fl-plat>span{min-width:0;font-size:14px;line-height:1.3;color:var(--text,#0a1f3a);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
++.fl-plat>span small{display:block;font-size:11.5px;color:var(--muted,#64748b);font-weight:500}
++.fl-plat>b{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;font-size:14.5px}
++.fl-plat-total>span,.fl-plat-total>b{font-weight:800}
++.fl-plats-res{margin-top:10px}
++.fl-sub-t{display:block;margin:4px 0 0;font-size:14px}
++.fl-rango{margin:-2px 0 8px}
++.fl-alerta{border:1px solid #f3c7c5;background:#fff;box-shadow:0 3px 0 #f3e1e0}
++.fl-alerta>b{color:#b91c1c}
++.fl-pill-abierto{background:#fff4dc!important;color:#8a5a00!important;border-color:#f1d79b!important}
++.fl-pill-cerrado{font-style:normal;margin-left:6px;background:#e8f7ee!important;color:#15803d!important;border:1px solid #bfe5cc;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:800}
++.fl-mov.fl-editando{outline:2px solid var(--red,#e2231a);outline-offset:2px;border-radius:12px}
++/* R192 · Más: las tarjetas con ícono dibujado (Pedidos de socios, Baúl de APKs, Sala de Juntas) con el MISMO relieve 3D suave */
++.mas-ico.mas-ico-svg{background:linear-gradient(180deg,#fff 0%,#f3f6fa 100%);box-shadow:0 4px 0 #dfe6ee,0 8px 14px rgba(20,40,70,.12),inset 0 1px 0 #fff}
++.mas-ico.mas-ico-svg>svg{width:42px;height:42px;filter:drop-shadow(0 3px 2px rgba(10,31,58,.28)) drop-shadow(0 1px 0 rgba(255,255,255,.6))}
++.mas-card{transition:transform .14s ease,box-shadow .14s ease}
++.mas-card:active{transform:scale(.98);box-shadow:0 6px 14px rgba(35,88,120,.08)}
++@media (prefers-reduced-motion:reduce){.mas-card{transition:none}}
++/* R192 · Baúl de APKs en 3 niveles (logos → dispositivos → apps), fondo blanco y relieve 3D suave */
++.baul-paso{margin:0;color:var(--muted,#64748b);font-size:13px;font-weight:700}
++.baul-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
++.baul-plat{display:grid;justify-items:center;gap:6px;padding:16px 10px;min-height:128px;border:1px solid #e4edf5;border-radius:20px;background:#fff;box-shadow:0 4px 0 #e6ecf2,0 10px 18px rgba(20,40,70,.08);font:inherit;color:#0a1f3a;transition:transform .14s ease}
++.baul-plat:active,.baul-disp:active{transform:scale(.98)}
++.baul-plat b{font-size:15px}.baul-plat small{color:var(--muted,#64748b);font-size:12px}
++.baul-logo{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:#f4f7fb;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(20,60,100,.06)}
++.baul-logo img{width:100%;height:100%;object-fit:cover}
++.baul-ini{font:800 28px/1 inherit;color:#e2231a}
++.baul-disps{display:grid;gap:10px}
++.baul-disp{display:grid;grid-template-columns:40px minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;column-gap:10px;padding:12px 14px;min-height:64px;border:1px solid #e4edf5;border-radius:18px;background:#fff;box-shadow:0 3px 0 #e6ecf2,0 8px 14px rgba(20,40,70,.07);text-align:left;font:inherit;color:#0a1f3a}
++.baul-disp>span{grid-row:1/3;font-size:24px;text-align:center}.baul-disp>b{font-size:15px}.baul-disp>small{grid-column:2;color:var(--muted,#64748b)}.baul-disp>i{grid-row:1/3;grid-column:3;font-style:normal;font-size:22px;color:#94a3b8}
++.baul-app{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:16px}
++.baul-op{display:inline-block;padding:2px 10px;border-radius:999px;background:#fdecec;color:#b91c1c;font-size:12px;font-weight:800}
++.baul-ios{color:#b91c1c;font-weight:700}
++.baul-costo{margin:0;padding:10px 12px;border-radius:12px;background:#fff8e6;border:1px solid #f4dfa6;font-size:13px;color:#6b4e00}
++.baul-msg{border:1px solid var(--line,#e3e8ef);border-radius:14px;padding:10px 12px;background:#fff}
++.baul-msg>b{display:block;font-size:13.5px;margin-bottom:6px}
++.baul-msg pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:500 13px/1.45 inherit;color:#334155}
++.baul-acc-pri{display:grid;grid-template-columns:1fr;gap:8px}
++.baul-acc-pri .se-btn{min-height:46px;font-weight:800}
++.baul-enviar{background:#1a8a5a!important;border-color:#1a8a5a!important;color:#fff!important}
++.baul-volver{align-self:flex-start;min-height:44px}
++/* R192 · Sala de Juntas: detalle con la sala 3D real, participantes con avatar, Mi avatar y escenarios */
++.sj-m-esc{margin:0;border-radius:16px;overflow:hidden;border:1px solid var(--line,#e3e8ef);background:#fff}
++.sj-m-esc img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}
++.sj-m-esc figcaption{padding:6px 10px;font-size:12px;color:var(--muted,#64748b)}
++.sj-m-parts{display:flex;flex-wrap:wrap;gap:12px}
++.sj-m-part{display:grid;justify-items:center;gap:4px;min-width:56px}
++.sj-m-av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:#fff;border:2px solid var(--c,#475569);color:var(--c,#475569);font-weight:800;box-shadow:0 3px 0 #e6ecf2}
++.sj-m-av img{width:100%;height:100%;object-fit:cover}
++.sj-m-espera{margin:0;padding:8px 10px;border-radius:12px;background:#fff8e6;border:1px solid #f4dfa6;font-weight:700;color:#6b4e00}
++.sj-m-entrar{min-height:48px;font-weight:800}
++.sj-m-mi-cab{display:flex;gap:12px;align-items:center}
++.sj-m-mi-cab span{display:grid;gap:2px}.sj-m-mi-cab small{color:var(--muted,#64748b)}
+diff -ruN r189src/sublicuentas-android-bootstrap/tests/helpers/stubs/intent.js r192src/sublicuentas-android-bootstrap/tests/helpers/stubs/intent.js
+--- r189src/sublicuentas-android-bootstrap/tests/helpers/stubs/intent.js	2026-10-23 16:28:38.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/tests/helpers/stubs/intent.js	2026-11-07 16:18:30.000000000 -0600
+@@ -1,2 +1,2 @@
+-export const IntentLauncher={startActivityAsync:async()=>({}),openApplication:async()=>({})};
++export const IntentLauncher={startActivityAsync:async(o)=>{ (globalThis.__intents ||= []).push(o); return {}; },openApplication:async()=>({})};
+ export const ActivityAction={VIEW:'android.intent.action.VIEW',SEND:'android.intent.action.SEND'};
+diff -ruN r189src/sublicuentas-android-bootstrap/tests/r104-finanzas-libro.test.mjs r192src/sublicuentas-android-bootstrap/tests/r104-finanzas-libro.test.mjs
+--- r189src/sublicuentas-android-bootstrap/tests/r104-finanzas-libro.test.mjs	2026-10-23 18:18:34.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/tests/r104-finanzas-libro.test.mjs	2026-11-07 16:16:42.000000000 -0600
+@@ -30,7 +30,10 @@
+ test('Control financiero: pestañas Resumen/Bancos/Planilla/Movimientos/Cierre/Reportes y la vista anterior en Reportes', () => {
+   const html = libroViewHtml(stateWith('resumen'), '<div id="old">viejo</div>');
+   for (const t of ['Resumen', 'Bancos', 'Planilla', 'Movimientos', 'Cierre', 'Reportes']) assert.match(html, new RegExp(`>${t}<`));
+-  assert.match(html, /Disponible antes de planilla/); assert.match(html, /Resultado después de planilla/);
++  // R192: el ciclo (disponible antes/después de planilla) vive en Cierre; Resumen = solo el mes actual.
++  const cierre = libroViewHtml(stateWith('cierre'));
++  assert.match(cierre, /Disponible antes de planilla/); assert.match(cierre, /Resultado después de planilla|Resultado/);
++  assert.doesNotMatch(html, /Disponible antes de planilla/);
+   assert.match(libroViewHtml(stateWith('reportes'), '<div id="old">viejo</div>'), /id="old"/);
+ });
+ 
+@@ -94,5 +97,6 @@
+   assert.deepEqual(orden, ['Banco Atlántida', 'BAC Credomatic', 'Ficohsa', 'Tigo Money', 'Davivienda']);
+   const st = stateWith('resumen'); st.libro.data.cartera = { pendienteClientes: 120, pendienteVendedores: 0, pendienteTotal: 120 };
+   const html = libroViewHtml(st);
+-  assert.match(html, /Pendiente total \(NO es dinero disponible\)/); assert.match(html, /Saldo real en bancos/); assert.match(html, /Ciclo abierto/);
++  assert.match(html, /Pendiente total \(NO es dinero disponible\)/); assert.match(html, /Saldo real en bancos/); assert.doesNotMatch(html, /Ciclo abierto/); // R192: el ciclo pasó a Cierre
++  assert.match(libroViewHtml(stateWith('cierre')), /Ciclo vigente[\s\S]*ABIERTO/);
+ });
+diff -ruN r189src/sublicuentas-android-bootstrap/tests/r106-centro-financiero.test.mjs r192src/sublicuentas-android-bootstrap/tests/r106-centro-financiero.test.mjs
+--- r189src/sublicuentas-android-bootstrap/tests/r106-centro-financiero.test.mjs	2026-10-23 16:28:38.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/tests/r106-centro-financiero.test.mjs	2026-11-07 16:16:42.000000000 -0600
+@@ -9,7 +9,7 @@
+ const st = (tab, extra = {}) => ({ libro: { tab, data: { hoy: '2026-10-04', metodos: methods, ciclo: { inicio: '2026-10-01', dias: 4 }, totales: { ingresos: 100, egresosOperativos: 0, disponibleAntesPlanilla: 100, planilla: 0, resultado: 100, ventasGeneradas: 1020 }, bancos, totalBancos: 5000, planillaPagos: [], cierres: [], cartera: { pendienteClientes: 420, pendienteVendedores: 500, pendienteTotal: 920 } }, movFiltro: {}, ...extra } });
+ 
+ test('Resumen muestra ventas generadas y cartera separada del dinero real', () => {
+-  const h = libroViewHtml(st('resumen'));
++  const h = libroViewHtml(st('resumen', { mes: { periodo: '2026-10', ingresos: 100, egresos: 0, ventasGeneradas: 1020, porPlataforma: [] } })); // R192: del mes actual
+   assert.match(h, /Ventas generadas/); assert.match(h, /Pendiente clientes/); assert.match(h, /Pendiente vendedores/); assert.match(h, /NO es dinero disponible/);
+ });
+ 
+diff -ruN r189src/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs r192src/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs
+--- r189src/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs	2026-11-07 12:59:16.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/tests/r187-baul-icomplay.test.mjs	2026-11-07 16:17:12.000000000 -0600
+@@ -30,7 +30,8 @@
+ 
+ test('enlace: «Abrir» solo https; el código por confirmar solo para el editor; sin URL inventada en tienda del TV', () => {
+   const src = fs.readFileSync(new URL('../src/app/baul-apks.js', import.meta.url), 'utf8');
+-  assert.match(src, /const http = \/\^https:\\\/\\\/\/i\.test/);
++  assert.match(src, /const https = \/\^https:\\\/\\\/\/i\.test/); // R192
++  assert.match(src, /\$\{https \? `<button type="button" class="se-btn ghost" data-baul-abrir=/);
+   assert.match(src, /editor && e\.codigoPendiente \?/);
+   assert.match(src, /e\.metodo === 'tv_store' \? '<small>Buscar en la tienda del TV \(sin enlace\)\.<\/small>'/);
+   assert.doesNotMatch(src, /aftv\.news|dldsrvs|bit\.ly/, 'la APK no trae una lista fija: la sirve el servidor');
+@@ -56,6 +57,10 @@
+   try {
+     await app.click('[data-tab="mas"]', 300);
+     await app.click('[data-open="baul-apks"]', 400);
++    // R192: tres niveles → plataforma › dispositivo › app
++    await app.waitFor(() => app.$('[data-baul-plat="oleada"]'));
++    await app.click('[data-baul-plat="oleada"]', 150);
++    await app.click('[data-baul-disp="fire_tv"]', 150);
+     await app.waitFor(() => /1290332/.test(app.$('.se-wrap')?.textContent || ''));
+     assert.match(app.$('.se-wrap').textContent, /mgs_pro\.apk/);
+     assert.ok(app.$('[data-baul-abrir="https://dldsrvs.com/apks/firestick/mgs_pro.apk"]') && app.$('[data-baul-copiar="1290332"]'));
+@@ -66,6 +71,8 @@
+     assert.equal(g.enlace.id, 'oleada-fire'); assert.equal(g.enlace.nota, 'Probado en Fire TV Stick'); assert.equal(g.enlace.codigo, '1290332');
+     await app.click('[data-baul-activar="oleada-fire"]', 300);
+     assert.deepEqual((({ id, activo }) => ({ id, activo }))(app.bodies.find((b) => b?.accion === 'baulActivarEnlace')), { id: 'oleada-fire', activo: false });
++    await app.waitFor(() => app.$('[data-baul-atras]'));
++    await app.click('[data-baul-atras]', 150); await app.click('[data-baul-atras="plat"]', 150); // R192: URLs en el nivel 1
+     await app.click('[data-baul-tab="urls"]', 150);
+     assert.match(app.$('.se-wrap').textContent, /latinostream\.xyz/);
+     assert.match(app.$('.se-wrap').textContent, /clientes que ya la tienen no se tocan/);
+diff -ruN r189src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs r192src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs
+--- r189src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs	1969-12-31 18:00:00.000000000 -0600
++++ r192src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs	2026-11-07 16:18:46.000000000 -0600
+@@ -0,0 +1,123 @@
++// R192 · PDF «Sublichat APK correcciones»: Sala 3D, Baúl en 3 niveles con mensaje/compartir, Resumen del mes,
++// conciliación del ciclo, edición sin saltos y tarjetas de Más. Datos ficticios.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { bootApp } from './helpers/ui-harness.mjs';
++import { libroViewHtml, mesHtml, conciliacionCiclo } from '../src/app/finanzas-libro.js';
++import { MAS_MODULES } from '../src/screens.js';
++import { roleModules } from '../src/data.js';
++
++const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
++
++test('P1 Sala: «Entrar a Sala 3D», espera de autorización, Mi avatar / Ver salas por la misma web; sin secretos LiveKit', async () => {
++  const AHORA = Date.now();
++  const PANEL = { ok: true, yo: { id: 'libni', nombre: 'Libni' }, permisos: { crear: false, moderar: false }, tiempoReal: true,
++    fundadoras: [{ id: 'naara', nombre: 'Naara' }, { id: 'libni', nombre: 'Libni' }],
++    avatares: { naara: { miniatura: 'data:image/webp;base64,AAAA' } },
++    reuniones: [{ id: 'reuEnCurso01', titulo: 'Junta en curso', inicioMs: AHORA - 6e5, fecha: '07/11/2026', hora: '10:00 a. m.', estado: 'en_curso', anfitrion: 'naara', participantes: ['naara', 'libni'], invitaciones: {} }] };
++  const abiertos = [];
++  const app = await bootApp({ role: 'sublicuentas', fetchExtra: async (path, body) => {
++    if (path !== '/api/sala-juntas') return undefined;
++    if (body.accion === 'panel') return PANEL;
++    if (body.accion === 'actas') return { ok: true, actas: [] };
++    if (body.accion === 'solicitud_estado') return { ok: true, solicitud: { estado: 'pendiente' } };
++    return { ok: true };
++  } });
++  try {
++    app.w.open = (u) => abiertos.push(u);
++    await app.click('[data-tab="mas"]', 300);
++    await app.click('[data-open="sala-juntas"]', 400);
++    await app.waitFor(() => /Junta en curso/.test(app.$('.se-wrap')?.textContent || ''));
++    assert.match(app.$('.se-wrap').textContent, /Mi avatar y escenarios/);
++    await app.click('[data-sj-ver="reuEnCurso01"]', 300);
++    await app.waitFor(() => app.$('.sj-m-espera'));
++    assert.match(app.$('.sj-m-espera').textContent, /Esperando autorización/);
++    assert.ok(app.$('.sj-m-esc img[src="/assets/sala/sala-escenario-c.webp"]'));
++    assert.ok(app.$('.sj-m-av img'), 'avatar real de Naara');
++    assert.match(app.$('[data-sj-entrar="reuEnCurso01"]').textContent, /Entrar a Sala 3D/);
++    await app.click('[data-sj-vista="personaje"]', 150);
++    await app.click('[data-sj-vista="escenarios"]', 150);
++    const urls = [...abiertos, ...(app.w.__intents || globalThis.__intents || []).map((o) => o.data)];
++    assert.ok(urls.some((u) => /^https:.*\/\?sala=personaje$/.test(u)) && urls.some((u) => /^https:.*\/\?sala=escenarios$/.test(u)), urls.join(' '));
++  } finally { app.close(); }
++  const s = src('app/sala-juntas.js').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
++  assert.doesNotMatch(s, /LIVEKIT|apiSecret|token_tiempo_real/i);
++  assert.ok(fs.existsSync(new URL('../public/assets/sala/sala-escenario-c.webp', import.meta.url)));
++});
++
++const BAUL = { ok: true, editor: false, version: 4, aviso: 'Para APK externas…',
++  plataformas: [{ id: 'oleada', nombre: 'Oleada TV' }, { id: 'liontv', nombre: 'Lion TV' }],
++  vistas: [
++    { plataforma: 'oleada', dispositivos: [{ id: 'android_tv', nombre: 'Android TV / TV Box', enlaces: [{ id: 'oleada-atv', app: 'Oleada', dispositivo: 'android_tv', metodo: 'apk', metodoTxt: 'Con Downloader', url: 'https://ejemplo.invalid/o.apk', codigo: '9387291', activo: true, mensaje: 'SUBLICUENTAS | Instalación de Oleada TV\nCódigo Downloader: 9387291' }] }] },
++    { plataforma: 'liontv', dispositivos: [{ id: 'smart_tv', nombre: 'Smart TV Samsung o LG', enlaces: [
++      { id: 'maxplayer-tv', app: 'Max Player', dispositivo: 'smart_tv', metodo: 'tv_store', metodoTxt: 'Tienda del TV', activo: true, mensaje: 'SUBLICUENTAS | Instalación de Lion TV\nAplicación: Max Player' },
++      { id: 'smartone-tv', app: 'SmartOne', dispositivo: 'smart_tv', metodo: 'tv_store', metodoTxt: 'Tienda del TV', activo: true, costoExterno: { texto: 'L85 para activar 12 meses POR DISPOSITIVO' }, mensaje: 'SUBLICUENTAS | SmartOne\nImportante: L85' }] },
++      { id: 'iphone', nombre: 'iPhone / iPad', enlaces: [{ id: 'purple-ios', app: 'Purple IPTV Lite', dispositivo: 'iphone', metodo: 'app_store', metodoTxt: 'App Store', url: 'https://apps.apple.com/x', activo: true, mensaje: 'App Store' }] }] },
++  ], enlaces: [] };
++
++test('P2 Baúl: logo → dispositivo → app; mensaje del servidor; Enviar abre Compartir (no envía solo); URL oculta al no editor', async () => {
++  const app = await bootApp({ role: 'geisell', fetchExtra: async (path, body) => {
++    if (path !== '/api/inventario') return undefined;
++    if (body.accion === 'baulApks') return BAUL;
++    return { ok: true, urls: {} };
++  } });
++  try {
++    await app.click('[data-tab="mas"]', 300);
++    await app.click('[data-open="baul-apks"]', 400);
++    await app.waitFor(() => app.$('[data-baul-plat="oleada"]'));
++    assert.match(app.$('.se-wrap').textContent, /Paso 1 de 3/);
++    assert.ok(app.$('[data-baul-plat="oleada"] img[src="/assets/plataformas/oleada-tv.webp"]'));
++    await app.click('[data-baul-plat="oleada"]', 150);
++    assert.match(app.$('.se-wrap').textContent, /Paso 2 de 3/);
++    await app.click('[data-baul-disp="android_tv"]', 150);
++    const t = app.$('.se-wrap').textContent;
++    assert.match(t, /Paso 3 de 3/); assert.match(t, /Código Downloader: 9387291/);
++    assert.doesNotMatch(t, /ejemplo\.invalid/, 'la URL técnica no se muestra al personal sin permiso de edición');
++    assert.ok(app.$('[data-baul-copiar-msg="oleada-atv"]') && app.$('[data-baul-enviar="oleada-atv"]'));
++    await app.click('[data-baul-atras="disp"]', 150); await app.click('[data-baul-atras="plat"]', 150);
++    await app.click('[data-baul-plat="liontv"]', 150); await app.click('[data-baul-disp="smart_tv"]', 150);
++    const tv = app.$('.se-wrap').textContent;
++    assert.match(tv, /Opción 1/); assert.match(tv, /Opción 2/); assert.match(tv, /L85 para activar 12 meses/);
++    await app.click('[data-baul-atras="disp"]', 150); await app.click('[data-baul-disp="iphone"]', 150);
++    assert.match(app.$('.se-wrap').textContent, /No instalar archivos APK en iPhone/);
++  } finally { app.close(); }
++  const s = src('app/baul-apks.js');
++  assert.match(s, /Share\.share\(\{ title: 'Instalación', text: texto/);
++  assert.doesNotMatch(s, /wa\.me|api\.whatsapp|sendMessage/, 'nunca envía automáticamente');
++});
++
++test('P3 Resumen: solo el mes; cobrado/egreso/generado/pendiente separados; cobros por plataforma legibles', () => {
++  const mes = { periodo: '2026-11', ingresos: 220, egresos: 50, planilla: 0, ventasGeneradas: 900, pagosUnicos: 2,
++    cobrosPorPlataforma: [{ plataforma: 'netflix', monto: 150, centavos: 15000 }, { plataforma: 'Pago combinado (varios servicios)', monto: 70, centavos: 7000 }] };
++  const h = mesHtml(mes, false, { pendienteTotal: 120 });
++  assert.match(h, /Noviembre 2026/); assert.match(h, /01 nov – 30 nov 2026/);
++  assert.match(h, /Ingresos cobrados por plataforma/); assert.match(h, /Pago combinado/);
++  assert.match(h, /Ventas generadas/); assert.match(h, /class="fl-plat/);
++  const st = { libro: { tab: 'resumen', mes, movFiltro: {}, data: { hoy: '2026-11-07', metodos: [], ciclo: { inicio: '2026-10-01' }, totales: {}, bancos: [], totalBancos: 0, cierres: [], cartera: { pendienteTotal: 120 } } } };
++  const r = libroViewHtml(st);
++  assert.match(r, /NO es dinero disponible/); assert.doesNotMatch(r, /Ciclo abierto desde/);
++  const css = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
++  assert.match(css, /\.fl-plat\{[^}]*grid-template-columns/);
++});
++
++test('P3 Cierre: ciclo abierto desde 01/10 sin cierre al 31/10 → alerta y cierre guiado (no automático); con cierre, nada', () => {
++  const d = { hoy: '2026-11-07', ciclo: { inicio: '2026-10-01' }, cierres: [] };
++  assert.deepEqual(conciliacionCiclo(d), { fechaSugerida: '2026-10-31', mesAnteriorAbierto: true, ultimoDiaMesAnterior: '2026-10-31', ultimo: null });
++  assert.equal(conciliacionCiclo({ ...d, ciclo: { inicio: '2026-11-01' }, cierres: [{ fechaFin: '2026-10-31', estado: 'cerrado', origenCanal: 'tg' }] }).mesAnteriorAbierto, false);
++  const h = libroViewHtml({ libro: { tab: 'cierre', movFiltro: {}, data: { ...d, metodos: [], totales: { ingresos: 0, egresosOperativos: 0, disponibleAntesPlanilla: 0, planilla: 0, resultado: 0 }, bancos: [], totalBancos: 0 } } });
++  assert.match(h, /No hay cierre registrado al 31\/10\/2026/); assert.match(h, /data-fl-cierre-sug="2026-10-31"/);
++  const s = src('app/finanzas-libro.js');
++  assert.doesNotMatch(s, /setTimeout\([^)]*guardar_cierre_ciclo/, 'no cierra solo');
++});
++
++test('P4 Movimientos: editar conserva ancla, filtros y fila; P5 Más con relieve; navbar y categorías intactos', () => {
++  const s = src('app/finanzas-libro.js');
++  assert.match(s, /export function anclaMov\(id\)/); assert.match(s, /export function restaurarAncla\(a\)/);
++  assert.match(s, /data-fl-row="/); assert.match(s, /fl-editando/);
++  assert.match(s, /loadMovs\(ctx, \{ ?silent/);
++  assert.ok(MAS_MODULES['baul-apks']?.svg && MAS_MODULES['sala-juntas']?.svg);
++  assert.match(src('screens.js'), /mas-ico-svg/);
++  assert.match(fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8'), /\.mas-ico\.mas-ico-svg/);
++  assert.deepEqual(roleModules('sublicuentas', 'sublicuentas').tabs.length, roleModules('sublicuentas', 'sublicuentas').tabs.length);
++});
