@@ -638,7 +638,8 @@ async function controlDatos(db, body) {
   }
   // Ambos administradores consultan las mismas colecciones completas. La
   // autorización viene del token verificado, nunca del vendedor enviado.
-  const pageSize = 200;
+  // R184 · el navegador puede pedir páginas de hasta 500 (menos viajes); el corte de 2 MB de abajo sigue igual.
+  const pageSize = Math.max(50, Math.min(500, Number(body.pageSize) || 200));
   let query = db.collection(coleccion).orderBy(admin.firestore.FieldPath.documentId());
   if (cursor) query = query.startAfter(cursor);
   const snap = await query.limit(pageSize).get();
