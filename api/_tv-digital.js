@@ -9,7 +9,7 @@ const URLS_POR_DEFECTO = Object.freeze({
   latintv2: { nombre: "LatinTV 2", url: "http://enlatv.com" },
   liontv: { nombre: "LionTV", url: "http://liontv.es:80" },
   evoutouch: { nombre: "Nanotech", url: "http://smarterstv99.dyndns.tv:25461/" },
-  icomplay: { nombre: "ICOMPLAY MAX", url: "http://latinostream.xyz:80" }
+  icomplay: { nombre: "ICOMPLAY", url: "http://latinostream.xyz:80" } // R187: nombre oficial (Max Player es otro reproductor)
 });
 const CONFIG_COL = "configuracion_tv_digital";
 const CONFIG_DOC = "urls";
@@ -47,14 +47,14 @@ let cache = { at: 0, data: null };
 async function leerUrlsTv(db, { fresco = false } = {}) {
   if (!fresco && cache.data && Date.now() - cache.at < 60 * 1000) return cache.data;
   const out = {};
-  for (const [k, v] of Object.entries(URLS_POR_DEFECTO)) out[k] = { ...v };
+  for (const [k, v] of Object.entries(URLS_POR_DEFECTO)) out[k] = { ...v, activo: true, version: 1 };
   try {
     const snap = await db.collection(CONFIG_COL).doc(CONFIG_DOC).get();
     const guardado = snap.exists ? (snap.data() || {}).proveedores || {} : {};
     for (const [k, v] of Object.entries(guardado)) {
       const url = validarUrlTv(v && v.url);
       if (!url) continue;
-      out[k] = { nombre: String((v && v.nombre) || (out[k] && out[k].nombre) || k).slice(0, 60), url, updatedAt: v.updatedAt || "", updatedBy: v.updatedBy || "" };
+      out[k] = { nombre: String((v && v.nombre) || (out[k] && out[k].nombre) || k).replace(/^ICOMPLAY MAX$/i, "ICOMPLAY").slice(0, 60), url, activo: v.activo !== false, version: Number(v.version || 1), updatedAt: v.updatedAt || "", updatedBy: v.updatedBy || "" };
     }
   } catch (_) { /* sin documento: valores por defecto */ }
   cache = { at: Date.now(), data: out };
@@ -102,9 +102,11 @@ async function guardarUrlTv(db, { proveedor, url, nombre, usuario }) {
     const data = snap.exists ? snap.data() || {} : {};
     const proveedores = { ...(data.proveedores || {}) };
     anterior = (proveedores[prov] && proveedores[prov].url) || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].url) || "";
-    proveedores[prov] = { nombre: String(nombre || (proveedores[prov] && proveedores[prov].nombre) || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].nombre) || prov).slice(0, 60),
-      url: limpia, updatedAt: ahora, updatedBy: String(usuario || "") };
-    tx.set(ref, { proveedores, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
+    const previo = proveedores[prov] || {};
+    proveedores[prov] = { nombre: String(nombre || previo.nombre || (URLS_POR_DEFECTO[prov] && URLS_POR_DEFECTO[prov].nombre) || prov).slice(0, 60),
+      url: limpia, activo: previo.activo !== false, version: Number(previo.version || 1) + (previo.url && previo.url !== limpia ? 1 : 0), updatedAt: ahora, updatedBy: String(usuario || "") };
+    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: previo.url || URLS_POR_DEFECTO[prov] ? "editar" : "agregar", urlAnterior: anterior, urlNueva: limpia, por: String(usuario || ""), at: ahora }].slice(-100); // R187
+    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
   });
   // Historial: URL anterior y nueva (no es un secreto: la ve el cliente final).
   await db.collection("auditoria_eventos").add({ tipo: "tv_digital_url_cambiada", proveedor: prov, urlAnterior: anterior, urlNueva: limpia, usuario: String(usuario || ""), createdAt: ahora });
@@ -112,6 +114,58 @@ async function guardarUrlTv(db, { proveedor, url, nombre, usuario }) {
   return { proveedor: prov, url: limpia, urlAnterior: anterior };
 }
 
+// R187 · Cuántos clientes tienen un servicio de ese proveedor (para no borrar una URL que todavía usan).
+async function clientesConProveedor(db, prov) {
+  const snap = await db.collection("clientes").get();
+  let n = 0;
+  snap.forEach((d) => { const s = (d.data() || {}).servicios; if (Array.isArray(s) && s.some((x) => proveedorTv(x && x.plataforma, x && x.iptvProveedor) === prov)) n++; });
+  return n;
+}
+// Desactivar = ya no se ofrece para configuraciones NUEVAS; las entregas que ya la usan la siguen mostrando (no se rompen).
+async function activarUrlTv(db, { proveedor, activo, usuario }) {
+  const prov = normKey(proveedor), ref = db.collection(CONFIG_COL).doc(CONFIG_DOC), ahora = new Date().toISOString();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref); const data = snap.exists ? snap.data() || {} : {};
+    const proveedores = { ...(data.proveedores || {}) };
+    const previo = proveedores[prov] || (URLS_POR_DEFECTO[prov] ? { ...URLS_POR_DEFECTO[prov] } : null);
+    if (!previo) throw new Error("Ese proveedor no existe.");
+    proveedores[prov] = { ...previo, activo: !!activo, updatedAt: ahora, updatedBy: String(usuario || "") };
+    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: activo ? "activar" : "desactivar", url: previo.url || "", por: String(usuario || ""), at: ahora }].slice(-100);
+    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora }, { merge: true });
+  });
+  await db.collection("auditoria_eventos").add({ tipo: activo ? "tv_digital_url_activada" : "tv_digital_url_desactivada", proveedor: prov, usuario: String(usuario || ""), createdAt: ahora });
+  cache = { at: 0, data: null };
+  return { proveedor: prov, activo: !!activo };
+}
+// Eliminar: solo proveedores agregados (no los de fábrica), desactivados y SIN clientes asignados.
+async function eliminarUrlTv(db, { proveedor, usuario }) {
+  const prov = normKey(proveedor);
+  if (URLS_POR_DEFECTO[prov]) throw new Error("Esta URL es de un proveedor base: se puede editar o desactivar, no eliminar.");
+  const asignados = await clientesConProveedor(db, prov);
+  if (asignados > 0) throw new Error(`No se puede eliminar: ${asignados} cliente(s) la usan. Desactívela y cree la nueva.`);
+  const ref = db.collection(CONFIG_COL).doc(CONFIG_DOC), ahora = new Date().toISOString();
+  let anterior = null;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref); const data = snap.exists ? snap.data() || {} : {};
+    const proveedores = { ...(data.proveedores || {}) };
+    if (!proveedores[prov]) throw new Error("Ese proveedor no existe.");
+    if (proveedores[prov].activo !== false) throw new Error("Primero desactívela; luego se puede eliminar.");
+    anterior = proveedores[prov]; delete proveedores[prov];
+    const historial = [...(Array.isArray(data.historial) ? data.historial : []), { proveedor: prov, accion: "eliminar", url: anterior.url || "", por: String(usuario || ""), at: ahora }].slice(-100);
+    tx.set(ref, { proveedores, historial, version: Number(data.version || 0) + 1, updatedAt: ahora });
+  });
+  await db.collection("auditoria_eventos").add({ tipo: "tv_digital_url_eliminada", proveedor: prov, urlAnterior: anterior && anterior.url || "", usuario: String(usuario || ""), createdAt: ahora });
+  cache = { at: 0, data: null };
+  return { proveedor: prov, eliminado: true };
+}
+async function historialUrlsTv(db) {
+  try { const s = await db.collection(CONFIG_COL).doc(CONFIG_DOC).get(); return ((s.exists ? s.data() || {} : {}).historial || []).slice(-50).reverse(); } catch (_) { return []; }
+}
+
+exports.activarUrlTv = activarUrlTv;
+exports.eliminarUrlTv = eliminarUrlTv;
+exports.historialUrlsTv = historialUrlsTv;
+exports.clientesConProveedor = clientesConProveedor;
 exports.URLS_POR_DEFECTO = URLS_POR_DEFECTO;
 exports.proveedorTv = proveedorTv;
 exports.validarUrlTv = validarUrlTv;

@@ -3,6 +3,7 @@
 const admin = require('firebase-admin');
 const loginHandler = require('./login');
 const tvDigital = require('./_tv-digital.js');
+const planesTv = require('./_planes-tv.js'); // R187
 const vendedoresReg = require('./_vendedores.js'); // Oct-2026 · registro único de vendedores/socios
 const push = require('./_push.js'); // Fase 2 · notificaciones push
 
@@ -340,7 +341,9 @@ async function getConfig(req, res) {
   try {
     const urls = await tvDigital.leerUrlsTv(getApp().firestore());
     config.tvDigitalUrls = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.url]));
+    config.tvDigitalUrlsActivas = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k, v.activo !== false])); // R187
   } catch (_) { /* la APK conserva sus URLs guardadas */ }
+  try { const pl = await planesTv.leerPlanesTv(getApp().firestore()); config.planesTv = { icomplay: pl.icomplay.precios, version: pl.version }; } catch (_) { /* R187: la APK usa su tabla interna */ }
   // Vendedores: lista fija del equipo + revendedores activos de Firestore (los mismos que ven la web y el bot).
   // La APK los usa en el selector "Vendedor responsable"; si esto falla, se queda con su lista interna.
   try {

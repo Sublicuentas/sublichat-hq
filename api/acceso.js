@@ -95,7 +95,7 @@ function canonPlat(v) {
   if (p.startsWith("latintv")) return "latintv";
   if (p.startsWith("liontv")) return "liontv";
   if (p.startsWith("evoutouch")) { const m=p.match(/([123])$/); return `evoutouch${m?m[1]:"1"}`; }
-  { const ic = p.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; }
+  { const ic = p.match(/^icomplay(?:max)?([12357])$/); if (ic) return `icomplay${ic[1]}`; }
   return p;
 }
 
@@ -200,7 +200,7 @@ const PLAT_LABELS = {
   latintv: "LatinTV", latintv1: "LatinTV (1 dispositivo)", latintv2: "LatinTV (2 dispositivos)", latintv3: "LatinTV (3 dispositivos)", latintv4: "LatinTV (4 dispositivos)",
   liontv: "LionTV", liontv1: "LionTV (1 dispositivo)", liontv2: "LionTV (2 dispositivos)", liontv3: "LionTV (3 dispositivos)", liontv5: "LionTV (5 dispositivos)",
   evoutouch1: "Nanotech (1 dispositivo)", evoutouch2: "Nanotech (2 dispositivos)", evoutouch3: "Nanotech (3 dispositivos)", evoutouch4: "Nanotech (1 dispositivo)", evoutouch: "Nanotech",
-  icomplay: "ICOMPLAY MAX", icomplay1: "ICOMPLAY MAX (1 pantalla)", icomplay3: "ICOMPLAY MAX (3 pantallas)", icomplay5: "ICOMPLAY MAX (5 pantallas)", icomplay7: "ICOMPLAY MAX (7 pantallas)",
+  icomplay: "ICOMPLAY", icomplay1: "ICOMPLAY (1 pantalla)", icomplay2: "ICOMPLAY (2 pantallas)", icomplay3: "ICOMPLAY (3 pantallas)", icomplay5: "ICOMPLAY (5 pantallas)", icomplay7: "ICOMPLAY (7 pantallas)",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
   windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
 };

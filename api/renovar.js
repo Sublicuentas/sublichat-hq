@@ -56,7 +56,7 @@ const TV_DIGITAL_MESES_VALIDOS = Object.freeze({
   stellatv:[1,3,7],
   oleadatv:[1,3,7,14],
   evoutouch:[1,3,6,12], // Nanotech: 1, 3, 6 y 12 meses (sin meses gratis)
-  icomplay:[1,3,6,12],  // ICOMPLAY MAX (oct-2026): 1, 3, 6 y 12 meses
+  icomplay:[1,3,6,12],  // ICOMPLAY: 1, 3, 6 y 12 meses
 });
 function familiaMesesTvDigital(plataforma=""){
   const p=canonPlat(plataforma||"");
@@ -220,7 +220,7 @@ function canonPlat(v) {
   if (/^liontv[1235]$/.test(key)) return key;
   if (/^evoutouch[1-4]?$/.test(key)) return key.endsWith("2") ? "evoutouch2" : key.endsWith("3") ? "evoutouch3" : "evoutouch1";
   if (/^iptv[134]$/.test(key)) return key; // registros anteriores sin marca
-  { const ic = key.match(/^icomplay(?:max)?([1357])$/); if (ic) return `icomplay${ic[1]}`; } // ICOMPLAY MAX · 1/3/5/7 dispositivos
+  { const ic = key.match(/^icomplay(?:max)?([12357])$/); if (ic) return `icomplay${ic[1]}`; } // R187 · ICOMPLAY · 1/2/3/5/7 pantallas
   if (key.startsWith("stellatv") || key.startsWith("stella")) return "stellatv";
   if (key.startsWith("oleada")) return "oleada";
   if (key.startsWith("latintv")) return "latintv";
@@ -1200,7 +1200,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     out.iptvProveedor = String(servicio.iptvProveedor ?? anterior.iptvProveedor ?? (familia.startsWith("evoutouch") ? "evoutouch" : familia.startsWith("icomplay") ? "icomplay" : ""));
     if (familia.startsWith("icomplay")) out.iptvProveedor = "icomplay";
     out.iptvPantallas = familia.startsWith("evoutouch") ? Math.max(1, Math.min(3, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1))
-      : familia.startsWith("icomplay") ? Number((familia.match(/([1357])$/) || [])[1] || 1)
+      : familia.startsWith("icomplay") ? Number((familia.match(/([12357])$/) || [])[1] || 1)
       : Math.max(1, Number(servicio.iptvPantallas ?? anterior.iptvPantallas ?? 1) || 1);
     out.iptvLista = String(servicio.iptvLista ?? anterior.iptvLista ?? "");
     out.iptvHora = String(servicio.iptvHora ?? anterior.iptvHora ?? "");

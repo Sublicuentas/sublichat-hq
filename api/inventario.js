@@ -5,6 +5,8 @@
 
 import admin from "firebase-admin";
 import tvDigital from "./_tv-digital.js";
+import baulApks from "./_baul-apks.js"; // R187 · Baúl de APKs (fuente única Web/APK/bot)
+import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (ICOMPLAY)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -521,8 +523,32 @@ export default async function handler(req, res) {
     if (accion === "tvUrls") {
       return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db) });
     }
+    // R187 · Catálogo de planes de TV Digital: lo leen todos los que venden (Web, APK y bot ven las mismas tarifas).
+    if (accion === "planesTv") return res.status(200).json({ ok: true, planes: await planesTv.leerPlanesTv(db) });
+    const usrTv = String(authUser.usuario || "").toLowerCase();
+    const rolTv = String(authUser.role || "").toLowerCase();
+    const editorTv = ["admin", "administrador", "sublicuentas", "owner"].includes(rolTv) || ["sublicuentas", "naara", "relojes", "libni"].includes(usrTv); // R187: editan tarifas, Baúl y URLs
+    if (["guardarPrecioPlanTv", "baulGuardarEnlace", "baulActivarEnlace", "baulEliminarEnlace", "activarTvUrl", "eliminarTvUrl"].includes(accion) && !editorTv)
+      return res.status(403).json({ ok: false, error: "Solo Sublicuentas o Relojes pueden editar tarifas, el Baúl y las URLs de TV Digital." });
+    try {
+      if (accion === "guardarPrecioPlanTv") return res.status(200).json({ ok: true, ...(await planesTv.guardarPrecioPlan(db, { plataforma: "icomplay", pantallas: req.body.pantallas, meses: req.body.meses, precio: req.body.precio, usuario: usrTv })), planes: await planesTv.leerPlanesTv(db, { fresco: true }) });
+      if (accion === "baulGuardarEnlace") { const r = await baulApks.guardarEnlace(db, req.body.enlace || {}, usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
+      if (accion === "baulActivarEnlace") { const r = await baulApks.activarEnlace(db, String(req.body.id || ""), req.body.activo === true, usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
+      if (accion === "baulEliminarEnlace") { const r = await baulApks.eliminarEnlace(db, String(req.body.id || ""), usrTv); return res.status(200).json({ ...r, baul: await baulApks.leerBaul(db, { fresco: true }) }); }
+      if (accion === "activarTvUrl") return res.status(200).json({ ok: true, ...(await tvDigital.activarUrlTv(db, { proveedor: req.body.proveedor, activo: req.body.activo === true, usuario: usrTv })), urls: await tvDigital.leerUrlsTv(db, { fresco: true }) });
+      if (accion === "eliminarTvUrl") return res.status(200).json({ ok: true, ...(await tvDigital.eliminarUrlTv(db, { proveedor: req.body.proveedor, usuario: usrTv })), urls: await tvDigital.leerUrlsTv(db, { fresco: true }) });
+    } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
+
     // R162: Control Maestro / Bodega según lo que Sublicuentas active o desactive a cada usuario.
     const permisosCtx = await PERMISOS.contexto(db, authUser);
+    // R187 · Baúl de APKs: módulo propio (lo activa Sublicuentas por usuario). Solo lectura aquí.
+    if (accion === "baulApks" || accion === "tvUrlsHistorial") {
+      if (!(editorTv || PERMISOS.aplicar(permisosCtx, "baul-apks", !!(PERMISOS.porDefecto && PERMISOS.porDefecto(authUser) || {})["baul-apks"]))) return res.status(403).json({ ok: false, error: "No tiene acceso al Baúl de APKs." });
+      if (accion === "tvUrlsHistorial") return res.status(200).json({ ok: true, urls: await tvDigital.leerUrlsTv(db), historial: editorTv ? await tvDigital.historialUrlsTv(db) : [] });
+      const baul = await baulApks.leerBaul(db);
+      return res.status(200).json({ ok: true, editor: editorTv, version: baul.version, plataformas: baulApks.PLATAFORMAS, dispositivos: baulApks.DISPOSITIVOS, metodos: baulApks.METODOS, apps: baul.apps,
+        vistas: baulApks.PLATAFORMAS.map((p) => baulApks.vistaPlataforma(baul, p.id, { incluirInactivos: editorTv })), ...(editorTv ? { enlaces: baul.enlaces } : {}), aviso: baulApks.AVISO_INSTALACION });
+    }
     const puedeInventario = PERMISOS.aplicar(permisosCtx, "control-maestro", isAdminUser(authUser)) || permisosCtx.overrides?.bodega === true;
     if (!puedeInventario) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });

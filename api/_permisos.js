@@ -30,6 +30,7 @@ const MODULOS = Object.freeze([
   { id: 'bodega', label: 'Bodega', grupo: 'Operación', pantallas: ['inventario'], servidor: true },
   { id: 'finanzas', label: 'Finanzas (egresos, cierre y libro)', grupo: 'Operación', pantallas: ['egresos', 'cierre'], servidor: true },
   { id: 'codigos', label: 'Códigos de plataformas (APK)', grupo: 'Operación', pantallas: [], servidor: true },
+  { id: 'baul-apks', label: 'Baúl de APKs de TV Digital (APK y bot)', grupo: 'Operación', pantallas: [], servidor: true }, // R187
   { id: 'actividad', label: 'Actividad del sistema', grupo: 'Supervisión', pantallas: ['actividad'], servidor: true },
   { id: 'auditoria', label: 'Cuadre y auditoría', grupo: 'Supervisión', pantallas: ['auditoria'] },
   { id: 'crm-master', label: 'CRM Master', grupo: 'Supervisión', pantallas: ['crm-master'] },
@@ -80,6 +81,7 @@ function porDefecto(user = {}) {
     if (['portal-cliente', 'sorteos', 'catalogo'].includes(m.id)) v = relojes;
     if (m.id === 'finanzas') v = rol === 'finanzas' && relojes;
     if (m.id === 'codigos') v = relojes || geisell;
+    if (m.id === 'baul-apks') v = relojes || geisell; // R187 · fundadoras; a los demás lo activa Sublicuentas
     if (m.id === 'bodega') v = false;
     if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
     out[m.id] = !!v;
