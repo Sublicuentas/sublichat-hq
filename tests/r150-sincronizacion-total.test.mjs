@@ -138,9 +138,9 @@ test('Renovación por duración (R163 + R186): siempre desde el vencimiento, 1 m
   assert.throws(() => f.calcularRenovacionPorDuracion(futuro, { unidad: 'meses', cantidad: 25 }));
 });
 
-test('ICOMPLAY MAX: planes 1/3/5/7 pantallas × 1/3/6/12 meses en Web; meses válidos en el servidor', () => {
+test('ICOMPLAY (R187): planes 1/2/3/5/7 pantallas × 1/3/6/12 meses en Web; meses válidos en el servidor', () => {
   const web = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
-  assert.match(web, /ICOMPLAY_PRECIOS=\{1:\{1:179,3:499,6:949,12:1799\},3:\{1:249,3:699,6:1349,12:2499\},5:\{1:329,3:929,6:1799,12:3399\},7:\{1:399,3:1129,6:2199,12:4199\}\}/);
+  assert.match(web, /ICOMPLAY_PRECIOS=\{1:\{1:179,3:499,6:949,12:1799\},2:\{1:219,3:599,6:1149,12:2149\},3:\{1:249,3:699,6:1349,12:2499\},5:\{1:329,3:929,6:1799,12:3399\},7:\{1:399,3:1129,6:2199,12:4199\}\}/);
   const api = fs.readFileSync(new URL('../api/renovar.js', import.meta.url), 'utf8');
   assert.match(api, /icomplay:\[1,3,6,12\]/);
 });
