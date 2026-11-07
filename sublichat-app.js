@@ -3502,6 +3502,8 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
       ? `+${duracion.cantidad} ${duracion.unidad==="dias"?"día"+(duracion.cantidad===1?"":"s"):"mes"+(duracion.cantidad===1?"":"es")}${duracion.base==="hoy"?" desde hoy":duracion.base==="vencimiento"?" desde el vencimiento":""}`
       : `+${dias} días`;
   const nombres=aRenovar.map(s=>s.plataforma).join(", ");
+  // R186 · Varios servicios con duración: UNA operación en el servidor (todos o ninguno, un solo pago con desglose).
+  if(aRenovar.length>1&&!fechaExacta) return renovarLoteWeb(g,aRenovar,duracion||{unidad:"dias",cantidad:Number(dias)||31},descRenov);
   let pagoOp=null; // R106: Sublicuentas/Relojes registran el pago real (o ajuste sin pago con motivo)
   if(pagoOpHabilitado()){
     pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:[{key:"renovacion",label:`${nombres} · ${descRenov}`}],permitirAjuste:true});
@@ -3566,8 +3568,55 @@ async function renovarServicio(dias, fechaExacta, duracion=null){
     hint.textContent="⚠️ No se renovó nada: "+(errores.join(" · ")||"error desconocido");
   }
 }
+// R186 · Renovación múltiple: vista previa → (atraso: cuántos periodos) → pago con monto por servicio → una sola operación.
+async function renovarLoteWeb(g,aRenovar,duracion,descRenov){
+  const hint=$cobro("cobroRenovarHint");
+  const clienteId=String(g.clienteId||aRenovar[0]?.clienteId||"");
+  if(!clienteId){mostrarToast("No encontré el ID del cliente. Recargue la lista.");return;}
+  const dur={unidad:duracion.unidad==="dias"?"dias":"meses",cantidad:Number(duracion.cantidad)};
+  const lineas=aRenovar.map(s=>({compraId:s.compraId||"",servicioIndex:Number.isInteger(Number(s.srvIndex))?Number(s.srvIndex):null,plataforma:s.plataformaRaw||s.plataforma||"",correo:s.correo||"",duracion:dur,periodos:1,monto:0}));
+  const post=async(extra)=>{const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"renovar_lote",clienteId,lineas,origen:"web",...extra})});return r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));};
+  hint.textContent="Calculando fechas…";
+  let vista=await post({soloVista:true});
+  if(!vista.ok){hint.textContent="⚠️ "+(vista.error||"No se pudo calcular.");return;}
+  let atraso=false;
+  if(vista.lineas.some(x=>x.sigueVencida)){
+    const n=prompt(`Algunos servicios siguen vencidos aun después de renovar ${descRenov}:\n${vista.lineas.filter(x=>x.sigueVencida).map(x=>`· ${x.plataforma}: vencía ${x.fechaAnterior} → ${x.fechaNueva}`).join("\n")}\n\nLa fecha NO se adelanta al día del pago.\n¿Cuántos periodos cobra? (1 a 24)`,"1");
+    if(n===null){hint.textContent="";return;}
+    const k=Math.max(1,Math.min(24,parseInt(n,10)||1));
+    lineas.forEach((l,i)=>{if(vista.lineas[i]?.sigueVencida)l.periodos=k;});
+    vista=await post({soloVista:true});
+    if(!vista.ok){hint.textContent="⚠️ "+(vista.error||"No se pudo calcular.");return;}
+    atraso=true;
+  }
+  const detalle=vista.lineas.map(x=>`${x.plataforma}: ${x.fechaAnterior||"sin fecha"} → ${x.fechaNueva}${x.periodos>1?` (${x.periodos} periodos)`:""}`);
+  let pagoOp=null;
+  if(pagoOpHabilitado()){
+    pagoOp=await pedirPagoOperacion({tipo:"renovacion",cliente:g.nombre,rows:vista.lineas.map((x,i)=>({key:`s${i}`,label:`${x.plataforma} · vence ${x.fechaAnterior||"—"} → nuevo ${x.fechaNueva}`})),permitirAjuste:true});
+    if(!pagoOp){hint.textContent="";return;}
+  }else if(!confirm(`¿Confirmar renovación conjunta de ${lineas.length} servicios (${descRenov})?\n\n${detalle.join("\n")}`)){hint.textContent="";return;}
+  const extra={confirmarAtraso:atraso||vista.lineas.every(x=>!x.sigueVencida),operationId:pagoOpNuevoId()};
+  if(pagoOp?.modo==="ajuste"){extra.ajusteAdministrativo=true;extra.motivoAjuste=pagoOp.motivo;}
+  else if(pagoOp?.modo==="pago"){
+    let total=0,recibido=0;const porBanco={};
+    lineas.forEach((l,i)=>{const f=(pagoOp.filas||{})[`s${i}`]||{};const e=pagoOpFilaEstado(f);l.monto=e.total;total+=e.total;recibido+=e.recibido;(((pagoOp.pagosPorFila||{})[`s${i}`])||[]).forEach(p=>{porBanco[p.bancoId]=(porBanco[p.bancoId]||0)+Number(p.monto||0);});});
+    const pagos=Object.entries(porBanco).filter(([,m])=>m>0).map(([bancoId,monto])=>({bancoId,monto}));
+    extra.pago={montoTotal:total,recibido,bancoId:recibido>0?(pagos[0]?.bancoId||pagoOp.bancoId):"",...(pagos.length>1?{pagos}:{}),responsable:pagoOp.responsable,vendedorNombre:pagoOp.vendedor,fechaPago:pagoOp.fechaPago||pagoOpHoy(),operationId:extra.operationId,origen:"web"};
+  }
+  hint.textContent=`Renovando ${lineas.length} servicios en una sola operación…`;
+  let j=null;
+  for(let i=0;i<2;i++){ // un reintento con el MISMO operationId: el servidor no duplica
+    try{j=await post(extra);break;}catch(e){j={ok:false,error:e.message||"sin conexión"};}
+  }
+  if(!j?.ok){hint.textContent="⚠️ No se renovó nada: "+(j?.error||"error desconocido");mostrarToast(`⚠️ ${g.nombre}: no se renovó (todo o nada)`);return;}
+  hint.textContent=`✅ ${j.duplicado?"Ya estaba registrada":"Confirmado por el servidor"}: ${(j.lineas||[]).map(x=>`${x.plataforma} → ${x.fechaNueva}`).join(" · ")}${j.pagoOperacion?` · 💵 ${String(j.pagoOperacion.estado||"").toUpperCase()} · un solo cobro L${j.total}`:""}`;
+  mostrarToast(`✅ ${g.nombre}: ${lineas.length} servicios renovados`);
+  await load({forceServer:true});
+  (j.lineas||[]).forEach(x=>{const s=aRenovar.find(a=>(x.compraId&&a.compraId===x.compraId)||Number(a.srvIndex)===Number(x.servicioIndex));if(s)aplicarRenovacionLocal(g,s,{...x,clienteId});});
+  render();
+}
 // Oct-2026 · Renovar: +31 días, 1, 2, 3, 6 y 12 meses + Personalizado (fecha). Iguales en Web, APK y Bot.
-// El servidor calcula la fecha (R163): siempre desde el vencimiento · 1 mes = 30 días.
+// El servidor calcula la fecha (R186): siempre desde el vencimiento · 1 mes = 30 días · 2+ meses = meses calendario.
 document.querySelectorAll("#cobroDuraciones [data-dur-unidad]").forEach(b=>b.addEventListener("click",()=>renovarServicio(null,null,{unidad:b.dataset.durUnidad,cantidad:Number(b.dataset.durCantidad),base:"auto"})));
 
 // Botón que despliega/oculta las opciones de renovación
