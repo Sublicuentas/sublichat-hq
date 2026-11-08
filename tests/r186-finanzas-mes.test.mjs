@@ -26,7 +26,7 @@ test('F01/F03: solo el mes; TX-1001 = L350 una vez con 3 asignaciones; anulados 
   assert.equal(r.ingresosCentavos, 45030); assert.equal(r.ingresos, 450.3); // 350 + (100.10 + 0.20), sin el 999 de octubre ni el anulado
   assert.equal(r.pagosUnicos, 2, 'TX-1001 y el pago dividido: 2 pagos reales'); assert.equal(r.renglonesBanco, 3);
   assert.equal(r.serviciosRenovadosOVendidos, 3);
-  assert.deepEqual(r.porPlataforma.map((p) => [p.plataforma, p.monto]), [['Netflix', 150], ['Disney+', 110], ['Prime', 90]]);
+  assert.deepEqual(r.porPlataforma.map((p) => [p.plataforma, p.monto]), [['Netflix Premium', 150], ['Disney Premium', 110], ['Prime Video', 90]]); // R193: nombres canónicos
   assert.equal(r.porPlataforma.reduce((a, p) => a + p.centavos, 0), 35000, 'el desglose cuadra con el pago, no se suma 3 veces');
   assert.equal(r.anulados, 2); assert.equal(r.conciliacion.ingresosVsPagos, true);
 });

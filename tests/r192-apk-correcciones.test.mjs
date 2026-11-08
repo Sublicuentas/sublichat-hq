@@ -36,7 +36,7 @@ test('Finanzas: cobros del mes por plataforma suman exactamente lo cobrado; pago
   const r = resumenMes(movs, periodoHN(new Date(), '2026-11'));
   assert.equal(r.ingresos, 220);
   assert.equal(r.cobrosPorPlataforma.reduce((s, p) => s + p.centavos, 0), r.ingresosCentavos);
-  assert.ok(r.cobrosPorPlataforma.some((p) => /combinado/i.test(p.plataforma)));
+  assert.ok(r.cobrosPorPlataforma.some((p) => p.pendiente && p.centavos === 7000), 'R193: el pago combinado sin desglose queda pendiente de clasificar');
 });
 
 test('Sala web: ?sala=personaje y ?sala=escenarios abren esas vistas; ids de reunión siguen validados', () => {
