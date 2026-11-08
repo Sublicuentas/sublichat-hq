@@ -13,7 +13,8 @@ import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-c
 import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
 import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
 import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
-import { periodoHN, resumenMes, diagnosticarDuplicados } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
+import { periodoHN, resumenMes, diagnosticarDuplicados, evidenciaNecesaria } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
+import { PRODUCTOS, normAlias, resolverProducto } from "./_productos-canonicos.js"; // R193 · productos canónicos
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
@@ -251,6 +252,25 @@ function agruparPagos(rows = []) {
   return out.map(({ _key, _t, ...r }) => (r.ids.length > 1 ? { ...r, partes: r.ids, id: `grp:${r.ids.join(",")}`, ids: [`grp:${r.ids.join(",")}`] } : r)).map((r) => ({ ...r, plataforma: r.plataformas.join(" + ") }));
 }
 
+// R193 · Contexto para atribuir pagos a productos: alias confirmados + ficha del servicio para etiquetas ambiguas.
+async function contextoProductosR193(db, movimientos) {
+  const confirmados = {};
+  try { (await db.collection("finanzas_alias_productos").limit(500).get()).docs.forEach((d) => { const x = d.data() || {}; if (PRODUCTOS[x.productoId]) confirmados[d.id] = x.productoId; }); } catch (_) {}
+  const pedir = evidenciaNecesaria(movimientos);
+  const fichas = new Map();
+  const ids = [...new Set(pedir.map((p) => p.clienteId))].filter((x) => /^[A-Za-z0-9_-]{1,160}$/.test(x)).slice(0, 300);
+  for (let i = 0; i < ids.length; i += 100) {
+    try { const snaps = await db.getAll(...ids.slice(i, i + 100).map((id) => db.collection("clientes").doc(id))); snaps.forEach((d) => { if (d.exists) fichas.set(d.id, d.data() || {}); }); } catch (_) {}
+  }
+  const evidencia = (clienteId, compraId) => {
+    const c = fichas.get(clienteId); if (!c) return "";
+    const s = (Array.isArray(c.servicios) ? c.servicios : []).find((x) => x && x.compraId === compraId);
+    const key = String(s?.plataforma || "").toLowerCase().trim();
+    return key && !resolverProducto(key).ambiguo ? key : "";
+  };
+  return { confirmados, evidencia };
+}
+
 async function handleLibro(db, accion, body, identity, authUser, res) {
   if (!canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas (libro mayor) es exclusivo de Sublicuentas y Relojes." });
   const now = isoNow();
@@ -288,10 +308,35 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
 
   // R117 · Datos del Excel Saiyajin para la APK (misma data y reglas que el reporte del bot).
   // R186 · Mes calendario de Honduras: tarjeta de la APK/Web y el Excel salen de esta misma consulta.
-  if (accion === "finanzas_mes") {
+  if (accion === "finanzas_mes" || accion === "finanzas_conciliacion_mes") {
     const per = periodoHN(new Date(), String(body.periodo || ""));
     const all = rowsOf(await movementsRangoQuery(db, per.desde, per.hasta).limit(20000).get());
-    return res.status(200).json({ ok: true, accion, periodo: per.periodo, zona: "America/Tegucigalpa", generado: isoNow(), ...resumenMes(all, per), excel: { desde: per.desde, hasta: per.hasta, nombre: `finanzas_${per.periodo}.xlsx` } });
+    const ctx = await contextoProductosR193(db, all);
+    const r = resumenMes(all, per, ctx);
+    if (accion === "finanzas_mes") return res.status(200).json({ ok: true, accion, periodo: per.periodo, zona: "America/Tegucigalpa", generado: isoNow(), ...r, excel: { desde: per.desde, hasta: per.hasta, nombre: `finanzas_${per.periodo}.xlsx` } });
+    // R193 · Conciliación ANTES (agrupado por etiqueta, R192) / DESPUÉS (producto canónico). SOLO LECTURA.
+    const antes = resumenMes(all, per, { sinCanonico: true });
+    const dup = diagnosticarDuplicados(all.filter((m) => { const f = m.fechaPago || ""; return f >= per.desde && f <= per.hasta; }));
+    return res.status(200).json({ ok: true, accion, periodo: per.periodo, generado: isoNow(),
+      antes: { ingresosCentavos: antes.ingresosCentavos, pagosUnicos: antes.pagosUnicos, anulados: antes.anulados, porEtiqueta: antes.cobrosPorEtiqueta },
+      despues: { ingresosCentavos: r.ingresosCentavos, pagosUnicos: r.pagosUnicos, anulados: r.anulados, cobrosPorProducto: r.cobrosPorProducto, pendienteClasificar: r.pendienteClasificar },
+      totalIgual: antes.ingresosCentavos === r.ingresosCentavos, invariante: r.conciliacion, aliasRevisados: r.aliasRevisados, duplicadosSospechosos: dup.sospechosos, productos: PRODUCTOS });
+  }
+  // R193 · Una persona confirma a qué producto corresponde una etiqueta (alias). No toca movimientos ni montos; auditado y reversible.
+  if (accion === "finanzas_alias_confirmar") {
+    const alias = normAlias(body.alias), productoId = cleanText(body.productoId);
+    if (!alias || alias.length > 80) return res.status(400).json({ ok: false, error: "Etiqueta inválida." });
+    if (productoId && !PRODUCTOS[productoId]) return res.status(400).json({ ok: false, error: "Producto inválido." });
+    const motivo = cleanText(body.motivo).slice(0, 200);
+    if (!motivo) return res.status(400).json({ ok: false, error: "Escriba el motivo o la evidencia (obligatorio)." });
+    const ref = db.collection("finanzas_alias_productos").doc(alias);
+    await db.runTransaction(async (tx) => {
+      const antes = await tx.get(ref);
+      if (productoId) tx.set(ref, { alias, original: cleanText(body.original).slice(0, 80), productoId, producto: PRODUCTOS[productoId], motivo, revisadoPor: identity.usuario, revisadoAt: now });
+      else tx.delete(ref); // deshacer: vuelve a «pendiente de clasificar»
+      auditar(tx, db, identity, { origen: body.origen, accion: "alias_producto", targetType: "alias", targetId: alias, motivo, before: antes.exists ? { productoId: antes.data()?.productoId || "" } : null, after: productoId ? { productoId } : { productoId: "" }, detalle: `${cleanText(body.original) || alias} → ${productoId ? PRODUCTOS[productoId] : "sin confirmar"}` });
+    });
+    return res.status(200).json({ ok: true, alias, productoId, producto: productoId ? PRODUCTOS[productoId] : "" });
   }
   // R186 · Diagnóstico de cobros duplicados: SOLO LECTURA, nunca borra ni anula.
   if (accion === "diagnostico_duplicados") {

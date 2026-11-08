@@ -7,6 +7,7 @@
 'use strict';
 const admin = require('firebase-admin');
 const S = require('./_sala-juntas.js');
+const G = require('./_sala-grabacion.js'); // R193 · grabación completa en el servidor (LiveKit Egress)
 const P = require('./_permisos.js');
 const { usuariosConfigurados } = require('./permisos.js');
 const ETQ_ROL = { admin: 'Supervisor', finanzas: 'Operativo', auditor: 'Auditor', geisell_admin: 'Admin Control' };
@@ -121,6 +122,30 @@ function auditoria(db, yo, accion, objetivo, extra = {}) {
   return { ref: db.collection(C.AUD).doc(), data: { tipo: 'sala_juntas', modulo: 'sala-juntas', accion, actorUsuario: yo.id, objetivo, resultado: 'ok', createdAt: new Date().toISOString(), ...extra } };
 }
 
+// R193 · Escena para la plantilla de grabación. Solo mientras la grabación está iniciando/grabando y dentro del tope.
+async function escenaGrabacion(db, env, grabacionId, ahora) {
+  if (!G.idValido(grabacionId)) throw err(400, 'Grabación no válida.');
+  const gs = await db.collection(G.COLECCION).doc(grabacionId).get();
+  const g = gs.exists ? gs.data() || {} : null;
+  if (!g || !['iniciando', 'grabando'].includes(g.estado) || ahora - Date.parse(g.inicio || 0) > (G.MAX_MIN + 10) * 60000) throw err(404, 'No hay grabación activa.');
+  const rs = await db.collection(C.R).doc(g.reunionId).get(); const r = rs.exists ? rs.data() || {} : {};
+  const miembros = (await miembrosDe(db, env)).filter((m) => (r.participantes || []).includes(m.id));
+  const av = await avataresDe(db, miembros); const avatares = {}; for (const [k, v] of Object.entries(av)) avatares[k] = { config: v.config, version: v.version };
+  const escenario = S.escenarioValido ? (S.escenarioValido(r.escenario) ? r.escenario : 'sala-c') : (r.escenario || 'sala-c');
+  let presets = { presets: [], predeterminado: '' }; try { const d = await db.collection(C.ESC).doc(escenario).get(); if (d.exists) presets = d.data() || presets; } catch (_) {}
+  const p = r.presetId && (presets.presets || []).find((x) => x.id === r.presetId); const of = (presets.presets || []).find((x) => x.id === presets.predeterminado);
+  return { reunionId: g.reunionId, titulo: String(r.titulo || '').slice(0, 120), participantes: miembros.map((m) => ({ id: m.id, nombre: m.nombre, asiento: m.asiento || null })),
+    avatares, escenario, estilo: p ? p.estilo : (r.presetId && r.estiloUsado ? r.estiloUsado : null), sugerido: !p && !r.estiloUsado ? r.sugerido || '' : '', estiloPredeterminado: of ? of.estilo : null, maxMin: G.MAX_MIN };
+}
+async function firmarGrabacion(env, key, { descargar = false, ahora = Date.now() } = {}) {
+  let Storage; try { ({ Storage } = require('@google-cloud/storage')); } catch (_) { throw err(503, 'Falta el componente de almacenamiento en el servidor.'); }
+  const cred = JSON.parse(env.SALA_GRAB_GCP_CREDENTIALS);
+  const st = new Storage({ projectId: cred.project_id, credentials: { client_email: cred.client_email, private_key: cred.private_key } });
+  const [url] = await st.bucket(String(env.SALA_GRAB_BUCKET).trim()).file(key).getSignedUrl({ version: 'v4', action: 'read', expires: ahora + G.FIRMA_MIN * 60000,
+    ...(descargar ? { responseDisposition: 'attachment; filename="reunion-sala-juntas.mp4"' } : {}), responseType: 'video/mp4' });
+  return url;
+}
+
 async function handler(req, res, deps = {}) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'private, no-store, max-age=0');
@@ -131,6 +156,13 @@ async function handler(req, res, deps = {}) {
   const ahora = deps.ahora ? deps.ahora() : Date.now();
   if (String(env.SALA_JUNTAS_ENABLED ?? '1') === '0') return res.status(503).json({ ok: false, error: 'La Sala de Juntas está apagada.' });
 
+  // R193 · La plantilla de grabación (la abre LiveKit, sin sesión de Sublichat) pide SOLO la escena de una grabación ACTIVA:
+  // nombres, avatares y escenario. Nada de correos, teléfonos, tokens ni datos de clientes.
+  if (req.body && typeof req.body === 'object' && req.body.accion === 'grabacion_escena') {
+    let db0; try { db0 = dbOf(); } catch (_) { return res.status(500).json({ ok: false, error: 'Sin base de datos.' }); }
+    try { return res.status(200).json({ ok: true, escena: await escenaGrabacion(db0, env, String(req.body.grabacionId || ''), ahora) }); }
+    catch (e) { return res.status(e.status || 500).json({ ok: false, error: e.status ? e.message : 'No se pudo leer la escena.' }); }
+  }
   const header = String(req.headers?.authorization || '');
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return res.status(401).json({ ok: false, error: 'Sesión requerida.' });
@@ -189,7 +221,7 @@ async function handler(req, res, deps = {}) {
         permisos: { crear: S.puede.crear(yo), moderar: S.puede.moderar(yo) },
         fundadoras: miembros.map(({ id, nombre, cargo, anfitriona, asiento, invitado }) => ({ id, nombre, cargo, anfitriona, asiento, invitado: !!invitado })),
         avatares: await avataresDe(db, miembros), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
-        proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora,
+        proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora, grabacionServidor: G.configGrabacion(env).ok,
         telegram: S.puede.moderar(yo) ? await telegramDe(db, env, idsMiembros) : { [yo.id]: (await telegramDe(db, env, [yo.id]))[yo.id] }, botTelegram: !!String(env.TELEGRAM_BOT_USERNAME || '').trim(),
       });
     }
@@ -328,6 +360,75 @@ async function handler(req, res, deps = {}) {
       const ini = Date.parse(r.abiertaAt || '') || 0, fin = Date.parse(r.cerradaAt || '') || 0;
       const grab = aud.docs.map((d) => d.data()).filter((x) => x.accion === 'grabacion_fin');
       return { asistentes, duracionMin: ini && fin && fin > ini ? Math.round((fin - ini) / 60000) : null, grabada: grab.length > 0, grabacionSeg: grab.reduce((t, x) => t + (x.duracionSeg || 0), 0) };
+    }
+    // ---------- R193 · grabación COMPLETA en el servidor (LiveKit Egress + plantilla 3D propia) ----------
+    if (accion === 'grabacion_servidor') {
+      const op = String(body.op || '');
+      const cfg = G.configGrabacion(env);
+      const f = deps.fetch || fetch;
+      const { id, r } = await leerReunion(body.id);
+      const sala = r.roomId || `sj_${id}`;
+      const activas = async () => (await db.collection(G.COLECCION).where('reunionId', '==', id).get()).docs.map((d) => ({ id: d.id, g: d.data() || {} })).filter((x) => ['iniciando', 'grabando'].includes(x.g.estado));
+      if (op === 'iniciar') {
+        if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede grabar.');
+        if (!cfg.ok) throw err(503, `La grabación en el servidor no está configurada. Faltan: ${cfg.faltan.join(', ')}.`);
+        if (S.estadoVigente(r, ahora) !== 'en_curso' || !r.salaAbierta) throw err(409, 'La reunión debe estar en curso con la sala abierta.');
+        if (body.consentimiento !== true) throw err(400, 'Confirme el aviso de grabación antes de empezar.');
+        if ((await activas()).length) throw err(409, 'Ya hay una grabación en curso de esta reunión.');
+        const gid = G.nuevoId();
+        const presentes = (Array.isArray(body.presentes) ? body.presentes : []).map(String).filter((u) => (r.participantes || []).includes(u)).slice(0, 20);
+        const ref = db.collection(G.COLECCION).doc(gid);
+        await ref.set({ reunionId: id, sala, estado: 'iniciando', inicio: iso, iniciadaPor: yo.id, participantes: r.participantes || [], origen: body.origen === 'android' ? 'android' : 'web',
+          consentimiento: { avisoMostrado: true, confirmadoPor: yo.id, presentes, at: iso } });
+        let info;
+        try { info = await G.twirp(f, env, 'StartRoomCompositeEgress', G.cuerpoInicio({ sala, base: cfg.base, bucket: String(env.SALA_GRAB_BUCKET).trim(), credenciales: env.SALA_GRAB_GCP_CREDENTIALS, reunionId: id, grabacionId: gid }), sala, ahora); }
+        catch (e) { await ref.set({ estado: 'fallida', error: e.message, fin: iso }, { merge: true }); throw e; }
+        const est = G.estadoDeEgress(info);
+        await ref.set({ egressId: est.egressId, estado: est.estado === 'iniciando' ? 'iniciando' : est.estado }, { merge: true });
+        const a = auditoria(db, yo, 'grabacion_servidor_inicio', id, { grabacionId: gid, presentes }); await a.ref.set(a.data);
+        return res.status(200).json({ ok: true, grabacion: G.publicaGrabacion(gid, { reunionId: id, estado: est.estado, inicio: iso, iniciadaPor: yo.id, participantes: r.participantes, consentimiento: { presentes } }) });
+      }
+      if (op === 'detener') {
+        if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede detener la grabación.');
+        const lista = await activas(); const x = lista.find((y) => y.id === body.grabacionId) || lista[0];
+        if (!x) throw err(404, 'No hay grabación en curso.');
+        let est = { estado: 'procesando' };
+        if (x.g.egressId && cfg.ok) est = G.estadoDeEgress(await G.twirp(f, env, 'StopEgress', { egressId: x.g.egressId }, sala, ahora));
+        const nuevo = ['iniciando', 'grabando'].includes(est.estado) ? 'procesando' : est.estado;
+        await db.collection(G.COLECCION).doc(x.id).set({ estado: nuevo, fin: iso, detenidaPor: yo.id, ...(est.storageKey ? { storageKey: est.storageKey } : {}), ...(est.duracionSeg ? { duracionSeg: est.duracionSeg, bytes: est.bytes } : {}) }, { merge: true });
+        const a = auditoria(db, yo, 'grabacion_servidor_fin', id, { grabacionId: x.id }); await a.ref.set(a.data);
+        return res.status(200).json({ ok: true, grabacion: { id: x.id, estado: nuevo } });
+      }
+      if (op === 'estado') { const l = await activas(); return res.status(200).json({ ok: true, activa: l[0] ? G.publicaGrabacion(l[0].id, l[0].g) : null, configurada: cfg.ok }); }
+      throw err(400, 'Operación no válida.');
+    }
+    if (accion === 'grabaciones') { // lista de grabaciones de UNA reunión: solo sus participantes
+      const { id, r } = await leerReunion(body.id);
+      const cfg = G.configGrabacion(env); const f = deps.fetch || fetch;
+      const docs = (await db.collection(G.COLECCION).where('reunionId', '==', id).get()).docs.map((d) => ({ id: d.id, g: d.data() || {} }));
+      for (const x of docs.filter((y) => ['iniciando', 'grabando', 'procesando'].includes(y.g.estado) && y.g.egressId).slice(0, 4)) {
+        if (!cfg.ok) break;
+        try {
+          const j = await G.twirp(f, env, 'ListEgress', { roomName: x.g.sala || r.roomId || `sj_${id}`, egressId: x.g.egressId }, x.g.sala || `sj_${id}`, ahora);
+          const info = (j.items || [])[0]; if (!info) continue;
+          const est = G.estadoDeEgress(info); const upd = { estado: est.estado };
+          if (est.storageKey) upd.storageKey = est.storageKey; if (est.duracionSeg) { upd.duracionSeg = est.duracionSeg; upd.bytes = est.bytes; } if (est.error) upd.error = est.error;
+          await db.collection(G.COLECCION).doc(x.id).set(upd, { merge: true }); Object.assign(x.g, upd);
+        } catch (_) {}
+      }
+      docs.sort((a, b) => String(b.g.inicio).localeCompare(String(a.g.inicio)));
+      return res.status(200).json({ ok: true, grabaciones: docs.map((x) => G.publicaGrabacion(x.id, x.g)), configurada: cfg.ok });
+    }
+    if (accion === 'grabacion_ver') { // enlace firmado de 15 minutos; queda auditado quién lo abrió
+      const { id } = await leerReunion(body.id);
+      if (!G.idValido(body.grabacionId)) throw err(400, 'Grabación no válida.');
+      const s2 = await db.collection(G.COLECCION).doc(body.grabacionId).get(); const g = s2.exists ? s2.data() || {} : null;
+      if (!g || g.reunionId !== id) throw err(404, 'Esa grabación no existe.');
+      if (!['lista', 'lista_parcial'].includes(g.estado) || !g.storageKey) throw err(409, 'La grabación todavía no está lista.');
+      if (!G.configGrabacion(env).ok) throw err(503, 'La grabación en el servidor no está configurada.');
+      const url = await (deps.firmar || firmarGrabacion)(env, g.storageKey, { descargar: body.descargar === true, ahora });
+      const a = auditoria(db, yo, body.descargar === true ? 'grabacion_descargar' : 'grabacion_ver', id, { grabacionId: body.grabacionId }); await a.ref.set(a.data);
+      return res.status(200).json({ ok: true, url, expiraMs: ahora + G.FIRMA_MIN * 60000 });
     }
     if (accion === 'grabacion') { // R175 · solo registro: el archivo queda en el equipo de la anfitriona, no se sube
       if (!S.puede.moderar(yo)) throw err(403, 'Solo la anfitriona puede grabar.');
@@ -547,3 +648,4 @@ async function handler(req, res, deps = {}) {
 module.exports = handler;
 module.exports.handler = handler;
 module.exports.retirarDeSala = retirarDeSala;
+module.exports.escenaGrabacion = escenaGrabacion;
