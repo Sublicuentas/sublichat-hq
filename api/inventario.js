@@ -562,6 +562,13 @@ export default async function handler(req, res) {
         if (accion === "spotifyVincular") return res.status(200).json({ ok: true, familia: await spotifyFam.vincularInvitado(db, { familiaId: req.body.familiaId, correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u }) });
         if (accion === "spotifyMover") return res.status(200).json({ ok: true, ...(await spotifyFam.moverInvitado(db, { correo: req.body.correo, destinoId: req.body.destinoId, usuario: u })) });
         if (accion === "spotifyDesvincular") return res.status(200).json({ ok: true, ...(await spotifyFam.desvincular(db, { correo: req.body.correo, usuario: u })) });
+        // R196 · Control Maestro › Spotify Premium Familiar (5 espacios por correo; cliente y vencimiento leídos de la ficha)
+        if (accion === "spotifyPanel") { const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10); return res.status(200).json({ ok: true, hoy, capacidad: spotifyFam.CAPACIDAD, familias: await spotifyFam.panelFamilias(db, { hoy }) }); }
+        if (accion === "spotifyVincularEspacio") return res.status(200).json({ ok: true, familia: await spotifyFam.vincularInvitado(db, { familiaId: req.body.familiaId, correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, pendiente: req.body.pendiente === true, posicion: Number(req.body.posicion) || 0, usuario: u }) });
+        if (accion === "spotifyCambiarCorreo") return res.status(200).json({ ok: true, ...(await spotifyFam.cambiarCorreo(db, { correoActual: req.body.correoActual, correoNuevo: req.body.correoNuevo, usuario: u })) });
+        if (accion === "spotifyVincularFicha") return res.status(200).json({ ok: true, ...(await spotifyFam.vincularFicha(db, { correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u })) });
+        if (accion === "spotifyMarcar") return res.status(200).json({ ok: true, ...(await spotifyFam.marcarMiembro(db, { correo: req.body.correo, estadoInvitacion: req.body.estadoInvitacion, retiroPendiente: typeof req.body.retiroPendiente === "boolean" ? req.body.retiroPendiente : undefined, usuario: u })) });
+        if (accion === "spotifyLiberar") return res.status(200).json({ ok: true, ...(await spotifyFam.liberarEspacio(db, { correo: req.body.correo, confirmoRetiro: req.body.confirmoRetiro === true, usuario: u })) });
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e) }); }
       return res.status(400).json({ ok: false, error: "Acción de Spotify desconocida." });
     }

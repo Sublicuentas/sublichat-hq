@@ -31,6 +31,7 @@ const MODULOS = Object.freeze([
   { id: 'finanzas', label: 'Finanzas (egresos, cierre y libro)', grupo: 'Operación', pantallas: ['egresos', 'cierre'], servidor: true },
   { id: 'codigos', label: 'Códigos de plataformas (APK)', grupo: 'Operación', pantallas: [], servidor: true },
   { id: 'baul-apks', label: 'Baúl de APKs de TV Digital (APK y bot)', grupo: 'Operación', pantallas: [], servidor: true }, // R187
+  { id: 'finanzas-panel', label: 'Finanzas (ganancias, proveedores, compras, Netflix VIP)', grupo: 'Operación', pantallas: ['finanzas'], servidor: true }, // R196 · solo Sublicuentas por defecto
   { id: 'spotify-familias', label: 'Spotify Familiar (familias e invitados)', grupo: 'Operación', pantallas: [], servidor: true }, // R188
   { id: 'actividad', label: 'Actividad del sistema', grupo: 'Supervisión', pantallas: ['actividad'], servidor: true },
   { id: 'auditoria', label: 'Cuadre y auditoría', grupo: 'Supervisión', pantallas: ['auditoria'] },
@@ -85,6 +86,7 @@ function porDefecto(user = {}) {
     if (m.id === 'baul-apks') v = relojes || geisell; // R187 · fundadoras; a los demás lo activa Sublicuentas
     if (m.id === 'spotify-familias') v = relojes || geisell; // R188 · igual que el Baúl
     if (m.id === 'bodega') v = false;
+    if (m.id === 'finanzas-panel') v = false; // R196 · Sublicuentas (supervisor) lo tiene; a los demás lo activa él
     if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
     out[m.id] = !!v;
   }
@@ -154,6 +156,7 @@ function pantallasVisibles(user = {}, config = {}) {
   for (const m of MODULOS) {
     if (!mods[m.id]) continue;
     if (m.id === 'sala-juntas') { out.push('sala-juntas'); continue; } // R179 · módulo seleccionable: activo = se ve
+    if (m.id === 'finanzas-panel') { out.push('finanzas'); continue; } // R196 · igual que la Sala
     const todas = ov[m.id] === true && !base[m.id];
     for (const p of m.pantallas) if (todas || m.fijo || menu.has(p) || ov[m.id] === true) out.push(p);
   }

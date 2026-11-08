@@ -11,7 +11,10 @@ import { financeMetadata } from "./_finance-schema.js";
 import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
 import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-categorias.js"; // R112 · R137
 import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
-import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
+import { handleEmpresa, ACCIONES_EMPRESA, resumenInventario as resumenInvEmpresa, MODELOS as MODELOS_FIN, MONEDAS as MONEDAS_FIN } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
+import { handlePanel, ACCIONES_PANEL } from "./_finanzas-panel.js"; // R196 · pestaña FINANZAS (ganancias, proveedores, compras, Netflix VIP)
+import { correrCosteo as correrCosteoPanel } from "./_finanzas-costeo.js"; // R196
+import { costosProveedor as costosProvPanel, rentabilidad as rentPanel } from "./_finanzas-reportes.js"; // R196
 import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
 import { periodoHN, resumenMes, diagnosticarDuplicados, evidenciaNecesaria } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
 import { PRODUCTOS, normAlias, resolverProducto } from "./_productos-canonicos.js"; // R193 · productos canónicos
@@ -880,6 +883,14 @@ export default async function handler(req, res) {
     // R104: egresos operativos los registran Sublicuentas y Relojes (Finanzas nueva).
     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
+    }
+    if (ACCIONES_PANEL.includes(accion)) { // R196 · FINANZAS: solo Sublicuentas o quien él autorice en Permisos (módulo «finanzas-panel»)
+      const puede = await PERMISOS.decidir(db, authUser, "finanzas-panel", identity.role === "sublicuentas");
+      if (!puede) return res.status(403).json({ ok: false, error: "Su usuario no tiene Finanzas. Sublicuentas lo activa en Permisos." });
+      const cd = { R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(db, desde).get()) };
+      const handled = await handlePanel(db, accion, body, identity, authUser, res, { hoyYmdHN, auditar, loadMethods, resumenInventario: resumenInvEmpresa, costosProveedor: costosProvPanel, rentabilidad: rentPanel, MODELOS: MODELOS_FIN, MONEDAS: MONEDAS_FIN,
+        correrCosteo: () => correrCosteoPanel(db, { ...cd, hoy: hoyYmdHN(), actor: "sistema", limite: 150 }) });
+      if (handled !== null) return handled;
     }
     if (ACCIONES_EMPRESA.includes(accion)) { // R135 · catálogo financiero, proveedores, precios con historial y Binance
       const handled = await handleEmpresa(db, accion, body, identity, authUser, res, { canUseLibro, hoyYmdHN, auditar, loadMethods, libroOpDocId, estadoLibro, baseMov, canonicalFinanceDate,

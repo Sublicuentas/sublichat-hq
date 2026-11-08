@@ -22,8 +22,8 @@ export const MODELOS = Object.freeze({
   panel: { label: "Panel / cupos", unidad: "cupo", ejemplo: "Canva, Duolingo" },
   costo_cero: { label: "Costo cero", unidad: "unidad", ejemplo: "Vix" },
 });
-export const MONEDAS = Object.freeze(["HNL", "USDT", "USD"]);
-export const CATEGORIAS_FIN = Object.freeze({ perfiles: "Perfiles de streaming", tv_digital: "TV Digital", musica: "Música", software: "Software y licencias", cuentas_completas: "Cuentas completas" });
+export const MONEDAS = Object.freeze(["HNL", "USDT", "USD", "EUR", "PHP"]); // R196 · EUR y PHP (siempre con cargo real en HNL)
+export const CATEGORIAS_FIN = Object.freeze({ perfiles: "Perfiles de streaming", tv_digital: "TV Digital", musica: "Música", software: "Software y licencias", cuentas_completas: "Cuentas completas", ia: "IA y productividad", videojuegos: "Videojuegos", recargas: "Recargas", antivirus: "Antivirus" }); // R196 · + categorías
 export const BINANCE_ID = "binance";
 
 const r2 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
@@ -39,7 +39,7 @@ export function validarProducto(p = {}) {
   const nombre = txt(p.nombre, 80); if (!nombre) throw errUsuario("Escriba el nombre del producto.");
   const sku = (txt(p.sku, 30) || slug(nombre)).toUpperCase().replace(/[^A-Z0-9-]/g, "-").slice(0, 30);
   const modelo = String(p.modelo || ""); if (!MODELOS[modelo]) throw errUsuario("Elija el modelo de abastecimiento.");
-  const categoria = CATEGORIAS_FIN[p.categoria] ? p.categoria : "perfiles";
+  const categoria = CATEGORIAS_FIN[p.categoria] || /^[a-z][a-z0-9_]{2,29}$/.test(String(p.categoria || "")) ? String(p.categoria) : "perfiles"; // R196 · categoría nueva sin programar
   const capacidad = Math.max(1, Math.round(Number(p.capacidad) || 1));
   const duracionDias = Math.max(0, Math.round(Number(p.duracionDias) || 0));
   const c = p.costoRef || {};
