@@ -1539,6 +1539,7 @@
         </div>
         <div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>
       </div>
+      ${state.accountPlatform==='spotify'?'<div id="cmSpotifyFamilias"></div>':''}<!-- R196 · solo Spotify Premium Familiar: 5 espacios por correo -->
       <div id="cmAccountResults">${accountResultsHtml()}</div>
     </section>`;
   }
@@ -1660,6 +1661,7 @@
       </details>
     </div>`;
     bind();
+    if(state.accountPlatform==='spotify'&&window.SublichatSpotifyCM)window.SublichatSpotifyCM.montar(host.querySelector('#cmSpotifyFamilias')); // R196
     if(expanded){
       state.controlExpanded=true;
       requestAnimationFrame(persistControlExpanded);

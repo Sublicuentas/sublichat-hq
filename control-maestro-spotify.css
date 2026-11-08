@@ -1,0 +1,31 @@
+/* control-maestro-spotify.css · R196 — Control Maestro › Spotify Premium Familiar (5 espacios por correo). Claro, tarjetas blancas. */
+.sp-cm{margin:14px 0;display:grid;gap:12px}
+.sp-cm-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.sp-cm-cab h3{margin:0;font-size:18px;color:#0f172a}.sp-cm-cab p{margin:2px 0 0;color:#64748b;font-size:13px}
+.sp-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:14px;padding:10px}
+.sp-filtros input{flex:1 1 260px;min-height:40px;border:1px solid #e3e8ef;border-radius:10px;padding:0 12px;font:inherit;background:#f8fafc}
+.sp-chip{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid #e3e8ef;background:#fff;font-weight:600;color:#334155;cursor:pointer}
+.sp-chip.on{background:#fff1f0;border-color:#f5b5b0;color:#c81e1e}
+.sp-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+@media (max-width:1000px){.sp-grid{grid-template-columns:1fr}}
+.sp-lista{display:grid;gap:12px}
+.sp-fam{background:#fff;border:1px solid #e3e8ef;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.sp-fam-cab{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#f8fafc;border:1px solid #edf1f6;border-radius:12px;padding:10px 14px;margin-bottom:10px}
+.sp-fam-cab small{display:block;color:#64748b;font-size:12px}.sp-fam-cab b{display:block;font-size:17px;color:#0f172a;word-break:break-all}
+.sp-cupo{white-space:nowrap;padding:6px 14px;border-radius:999px;background:#e9f9ef;color:#15803d;border:1px solid #bfe8cf;font-weight:700;font-size:13px}
+.sp-cupo.llena{background:#f1f5f9;color:#475569;border-color:#e2e8f0}
+.sp-tabla{display:grid;gap:6px}
+.sp-fila{display:grid;grid-template-columns:44px minmax(0,1.6fr) minmax(0,1.1fr) 120px 150px 36px;gap:8px;align-items:center;padding:8px 10px;border:1px solid #edf1f6;border-radius:10px;background:#fbfcfe}
+.sp-th{background:transparent;border:0;padding:0 10px;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.sp-n{color:#94a3b8;font-weight:800}.sp-correo{font-weight:700;color:#0f172a;word-break:break-all}.sp-vence{color:#475569;font-size:13px}
+.sp-mute{color:#94a3b8}.sp-warn{color:#b45309}.sp-venc{color:#c81e1e;font-weight:700}
+.sp-pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
+.sp-disp{background:#eef2ff;color:#3f4b8c}.sp-ocup{background:#e9f9ef;color:#15803d}.sp-pend{background:#fff7e0;color:#9a6700}.sp-ret{background:#fff1f0;color:#c81e1e}
+.sp-mas{width:32px;height:32px;border-radius:8px;border:1px solid #e3e8ef;background:#fff;cursor:pointer;font-weight:800}
+.sp-menu{display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px 10px 54px}
+.sp-menu button{min-height:34px;padding:0 10px;border-radius:9px;border:1px solid #e3e8ef;background:#fff;font-weight:600;cursor:pointer}
+.sp-menu .sp-peligro{color:#c81e1e;border-color:#f5c2be}
+.sp-rel{background:#fff;border:1px solid #e3e8ef;border-radius:16px;padding:14px;display:grid;gap:8px}
+.sp-rel h4{margin:0 0 4px;font-size:16px}.sp-rel div{background:#f8fafc;border-radius:10px;padding:8px 10px}
+.sp-rel b{color:#c81e1e;display:block}.sp-rel small{color:#64748b}
+@media (max-width:720px){.sp-fila{grid-template-columns:34px 1fr 90px;grid-auto-rows:auto}.sp-fila>span:nth-child(3),.sp-fila>span:nth-child(4){grid-column:2/4}.sp-th{display:none}}
