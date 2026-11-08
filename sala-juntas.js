@@ -46,7 +46,11 @@
   };
   const ico = (k, c = '') => `<svg class="sj-i ${c}" viewBox="0 0 24 24" aria-hidden="true">${I[k] || ''}</svg>`;
 
+  // R193 · Misma sala dentro de la APK: la APK define window.SalaJuntasConfig = { post, embebida, descargar } antes de cargar
+  // este archivo. post() usa la sesión vigente de la APK (sin segundo inicio de sesión). En la Web no existe y todo sigue igual.
+  const CFG = (typeof window !== 'undefined' && window.SalaJuntasConfig) || {};
   async function api(body) {
+    if (typeof CFG.post === 'function') { const j = await CFG.post(body); if (!j || !j.ok) throw new Error((j && j.error) || 'No se pudo completar.'); return j; }
     const r = await fetch('/api/sala-juntas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo completar.');
@@ -120,6 +124,7 @@
     else cuerpo = inicio();
     desmontar3D();
     if (st.vivo && st.vista !== 'sala3d') salirVivo();
+    if (st.vistaPintada !== st.vista) { st.vistaPintada = st.vista; try { CFG.alCambiarVista && CFG.alCambiarVista(st.vista); } catch (_) {} } // R193 · la APK sube su vista interna al inicio
     document.documentElement.classList.toggle('sj-en-sala', st.vista === 'sala3d');
     document.documentElement.classList.toggle('sj-en-editor', st.vista === 'personaje');
     if (st.vista !== 'sala3d') salirPantallaCompleta();
@@ -314,12 +319,26 @@
     try { const j = await api({ accion: 'acta', id }); st.acta = { id, ...j, editar: !!editar || (!j.acta && st.data.permisos.moderar) }; }
     catch (e) { st.acta = { id, error: e.message }; }
     pintar();
+    try { const g = await api({ accion: 'grabaciones', id }); if (st.acta && st.acta.id === id) { st.acta.grabs = g.grabaciones || []; st.acta.grabCfg = g.configurada; if (st.vista === 'acta' && !st.acta.editar) pintar(); } } catch (_) {}
+  }
+  // R193 · Grabaciones de la reunión (servidor). Estado, duración, quiénes estaban; reproducir/descargar con enlace de 15 min.
+  const ESTADO_G = { iniciando: 'Iniciando', grabando: 'Grabando', procesando: 'Procesando el video…', lista: 'Lista', lista_parcial: 'Lista (llegó al tope)', fallida: 'Falló' };
+  function grabacionesHtml(A) {
+    if (!A || !Array.isArray(A.grabs)) return '';
+    if (!A.grabs.length) return '';
+    const dur = (s2) => s2 ? `${Math.floor(s2 / 60)} min ${s2 % 60} s` : '—';
+    return `<div class="sj-card sj-pn sj-grabs"><div class="sj-ph">${ico('cam')}<b>Grabaciones de la reunión</b></div>${A.grabs.map((g) => `<div class="sj-grab">
+      <div><b>${esc(new Date(g.inicio).toLocaleString('es-HN', { timeZone: 'America/Tegucigalpa', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}</b> · ${esc(ESTADO_G[g.estado] || g.estado)} · ${dur(g.duracionSeg)}${g.bytes ? ` · ${(g.bytes / 1048576).toFixed(1)} MB` : ''}
+      <small>Presentes al iniciar: ${(g.presentes || []).map((u) => esc(funda(u).nombre)).join(', ') || '—'}${g.error ? ` · ${esc(g.error)}` : ''}</small></div>
+      ${g.reproducible ? `<div class="sj-grab-a"><button type="button" class="sj-btn sj-mini" data-sj="grabVer" data-id="${esc(A.id)}" data-g="${esc(g.id)}">${ico('play')}Reproducir</button>${CFG.embebida && typeof CFG.descargar !== 'function' ? '' : `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="grabBajar" data-id="${esc(A.id)}" data-g="${esc(g.id)}">Descargar</button>`}</div>` : ''}
+      ${A.video && A.video.g === g.id ? `<video class="sj-grab-v" controls playsinline preload="metadata" src="${esc(A.video.url)}"></video><small>El enlace vence en 15 minutos.</small>` : ''}</div>`).join('')}</div>`;
   }
   function actaHtml() {
     const A = st.acta; if (!A) return '';
     if (A.cargando) return `<div class="sj-card sj-pn"><p class="sj-p">Cargando acta…</p></div>`;
     if (A.error) return `<div class="sj-card sj-pn"><p class="sj-p">${esc(A.error)}</p></div>`;
     const r = A.reunion, a = A.acta, mod = st.data.permisos.moderar, yo = st.data.yo.id;
+    const grabsHtml = grabacionesHtml(A);
     const cabA = `<div class="sj-ph">${ico('doc')}<b>${esc(r.titulo)}</b>${pill(r.estado)}</div>
       <div class="sj-acta-meta"><span>${ico('cal')}${esc(new Date(r.inicioMs).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Tegucigalpa' }))}</span>
       <span>${ico('reloj')}${A.duracionMin != null ? `Duración ${A.duracionMin} min` : 'Duración no registrada'}</span>
@@ -335,14 +354,14 @@
         <button type="button" class="sj-btn sj-sec sj-mini" data-sj="acuMas">+ Agregar acuerdo</button>
         <div class="sj-form-acc"><button type="submit" class="sj-btn sj-rojo sj-grande">${ico('check')}Guardar acta</button>${a ? `<button type="button" class="sj-btn sj-sec" data-sj="actaCancelar">Cancelar</button>` : ''}</div></form>`;
     }
-    if (!a) return `<div class="sj-card sj-pn">${cabA}<p class="sj-p">La anfitriona todavía no ha escrito el acta de esta reunión.</p></div>`;
+    if (!a) return `<div class="sj-card sj-pn">${cabA}<p class="sj-p">La anfitriona todavía no ha escrito el acta de esta reunión.</p></div>${grabsHtml}`;
     const acu = (a.acuerdos || []).map((x) => { const puede = x.responsable === yo || mod; return `<li class="sj-acu ${x.estado === 'cumplido' ? 'sj-acu-ok' : ''}"><label><input type="checkbox" data-sj="acuEstado" data-k="${esc(x.id)}" ${x.estado === 'cumplido' ? 'checked' : ''} ${puede ? '' : 'disabled'}><span><b>${esc(x.texto)}</b><small>${esc(funda(x.responsable).nombre)}${x.fecha ? ' · para el ' + esc(x.fecha.split('-').reverse().join('/')) : ''}${x.estado === 'cumplido' ? ' · cumplido' : ''}</small></span></label></li>`; }).join('');
     return `<div class="sj-card sj-pn sj-acta">${cabA}
       ${a.resumen ? `<h4>Resumen</h4><p class="sj-p sj-pre">${esc(a.resumen)}</p>` : ''}
       ${(a.decisiones || []).length ? `<h4>Decisiones</h4><ul class="sj-dec">${a.decisiones.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
       ${(a.acuerdos || []).length ? `<h4>Acuerdos y tareas</h4><ul class="sj-acus">${acu}</ul>` : ''}
       <p class="sj-hint">Actualizada ${esc(new Date(a.actualizadoAt).toLocaleString('es-HN', { timeZone: 'America/Tegucigalpa' }))} por ${esc(funda(a.actualizadoPor).nombre)}.</p>
-      ${mod ? `<div class="sj-form-acc"><button type="button" class="sj-btn sj-sec" data-sj="actaEditar">Editar acta</button></div>` : ''}</div>`;
+      ${mod ? `<div class="sj-form-acc"><button type="button" class="sj-btn sj-sec" data-sj="actaEditar">Editar acta</button></div>` : ''}</div>${grabsHtml}`;
   }
   async function guardarActa(f) {
     if (st.guardando) return; const A = st.acta;
@@ -737,6 +756,7 @@
     if (V.presEl) V.presEl.remove();
     if (V.presentador) { try { V.presentador.detener(); } catch (_) {} V.presentador = null; }
     if (V.grab) { try { V.grab.g.detener(); } catch (_) {} }
+    if (V.grabSrv) { api({ accion: 'grabacion_servidor', op: 'detener', id: V.id, grabacionId: V.grabSrv.id }).catch(() => {}); V.grabSrv = null; } // R193: al salir la anfitriona se detiene
     clearInterval(V.recReloj);
     salirPantallaCompleta();
     if (volver && st.vista === 'sala3d') { st.vista = 'antesala'; pintar(); }
@@ -801,14 +821,33 @@
   // R175 · grabación local (Fase 7)
   function pintarRec() {
     const V = st.vivo, e = document.getElementById('sj3dRec'); if (!V || !e) return;
-    const desde = V.grab ? V.grab.desde : V.grabandoDesde; e.hidden = !desde;
+    const desde = V.grabSrv ? V.grabSrv.desde : V.grab ? V.grab.desde : V.grabandoDesde; e.hidden = !desde;
     clearInterval(V.recReloj); if (!desde) return;
     const tic = () => { const s2 = Math.max(0, Math.round((Date.now() - desde) / 1000)); const t = document.getElementById('sj3dRecT'); if (t) t.textContent = `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`; };
     tic(); V.recReloj = setInterval(tic, 1000);
-    const b = document.getElementById('sj3d-lkGrabar'); if (b) { b.classList.toggle('sj3d-on', !!V.grab); b.innerHTML = `${ico('reloj')}<span>${V.grab ? 'Detener' : 'Grabar'}</span>`; }
+    const b = document.getElementById('sj3d-lkGrabar'); if (b) { b.classList.toggle('sj3d-on', !!(V.grab || V.grabSrv)); b.innerHTML = `${ico('reloj')}<span>${V.grab || V.grabSrv ? 'Detener' : 'Grabar'}</span>`; }
+  }
+  // R193 · GRABACIÓN COMPLETA EN EL SERVIDOR (LiveKit Egress + plantilla 3D): escena, avatares, presentación y audio real.
+  // La inicia/detiene solo la anfitriona; todas ven «Grabando»; el video queda privado y se ve desde el acta con permiso.
+  async function grabacionServidor() {
+    const V = st.vivo; if (!V) return;
+    if (V.grabSrv) {
+      try { await api({ accion: 'grabacion_servidor', op: 'detener', id: V.id, grabacionId: V.grabSrv.id }); toast('Grabación detenida. El video estará en el acta cuando termine de procesarse.'); }
+      catch (e) { toast(e.message, true); return; }
+      V.grabSrv = null; try { await V.ctl.setGrabando(false); } catch (_) {} pintarRec(); return;
+    }
+    if (!confirm('¿Grabar la reunión COMPLETA?\n\nSe graba la sala 3D, los avatares, la presentación y el audio de todas. Todas verán el aviso «Grabando».\nEl video queda privado y solo lo ven las participantes desde el acta.')) return;
+    try {
+      const j = await api({ accion: 'grabacion_servidor', op: 'iniciar', id: V.id, consentimiento: true, presentes: [...(V.presentes || [])], origen: CFG.embebida ? 'android' : 'web' });
+      V.grabSrv = { id: j.grabacion.id, desde: Date.now() };
+      try { await V.ctl.setGrabando(true); } catch (_) {}
+      pintarRec(); toast('Grabando en el servidor. Todas ven el aviso.');
+    } catch (e) { toast(e.message || 'No se pudo empezar a grabar.', true); }
   }
   async function alternarGrabacion() {
     const V = st.vivo; if (!V?.ctl || !st.data.permisos.moderar) return;
+    if (st.data.grabacionServidor || V.grabSrv) return grabacionServidor();
+    if (CFG.embebida) return toast('La grabación en el servidor todavía no está configurada (falta el almacenamiento). En la APK no se graba en el teléfono.', true);
     if (V.grab) { V.grab.g.detener(); return; }
     if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. El video se descarga solo en este equipo al detener (no se sube a internet).' + (V.modoGrab ? '' : '\n\nPara anuncios: active "Modo grabación" en Ajustes (plano frontal y escena limpia).'))) return;
     const lienzo = document.querySelector('#sj3dEscena canvas.sj3d-canvas'); if (!lienzo) return toast('La sala 3D todavía no está lista.', true);
@@ -1000,6 +1039,14 @@
     if (a === 'historial') cargarActas();
     if (/^esc[A-Z]/.test(a)) return accionEsc(a, b);
     if (a === 'verActa') return abrirActa(id);
+    if (a === 'grabVer' || a === 'grabBajar') { // R193
+      try {
+        const j = await api({ accion: 'grabacion_ver', id, grabacionId: b.dataset.g, descargar: a === 'grabBajar' });
+        if (a === 'grabBajar') { if (typeof CFG.descargar === 'function') await CFG.descargar(j.url, 'reunion-sala-juntas.mp4'); else { const l = document.createElement('a'); l.href = j.url; l.rel = 'noopener'; document.body.appendChild(l); l.click(); l.remove(); } return; }
+        if (st.acta && st.acta.id === id) { st.acta.video = { g: b.dataset.g, url: j.url }; pintar(); }
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (a === 'actaEditar') { st.acta.editar = true; return pintar(); }
     if (a === 'actaCancelar') { st.acta.editar = false; return pintar(); }
     if (a === 'acuMas') { const c = document.getElementById('sjAcuerdos'); if (c && c.children.length < 30) { const n = c.firstElementChild.cloneNode(true); n.dataset.k = 'a' + Date.now().toString(36).slice(-6); n.dataset.e = 'pendiente'; n.querySelectorAll('input').forEach((x) => { x.value = ''; }); n.querySelector('select').value = ''; c.appendChild(n); n.querySelector('input').focus(); } return; }
@@ -1202,6 +1249,7 @@ html body #screen-sala-juntas.sj-pantalla.sj-pantalla>.card>h2,html body #screen
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-sw-col{all:unset;cursor:pointer;width:30px;height:30px;border-radius:50%!important;background:var(--c)!important;border:0!important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)!important}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-sw-col.on{background:var(--c)!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #E2231A!important}
 .sj-chip-op:focus-visible,.sj-sw-col:focus-visible,.sj-tab:focus-visible,.sj-rot:focus-visible{outline:2px solid #2879C7;outline-offset:2px}
 .sj-acc-op{padding:10px 0;border-bottom:1px solid var(--b)}
+.sj-grabs{display:grid;gap:10px}.sj-grab{display:grid;gap:8px;padding:10px 0;border-top:1px solid var(--b)}.sj-grab small{display:block;color:var(--m);margin-top:3px}.sj-grab-a{display:flex;gap:8px;flex-wrap:wrap}.sj-grab-v{width:100%;border-radius:12px;background:#000}
 .sj-ed-3d{position:relative;border-radius:14px;background:#F4F1EC;min-height:420px;overflow:hidden}.sj-ed-3d canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
 #rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot{all:unset;border-radius:50%!important;background:#20242B!important;cursor:pointer;position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:#20242B;color:#fff;display:grid;place-items:center;font-size:22px;line-height:1}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot-i{left:10px}#rbac-sala-juntas:not(#x1):not(#x2):not(#x3):not(#x4) button.sj-rot-d{right:10px;left:auto}
 .sj-ed-carga{position:absolute;inset:0;display:grid;place-items:center;color:var(--m);font-size:13px;text-align:center;padding:20px}
@@ -1364,5 +1412,27 @@ html.sj-sala-expandida #screen-sala-juntas,html.sj-sala-expandida .screen-sala-j
       catch (e) { toast(e.message, true); }
     }, 250);
   })();
-  window.SublichatSala = { open, recargar: () => cargar(true) };
+  // R193 · Para la APK (sala embebida): abrir una vista concreta sin pasar por el enlace de la Web, y cerrar liberando
+  // micrófono, cámara, LiveKit y la escena 3D (al salir o al girar/volver no queda audio abierto).
+  async function abrir(vista = 'inicio', id = '') {
+    open();
+    for (let i = 0; i < 60 && !st.data && !st.error; i++) await new Promise((r) => setTimeout(r, 200));
+    if (!st.data) return;
+    if (vista === 'escenarios') { await cargarEscenarios(); st.vista = 'escenarios'; return pintar(); }
+    if (vista === 'personaje') { st.pers = null; st.volverAnte = false; st.vista = 'personaje'; return pintar(); }
+    if (vista === 'nueva' && st.data.permisos.crear) { st.editar = null; st.formEsc = ''; st.formSug = null; st.formTipo = ''; if (!st.esc) await cargarEscenarios(); st.vista = 'form'; return pintar(); }
+    if (vista === 'historial') { st.vista = 'historial'; cargarActas(); return pintar(); }
+    if (vista === 'acta' && /^[A-Za-z0-9_-]{6,60}$/.test(id)) return abrirActa(id);
+    if (vista === 'antesala' && /^[A-Za-z0-9_-]{6,60}$/.test(id)) {
+      try { const j = await api({ accion: 'antesala', id }); st.ante = j.reunion; st.data.tiempoReal = j.tiempoReal; st.vista = 'antesala'; pintar(); } catch (e) { toast(e.message, true); }
+    }
+  }
+  function cerrar() {
+    clearInterval(poll); detenerMic();
+    if (st.vivo) salirVivo(false);
+    try { desmontar3D(); } catch (_) {}
+    document.documentElement.classList.remove('sj-en-sala', 'sj-en-editor');
+    st.vista = 'inicio'; host = null;
+  }
+  window.SublichatSala = { open, abrir, cerrar, recargar: () => cargar(true) };
 })();

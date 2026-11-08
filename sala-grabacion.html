@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Grabación · Sala de Juntas</title>
+<!-- R193 · Plantilla de grabación de LiveKit Egress: la abre SOLO el grabador del servidor (no es una pantalla para personas).
+     Dibuja la MISMA sala 3D (sala-3d.js) con los avatares, la presentación y el audio real de la reunión. -->
+<style>
+html,body{margin:0;height:100%;background:#141920;overflow:hidden;font-family:Inter,system-ui,sans-serif}
+#escena{position:fixed;inset:0}
+.sj3d-canvas{position:absolute;inset:0;width:100%;height:100%}
+.sj3d-nombres{position:absolute;inset:0;pointer-events:none}
+.sj3d-nombre{position:absolute;left:0;top:0;background:rgba(20,25,32,.85);color:#fff;font:600 13px Inter,sans-serif;padding:5px 10px;border-radius:999px;white-space:nowrap}
+.sj3d-nombre.sj3d-ausente{opacity:.55;font-style:italic}
+.sj3d-nombre.sj3d-hablando{box-shadow:0 0 0 2px #2FD27A,0 0 14px rgba(47,210,122,.55)}
+.sj3d-ondas{display:none}
+.sj3d-reac{position:absolute;left:50%;bottom:100%;font-size:30px;animation:sube 2.6s ease-out forwards}
+@keyframes sube{to{transform:translateY(-60px);opacity:0}}
+#marca{position:fixed;left:16px;top:14px;display:flex;gap:8px;align-items:center;color:#fff;font:700 14px Inter,sans-serif;background:rgba(20,25,32,.7);padding:6px 12px;border-radius:999px}
+#marca i{width:10px;height:10px;border-radius:50%;background:#E2231A;display:inline-block}
+#aviso{position:fixed;inset:auto 0 0 0;color:#fff;text-align:center;padding:10px;font:600 14px Inter,sans-serif;background:rgba(0,0,0,.55)}
+</style>
+</head>
+<body>
+<div id="escena"></div>
+<div id="marca"><i></i><span id="titulo">Sala de Juntas · Grabando</span></div>
+<div id="aviso" hidden></div>
+<script type="module" src="/sala-grabacion.js?v=20261107-r193"></script>
+</body>
+</html>
