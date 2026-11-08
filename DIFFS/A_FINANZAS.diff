@@ -1,0 +1,167 @@
+--- antes/api/_finanzas-empresa.js
++++ despues/api/_finanzas-empresa.js
+@@ -22,8 +22,8 @@
+   panel: { label: "Panel / cupos", unidad: "cupo", ejemplo: "Canva, Duolingo" },
+   costo_cero: { label: "Costo cero", unidad: "unidad", ejemplo: "Vix" },
+ });
+-export const MONEDAS = Object.freeze(["HNL", "USDT", "USD"]);
+-export const CATEGORIAS_FIN = Object.freeze({ perfiles: "Perfiles de streaming", tv_digital: "TV Digital", musica: "Música", software: "Software y licencias", cuentas_completas: "Cuentas completas" });
++export const MONEDAS = Object.freeze(["HNL", "USDT", "USD", "EUR", "PHP"]); // R196 · EUR y PHP (siempre con cargo real en HNL)
++export const CATEGORIAS_FIN = Object.freeze({ perfiles: "Perfiles de streaming", tv_digital: "TV Digital", musica: "Música", software: "Software y licencias", cuentas_completas: "Cuentas completas", ia: "IA y productividad", videojuegos: "Videojuegos", recargas: "Recargas", antivirus: "Antivirus" }); // R196 · + categorías
+ export const BINANCE_ID = "binance";
+ 
+ const r2 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+@@ -39,7 +39,7 @@
+   const nombre = txt(p.nombre, 80); if (!nombre) throw errUsuario("Escriba el nombre del producto.");
+   const sku = (txt(p.sku, 30) || slug(nombre)).toUpperCase().replace(/[^A-Z0-9-]/g, "-").slice(0, 30);
+   const modelo = String(p.modelo || ""); if (!MODELOS[modelo]) throw errUsuario("Elija el modelo de abastecimiento.");
+-  const categoria = CATEGORIAS_FIN[p.categoria] ? p.categoria : "perfiles";
++  const categoria = CATEGORIAS_FIN[p.categoria] || /^[a-z][a-z0-9_]{2,29}$/.test(String(p.categoria || "")) ? String(p.categoria) : "perfiles"; // R196 · categoría nueva sin programar
+   const capacidad = Math.max(1, Math.round(Number(p.capacidad) || 1));
+   const duracionDias = Math.max(0, Math.round(Number(p.duracionDias) || 0));
+   const c = p.costoRef || {};
+--- antes/api/finanzas.js
++++ despues/api/finanzas.js
+@@ -11,7 +11,10 @@
+ import { fechaPagoValida, pagoSocioVista, pagoSocioDisponible } from "./_finanzas-operacion.js"; // R110 · R121
+ import { clasificarServicio, CATEGORIAS, normPlataformaKey } from "./_catalogo-categorias.js"; // R112 · R137
+ import { estadosFinancieros } from "./_contabilidad.js"; // R134 · partida doble + estados financieros
+-import { handleEmpresa, ACCIONES_EMPRESA } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
++import { handleEmpresa, ACCIONES_EMPRESA, resumenInventario as resumenInvEmpresa, MODELOS as MODELOS_FIN, MONEDAS as MONEDAS_FIN } from "./_finanzas-empresa.js"; // R135 · Finance OS fase 1
++import { handlePanel, ACCIONES_PANEL } from "./_finanzas-panel.js"; // R196 · pestaña FINANZAS (ganancias, proveedores, compras, Netflix VIP)
++import { correrCosteo as correrCosteoPanel } from "./_finanzas-costeo.js"; // R196
++import { costosProveedor as costosProvPanel, rentabilidad as rentPanel } from "./_finanzas-reportes.js"; // R196
+ import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
+ import { periodoHN, resumenMes, diagnosticarDuplicados, evidenciaNecesaria } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
+ import { PRODUCTOS, normAlias, resolverProducto } from "./_productos-canonicos.js"; // R193 · productos canónicos
+@@ -881,6 +884,14 @@
+     if (accion === "registrar_egreso" && !canUseLibro(identity)) {
+       return res.status(403).json({ ok: false, error: "Esta acción corresponde únicamente a Sublicuentas y Relojes." });
+     }
++    if (ACCIONES_PANEL.includes(accion)) { // R196 · FINANZAS: solo Sublicuentas o quien él autorice en Permisos (módulo «finanzas-panel»)
++      const puede = await PERMISOS.decidir(db, authUser, "finanzas-panel", identity.role === "sublicuentas");
++      if (!puede) return res.status(403).json({ ok: false, error: "Su usuario no tiene Finanzas. Sublicuentas lo activa en Permisos." });
++      const cd = { R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(db, desde).get()) };
++      const handled = await handlePanel(db, accion, body, identity, authUser, res, { hoyYmdHN, auditar, loadMethods, resumenInventario: resumenInvEmpresa, costosProveedor: costosProvPanel, rentabilidad: rentPanel, MODELOS: MODELOS_FIN, MONEDAS: MONEDAS_FIN,
++        correrCosteo: () => correrCosteoPanel(db, { ...cd, hoy: hoyYmdHN(), actor: "sistema", limite: 150 }) });
++      if (handled !== null) return handled;
++    }
+     if (ACCIONES_EMPRESA.includes(accion)) { // R135 · catálogo financiero, proveedores, precios con historial y Binance
+       const handled = await handleEmpresa(db, accion, body, identity, authUser, res, { canUseLibro, hoyYmdHN, auditar, loadMethods, libroOpDocId, estadoLibro, baseMov, canonicalFinanceDate,
+         costeoDeps: (dbx) => ({ R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(dbx, desde).get()) }) }); // R137
+--- antes/api/_permisos.js
++++ despues/api/_permisos.js
+@@ -31,6 +31,7 @@
+   { id: 'finanzas', label: 'Finanzas (egresos, cierre y libro)', grupo: 'Operación', pantallas: ['egresos', 'cierre'], servidor: true },
+   { id: 'codigos', label: 'Códigos de plataformas (APK)', grupo: 'Operación', pantallas: [], servidor: true },
+   { id: 'baul-apks', label: 'Baúl de APKs de TV Digital (APK y bot)', grupo: 'Operación', pantallas: [], servidor: true }, // R187
++  { id: 'finanzas-panel', label: 'Finanzas (ganancias, proveedores, compras, Netflix VIP)', grupo: 'Operación', pantallas: ['finanzas'], servidor: true }, // R196 · solo Sublicuentas por defecto
+   { id: 'spotify-familias', label: 'Spotify Familiar (familias e invitados)', grupo: 'Operación', pantallas: [], servidor: true }, // R188
+   { id: 'actividad', label: 'Actividad del sistema', grupo: 'Supervisión', pantallas: ['actividad'], servidor: true },
+   { id: 'auditoria', label: 'Cuadre y auditoría', grupo: 'Supervisión', pantallas: ['auditoria'] },
+@@ -85,6 +86,7 @@
+     if (m.id === 'baul-apks') v = relojes || geisell; // R187 · fundadoras; a los demás lo activa Sublicuentas
+     if (m.id === 'spotify-familias') v = relojes || geisell; // R188 · igual que el Baúl
+     if (m.id === 'bodega') v = false;
++    if (m.id === 'finanzas-panel') v = false; // R196 · Sublicuentas (supervisor) lo tiene; a los demás lo activa él
+     if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
+     out[m.id] = !!v;
+   }
+@@ -154,6 +156,7 @@
+   for (const m of MODULOS) {
+     if (!mods[m.id]) continue;
+     if (m.id === 'sala-juntas') { out.push('sala-juntas'); continue; } // R179 · módulo seleccionable: activo = se ve
++    if (m.id === 'finanzas-panel') { out.push('finanzas'); continue; } // R196 · igual que la Sala
+     const todas = ov[m.id] === true && !base[m.id];
+     for (const p of m.pantallas) if (todas || m.fijo || menu.has(p) || ov[m.id] === true) out.push(p);
+   }
+--- antes/sublichat-app.js
++++ despues/sublichat-app.js
+@@ -7468,7 +7468,8 @@
+     'crm-master':['🗂️','CRM Master'], auditoria:['🔍','Auditoría'], estadisticas:['📊','Métricas'], objetivos:['🎯','Objetivos'],
+     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil'],
+     permisos:['🛡️','Usuarios y permisos'], // R162 · solo Sublicuentas
+-    'sala-juntas':['🎥','Sala de Juntas'] // R179 · módulo de Permisos (fundadoras por defecto)
++    'sala-juntas':['🎥','Sala de Juntas'], // R179 · módulo de Permisos (fundadoras por defecto)
++    finanzas:['💹','Finanzas'] // R196 · módulo «finanzas-panel» (solo Sublicuentas por defecto)
+   };
+   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+   const currentUser=()=>{
+@@ -7502,7 +7503,7 @@
+   // R162 · Módulos por usuario que define Sublicuentas (api/permisos.js). Si el servidor ya respondió para este
+   // usuario, manda esa lista; si no (sin conexión o primera carga), quedan las reglas de siempre.
+   const PERM_KEY='sublichat_permisos_v1';
+-  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sala-juntas','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
++  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sala-juntas','finanzas','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
+   let permisosSrv=null, permisosPidiendo=false, permisosAt=0;
+   function claveActual(){const u=norm(currentUser());return u==='geissel'?'geisell':u;}
+   function permisosVigentes(){
+@@ -7537,6 +7538,7 @@
+   function can(screen){
+     if(screen==='permisos')return isSublicuentasAccount();
+     const pv=permisosVigentes();
++    if(screen==='finanzas')return pv?pv.pantallas.includes('finanzas'):isSublicuentasAccount(); // R196 · el servidor lo vuelve a validar
+     if(screen==='sala-juntas')return pv?pv.pantallas.includes('sala-juntas'):esFundadoraSala(); // R179 · módulo seleccionable en Permisos (el servidor lo vuelve a validar)
+     if(pv)return pv.pantallas.includes(screen);
+     return canHoy(screen);
+@@ -7867,6 +7869,7 @@
+     ensureScreen('auditoria','Cuadre y auditoría','Detecta servicios sin precio, sin vendedor, vencidos o posibles fugas.','');
+     ensureScreen('estadisticas','Métricas y rendimiento','Resumen por plataforma, vendedor y cartera.','');
+     ensureScreen('sala-juntas','Sala de Juntas','SubliStudio 3D · Reuniones, convocatorias y acuerdos del equipo','');
++    ensureScreen('finanzas','Finanzas','Ganancias, proveedores, compras y reportes · no modifica Control Maestro','');
+     ensureScreen('permisos','Usuarios y permisos','Sublicuentas define qué módulos tiene cada usuario. Sublicuentas siempre tiene todos.','');
+     ensureScreen('objetivos','Objetivos y metas','Módulo nuevo: metas de ventas diarias, semanales y mensuales con progreso en vivo. Las metas se guardan en este navegador y las puede editar Relojes, Sublicuentas o Magdiel.','');
+   }
+@@ -7879,7 +7882,7 @@
+     document.body.classList.toggle('role-auditor',role==='auditor');
+     // El menú usa el mismo permiso que abre el módulo para incluir a Geisell en Control Maestro.
+     const pv=permisosVigentes();
+-    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'sala-juntas','permisos'].filter(can); // R162 · R167
++    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'sala-juntas','finanzas','permisos'].filter(can); // R162 · R167 · R196
+     setTimeout(()=>cargarPermisos(false),0);
+     try{window.dispatchEvent(new CustomEvent('sublichat:nav',{detail:{screens:screens.slice(),role}}));}catch(_){}
+     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&['admin','geisell_admin'].includes(role))?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');
+@@ -7904,6 +7907,7 @@
+     if(screen==='sorteos'&&window.SublichatSorteos)window.SublichatSorteos.open();
+     if(screen==='permisos'&&window.SublichatPermisos)window.SublichatPermisos.open();
+     if(screen==='sala-juntas'&&window.SublichatSala)window.SublichatSala.open();
++    if(screen==='finanzas'&&window.SublichatFinanzas)window.SublichatFinanzas.open(); // R196
+     try{window.dispatchEvent(new CustomEvent('sublichat:screen',{detail:{screen}}));}catch(_){}
+   }
+ 
+@@ -8712,7 +8716,7 @@
+   window.subliRBAC={apply:applyRBAC,go:rbacGo,role:currentRole,can};
+   // R162 · Para el diseño nuevo (ui-v2.js) y la pantalla de permisos (permisos-admin.js).
+   window.SublichatRBAC={ir:rbacGo,can,rol:currentRole,rolEtiqueta:()=>ROLE_LABEL[currentRole()]||'Usuario',usuario:currentUser,esSupervisor:isSublicuentasAccount,
+-    pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'sala-juntas','permisos'].filter(can);},
++    pantallas:()=>{const pv=permisosVigentes();return pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[currentRole()]||ROLE_NAV.admin),'sala-juntas','finanzas','permisos'].filter(can);},
+     meta:(s)=>NAV_META[s]||['•',s],recargarPermisos:()=>cargarPermisos(true),
+     // R166 · Foto del usuario autenticado: MISMA fuente que Perfil (perfil guardado de ese usuario; sin foto → Sublirobot).
+     avatar:()=>{try{return svgAvatar(profileBase());}catch(_){return '';}},nombrePerfil:()=>{try{return profileBase().nombre||'';}catch(_){return '';}}};
+--- antes/ui-v2.js
++++ despues/ui-v2.js
+@@ -18,14 +18,14 @@
+ 
+   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
+   var NAV = [
+-    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'catalogo-relojes' }, { s: 'sala-juntas' },
++    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'catalogo-relojes' }, { s: 'sala-juntas' }, { s: 'finanzas' },
+     { g: 'Operación', items: ['importar', 'inventario', 'egresos', 'cierre'] },
+     { g: 'Supervisión', items: ['actividad', 'auditoria', 'crm-master', 'estadisticas', 'permisos'] },
+     { g: 'Más', items: ['sorteos', 'tickets', 'revendedores', 'chat', 'objetivos', 'pelis', 'partidos'] }
+   ];
+   var NOMBRE = {
+     inicio: 'Inicio', clientes: 'Clientes', agenda: 'Renovaciones', 'control-cuentas': 'Control Maestro', 'portal-cliente': 'Portal Cliente',
+-    'catalogo-relojes': 'Catálogo', 'sala-juntas': 'Sala de Juntas', sorteos: 'Sorteos', tickets: 'Tickets / Avisos', revendedores: 'Panel de Socios', perfil: 'Mi perfil',
++    'catalogo-relojes': 'Catálogo', 'sala-juntas': 'Sala de Juntas', finanzas: 'Finanzas', sorteos: 'Sorteos', tickets: 'Tickets / Avisos', revendedores: 'Panel de Socios', perfil: 'Mi perfil',
+     importar: 'Mesas de trabajo', inventario: 'Bodega', egresos: 'Egresos', cierre: 'Cierre', actividad: 'Actividad', auditoria: 'Auditoría',
+     'crm-master': 'CRM Master', estadisticas: 'Métricas', permisos: 'Usuarios y permisos', objetivos: 'Objetivos', chat: 'Subli', pelis: 'Pelis', partidos: 'Partidos'
+   };
+@@ -60,6 +60,7 @@
+     pelis: '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+     partidos: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+     'sala-juntas': '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
++    finanzas: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>', // R196
+     menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>', buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+     campana: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
+     mas: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',

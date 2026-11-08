@@ -1,0 +1,33 @@
+--- antes/index.html
++++ despues/index.html
+@@ -1324,7 +1324,7 @@
+ </style>
+ <!-- R184 · diseño único de Sublichat Web (todas las cuentas). Antes: apagado por defecto (?ui=v2). -->
+ <link rel="stylesheet" href="/ui-v2.css?v=20261106-r184">
+-<script src="/ui-v2.js?v=20261106-r184"></script>
++<script src="/ui-v2.js?v=20261108-r196"></script>
+ <script src="/ui-v2-inicio.js?v=20261106-r184"></script>
+ </head>
+ <body>
+@@ -1718,7 +1718,7 @@
+   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
+ </nav>
+ <div id="sidebarWrap" class="sidebar-wrap"></div>
+-<script type="module" src="./sublichat-app.js?v=20261106-r184"></script>
++<script type="module" src="./sublichat-app.js?v=20261108-r196"></script>
+ <!-- MODAL MENSAJE DE COBRO -->
+ <div id="cobroModal" class="cobro-overlay">
+   <div class="cobro-sheet">
+@@ -2828,7 +2828,11 @@
+   });
+ })();
+ </script>
+-<script defer src="./control-maestro.js?v=20261023-72"></script>
++<script defer src="./control-maestro.js?v=20261108-r196"></script>
++<script defer src="./control-maestro-spotify.js?v=20261108-r196"></script>
++<link rel="stylesheet" href="./control-maestro-spotify.css?v=20261108-r196">
++<script defer src="./finanzas-web.js?v=20261108-r196"></script>
++<link rel="stylesheet" href="./finanzas-web.css?v=20261108-r196">
+ 
+ <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
+ <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.
