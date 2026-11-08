@@ -1,0 +1,385 @@
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/src/app/baul-apks.js r194src/sublicuentas-android-bootstrap/src/app/baul-apks.js
+--- r193src/sublicuentas-android-bootstrap/src/app/baul-apks.js	2026-11-07 16:16:55.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/src/app/baul-apks.js	2026-11-07 22:11:07.000000000 -0600
+@@ -10,6 +10,7 @@
+ import { authPost } from '../api.js';
+ import { state, esc, ui, showToast } from './core.js';
+ import { operatorIdentity } from '../data.js';
++import { platformLogoFile } from '../screens2.js';
+ 
+ const ident = () => operatorIdentity(state.session?.role || '', state.session?.usuario || '');
+ export function canBaul() { return ['sublicuentas', 'relojes', 'geisell'].includes(ident()); }
+@@ -17,7 +18,9 @@
+ export function resetBaul() { state.baul = null; }
+ 
+ // Logos que YA existen en la app (catálogo). Lion TV y Nanotech todavía no tienen logo autorizado: marcador con su inicial.
+-export const LOGOS_TV = Object.freeze({ icomplay: '/assets/plataformas/icomplay.webp', latintv: '/assets/plataformas/latin-tv.webp', oleada: '/assets/plataformas/oleada-tv.webp', stellatv: '/assets/plataformas/stella-tv.webp' });
++// R194 · Logos: el MISMO catálogo de logos de toda la APK (screens2.platformLogoFile), así Lion TV y Nanotech salen con
++// el logo que el sistema ya usa para ellas (CRM, Control Maestro, acceso) y no con una letra.
++export const LOGOS_TV = Object.freeze(Object.fromEntries(['liontv', 'icomplay', 'latintv', 'oleada', 'stellatv', 'evoutouch'].map((id) => [id, `/assets/plataformas/${platformLogoFile(id)}.webp`])));
+ const ICONO_DISP = Object.freeze({ android_tv: '📺', fire_tv: '🔥', android_movil: '📱', smart_tv: '🖥️', iphone: '', pc: '💻' });
+ const icoDisp = (id) => ICONO_DISP[id] || '📲';
+ 
+@@ -37,7 +40,8 @@
+   s.cargando = false; if (state.subview === 'baul-apks') ui.render();
+ }
+ 
+-const logoHtml = (p) => LOGOS_TV[p.id] ? `<img src="${LOGOS_TV[p.id]}" alt="" loading="lazy">` : `<span class="baul-ini" aria-hidden="true">${esc((p.nombre || '?').charAt(0))}</span>`;
++const logoDe = (p) => LOGOS_TV[p.id] || (platformLogoFile(p.id || p.nombre) ? `/assets/plataformas/${platformLogoFile(p.id || p.nombre)}.webp` : '');
++const logoHtml = (p) => logoDe(p) ? `<img src="${logoDe(p)}" alt="" loading="lazy">` : `<span class="baul-ini" aria-hidden="true">${esc((p.nombre || '?').charAt(0))}</span>`;
+ function nivelPlataformas(d) {
+   return `<p class="baul-paso">Paso 1 de 3 · elija la plataforma</p><div class="baul-grid">${(d.plataformas || []).map((p) => {
+     const v = (d.vistas || []).find((x) => x.plataforma === p.id) || { dispositivos: [] };
+@@ -46,7 +50,7 @@
+ }
+ function nivelDispositivos(d, vista, p) {
+   return `<p class="baul-paso">Paso 2 de 3 · ${esc(p.nombre)} · elija el dispositivo del cliente</p>
+-    ${vista.dispositivos.length ? `<div class="baul-disps">${vista.dispositivos.map((x) => `<button type="button" class="baul-disp" data-baul-disp="${esc(x.id)}"><span aria-hidden="true">${icoDisp(x.id)}</span><b>${esc(x.nombre)}</b><small>${x.enlaces.length} opción${x.enlaces.length === 1 ? '' : 'es'}</small><i aria-hidden="true">›</i></button>`).join('')}</div>`
++    ${vista.dispositivos.length ? `<div class="baul-disps">${vista.dispositivos.map((x) => `<button type="button" class="baul-disp" data-baul-disp="${esc(x.id)}"><span aria-hidden="true">${icoDisp(x.id)}</span><b>${esc(x.nombre)}</b><small>${x.enlaces.length} ${x.enlaces.length === 1 ? 'opción' : 'opciones'}</small><i aria-hidden="true">›</i></button>`).join('')}</div>`
+       : '<div class="empty-state"><strong>Sin dispositivos registrados para esta plataforma</strong></div>'}`;
+ }
+ export function enlaceHtml(e, editor = false, editando = false, n = 1, total = 1) {
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/src/app/sala-juntas.js r194src/sublicuentas-android-bootstrap/src/app/sala-juntas.js
+--- r193src/sublicuentas-android-bootstrap/src/app/sala-juntas.js	2026-11-07 19:37:10.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/src/app/sala-juntas.js	2026-11-07 22:01:19.000000000 -0600
+@@ -1,6 +1,9 @@
+-// R189 · Más › Sala de Juntas en la APK. R193 (PDF «Corrección urgente Sala 3D»): la sala 3D se abre DENTRO de la APK.
+-// · Es la MISMA sala de Sublichat Web: los archivos de la sala (sala-juntas.js, sala-3d.js, sala-vivo.js, escenarios.js,
+-//   avatar-glb.js, modelos 3D) viajan como copia fiel en public/ y se cargan en esta misma vista (sin Chrome, sin URL externa).
++// Más › Sala de Juntas en la APK.
++// R194 · Al tocar «Sala de Juntas» se abre DIRECTO la interfaz completa de SubliStudio 3D (la misma de Sublichat Web):
++//   reuniones, convocatorias, antesala, sala 3D, avatar, escenarios, actas, grabaciones y permisos. Ya no hay una pantalla
++//   preliminar propia de la APK: la sala es UNA sola (no se duplica código).
++// · Los archivos de la sala (sala-juntas.js, sala-3d.js, sala-vivo.js, escenarios.js, avatar-glb.js, modelos 3D) viajan como
++//   copia fiel en public/ y se cargan en esta misma vista (sin Chrome, sin URL externa).
+ // · Usa la sesión vigente de la APK (authPost → /api/sala-juntas, que repite TODA la autorización): no hay segundo login.
+ // · LiveKit: el servidor entrega un token temporal solo de esa reunión; la APK no guarda ninguna clave.
+ // · Micrófono/cámara: los pide la sala al activarlos (Android pregunta el permiso en ese momento).
+@@ -8,16 +11,9 @@
+ import { state, esc, ui, showToast } from './core.js';
+ import { operatorIdentity } from '../data.js';
+ 
+-export const ESTADOS = Object.freeze({ borrador: 'Borrador', programada: 'Programada', en_curso: 'En curso', finalizada: 'Concluida', cancelada: 'Cancelada' });
+ export function canSala() { return ['sublicuentas', 'relojes', 'geisell'].includes(operatorIdentity(state.session?.role || '', state.session?.usuario || '')); }
+-export function sjState() { if (!state.sj) state.sj = { data: null, actas: null, abierta: '', confirmarEntrada: '', cargando: false, error: '', guardando: '' }; return state.sj; }
+ export const VISTAS_INTERNAS = Object.freeze(['inicio', 'antesala', 'personaje', 'escenarios', 'nueva', 'historial', 'acta']);
+ export const SALA_WEB_VERSION = '20261107-r193';
+-const COLOR = { naara: '#E2231A', libni: '#2879C7', geisell: '#159B62' };
+-function avatarHtml(id, nombre, av) {
+-  const mini = av && /^data:image\/(webp|jpeg|png);base64,/.test(av.miniatura || '') ? av.miniatura : '';
+-  return `<span class="sj-m-av" style="--c:${COLOR[id] || '#475569'}">${mini ? `<img src="${mini}" alt="">` : esc(String(nombre || id || '?').charAt(0).toUpperCase())}</span>`;
+-}
+ 
+ async function sala(accion, extra = {}) {
+   let r;
+@@ -26,40 +22,7 @@
+   if (!r || r.ok === false) throw new Error(r?.error || 'No se pudo completar.');
+   return r;
+ }
+-export async function sjCargar() {
+-  const s = sjState(); s.cargando = true; s.error = ''; ui.render();
+-  try { const [p, a] = await Promise.all([sala('panel'), sala('actas').catch(() => ({ actas: [] }))]); s.data = p; s.actas = a.actas || []; }
+-  catch (e) { s.error = e.message; }
+-  s.cargando = false; if (state.subview === 'sala-juntas') ui.render();
+-}
+-
+-const fechaTxt = (r) => r.fecha ? `${r.fecha} · ${r.hora}` : 'Sin fecha';
+-const INV = { aceptada: 'Confirmó', rechazada: 'No asistirá', pendiente: 'Pendiente' };
+-function reunionHtml(r, d, s) {
+-  const yo = d.yo?.id, abierta = s.abierta === r.id, miInv = r.invitaciones?.[yo]?.estado || 'pendiente';
+-  const nombres = Object.fromEntries((d.fundadoras || []).map((f) => [f.id, f.nombre]));
+-  const acta = (s.actas || []).find((a) => a.reunionId === r.id);
+-  const puedeEntrar = ['programada', 'en_curso'].includes(r.estado);
+-  const sol = s.solicitudes?.[r.id];
+-  const esperando = r.estado === 'en_curso' && !d.permisos?.moderar && sol && sol.estado === 'pendiente';
+-  const detalle = abierta ? `
+-    <div class="sj-m-det">
+-      <figure class="sj-m-esc"><img src="/assets/sala/sala-escenario-c.webp" alt="Sala SubliStudio 3D"><figcaption>Sala 3D real · escenario ${esc(r.escenario || 'sala-c')}${r.anfitrion ? ` · anfitriona ${esc(nombres[r.anfitrion] || r.anfitrion)}` : ''}</figcaption></figure>
+-      <div class="sj-m-parts">${(r.participantes || []).map((u) => `<span class="sj-m-part">${avatarHtml(u, nombres[u], d.avatares?.[u])}<small>${esc(nombres[u] || u)}</small></span>`).join('')}</div>
+-      ${esperando ? '<p class="sj-m-espera" role="status">⏳ Esperando autorización de la anfitriona para entrar.</p>' : ''}
+-      ${(r.agenda || []).length ? `<small><b>Agenda:</b> ${r.agenda.map((x) => esc(typeof x === 'string' ? x : x?.titulo || '')).join(' · ')}</small>` : ''}
+-      <b>Participantes e invitaciones</b>
+-      ${(r.participantes || []).map((u) => `<small>${esc(nombres[u] || u)} · ${esc(INV[r.invitaciones?.[u]?.estado] || 'Pendiente')}</small>`).join('')}
+-      ${acta ? `<small><b>Acuerdos:</b> ${acta.acuerdos} · pendientes ${acta.pendientes}</small>` : ''}
+-      ${r.avisos ? `<small><b>Avisos de Telegram:</b> enviados ${r.avisos.enviado} · pendientes ${r.avisos.pendiente} · fallidos ${r.avisos.fallido}${(r.avisos.fallas || []).length ? ` (${r.avisos.fallas.map((f) => esc(`${nombres[f.usuario] || f.usuario}: ${f.error || f.motivo || 'error'}`)).join(' · ')})` : ''}</small>` : ''}
+-      ${puedeEntrar && r.estado === 'programada' ? `<div class="baul-acc"><button type="button" class="se-btn ${miInv === 'aceptada' ? '' : 'ghost'}" data-sj-rsvp="aceptada" data-id="${esc(r.id)}">Asistiré</button><button type="button" class="se-btn ${miInv === 'rechazada' ? '' : 'ghost'}" data-sj-rsvp="rechazada" data-id="${esc(r.id)}">No asistiré</button></div>` : ''}
+-      ${puedeEntrar ? `<button type="button" class="se-btn sj-m-entrar" data-sj-interna="antesala" data-id="${esc(r.id)}">Entrar en la APK</button><small class="sj-m-nota">Se abre aquí mismo: antesala con prueba de micrófono y luego la sala 3D. Si la reunión ya empezó, la anfitriona aprueba su ingreso.</small>` : ''}
+-      ${r.estado === 'finalizada' ? `<button type="button" class="se-btn ghost" data-sj-interna="acta" data-id="${esc(r.id)}">Acta y grabaciones</button>` : ''}
+-    </div>` : '';
+-  return `<article class="se-card sj-m-reu"><button type="button" class="sj-m-cab" data-sj-ver="${esc(r.id)}"><b>${esc(r.titulo || 'Reunión')}</b><small>${esc(fechaTxt(r))} · ${r.duracionMin || 60} min</small><span class="sj-m-est e-${esc(r.estado)}">${esc(ESTADOS[r.estado] || r.estado)}</span></button>${detalle}</article>`;
+-}
+ 
+-// ---------- R193 · Sala web embebida (vista interna a pantalla completa) ----------
+ let cargaWeb = null;
+ async function descargarVideo(url, nombre) {
+   const { Capacitor } = await import('@capacitor/core');
+@@ -81,68 +44,47 @@
+   cargaWeb = new Promise((ok, mal) => {
+     const sc = doc.createElement('script'); sc.src = `/sala-juntas.js?v=${SALA_WEB_VERSION}`; sc.async = true;
+     sc.onload = () => (w.SublichatSala?.abrir ? ok(w.SublichatSala) : mal(new Error('La sala no se pudo iniciar.')));
+-    sc.onerror = () => { cargaWeb = null; mal(new Error('No se pudo cargar la sala 3D.')); };
++    sc.onerror = () => { cargaWeb = null; mal(new Error('No se pudo cargar la sala 3D. Revise la conexión y vuelva a intentar.')); };
+     doc.head.appendChild(sc);
+   });
+   return cargaWeb;
+ }
++
++// «‹ Más» cierra la sala (libera micrófono, LiveKit y 3D) y vuelve a Más, sin pasar por ninguna pantalla intermedia.
+ export function cerrarSalaInterna() {
+-  const ov = document.getElementById('sjApk'); if (!ov) return;
++  const ov = document.getElementById('sjApk');
+   try { window.SublichatSala?.cerrar?.(); } catch (_) {}
+-  ov.remove(); document.documentElement.classList.remove('sj-apk-on');
+-  if (state.subview === 'sala-juntas') sjCargar();
++  if (ov) ov.remove();
++  document.documentElement.classList.remove('sj-apk-on');
++  if (state.subview === 'sala-juntas') { state.subview = null; state.active = 'mas'; ui.render(); }
+ }
+ export async function abrirSalaInterna(vista = 'inicio', id = '') {
+   if (!VISTAS_INTERNAS.includes(vista)) return;
+   let ov = document.getElementById('sjApk');
+   if (!ov) {
+     ov = document.createElement('div'); ov.id = 'sjApk'; ov.className = 'sj-apk'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Sala de Juntas');
+-    ov.innerHTML = `<header class="sj-apk-top"><button type="button" class="sj-apk-volver" data-sj-apk-cerrar>‹ Volver</button><b>Sala de Juntas · SubliStudio 3D</b></header>
+-      <section id="screen-sala-juntas" class="active sj-pantalla"><div id="rbac-sala-juntas"><div class="loading-card"><span class="spinner"></span><strong>Abriendo la sala…</strong></div></div></section>`;
++    ov.innerHTML = `<header class="sj-apk-top"><button type="button" class="sj-apk-volver" data-sj-apk-cerrar aria-label="Volver a Más">‹ Más</button></header>
++      <section id="screen-sala-juntas" class="active sj-pantalla"><div id="rbac-sala-juntas"><div class="loading-card"><span class="spinner"></span><strong>Abriendo SubliStudio 3D…</strong></div></div></section>`;
+     document.body.appendChild(ov); document.documentElement.classList.add('sj-apk-on');
+     ov.querySelector('[data-sj-apk-cerrar]').addEventListener('click', cerrarSalaInterna);
+   }
+   try { const S = await cargarSalaWeb(); await S.abrir(vista, id); }
+-  catch (e) { const h = document.getElementById('rbac-sala-juntas'); if (h) h.innerHTML = `<div class="error-box"><span>${esc(e.message)}</span></div>`; }
++  catch (e) {
++    const h = document.getElementById('rbac-sala-juntas');
++    if (h) {
++      h.innerHTML = `<div class="error-box"><span>${esc(e.message)}</span></div><button type="button" class="se-btn" data-sj-reintentar>Reintentar</button>`;
++      h.querySelector('[data-sj-reintentar]')?.addEventListener('click', () => abrirSalaInterna(vista, id));
++    }
++  }
+ }
+ 
++// La subvista solo existe para el permiso y como respaldo mientras se monta la sala completa encima.
+ export function salaView() {
+-  const s = sjState();
+   if (!canSala()) return ui.subPage('Sala de Juntas', 'No disponible', '<div class="empty-state"><strong>Su usuario no tiene la Sala de Juntas</strong></div>');
+-  if (s.data === null && !s.cargando && !s.error) setTimeout(sjCargar, 0);
+-  const d = s.data;
+-  let cuerpo = '';
+-  if (s.cargando && !d) cuerpo = '<div class="loading-card"><span class="spinner"></span><strong>Cargando reuniones…</strong></div>';
+-  else if (s.error && !d) cuerpo = `<div class="error-box"><span>${esc(s.error)}</span></div>`;
+-  else if (d) {
+-    const lista = (d.reuniones || []).filter((r) => r.estado !== 'borrador' || d.permisos?.crear);
+-    const proximas = lista.filter((r) => ['programada', 'en_curso'].includes(r.estado)).sort((a, b) => a.inicioMs - b.inicioMs);
+-    const pasadas = lista.filter((r) => !['programada', 'en_curso'].includes(r.estado)).slice(0, 15);
+-    cuerpo = `${s.error ? `<div class="error-box"><span>${esc(s.error)}</span></div>` : ''}
+-      <article class="se-card sj-m-mi"><div class="sj-m-mi-cab">${avatarHtml(d.yo?.id, d.yo?.nombre, d.avatares?.[d.yo?.id])}<span><b>Mi avatar · Escenarios</b><small>Ver y editar sin reunión. Es el mismo personaje de Sublichat Web.</small></span></div>
+-        <div class="baul-acc"><button type="button" class="se-btn ghost" data-sj-interna="personaje">Mi avatar</button><button type="button" class="se-btn ghost" data-sj-interna="escenarios">Ver salas</button></div></article>
+-      ${d.tiempoReal ? '' : '<p class="baul-aviso">El audio en tiempo real todavía no está configurado en el servidor.</p>'}
+-      <b class="sj-m-tit">Próximas y en curso</b>${proximas.length ? proximas.map((r) => reunionHtml(r, d, s)).join('') : '<div class="empty-state"><strong>Sin reuniones próximas</strong><small>Cuando Naara convoque, aparecerá aquí con su invitación.</small></div>'}
+-      <article class="se-card sj-m-acc"><b>Acciones según permisos</b>
+-        <div class="baul-acc">${d.permisos?.crear ? '<button type="button" class="se-btn ghost" data-sj-interna="nueva">Programar reunión</button>' : ''}<button type="button" class="se-btn ghost" data-sj-interna="inicio">Agenda completa</button><button type="button" class="se-btn ghost" data-sj-interna="historial">Historial, actas y grabaciones</button></div>
+-        <small>${d.permisos?.moderar ? 'Usted es anfitriona: inicia la sala, aprueba ingresos y graba (con aviso a todas).' : 'Entra a las reuniones a las que la invitan; si ya empezaron, la anfitriona aprueba su ingreso.'}${d.grabacionServidor ? '' : ' · Grabación en servidor: pendiente de configurar.'}</small></article>
+-      ${pasadas.length ? `<b class="sj-m-tit">Concluidas y canceladas</b>${pasadas.map((r) => reunionHtml(r, d, s)).join('')}` : ''}`;
+-  }
+-  return ui.subPage('Sala de Juntas', 'Reuniones, salas y avatar', `<section class="se-wrap">${cuerpo}<button type="button" class="se-btn ghost" data-sj-recargar>Actualizar</button></section>`);
++  return ui.subPage('Sala de Juntas', 'SubliStudio 3D', '<div class="loading-card"><span class="spinner"></span><strong>Abriendo SubliStudio 3D…</strong></div>');
+ }
+ 
+ export function bindSala() {
+-  if (state.subview !== 'sala-juntas') return;
+-  const s = sjState(), qa = (x) => document.querySelectorAll(x);
+-  qa('[data-sj-ver]').forEach((b) => b.addEventListener('click', () => {
+-    s.abierta = s.abierta === b.dataset.sjVer ? '' : b.dataset.sjVer; s.confirmarEntrada = ''; ui.render();
+-    const r = (s.data?.reuniones || []).find((x) => x.id === s.abierta);
+-    if (r && r.estado === 'en_curso' && !s.data?.permisos?.moderar) sala('solicitud_estado', { id: r.id }).then((j) => { s.solicitudes = { ...(s.solicitudes || {}), [r.id]: j.solicitud }; if (state.subview === 'sala-juntas') ui.render(); }).catch(() => {});
+-  }));
+-  qa('[data-sj-interna]').forEach((b) => b.addEventListener('click', () => abrirSalaInterna(b.dataset.sjInterna, b.dataset.id || '')));
+-  qa('[data-sj-recargar]').forEach((b) => b.addEventListener('click', sjCargar));
+-  qa('[data-sj-rsvp]').forEach((b) => b.addEventListener('click', async () => {
+-    try { await sala('rsvp', { id: b.dataset.id, respuesta: b.dataset.sjRsvp }); showToast?.(b.dataset.sjRsvp === 'aceptada' ? 'Asistencia confirmada' : 'Respuesta enviada'); await sjCargar(); }
+-    catch (e) { s.error = e.message; ui.render(); }
+-  }));
++  if (state.subview !== 'sala-juntas' || !canSala()) return;
++  if (!document.getElementById('sjApk')) abrirSalaInterna('inicio');
+ }
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/src/styles.css r194src/sublicuentas-android-bootstrap/src/styles.css
+--- r193src/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 19:24:01.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/src/styles.css	2026-11-07 22:01:50.000000000 -0600
+@@ -2453,3 +2453,19 @@
+ html.sj-apk-on .bottom-nav,html.sj-apk-on nav.navbar,html.sj-apk-on .app-nav{visibility:hidden}
+ .sj-apk .sj3d-full{display:none!important}
+ .sj-m-acc{display:grid;gap:8px}.sj-m-acc small,.sj-m-nota{color:var(--muted,#64748b)}
++/* R194 · Baúl de APKs con el MISMO relieve 3D suave de Más (sombras discretas, borde, profundidad y pulsación) */
++.baul-plat,.baul-disp{border:1px solid #e1e9f1;background:#fff;box-shadow:0 5px 0 #dfe7ef,0 12px 22px rgba(20,48,80,.10),inset 0 1px 0 #fff;transition:transform .14s ease,box-shadow .14s ease}
++.baul-plat:active,.baul-disp:active{transform:translateY(3px) scale(.99);box-shadow:0 2px 0 #dfe7ef,0 6px 12px rgba(20,48,80,.08),inset 0 1px 0 #fff}
++.baul-logo{width:68px;height:68px;padding:5px;border-radius:20px;background:linear-gradient(180deg,#fff 0%,#f3f6fa 100%);box-shadow:0 4px 0 #dfe6ee,0 8px 14px rgba(20,40,70,.12),inset 0 1px 0 #fff;overflow:visible}
++.baul-logo img{border-radius:15px;box-shadow:0 2px 6px rgba(10,31,58,.18)}
++.baul-ini{width:100%;height:100%;display:grid;place-items:center;border-radius:15px;background:#fff}
++.baul-disp>span{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(180deg,#fff 0%,#f3f6fa 100%);box-shadow:0 3px 0 #dfe6ee,0 5px 10px rgba(20,40,70,.10)}
++.baul-enlace{border:1px solid #e1e9f1;box-shadow:0 5px 0 #e3eaf2,0 12px 22px rgba(20,48,80,.08)}
++.baul-acc .se-btn,.baul-acc-pri .se-btn,.baul-volver{box-shadow:0 3px 0 #dbe3ec,0 6px 12px rgba(20,40,70,.08);transition:transform .12s ease,box-shadow .12s ease}
++.baul-acc .se-btn:active,.baul-acc-pri .se-btn:active,.baul-volver:active{transform:translateY(2px);box-shadow:0 1px 0 #dbe3ec,0 3px 6px rgba(20,40,70,.08)}
++.baul-enviar{box-shadow:0 3px 0 #116b44,0 6px 12px rgba(17,107,68,.22)!important}
++.baul-enviar:active{box-shadow:0 1px 0 #116b44,0 3px 6px rgba(17,107,68,.2)!important}
++.baul-msg{box-shadow:inset 0 1px 2px rgba(20,40,70,.06)}
++@media (prefers-reduced-motion:reduce){.baul-plat,.baul-disp,.baul-acc .se-btn,.baul-acc-pri .se-btn,.baul-volver{transition:none}}
++/* R194 · La Sala abre directo SubliStudio 3D: barra mínima para volver a Más */
++.sj-apk-top{border-bottom:0;margin-bottom:4px}
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs r194src/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs
+--- r193src/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs	2026-11-07 19:24:54.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/tests/r189-sala-juntas-apk.test.mjs	2026-11-07 22:02:14.000000000 -0600
+@@ -28,31 +28,5 @@
+   assert.doesNotMatch(codigo, /openLink|\?sala=|API_BASE|LIVEKIT|apiSecret/i);
+   assert.match(src, /authPost\('\/api\/sala-juntas'/);
+ });
+-
+-test('lista próximas y concluidas con estado; detalle con invitaciones, avisos fallidos; RSVP por el servidor; entrar pide confirmación', async () => {
+-  const abiertos = [];
+-  const app = await bootApp({ role: 'sublicuentas', fetchExtra: async (path, body) => {
+-    if (path !== '/api/sala-juntas') return undefined;
+-    if (body.accion === 'panel') return PANEL;
+-    if (body.accion === 'actas') return { ok: true, actas: [{ reunionId: 'reuPrueba01', acuerdos: 3, pendientes: 1 }] };
+-    if (body.accion === 'rsvp') return { ok: true, id: body.id, estado: body.respuesta };
+-    return { ok: true };
+-  } });
+-  try {
+-    app.w.open = (u) => abiertos.push(u);
+-    await app.click('[data-tab="mas"]', 300);
+-    await app.click('[data-open="sala-juntas"]', 400);
+-    await app.waitFor(() => /Junta de prueba/.test(app.$('.se-wrap')?.textContent || ''));
+-    const t = app.$('.se-wrap').textContent;
+-    assert.match(t, /Programada/); assert.match(t, /Concluida/);
+-    await app.click('[data-sj-ver="reuPrueba01"]', 150);
+-    const d = app.$('.se-wrap').textContent;
+-    assert.match(d, /Libni · Confirmó/); assert.match(d, /Geisell · Pendiente/); assert.match(d, /fallidos 1 \(Geisell: bot bloqueado\)/); assert.match(d, /Acuerdos:\s*3 · pendientes 1/);
+-    await app.click('[data-sj-rsvp="aceptada"]', 300);
+-    const r = app.bodies.find((b) => b?.accion === 'rsvp');
+-    assert.deepEqual([r.id, r.respuesta, r.origen], ['reuPrueba01', 'aceptada', 'android']);
+-    await app.waitFor(() => app.$('[data-sj-interna="antesala"][data-id="reuPrueba01"]'));
+-    assert.match(app.$('[data-sj-interna="antesala"][data-id="reuPrueba01"]').textContent, /Entrar en la APK/);
+-    assert.equal(abiertos.length, 0, 'nunca abre el navegador');
+-  } finally { app.close(); }
+-});
++// R194 · La agenda/RSVP/entrada ya no tienen pantalla propia en la APK: se abre directo la sala completa de SubliStudio 3D
++// (tests/r193-sala-interna.test.mjs). Las reglas de RSVP, avisos y permisos se prueban en el servidor (Sublichat HQ).
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs r194src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs
+--- r193src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs	2026-11-07 19:24:54.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/tests/r192-apk-correcciones.test.mjs	2026-11-07 22:02:45.000000000 -0600
+@@ -32,6 +32,9 @@
+     await app.waitFor(() => app.$('[data-baul-plat="oleada"]'));
+     assert.match(app.$('.se-wrap').textContent, /Paso 1 de 3/);
+     assert.ok(app.$('[data-baul-plat="oleada"] img[src="/assets/plataformas/oleada-tv.webp"]'));
++    // R194 · ninguna plataforma con una sola letra: Lion TV usa el logo del sistema (el mismo del CRM y Control Maestro)
++    assert.ok(app.$('[data-baul-plat="liontv"] img[src="/assets/plataformas/iptv.webp"]'));
++    assert.equal(app.$('.baul-ini'), null);
+     await app.click('[data-baul-plat="oleada"]', 150);
+     assert.match(app.$('.se-wrap').textContent, /Paso 2 de 3/);
+     await app.click('[data-baul-disp="android_tv"]', 150);
+@@ -85,3 +88,15 @@
+   assert.match(fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8'), /\.mas-ico\.mas-ico-svg/);
+   assert.deepEqual(roleModules('sublicuentas', 'sublicuentas').tabs.length, roleModules('sublicuentas', 'sublicuentas').tabs.length);
+ });
++
++test('R194 · Baúl: las seis plataformas tienen logo real del sistema (archivo existe) y relieve 3D como Más', () => {
++  const s = src('app/baul-apks.js');
++  assert.match(s, /import \{ platformLogoFile \} from '\.\.\/screens2\.js'/);
++  const ids = ['liontv', 'icomplay', 'latintv', 'oleada', 'stellatv', 'evoutouch'];
++  const map = { liontv: 'iptv', icomplay: 'icomplay', latintv: 'latin-tv', oleada: 'oleada-tv', stellatv: 'stella-tv', evoutouch: 'iptv' };
++  for (const id of ids) assert.ok(fs.existsSync(new URL(`../public/assets/plataformas/${map[id]}.webp`, import.meta.url)), id);
++  const css = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
++  assert.match(css, /\.baul-plat,\.baul-disp\{[^}]*box-shadow:0 5px 0/);
++  assert.match(css, /\.baul-plat:active,\.baul-disp:active\{transform:translateY\(3px\)/);
++  assert.match(css, /\.baul-logo\{[^}]*box-shadow:0 4px 0 #dfe6ee/);
++});
+diff -ruN -x '*.glb' -x '*.webp' -x '*.png' r193src/sublicuentas-android-bootstrap/tests/r193-sala-interna.test.mjs r194src/sublicuentas-android-bootstrap/tests/r193-sala-interna.test.mjs
+--- r193src/sublicuentas-android-bootstrap/tests/r193-sala-interna.test.mjs	2026-11-07 19:24:54.000000000 -0600
++++ r194src/sublicuentas-android-bootstrap/tests/r193-sala-interna.test.mjs	2026-11-07 22:02:14.000000000 -0600
+@@ -11,60 +11,60 @@
+   reuniones: [{ id: 'reuEnCurso01', titulo: 'Junta semanal', inicioMs: AHORA - 6e5, fecha: '07/11/2026', hora: '10:00 a. m.', duracionMin: 45, estado: 'en_curso', anfitrion: 'naara', participantes: ['naara', 'libni', 'geisell'], invitaciones: {} },
+     { id: 'reuPasada01', titulo: 'Cierre de octubre', inicioMs: AHORA - 9e8, fecha: '31/10/2026', hora: '9:00 a. m.', estado: 'finalizada', participantes: ['naara', 'libni'], invitaciones: {} }] };
+ 
+-async function abrirSala(extra = {}) {
+-  const app = await bootApp({ role: 'sublicuentas', fetchExtra: async (path, body) => {
++async function abrirSala(extra = {}, role = 'sublicuentas') {
++  const app = await bootApp({ role, fetchExtra: async (path, body) => {
+     if (path !== '/api/sala-juntas') return undefined;
+     if (body.accion === 'panel') return { ...PANEL, ...extra };
+-    if (body.accion === 'actas') return { ok: true, actas: [] };
+     return { ok: true, eco: body };
+   } });
+   const llamadas = [];
+-  // La sala web real se carga desde public/sala-juntas.js; aquí se observa la API que la APK le pide.
+-  app.w.SublichatSala = { abrir: async (v, id) => { llamadas.push(['abrir', v, id]); app.w.document.getElementById('rbac-sala-juntas').innerHTML = `<div class="sj-card">Vista ${v}</div>`; }, cerrar: () => llamadas.push(['cerrar']) };
++  // La sala web real (public/sala-juntas.js) se observa por la API que la APK le pide.
++  app.w.SublichatSala = { abrir: async (v, id) => { llamadas.push(['abrir', v, id]); const h = app.w.document.getElementById('rbac-sala-juntas'); if (h) h.innerHTML = `<div class="sj-card">SubliStudio 3D · ${v}</div>`; }, cerrar: () => llamadas.push(['cerrar']) };
+   const abiertos = []; app.w.open = (u) => abiertos.push(u);
+   await app.click('[data-tab="mas"]', 300);
+-  await app.click('[data-open="sala-juntas"]', 400);
+-  await app.waitFor(() => /Junta semanal/.test(app.$('.se-wrap')?.textContent || ''));
+   return { app, llamadas, abiertos };
+ }
+ 
+-test('J01/J02: «Entrar en la APK» abre la antesala y la sala 3D en una vista INTERNA (sin Chrome ni URL externa)', async () => {
++test('R194 · Más › Sala de Juntas abre DIRECTO la interfaz completa de SubliStudio 3D (sin pantalla preliminar, sin Chrome)', async () => {
+   const { app, llamadas, abiertos } = await abrirSala();
+   try {
+-    const t = app.$('.se-wrap').textContent;
+-    assert.match(t, /Mi avatar · Escenarios/); assert.match(t, /Acciones según permisos/); assert.match(t, /Programar reunión/);
+-    await app.click('[data-sj-ver="reuEnCurso01"]', 150);
+-    await app.click('[data-sj-interna="antesala"][data-id="reuEnCurso01"]', 200);
+-    assert.ok(app.$('#sjApk #screen-sala-juntas.active #rbac-sala-juntas'), 'contenedor interno de la sala');
+-    assert.deepEqual(llamadas[0], ['abrir', 'antesala', 'reuEnCurso01']);
+-    assert.ok(app.w.document.documentElement.classList.contains('sj-apk-on'));
++    await app.click('[data-open="sala-juntas"]', 400);
++    await app.waitFor(() => llamadas.length);
++    assert.deepEqual(llamadas, [['abrir', 'inicio', '']], 'una sola apertura, directo a la sala completa');
++    assert.ok(app.$('#sjApk #screen-sala-juntas.active #rbac-sala-juntas'));
++    assert.match(app.$('#rbac-sala-juntas').textContent, /SubliStudio 3D · inicio/);
++    assert.equal(app.$('.sj-m-reu, .sj-m-mi, [data-sj-interna]'), null, 'ya no existe la pantalla preliminar de la APK');
+     assert.equal(abiertos.length, 0); assert.equal((app.w.__intents || []).length, 0, 'no ACTION_VIEW');
+     // la sala usa la sesión de la APK (sin segundo login) y se identifica como android
+     const r = await app.w.SalaJuntasConfig.post({ accion: 'antesala', id: 'reuEnCurso01' });
+     assert.equal(r.eco.origen, 'android'); assert.equal(r.eco.accion, 'antesala');
+     assert.equal(app.w.SalaJuntasConfig.embebida, true);
+-    // J11: al volver se libera la sala (micrófono/LiveKit/3D) y se quita la vista
+-    await app.click('[data-sj-apk-cerrar]', 150);
++    // re-render de la APK no vuelve a abrir ni duplica la sala
++    app.w.document.querySelector('#app') && await app.wait?.(100);
++    assert.equal(app.w.document.querySelectorAll('#sjApk').length, 1);
++    // J11: «‹ Más» libera la sala (micrófono/LiveKit/3D) y vuelve a Más
++    await app.click('[data-sj-apk-cerrar]', 200);
+     assert.deepEqual(llamadas.at(-1), ['cerrar']); assert.equal(app.$('#sjApk'), null);
+     assert.equal(app.w.document.documentElement.classList.contains('sj-apk-on'), false);
++    assert.ok(app.$('[data-open="sala-juntas"]'), 'quedó en Más');
++    await app.click('[data-open="sala-juntas"]', 300);
++    assert.deepEqual(llamadas.filter((x) => x[0] === 'abrir').length, 2);
+   } finally { app.close(); }
+ });
+ 
+-test('J10: Mi avatar y Ver salas funcionan sin reunión, dentro de la APK; historial/actas/grabaciones también', async () => {
+-  const { app, llamadas, abiertos } = await abrirSala();
++test('R194 · si la sala no carga, se ve el error con Reintentar (no una pantalla a medias)', async () => {
++  const { app } = await abrirSala();
+   try {
+-    for (const v of ['personaje', 'escenarios', 'historial', 'nueva']) { await app.click(`[data-sj-interna="${v}"]`, 120); await app.click('[data-sj-apk-cerrar]', 80); }
+-    assert.deepEqual(llamadas.filter((x) => x[0] === 'abrir').map((x) => x[1]), ['personaje', 'escenarios', 'historial', 'nueva']);
+-    assert.equal(abiertos.length, 0);
++    let n = 0;
++    app.w.SublichatSala = { abrir: async () => { n++; if (n === 1) throw new Error('Sin conexión'); }, cerrar() {} };
++    await app.click('[data-open="sala-juntas"]', 400);
++    await app.waitFor(() => app.$('[data-sj-reintentar]'));
++    assert.match(app.$('#rbac-sala-juntas').textContent, /Sin conexión/);
++    await app.click('[data-sj-reintentar]', 200);
++    assert.equal(n, 2);
+   } finally { app.close(); }
+ });
+ 
+-test('J05: solo la anfitriona ve «Programar reunión»; una invitada no', async () => {
+-  const { app } = await abrirSala({ yo: { id: 'libni', nombre: 'Libni' }, permisos: { crear: false, moderar: false } });
+-  try { assert.equal(app.$('[data-sj-interna="nueva"]'), null); assert.match(app.$('.se-wrap').textContent, /la anfitriona aprueba su ingreso/); }
+-  finally { app.close(); }
+-});
+-
+ test('copia fiel de la sala web en la APK + permisos de Android; sin claves de LiveKit ni de grabación', () => {
+   const HQ = new URL('../../../hq-gh/', import.meta.url);
+   const archivos = ['sala-juntas.js', 'sala-3d.js', 'sala-vivo.js', 'sala-grabar.js', 'sala-presentar.js', 'escenarios.js', 'avatar-glb.js', 'vendor/three-gltf-0.160.0.js', 'assets/avatares/mujer.glb', 'assets/avatares/hombre.glb'];
