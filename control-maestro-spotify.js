@@ -46,7 +46,7 @@
       b('liberar', 'Liberar espacio (ya retirado en Spotify)', true) + '</div>';
   }
   function familiaHtml(f) {
-    return '<article class="sp-fam"><div class="sp-fam-cab"><div><small>Cuenta familiar · ' + esc(f.codigo) + '</small><b>' + esc(f.madreCorreo) + '</b><small class="sp-mute">Administrador: no es un espacio vendible.</small></div>' +
+    return '<article class="sp-fam"><div class="sp-fam-cab"><div><small>Cuenta familiar · ' + esc(f.codigo) + '</small><b>' + esc(f.madreCorreo) + '</b><small class="sp-mute">Administrador: no es un espacio vendible.' + ((f.madreClientes || []).length ? ' · Cliente de la cuenta madre: ' + f.madreClientes.map(function (x) { return esc(x.cliente || x.clienteId) + (x.vence ? ' (vence ' + fecha(x.vence) + (x.vencido ? ', vencido' : '') + ')' : ''); }).join(', ') : '') + (f.tieneClave ? ' · 🔒 clave guardada' : '') + '</small></div>' + // R196d
       '<span class="sp-cupo ' + (f.libres ? '' : 'llena') + '">' + f.ocupados + ' de ' + f.capacidad + ' espacios</span></div>' +
       '<div class="sp-tabla" role="table" aria-label="Invitaciones de ' + esc(f.madreCorreo) + '"><div class="sp-fila sp-th" role="row"><span role="columnheader">N.º</span><span role="columnheader">Correo invitado</span><span role="columnheader">Cliente vinculado</span><span role="columnheader">Vence</span><span role="columnheader">Estado</span><span></span></div>' +
       f.espacios.map(function (e) { return filaHtml(f, e); }).join('') + '</div></article>';
