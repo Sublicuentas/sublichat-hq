@@ -321,7 +321,7 @@ const PLAT_LABELS = {
   vix:"ViX",
   appletv:"Apple TV", "apple tv":"Apple TV", apple:"Apple TV",
   universal:"Universal+", universalp:"Universal+", "universal+":"Universal+",
-  spotify:"Spotify", youtube:"YouTube", deezer:"Deezer", duolingo:"Duolingo",
+  spotify:"Spotify", spotifyfamiliar:"Spotify Familiar", youtube:"YouTube", deezer:"Deezer", duolingo:"Duolingo",
   stellatv:"Stella TV", stella:"Stella TV", stellatv1:"Stella TV (1 dispositivo)", stellatv2:"Stella TV (2 dispositivos)", stellatv3:"Stella TV (3 dispositivos)",
   oleada:"Oleada TV", oleada1:"Oleada TV (1)", oleada3:"Oleada TV (3)", oleadatv:"Oleada TV",
   oleadatv1:"Oleada TV (1)", oleadatv3:"Oleada TV (3)", oleadatv4:"Oleada TV (4)",

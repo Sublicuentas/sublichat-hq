@@ -83,6 +83,7 @@
     if (d && (st.tab === 'ganancias' || st.tab === 'resumen')) dibujarChart(d);
     if (d && st.tab === 'compras' && st.sub === 'vip' && !st.vip.res) cargarVip();
     if (d && st.tab === 'compras' && st.sub === 'importar' && !st.jobs) cargarJobs();
+    if (d && st.tab === 'compras' && st.sub === 'spotify' && !st.spf) cargarSpf();
   }
 
   function kpis(d) {
@@ -97,7 +98,7 @@
     var a = d.alertas || []; var lst = max ? a.slice(0, max) : a;
     return '<div class="fz-card fz-alertas"><div class="fz-cab">' + ico('alert', 'am') + '<h3>Alertas</h3><span class="fz-badge">' + a.length + ' alerta' + (a.length === 1 ? '' : 's') + '</span></div>' +
       '<p class="fz-sub">Margen por debajo del objetivo (' + esc(d.config.umbralMargen) + '%), ventas sin costo y pagos a proveedores. <button type="button" class="fz-link" data-fz="umbral">Cambiar objetivo</button></p>' +
-      (lst.length ? lst.map(function (x) { return '<div class="fz-alerta ' + esc(x.nivel) + '">' + logo(x.producto) + '<div><b>' + esc(x.producto || '') + '</b><span>' + esc(x.texto) + '</span></div>' + (x.tipo === 'sin_costo' || x.tipo === 'stock' ? '<button type="button" class="fz-btn sec sm" data-fz="compra" data-prod="' + esc(x.productoId || '') + '">Registrar compra</button>' : x.tipo.indexOf('vip') === 0 ? '<button type="button" class="fz-btn sec sm" data-fz-tab="compras" data-sub="vip">Ver VIP</button>' : '<button type="button" class="fz-btn sec sm" data-fz="productos">Gestionar</button>') + '</div>'; }).join('') : '<div class="fz-ok">Sin alertas este mes.</div>') + '</div>';
+      (lst.length ? lst.map(function (x) { return '<div class="fz-alerta ' + esc(x.nivel) + '">' + logo(x.producto) + '<div><b>' + esc(x.producto || '') + '</b><span>' + esc(x.texto) + '</span></div>' + (x.tipo === 'sin_costo' || x.tipo === 'stock' ? '<button type="button" class="fz-btn sec sm" data-fz="compra" data-prod="' + esc(x.productoId || '') + '">Registrar compra</button>' : x.tipo === 'spf_renovacion' ? '<button type="button" class="fz-btn sec sm" data-fz-tab="compras" data-sub="spotify">Ver cuentas</button>' : x.tipo.indexOf('vip') === 0 ? '<button type="button" class="fz-btn sec sm" data-fz-tab="compras" data-sub="vip">Ver VIP</button>' : '<button type="button" class="fz-btn sec sm" data-fz="productos">Gestionar</button>') + '</div>'; }).join('') : '<div class="fz-ok">Sin alertas este mes.</div>') + '</div>';
   }
   function topHtml(d) {
     return '<div class="fz-card fz-top"><div class="fz-cab">' + ico('trophy') + '<h3>Top productos más rentables</h3><span class="fz-sub r">Por ganancia</span></div>' +
@@ -162,10 +163,11 @@
       '<p class="fz-pie">El proveedor de un extra VIP se toma del NOMBRE (Trap/Deku), nunca del precio. Los valores 2.50/2.70 USDT son solo referencia.</p></div>';
   }
   function vCompras(d) {
-    var subs = [['registradas', 'Compras registradas'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel VIP']];
+    var subs = [['registradas', 'Compras registradas'], ['spotify', 'Spotify Familiar'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel VIP']];
     var nav = '<div class="fz-subtabs">' + subs.map(function (s) { return '<button type="button" class="' + (st.sub === s[0] ? 'on' : '') + '" data-fz-sub="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (st.sub === 'vip') return nav + vVip();
     if (st.sub === 'importar') return nav + vImportar();
+    if (st.sub === 'spotify') return nav + vSpotify();
     var rows = (d.lotes || []).map(function (l) {
       return '<tr><td>' + fecha(l.fecha) + '</td><td><div class="fz-prod">' + logo(l.producto) + '<b>' + esc(l.producto) + '</b></div></td><td>' + esc(l.proveedor || '—') + '</td><td class="n">' + esc(l.cantidad) + ' ' + esc(l.unidad || '') + '</td>' +
         '<td class="n">' + (l.moneda === 'HNL' ? L(l.costoTotalMoneda, true) : esc(l.costoTotalMoneda) + ' ' + esc(l.moneda)) + '</td><td class="n">' + (l.moneda === 'HNL' ? '—' : esc(l.tasa)) + '</td><td class="n"><b>' + L(l.costoTotalHnl, true) + '</b></td><td>' + esc(l.cuentaPagoNombre || l.pago) + '</td><td class="n">' + esc(l.disponible) + '</td></tr>';
@@ -173,6 +175,50 @@
     return nav + '<div class="fz-card"><div class="fz-cab">' + ico('cart') + '<h3>Compras registradas</h3><button type="button" class="fz-btn sm" data-fz="compra">' + ico('plus') + 'Registrar compra</button></div>' +
       '<p class="fz-sub">Cada compra crea un lote con su tasa guardada (no cambia después). Spotify Familiar: UNA compra por familia y mes, aunque tenga 5 invitaciones.</p>' +
       '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Fecha</th><th>Producto</th><th>Proveedor</th><th class="n">Cantidad</th><th class="n">Monto</th><th class="n">Tasa</th><th class="n">Costo HNL</th><th>Pago</th><th class="n">Disponible</th></tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="fz-vacio-s">Sin compras registradas.</td></tr>') + '</tbody></table></div></div>';
+  }
+
+  // ---------------------------------------------------------------------------------------------------- R196f · Spotify Familiar
+  // Las cuentas llegan solas desde /spotifyf (bot) y Control Maestro. Aquí solo se anota cuánto se paga al mes y cuándo renueva la cuenta principal.
+  async function cargarSpf() { try { st.spf = await api('finp_spf_lista'); } catch (e) { st.spf = { error: e.message }; } if (st.tab === 'compras' && st.sub === 'spotify') pintar(); }
+  function vSpotify() {
+    var r = st.spf;
+    var cab = '<div class="fz-card"><div class="fz-cab">' + logo('Spotify') + '<h3>Spotify Familiar · cuentas principales</h3></div><p class="fz-sub">Se agregan solas desde /spotifyf o Control Maestro. Aquí solo anote cuánto paga al mes y la renovación de la cuenta principal. «Registrar pago» crea UNA compra del mes (la tasa y el costo quedan guardados).</p>';
+    if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
+    if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
+    var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + r.filas.length + '</b></div><div><small>Pago mensual total</small><b>' + L(r.totalMensualHnl) + '</b></div><div><small>Sin datos</small><b>' + r.sinDatos + '</b></div><div><small>Renuevan en 7 días</small><b>' + r.pronto + '</b></div></div>';
+    var rows = r.filas.map(function (f) {
+      var ren = f.proximaRenovacion ? fecha(f.proximaRenovacion) + (f.vencida ? ' <span class="fz-pill warn">vencida</span>' : f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '<span class="fz-pend">Pendiente</span>';
+      return '<tr><td><b>' + esc(f.codigo) + '</b></td><td>' + esc(f.madreCorreo) + '</td><td class="n">' + f.ocupados + '/' + f.capacidad + '</td><td class="n">' + (f.costoMensualHnl == null ? '<span class="fz-pend">Pendiente</span>' : L(f.costoMensualHnl, true)) + '</td><td>' + ren + '</td><td>' + (f.ultimoPago ? fecha(f.ultimoPago) : '—') + '</td>' +
+        '<td class="c"><button type="button" class="fz-btn sm" data-fz-spf="pago" data-id="' + esc(f.familiaId) + '">Registrar pago</button> <button type="button" class="fz-btn sec sm" data-fz-spf="editar" data-id="' + esc(f.familiaId) + '">Editar</button></td></tr>';
+    }).join('');
+    return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta</th><th>Correo principal</th><th class="n">Invitados</th><th class="n">Pago mensual</th><th>Renovación</th><th>Último pago</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" class="fz-vacio-s">Aún no hay cuentas. Créelas con /spotifyf en el bot.</td></tr>') + '</tbody></table></div></div>';
+  }
+  function masUnMes(ymd) { var p = String(ymd || '').split('-').map(Number); if (p.length !== 3) return ''; var d = new Date(Date.UTC(p[0], p[1], p[2], 12)); if (d.getUTCDate() !== p[2]) d = new Date(Date.UTC(p[0], p[1] + 1, 0, 12)); return d.toISOString().slice(0, 10); }
+  function abrirSpf(acc, id) {
+    var f = ((st.spf && st.spf.filas) || []).find(function (x) { return x.familiaId === id; }); if (!f) return;
+    var d = st.data, hoy = d.hoy;
+    if (acc === 'editar') {
+      modal('Editar · ' + f.codigo, '<div class="fz-form"><label>Pago mensual (L)<input type="number" step="any" min="0" name="costo" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Renovación cuenta principal<input type="date" name="ren" value="' + esc(f.proximaRenovacion || '') + '"></label></div><p class="fz-sub">Solo guarda los datos; no registra una compra.</p>',
+        async function (m) { await api('finp_spf_guardar', { familiaId: id, costoMensualHnl: val(m, 'costo'), proximaRenovacion: val(m, 'ren') }); toast('Guardado.'); st.spf = null; pintar(); });
+      return;
+    }
+    var prod = (d.productosCatalogo || []).find(function (p) { return p.id === 'SPOTIFY-FAM' || (/spotify/i.test(p.nombre) && p.modelo === 'cuenta_madre'); });
+    var html = '<div class="fz-form"><label>Monto pagado (L)<input type="number" step="any" min="0" name="monto" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Fecha del pago<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '"></label>' +
+      '<label>Pagado con<select name="bancoId"><option value="">— elegir banco/tarjeta —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Próxima renovación<input type="date" name="ren" value="' + esc(masUnMes(f.proximaRenovacion && f.proximaRenovacion >= hoy ? f.proximaRenovacion : hoy)) + '"></label></div>' +
+      '<p class="fz-sub">' + (prod ? 'Se registra UNA compra de «' + esc(prod.nombre) + '» (1 cuenta, este mes). Las invitaciones no se pagan aparte.' : 'No hay producto «Spotify Familiar» en el catálogo: se guarda el pago y la renovación, sin compra. Créelo en Productos para que cuente en Ganancias.') + '</p>';
+    var opid = opId();
+    modal('Registrar pago · ' + f.codigo + ' · ' + f.madreCorreo, html, async function (m) {
+      var monto = Number(val(m, 'monto')); if (!(monto > 0)) throw new Error('Escriba el monto pagado en Lempiras.');
+      var loteId = '';
+      if (prod) {
+        if (!val(m, 'bancoId')) throw new Error('Elija con qué banco o tarjeta se pagó.');
+        var r = await api('fin_compra_registrar', { operationId: opid, compra: { productoId: prod.id, fecha: val(m, 'fecha'), cantidad: 1, costoTotal: monto, moneda: 'HNL', pago: 'banco', bancoId: val(m, 'bancoId'), referencia: 'Spotify Familiar ' + f.codigo + ' · ' + f.madreCorreo } });
+        loteId = r.loteId || '';
+      }
+      await api('finp_spf_guardar', { familiaId: id, costoMensualHnl: monto, proximaRenovacion: val(m, 'ren'), ultimoPago: val(m, 'fecha'), loteId: loteId });
+      toast(prod ? 'Pago registrado (1 compra) y renovación guardada.' : 'Pago y renovación guardados.'); st.spf = null; cargar(true);
+    }, 'Registrar pago');
   }
 
   // ---------------------------------------------------------------------------------------------------- Netflix VIP (lista)
@@ -437,6 +483,7 @@
       if ((t = e.target.closest('[data-fz-viptab]'))) { st.vip.tab = t.dataset.fzViptab; st.vip.pagina = 1; st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-pag]'))) { st.vip.pagina += Number(t.dataset.fzPag); st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-menu]'))) { var mm = t.parentNode; var abierto = mm.classList.contains('on'); h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); if (!abierto) mm.classList.add('on'); e.stopPropagation(); return; }
+      if ((t = e.target.closest('[data-fz-spf]'))) { abrirSpf(t.dataset.fzSpf, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-vip]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirVip(t.dataset.fzVip, t.dataset.id); return; }
       h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); });
       if (!(t = e.target.closest('[data-fz]'))) return;

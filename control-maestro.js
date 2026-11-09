@@ -282,7 +282,7 @@
       hbomax:'hbomax',hbo:'hbomax',max:'hbomax',prime:'primevideo',primevideo:'primevideo',
       paramount:'paramount',paramountp:'paramount',crunchy:'crunchyroll',crunchyroll:'crunchyroll',
       vix:'vix',viki:'viki',vikirakuten:'viki',universal:'universal',universalp:'universal',
-      spotify:'spotify',youtube:'youtube',youtubepremium:'youtube',deezer:'deezer',
+      spotify:'spotify',spotifyfamiliar:'spotifyfamiliar',spotifyfamilia:'spotifyfamiliar',spotifyfamily:'spotifyfamiliar',youtube:'youtube',youtubepremium:'youtube',deezer:'deezer', // R196f
       canva:'canva',canvapro:'canva',gemini:'gemini',geminipro:'gemini',
       duolingo:'duolingo',duolingoplus:'duolingo',chatgpt:'chatgpt',chatgptplus:'chatgpt',openai:'chatgpt',
       appletv:'appletv',apple:'appletv',star:'star',starplus:'star',
@@ -344,7 +344,7 @@
     if(n.includes('viki'))vixFamily.push('viki');
     if(n.includes('universal'))vixFamily.push('universal');
     if(vixFamily.length)return vixFamily;
-    if(n.includes('spotify'))return ['spotify'];
+    if(n.includes('spotify'))return [/famil/.test(n)?'spotifyfamiliar':'spotify']; // R196f
     if(n.includes('youtube'))return ['youtube'];
     if(n.includes('deezer'))return ['deezer'];
     if(n.includes('canva'))return ['canva'];
@@ -495,7 +495,7 @@
   const AUDIT_PLATFORM_LABELS={
     netflix:'Netflix',vipnetflix:'VIP Netflix',disney:'Disney+',hbomax:'HBO Max',primevideo:'Prime Video',
     paramount:'Paramount+',crunchyroll:'Crunchyroll',vix:'ViX',viki:'Viki Rakuten',universal:'Universal+',
-    spotify:'Spotify',youtube:'YouTube',deezer:'Deezer',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
+    spotify:'Spotify',spotifyfamiliar:'Spotify Familiar',youtube:'YouTube',deezer:'Deezer',canva:'Canva',gemini:'Gemini',duolingo:'Duolingo',chatgpt:'ChatGPT',
     appletv:'Apple TV',star:'Star+',office:'Office 365',office2021:'Office 2021',windows10:'Windows 10',windows11:'Windows 11',
     adobeexpress:'Adobe Express',eset:'ESET NOD32',magis:'Magis TV',stellatv:'Stella TV',stellatv1:'Stella TV (1)',stellatv2:'Stella TV (2)',stellatv3:'Stella TV (3)',oleada:'Oleada TV',oleadatv1:'Oleada TV (1)',oleadatv3:'Oleada TV (3)',
     latintv:'LatinTV',latintv1:'LatinTV (1)',latintv2:'LatinTV (2)',latintv3:'LatinTV (3)',latintv4:'LatinTV (4)',
@@ -1072,7 +1072,7 @@
   const AUDIT_PLATFORM_COLORS={
     netflix:'#e50914',vipnetflix:'#c9184a',disney:'#1769d2',hbomax:'#6f42c1',primevideo:'#00a8e1',
     paramount:'#1769d2',crunchyroll:'#f47521',vix:'#c000ff',viki:'#00a7c4',universal:'#078b80',
-    spotify:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
+    spotify:'#1db954',spotifyfamiliar:'#1db954',youtube:'#ff0033',deezer:'#a238ff',canva:'#7d2ae8',gemini:'#4285f4',duolingo:'#58cc02',chatgpt:'#10a37f',
     appletv:'#555b66',star:'#7d30c9',office:'#d83b01',office2021:'#d83b01',windows10:'#0078d4',windows11:'#0067c0',adobeexpress:'#e60023',eset:'#008f83',
     magis:'#16a085',stellatv:'#f04438',stellatv1:'#f04438',stellatv2:'#f04438',stellatv3:'#f04438',oleada:'#1297a6',oleadatv1:'#1297a6',oleadatv3:'#1297a6',latintv:'#0f9f82',latintv1:'#0f9f82',latintv2:'#0f9f82',latintv3:'#0f9f82',latintv4:'#0f9f82',liontv:'#b7791f',liontv1:'#b7791f',liontv2:'#b7791f',liontv3:'#b7791f',liontv5:'#b7791f',evoutouch:'#3b5bdb',icomplay:'#e2231a',icomplay1:'#e2231a',icomplay2:'#e2231a',icomplay3:'#e2231a',icomplay5:'#e2231a',icomplay7:'#e2231a',evoutouch1:'#3b5bdb',evoutouch2:'#3b5bdb',evoutouch3:'#3b5bdb',iptv:'#64748b',vixmix:'#9c27b0',sin_plataforma:'#78909c'
   };
@@ -1280,6 +1280,7 @@
       paramount:{label:'Paramount+',short:'P+',logo:'/assets/platformas/paramount.jpg'},
       spotify:{label:'Spotify',short:'SP',logo:'/assets/platformas/spotify.jpg'},
       deezer:{label:'Deezer',short:'DZ',logo:'/assets/platformas/deezer.jpg'},
+      spotifyfamiliar:{label:'Spotify Familiar',short:'SF',logo:'/assets/platformas/spotify.jpg'}, // R196f
       youtube:{label:'YouTube',short:'YT',logo:'/assets/platformas/youtube.jpg'},
       canva:{label:'Canva',short:'Ca',logo:'/assets/platformas/canva.jpg'},
       gemini:{label:'Gemini',short:'Ge',logo:'/assets/platformas/gemini.jpg'},
@@ -1539,7 +1540,7 @@
         </div>
         <div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>
       </div>
-      ${state.accountPlatform==='spotify'?'<div id="cmSpotifyFamilias"></div>':''}<!-- R196 · solo Spotify Premium Familiar: 5 espacios por correo -->
+      ${state.accountPlatform==='spotifyfamiliar'?'<div id="cmSpotifyFamilias"></div>':''}<!-- R196 · solo Spotify Premium Familiar: 5 espacios por correo -->
       <div id="cmAccountResults">${accountResultsHtml()}</div>
     </section>`;
   }
@@ -1661,7 +1662,7 @@
       </details>
     </div>`;
     bind();
-    if(state.accountPlatform==='spotify'&&window.SublichatSpotifyCM)window.SublichatSpotifyCM.montar(host.querySelector('#cmSpotifyFamilias')); // R196
+    if(state.accountPlatform==='spotifyfamiliar'&&window.SublichatSpotifyCM)window.SublichatSpotifyCM.montar(host.querySelector('#cmSpotifyFamilias')); // R196
     if(expanded){
       state.controlExpanded=true;
       requestAnimationFrame(persistControlExpanded);
