@@ -32,6 +32,17 @@ await S.vincularInvitado(db, { familiaId: f1.id, correo: 'invitado1@ejemplo.test
 await S.vincularInvitado(db, { familiaId: f1.id, correo: 'invitado2@ejemplo.test', clienteId: 'beto', compraId: 'sp-beto' });
 await S.vincularInvitado(db, { familiaId: f1.id, correo: 'invitado3@ejemplo.test', clienteId: 'caro', compraId: 'sp-caro', pendiente: true });
 await S.crearFamilia(db, { madreCorreo: 'madre2.spotify@ejemplo.test', usuario: 'naara' });
+await S.guardarClaveMadre(db, { familiaId: f1.id, clave: 'Ficticia#1' });
+for (let i = 1; i <= 6; i++) db._data.set(`inventario/nf-${i}`, { v: 1, data: { plataforma: 'netflix', correo: `netflix${i}@ejemplo.test`, clave: 'x', capacidad: 5, ocupados: i % 5, disponibles: 5 - (i % 5), clientes: [], estado: 'activa' } });
+for (let i = 1; i <= 3; i++) db._data.set(`inventario/sp-${i}`, { v: 1, data: { plataforma: 'spotify', correo: `individual${i}@ejemplo.test`, clave: 'x', capacidad: 1, ocupados: 1, disponibles: 0, clientes: [{ nombre: `Cliente ${i}` }], estado: 'llena' } });
+// Bodega/Control Maestro leen el inventario REAL de esta prueba (incluye el reflejo «spotifyfamiliar» que crea la librería)
+async function apiDatos(route) {
+  let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
+  const docs = [...db._data.entries()].filter(([k]) => k.startsWith('inventario/') && k.split('/').length === 2).map(([k, r]) => ({ id: k.split('/')[1], data: r.data }));
+  if (route.request().url().includes('/api/mobile-core')) return route.fulfill({ json: { ok: true, items: docs.map((d) => ({ id: d.id, ...d.data })), nextCursor: '' } });
+  if (body.accion === 'control_datos' && body.coleccion === 'inventario') return route.fulfill({ json: { ok: true, coleccion: 'inventario', documentos: docs, nextCursor: '' } });
+  return route.fallback();
+}
 const deps = { hoyYmdHN: () => '2026-11-08', loadMethods: async () => [{ id: 'bac', nombre: 'BAC' }], auditar: (tx, d, idn, ev) => tx.set(d.collection('auditoria_eventos').doc(), ev), resumenInventario, costosProveedor, rentabilidad, MODELOS, MONEDAS };
 const ident = { usuario: 'sublicuentas', role: 'sublicuentas', admin: true };
 const llamadas = [];
@@ -86,6 +97,12 @@ assert.equal([...db._data.keys()].filter((k) => k.startsWith('fin_vip_extras/'))
 paso('importación confirmada: 20 vínculos, 1 lote, auditoría');
 await pg.click('[data-fz-tab="compras"]'); await pg.click('[data-fz-sub="vip"]'); await pg.waitForSelector('[data-fz-viptab]'); await pg.waitForTimeout(900);
 await pg.screenshot({ path: path.join(out, 'finanzas-netflix-vip-1440.png'), fullPage: true });
+await pg.click('[data-fz-sub="spotify"]'); await pg.waitForSelector('[data-fz-spf]', { timeout: 15000 }); await pg.waitForTimeout(500);
+await pg.click(`[data-fz-spf="editar"][data-id="${f1.id}"]`); await pg.fill('.fz-modal [name="costo"]', '320'); await pg.fill('.fz-modal [name="ren"]', '2026-11-12'); await pg.click('.fz-modal [data-ok]');
+await pg.waitForTimeout(1200);
+assert.equal(db._data.get(`inventario/${S.idBodega(f1.id)}`).data.costoMensualHnl, 320, 'Bodega refleja el pago mensual');
+await pg.screenshot({ path: path.join(out, 'finanzas-spotify-familiar-1440.png'), fullPage: true });
+paso('Finanzas › Spotify Familiar: cuentas solas; se anota pago (L320) y renovación; Bodega lo refleja');
 await pg.click('[data-fz-tab="reportes"]'); await pg.waitForTimeout(300);
 const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 20000 }), pg.click('[data-fz="excel"]')]);
 const xlsx = path.join(out, 'Sublichat_Finanzas_reporte.xlsx'); await dl.saveAs(xlsx);
@@ -109,24 +126,30 @@ v = await pg.evaluate(() => [...document.querySelectorAll('button,a')].some((b) 
 assert.equal(v, false); paso('Relojes no ve la pestaña Finanzas (solo Sublicuentas por defecto)'); await h.cerrar();
 
 // ---------- Control Maestro › Spotify
-h = await abrir({ usuario: 'sublicuentas', ui: 'v2', ancho: 1440, alto: 2300, datos: { clientes: 36, inventario: 40 } }); pg = h.page;
+h = await abrir({ usuario: 'sublicuentas', ui: 'v2', ancho: 1440, alto: 2300, datos: { clientes: 36, inventario: 0 } }); pg = h.page;
 await pg.route('**/api/inventario', apiInventario);
+// El arnés no tiene Firestore real: se le pasa a Control Maestro el inventario de ESTA prueba (incluye el reflejo «spotifyfamiliar»)
+const cuentasInv = [...db._data.entries()].filter(([k]) => k.startsWith('inventario/') && k.split('/').length === 2).map(([k, r]) => ({ id: k.split('/')[1], ...r.data }));
+await pg.evaluate((cuentas) => { const orig = window.sublichatControlData; window.sublichatControlData = () => { const x = orig ? orig() : {}; return { ...x, ready: true, version: (Number(x.version) || 0) + 1000, cuentas: [...(x.cuentas || []), ...cuentas] }; }; }, cuentasInv);
 await pg.evaluate(() => window.subliRBAC ? window.subliRBAC.go('control-cuentas') : window.SublichatRBAC.ir('control-cuentas'));
-await pg.waitForSelector('[data-cm-open-workspace="spotify"]', { timeout: 20000 });
-await pg.click('[data-cm-open-workspace="spotify"]');
+await pg.waitForSelector('[data-cm-open-workspace="spotifyfamiliar"]', { timeout: 20000 });
+v = await pg.evaluate(() => [...document.querySelectorAll('[data-cm-open-workspace]')].map((b) => b.getAttribute('data-cm-open-workspace')));
+assert.ok(v.includes('spotifyfamiliar') && v.includes('spotify'), 'Spotify Familiar es una plataforma APARTE de Spotify: ' + v);
+paso('Control Maestro: «Spotify Familiar» sale como plataforma aparte (reflejo automático de las cuentas)');
+await pg.click('[data-cm-open-workspace="spotifyfamiliar"]');
 await pg.waitForSelector('#cmSpotifyFamilias .sp-fam, #cmSpotifyFamilias [class*="sp-"]', { timeout: 15000 }); await pg.waitForTimeout(900);
 v = await pg.evaluate(() => { const c = document.querySelector('#cmSpotifyFamilias'); const fams = c.querySelectorAll('.sp-fam'); return { fams: fams.length, filas: fams[0] ? fams[0].querySelectorAll('.sp-fila:not(.sp-th)').length : 0, txt: c.innerText }; });
 assert.ok(v.fams >= 2); assert.equal(v.filas, 5, 'exactamente 5 filas por familia');
-assert.match(v.txt, /Ana Prueba/); assert.match(v.txt, /Disponible/);
+assert.match(v.txt, /Ana Prueba/); assert.match(v.txt, /Disponible/); assert.match(v.txt, /clave guardada/); assert.doesNotMatch(v.txt, /Ficticia#1/, 'la clave no se muestra');
 paso('Control Maestro › Spotify: 2 familias, 5 filas cada una, 3 ocupadas y 2 disponibles con cliente de la ficha');
 await pg.screenshot({ path: path.join(out, 'control-maestro-spotify-1440.png'), fullPage: true });
 // otra plataforma: no aparece el bloque Spotify
-const clic = await pg.evaluate(() => { const b = [...document.querySelectorAll('[data-cm-audit-platform],[data-cm-platform],[data-cm-open-workspace]')].find((x) => /^netflix$/i.test(x.getAttribute('data-cm-audit-platform') || x.getAttribute('data-cm-platform') || x.getAttribute('data-cm-open-workspace') || '')); if (b) { b.click(); return true; } return false; });
+const clic = await pg.evaluate(() => { const b = [...document.querySelectorAll('[data-cm-audit-platform],[data-cm-platform],[data-cm-open-workspace]')].find((x) => /^spotify$/i.test(x.getAttribute('data-cm-audit-platform') || x.getAttribute('data-cm-platform') || x.getAttribute('data-cm-open-workspace') || '')); if (b) { b.click(); return true; } return false; });
 await pg.waitForTimeout(900);
 v = await pg.evaluate(() => !!document.querySelector('#cmSpotifyFamilias'));
-assert.ok(clic, 'se encontró la plataforma Netflix'); assert.equal(v, false, 'en Netflix no aparece el bloque Spotify');
-await pg.screenshot({ path: path.join(out, 'control-maestro-netflix-intacto-1440.png') });
-paso('Control Maestro › Netflix: sin bloque Spotify (vista de siempre)');
+assert.ok(clic, 'se encontró Spotify individual'); assert.equal(v, false, 'en Spotify (individual) no aparece el bloque familiar');
+await pg.screenshot({ path: path.join(out, 'control-maestro-spotify-individual-1440.png') });
+paso('Control Maestro › Spotify (individual): vista de siempre, sin bloque familiar');
 if (h.errores.length) console.log('ERRORES pagina', h.errores.slice(0, 5));
 await h.cerrar();
 console.log(`\n${ok} comprobaciones OK · capturas en ${out}`);
