@@ -95,12 +95,37 @@ test('17.5 · Netflix y VIP de Control Maestro no se tocan', async () => {
   assert.equal(JSON.stringify([db._data.get('inventario/nf-1'), db._data.get('inventario/vip-1'), db._data.get('clientes/caro').data.servicios[1]]), antes);
 });
 
-test('Control Maestro: el cambio fuera de Spotify son SOLO 2 líneas (contenedor + montaje), ambas condicionadas a Spotify', () => {
+test('Control Maestro: solo cambia lo de Spotify Familiar (contenedor + montaje + nombre/logo de la plataforma)', () => {
   const src = fs.readFileSync(new URL('../control-maestro.js', import.meta.url), 'utf8');
-  const lineas = src.split('\n').filter((l) => /R196/.test(l));
+  const lineas = src.split('\n').filter((l) => /R196(?!f)/.test(l));
   assert.equal(lineas.length, 2);
-  assert.ok(lineas.every((l) => /accountPlatform===\'spotify\'/.test(l)));
+  assert.ok(lineas.every((l) => /accountPlatform===\'spotifyfamiliar\'/.test(l)), 'el bloque solo se monta en la plataforma Spotify Familiar');
+  const f = src.split('\n').filter((l) => /R196f/.test(l));
+  assert.ok(f.length >= 1 && f.every((l) => /spotify/i.test(l)), 'R196f solo agrega la plataforma Spotify Familiar');
   const ui = fs.readFileSync(new URL('../control-maestro-spotify.js', import.meta.url), 'utf8');
   assert.match(ui, /SublichatSpotifyCM/);
   assert.doesNotMatch(ui.replace(/^\s*\/?\*.*$/gm, ''), /vipnetflix|plataforma: *'netflix'/i, 'la UI de Spotify no maneja Netflix');
+});
+
+test('R196f · Bodega refleja cada cuenta madre como «spotifyfamiliar» (correo, clave, cupos, invitados); eliminar quita el reflejo', async () => {
+  const db = fakeFirestore(semilla());
+  const f = await familiaCon3(db);
+  await S.guardarClaveMadre(db, { familiaId: f.id, clave: 'Prueba#1' });
+  let inv = db._data.get(`inventario/${S.idBodega(f.id)}`)?.data;
+  assert.ok(inv, 'se creó solo');
+  assert.deepEqual([inv.plataforma, inv.correo, inv.clave, inv.capacidad, inv.ocupados, inv.disponibles, inv.origen], ['spotifyfamiliar', 'madre@ejemplo.com', 'Prueba#1', 5, 3, 2, 'spotify_familia']);
+  assert.deepEqual(inv.clientes.map((c) => [c.slot, c.correo]), [[1, 'inv1@ejemplo.com'], [2, 'inv2@ejemplo.com'], [3, 'inv3@ejemplo.com']]);
+  await S.cambiarCorreoMadre(db, { familiaId: f.id, correoNuevo: 'madre.nueva@ejemplo.com' });
+  assert.equal(db._data.get(`inventario/${S.idBodega(f.id)}`).data.correo, 'madre.nueva@ejemplo.com');
+  for (const c of ['inv1@ejemplo.com', 'inv2@ejemplo.com', 'inv3@ejemplo.com']) await S.desvincular(db, { correo: c });
+  assert.equal(db._data.get(`inventario/${S.idBodega(f.id)}`).data.ocupados, 0);
+  await S.eliminarCuenta(db, { familiaId: f.id, confirmo: true });
+  assert.equal(db._data.has(`inventario/${S.idBodega(f.id)}`), false, 'el reflejo se quita; los datos siguen en spotify_familias');
+  assert.equal(db._data.get('inventario/nf-1').data.plataforma, 'netflix', 'Netflix intacto');
+});
+
+test('R196f · Bodega no deja editar ni crear Spotify Familiar por su lado (se edita en /spotifyf o Control Maestro)', () => {
+  const src = fs.readFileSync(new URL('../api/inventario.js', import.meta.url), 'utf8');
+  assert.match(src, /current\.origen === "spotify_familia"\) return res\.status\(200\)\.json\(\{ error: "Esta cuenta es de Spotify Familiar/);
+  assert.match(src, /spotify\\s\*famil\/i\.test\(String\(plataforma\)\)\) return res/);
 });

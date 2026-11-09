@@ -97,5 +97,6 @@ test('cableado: servidor con permiso propio, ficha Web consulta la familia, la f
   assert.match(fs.readFileSync(new URL('../api/renovar.js', import.meta.url), 'utf8'), /spotifyFam\.asignarServicio\(db/);
   const web = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
   assert.match(web, /async function invSpotifyFamilias\(\)/); assert.match(web, /accion:"spotifyResolver"/);
-  assert.doesNotMatch(fs.readFileSync(new URL('../api/_spotify-familias.js', import.meta.url), 'utf8'), /clave\s*:/, 'no guarda contraseña de Spotify');
+  // R196c/f · solo la cuenta madre lleva clave (pedido del 08/11/2026); los invitados (clientes) nunca.
+  assert.doesNotMatch(fs.readFileSync(new URL('../api/_spotify-familias.js', import.meta.url), 'utf8').replace(/clave: f\.madreClave \|\| ""/g, ''), /clave\s*:/, 'no guarda contraseña de los invitados');
 });

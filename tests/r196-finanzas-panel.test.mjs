@@ -171,3 +171,23 @@ test('Web: pestaña Finanzas con 5 pestañas, Productos en contexto y permiso pr
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /finanzas-web\.js\?v=20261108-r196/);
 });
+
+test('R196f · Spotify Familiar en Finanzas: lista sola desde las cuentas; solo se anota pago mensual y renovación; Bodega lo refleja', async () => {
+  const { createRequire } = await import('node:module');
+  const S = createRequire(import.meta.url)('../api/_spotify-familias.js');
+  const db = fakeFirestore({ clientes: {} });
+  const f = await S.crearFamilia(db, { madreCorreo: 'principal@ejemplo.com' });
+  const g = await S.crearFamilia(db, { madreCorreo: 'borrada@ejemplo.com' }); await S.eliminarCuenta(db, { familiaId: g.id, confirmo: true });
+  let l = await call(db, 'finp_spf_lista', {});
+  assert.deepEqual(l.filas.map((x) => [x.codigo, x.madreCorreo, x.costoMensualHnl]), [['SP-001', 'principal@ejemplo.com', null]], 'eliminadas no salen; sin dato = pendiente');
+  assert.equal(l.sinDatos, 1);
+  const bad = await call(db, 'finp_spf_guardar', { familiaId: f.id, costoMensualHnl: -5 });
+  assert.equal(bad.ok, false);
+  const r = await call(db, 'finp_spf_guardar', { familiaId: f.id, costoMensualHnl: 320, proximaRenovacion: '2026-11-12', ultimoPago: '2026-10-12' });
+  assert.equal(r.ok, true);
+  l = await call(db, 'finp_spf_lista', {});
+  assert.deepEqual([l.filas[0].costoMensualHnl, l.filas[0].proximaRenovacion, l.filas[0].pronto, l.totalMensualHnl, l.pronto], [320, '2026-11-12', true, 320, 1]);
+  const inv = db._data.get(`inventario/${S.idBodega(f.id)}`).data;
+  assert.deepEqual([inv.costoMensualHnl, inv.proximaRenovacion, inv.ultimoPago], [320, '2026-11-12', '2026-10-12'], 'Bodega muestra pago y renovación');
+  assert.equal([...db._data.keys()].filter((k) => k.startsWith('finanzas_movimientos/')).length, 0, 'editar datos no mueve caja');
+});
