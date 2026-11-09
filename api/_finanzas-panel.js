@@ -13,6 +13,8 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
+const requireCjs = createRequire(import.meta.url);
 
 const r2 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
 const r6 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : 0; };
@@ -219,7 +221,7 @@ export function previsualizarVip({ extras = [], lotes = [] }, { inventarioVip = 
 // ================================================================================================================
 // 3) HANDLER (/api/finanzas · acciones finp_*). Permiso: módulo «finanzas-panel» (por defecto solo Sublicuentas).
 // ================================================================================================================
-export const ACCIONES_PANEL = Object.freeze(["finp_panel", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones"]);
+export const ACCIONES_PANEL = Object.freeze(["finp_panel", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar"]); // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -263,6 +265,10 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       for (const p of actual.productos.filter((p) => p.estado === "margen_bajo")) alertas.push({ tipo: "margen_bajo", nivel: "media", productoId: p.productoId, producto: p.producto, margen: p.margen, objetivo: cfg.umbralMargen, texto: `Margen actual ${p.margen}% · objetivo ≥ ${cfg.umbralMargen}%` });
       for (const p of actual.productos.filter((p) => p.ingresoPendienteHnl > 0)) alertas.push({ tipo: "sin_costo", nivel: "media", productoId: p.productoId, producto: p.producto, texto: `${p.ventasPendientes} venta(s) sin costo registrado (L${p.ingresoPendienteHnl}): registre la compra.` });
       if (proximos.length) alertas.push({ tipo: "vip_cobro", nivel: "info", producto: "Netflix VIP", texto: `${proximos.length} extra(s) VIP con cobro del proveedor en los próximos 7 días.` });
+      try { // R196f · renovaciones de cuentas Spotify Familiar
+        const fs = await todos("fin_spotify_cuentas"); const vence = fs.filter((x) => x.proximaRenovacion && x.proximaRenovacion <= en7);
+        if (vence.length) alertas.push({ tipo: "spf_renovacion", nivel: "info", producto: "Spotify Familiar", texto: `${vence.length} cuenta(s) principal(es) renuevan en 7 días o ya vencieron.` });
+      } catch (_) {}
       if (vipProv.sin) alertas.push({ tipo: "vip_sin_proveedor", nivel: "info", producto: "Netflix VIP", texto: `${vipProv.sin} extra(s) VIP de Control Maestro sin proveedor en Finanzas.` });
       const inventario = d.resumenInventario ? d.resumenInventario(productos, lotes, hoy) : [];
       for (const i of inventario.filter((i) => i.stockBajo)) alertas.push({ tipo: "stock", nivel: "media", producto: i.nombre, texto: `Quedan ${i.disponible} ${i.unidad || "unidades"}: toca comprar.` });
@@ -413,6 +419,39 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         return { de, a, pagado };
       });
       return ok({ ...r, aviso: r.pagado ? "Registre la compra del reemplazo en Compras (una compra real, sin venta)." : "" });
+    }
+
+    // ---------------- R196f · Spotify Familiar: lo único que se llena en Finanzas es el pago mensual (L) y la renovación de la cuenta principal
+    if (accion === "finp_spf_lista") {
+      const [fams, fin] = await Promise.all([todos("spotify_familias"), todos("fin_spotify_cuentas")]);
+      const finDe = new Map(fin.map((x) => [x.id, x]));
+      const en7 = new Date(Date.parse(`${hoy}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+      const filas = fams.filter((f) => f.estado !== "inactiva").map((f) => { const x = finDe.get(f.id) || {}; const ocup = (f.miembros || []).filter((m) => m.estado === "activo").length;
+        return { familiaId: f.id, codigo: f.codigo || "", madreCorreo: f.madreCorreo || "", ocupados: ocup, capacidad: Number(f.capacidad || 5), costoMensualHnl: x.costoMensualHnl ?? null, proximaRenovacion: x.proximaRenovacion || "", ultimoPago: x.ultimoPago || "", ultimoLoteId: x.ultimoLoteId || "",
+          vencida: !!(x.proximaRenovacion && x.proximaRenovacion < hoy), pronto: !!(x.proximaRenovacion && x.proximaRenovacion >= hoy && x.proximaRenovacion <= en7), historial: (x.historial || []).slice(-10) }; })
+        .sort((a, b) => String(a.proximaRenovacion || "9999").localeCompare(String(b.proximaRenovacion || "9999")) || a.codigo.localeCompare(b.codigo));
+      return ok({ hoy, filas, totalMensualHnl: r2(filas.reduce((a, f) => a + (Number(f.costoMensualHnl) || 0), 0)), sinDatos: filas.filter((f) => f.costoMensualHnl == null || !f.proximaRenovacion).length, pronto: filas.filter((f) => f.pronto || f.vencida).length });
+    }
+    if (accion === "finp_spf_guardar") {
+      const fid = String(body.familiaId || "");
+      const costo = body.costoMensualHnl === "" || body.costoMensualHnl == null ? null : Number(body.costoMensualHnl);
+      if (costo !== null && !(costo > 0 && costo < 100000)) throw errUsuario("Escriba cuánto paga al mes en Lempiras.");
+      const ren = body.proximaRenovacion ? fechaExcel(body.proximaRenovacion) : "";
+      if (ren === null) throw errUsuario("Fecha de renovación inválida.");
+      const pago = body.ultimoPago ? fechaExcel(body.ultimoPago) : "";
+      if (pago === null || (pago && pago > hoy)) throw errUsuario("Fecha de pago inválida.");
+      await db.runTransaction(async (tx) => {
+        const fref = col("spotify_familias").doc(fid), ref = col("fin_spotify_cuentas").doc(fid);
+        const [sf, s] = [await tx.get(fref), await tx.get(ref)];
+        if (!sf.exists || (sf.data() || {}).estado === "inactiva") throw errUsuario("Esa cuenta de Spotify Familiar no existe.");
+        const a = s.exists ? s.data() : {};
+        const n = { costoMensualHnl: costo === null ? a.costoMensualHnl ?? null : r2(costo), proximaRenovacion: ren || a.proximaRenovacion || "", ...(pago ? { ultimoPago: pago } : {}), ...(body.loteId ? { ultimoLoteId: txt(body.loteId, 120) } : {}) };
+        tx.set(ref, { ...a, ...n, familiaId: fid, codigo: (sf.data() || {}).codigo || "", madreCorreo: (sf.data() || {}).madreCorreo || "", actualizadoAt: ahora, actualizadoPor: actor,
+          historial: [...(a.historial || []), { at: ahora, por: actor, antes: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, despues: n }].slice(-30) });
+        audit(tx, { accion: "spotify_familiar_pago", targetType: "spotify_familia", targetId: fid, before: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, after: n });
+      });
+      try { await requireCjs("./_spotify-familias.js").sincronizarBodega(db, fid); } catch (_) {} // Bodega muestra pago y renovación
+      return ok({ familiaId: fid });
     }
 
     if (accion === "finp_reporte") {

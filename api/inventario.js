@@ -594,6 +594,7 @@ export default async function handler(req, res) {
 
     if (accion === "crearCuenta") {
       if (!plataforma) return res.status(200).json({ error: "Falta la plataforma." });
+      if (/^spotify\s*famil/i.test(String(plataforma))) return res.status(200).json({ error: "Las cuentas de Spotify Familiar se crean en /spotifyf o en Control Maestro › Spotify Familiar; Bodega las refleja sola." }); // R196f
       if (!correo) return res.status(200).json({ error: "Falta el correo." });
       // No crear una cuenta paralela: misma plataforma + mismo correo/usuario = misma cuenta.
       const dupSnap = await db.collection("inventario").where("plataforma", "==", String(plataforma).toLowerCase().trim()).get();
@@ -627,6 +628,7 @@ export default async function handler(req, res) {
     const snap = await ref.get();
     if (!snap.exists) return res.status(200).json({ error: "No encontré esa cuenta." });
     const current = snap.data() || {};
+    if (current.origen === "spotify_familia") return res.status(200).json({ error: "Esta cuenta es de Spotify Familiar: edítela en /spotifyf o en Control Maestro › Spotify Familiar (Bodega se actualiza sola)." }); // R196f
 
     if (accion === "editarCuenta") {
       const update = { updatedAt: new Date().toISOString() };
