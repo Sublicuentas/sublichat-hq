@@ -169,7 +169,7 @@ test('Web: pestaña Finanzas con 5 pestañas, Productos en contexto y permiso pr
   const ui = fs.readFileSync(new URL('../ui-v2.js', import.meta.url), 'utf8');
   assert.match(ui, /\{ s: 'sala-juntas' \}, \{ s: 'finanzas' \}/);
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /finanzas-web\.js\?v=20261108-r196/);
+  assert.match(html, /finanzas-web\.js\?v=2026\d{4}-r196/);
 });
 
 test('R196f · Spotify Familiar en Finanzas: lista sola desde las cuentas; solo se anota pago mensual y renovación; Bodega lo refleja', async () => {
@@ -190,4 +190,73 @@ test('R196f · Spotify Familiar en Finanzas: lista sola desde las cuentas; solo 
   const inv = db._data.get(`inventario/${S.idBodega(f.id)}`).data;
   assert.deepEqual([inv.costoMensualHnl, inv.proximaRenovacion, inv.ultimoPago], [320, '2026-11-12', '2026-10-12'], 'Bodega muestra pago y renovación');
   assert.equal([...db._data.keys()].filter((k) => k.startsWith('finanzas_movimientos/')).length, 0, 'editar datos no mueve caja');
+});
+
+test('R196i · P0 Finanzas abre aunque haya datos raros y NO corre el costeo dentro del panel (evita el tiempo agotado)', async () => {
+  const db = fakeFirestore({ fin_productos: { SINNOMBRE: { categoria: 'software' }, OK: { nombre: 'Office 365', categoria: 'software' } }, fin_proveedores: { x: { pais: 'HN' } }, fin_lotes: { l1: { productoId: 'OK' } },
+    fin_consumos: { v1: { mesKey: '2026-11', estado: 'completo', lineas: [{ productoId: 'OK', ingresoHnl: 300, costoHnl: 180 }] } } });
+  let costeoLlamado = 0;
+  const res = mkRes();
+  await handlePanel(db, 'finp_panel', { mes: '2026-11' }, ident, { uid: 'u' }, res, { ...deps, correrCosteo: async () => { costeoLlamado++; return {}; }, loadMethods: async () => { throw new Error('banco caído'); } });
+  const r = res.body;
+  assert.equal(r.ok, true, 'abre');
+  assert.equal(costeoLlamado, 0, 'el panel no corre el costeo');
+  assert.deepEqual(r.fallas.map((f) => f.seccion), ['bancos'], 'solo se informa la parte que falló');
+  assert.deepEqual(r.productosCatalogo.map((p) => p.nombre), ['Office 365', 'SINNOMBRE'], 'producto sin nombre no rompe el orden');
+  assert.equal(r.proveedores[0].alias, 'x');
+  assert.equal(r.kpis.gananciaHnl, 120);
+  const res2 = mkRes();
+  await handlePanel(db, 'finp_costear', { limite: 999 }, ident, { uid: 'u' }, res2, { ...deps, correrCosteo: async (lim) => { costeoLlamado = lim; return { costeadas: 3 }; } });
+  assert.equal(res2.body.ok, true); assert.equal(costeoLlamado, 60, 'costeo con tope');
+});
+
+test('R196i · vercel: api/finanzas.js con 60 s', async () => {
+  const v = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.equal(v.functions['api/finanzas.js'].maxDuration, 60);
+});
+
+// ------------------------------------------------------------------------------------------- R196i · Fase 6: Excel sencillos
+import { detectarPlantilla, PLANTILLAS_SIMPLES } from '../api/_finanzas-panel.js';
+test('R196i · detecta VIP (4 col.) y Premium (6 col.) por encabezado exacto (acentos y mayúsculas da igual)', () => {
+  assert.equal(detectarPlantilla(PLANTILLAS_SIMPLES.vip), 'vip');
+  assert.equal(detectarPlantilla(['correo del extra vip', 'Proveedor', 'Fecha de renovacion', 'Pago por cuenta (usdt)']), 'vip');
+  assert.equal(detectarPlantilla(PLANTILLAS_SIMPLES.premium), 'premium');
+  assert.equal(detectarPlantilla(['CORREO', 'PROVEEDOR']), null);
+});
+
+test('R196i · Excel VIP 4 col.: vista previa, tasa obligatoria, proveedor «otro» editable, re-importar sin cambios, deshacer; Control Maestro intacto', async () => {
+  const db = fakeFirestore(semilla());
+  const antes = JSON.stringify([...db._data.entries()].filter(([k]) => k.startsWith('inventario/') || k.startsWith('clientes/')));
+  const enc = PLANTILLAS_SIMPLES.vip;
+  const filas = [{ _fila: 2, v: ['Extra1@Ejemplo.com', 'Trap Colombiano', 46363, 2.5] }, { _fila: 3, v: ['extra2@ejemplo.com', 'Proveedor Nuevo SA', '2026-12-10', 2.7] }, { _fila: 4, v: ['noexiste@ejemplo.com', 'Deku Peruano', 46363, 2.5] }, { _fila: 5, v: ['repetido@ejemplo.com', 'Deku Peruano', 46363, 2.5] }];
+  const sinTasa = await call(db, 'finp_simple_preview', { encabezados: enc, filas });
+  assert.match(sinTasa.filas[0].errores.join(), /tasa Binance/);
+  const pv = await call(db, 'finp_simple_preview', { encabezados: enc, filas, tasa: 26.5 });
+  assert.deepEqual(pv.filas.map((x) => x.estado), ['nuevo', 'nuevo', 'sin_coincidencia', 'ambiguo']);
+  assert.deepEqual([pv.filas[0].datos.costoMensualHnl, pv.filas[1].datos.grupo, pv.filas[1].datos.proveedor], [66.25, 'otro', 'Proveedor Nuevo SA']);
+  const c = await call(db, 'finp_simple_confirmar', { encabezados: enc, filas, tasa: 26.5, hash: pv.hash, confirmo: true });
+  assert.equal(c.ok, true); assert.equal(c.aplicados, 2);
+  assert.equal(db._data.get('fin_vip_extras/vip-1').data.proximoPagoProveedor, '2026-12-07');
+  const pv2 = await call(db, 'finp_simple_preview', { encabezados: enc, filas, tasa: 26.5 });
+  assert.equal(pv2.resumen.sinCambios, 2, 're-importar no duplica');
+  assert.equal(JSON.stringify([...db._data.entries()].filter(([k]) => k.startsWith('inventario/') || k.startsWith('clientes/'))), antes, 'Control Maestro y clientes intactos');
+  const jobs = (await call(db, 'finp_importaciones', {})).jobs;
+  const d = await call(db, 'finp_vip_deshacer', { jobId: jobs[0].id });
+  assert.equal(d.ok, true); assert.equal(db._data.has('fin_vip_extras/vip-1'), false);
+});
+
+test('R196i · Excel Premium 6 col.: solo banco + titular + 4 últimos (rechaza número completo), USD con cambio opcional', async () => {
+  const db = fakeFirestore({ inventario: { 'nf-1': { plataforma: 'netflix', correo: 'premium1@ejemplo.com', capacidad: 5, clientes: [{ nombre: 'Cliente 1' }] }, 'nf-2': { plataforma: 'netflix', correo: 'premium2@ejemplo.com', capacidad: 5 } } });
+  const enc = PLANTILLAS_SIMPLES.premium;
+  const filas = [{ _fila: 2, v: ['premium1@ejemplo.com', 'BAC Credomatic', 'Titular Prueba', 1234, '15/12/2026', 9.99] }, { _fila: 3, v: ['premium2@ejemplo.com', 'Ficohsa', 'Titular Prueba', '4111111111111111', '15/12/2026', 9.99] }];
+  const pv = await call(db, 'finp_simple_preview', { encabezados: enc, filas });
+  assert.equal(pv.filas[0].estado, 'nuevo'); assert.match(pv.filas[0].avisos.join(), /cambio/); assert.equal(pv.filas[0].datos.cargoHnl, null);
+  assert.equal(pv.filas[1].estado, 'error'); assert.match(pv.filas[1].errores.join(), /más de 4 dígitos/);
+  const pvc = await call(db, 'finp_simple_preview', { encabezados: enc, filas, tasa: 25.2 });
+  const c = await call(db, 'finp_simple_confirmar', { encabezados: enc, filas, tasa: 25.2, hash: pvc.hash, confirmo: true });
+  assert.equal(c.aplicados, 1);
+  const g = db._data.get('fin_premium_cuentas/nf-1').data;
+  assert.deepEqual([g.banco, g.ultimos4, g.fechaCobro, g.pagoUsd, g.cargoHnl], ['BAC Credomatic', '1234', '2026-12-15', 9.99, 251.75]);
+  assert.equal(JSON.stringify([...db._data.values()]).includes('4111111111111111'), false, 'nunca se guarda el número completo');
+  assert.equal(db._data.get('inventario/nf-1').data.clientes[0].nombre, 'Cliente 1', 'Control Maestro intacto');
 });
