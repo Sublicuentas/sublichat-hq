@@ -53,7 +53,10 @@
   async function api(accion, body) {
     var r = await fetch('/api/finanzas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ accion: accion, origen: 'web' }, body || {})) });
     var j = null; try { j = await r.json(); } catch (_) {}
-    if (!r.ok || !j || j.ok === false) throw new Error((j && j.error) || (r.status === 403 ? 'Su usuario no tiene Finanzas.' : 'No se pudo completar.'));
+    // R196i · error con causa visible (antes salía solo «No se pudo completar.»)
+    if (r.status === 403) throw new Error((j && j.error) || 'Sin autorización para Finanzas. Sublicuentas lo activa en Permisos.');
+    if (!j) throw new Error(r.status === 504 || r.status === 502 ? 'El servidor tardó demasiado (HTTP ' + r.status + '). Toque Reintentar.' : 'El servidor no respondió bien (HTTP ' + r.status + ').');
+    if (!r.ok || j.ok === false) throw new Error((j.error || 'No se pudo completar') + ' (HTTP ' + r.status + ', ' + accion + ')');
     return j;
   }
   function toast(msg, mal) { var t = document.createElement('div'); t.className = 'fz-toast' + (mal ? ' mal' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.classList.add('on'); }, 10); setTimeout(function () { t.remove(); }, 3600); }
@@ -73,13 +76,15 @@
     var d = st.data;
     var mesSel = '<label class="fz-mes"><span>Mes</span><input type="month" data-fz-mes value="' + esc(st.mes || '') + '"></label>';
     var cab = '<div class="fz-head"><div><h1>Finanzas</h1><p>Ganancias, margen y rendimiento por producto</p></div><div class="fz-head-acc">' + mesSel +
+      '<button type="button" class="fz-btn sec" data-fz="costear" title="Asigna el costo de las ventas nuevas con las compras registradas">' + ico('layers') + 'Actualizar costos</button>' +
       '<button type="button" class="fz-btn sec" data-fz="productos">' + ico('box') + 'Productos</button></div></div>' +
       '<nav class="fz-tabs" role="tablist">' + TABS.map(function (t) { return '<button type="button" role="tab" class="fz-tab' + (st.tab === t[0] ? ' on' : '') + '" data-fz-tab="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '">' + ico(t[2]) + t[1] + '</button>'; }).join('') + '</nav>';
     var cuerpo;
     if (st.error && !d) cuerpo = '<div class="fz-card fz-vacio"><b>No se pudo abrir Finanzas</b><span>' + esc(st.error) + '</span><button type="button" class="fz-btn" data-fz="reintentar">Reintentar</button></div>';
     else if (!d) cuerpo = '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Cargando Finanzas…</b></div>';
     else cuerpo = ({ resumen: vResumen, proveedores: vProveedores, compras: vCompras, ganancias: vGanancias, reportes: vReportes }[st.tab] || vGanancias)(d);
-    h.innerHTML = '<div class="fz">' + cab + (st.cargando && d ? '<div class="fz-cargando">Actualizando…</div>' : '') + cuerpo + '</div>';
+    var fallas = d && d.fallas && d.fallas.length ? '<div class="fz-err">Algunas partes no cargaron: ' + d.fallas.map(function (f) { return esc(f.seccion.replace(/_/g, ' ')); }).join(', ') + '. El resto está al día. <button type="button" class="fz-link" data-fz="reintentar">Reintentar</button></div>' : '';
+    h.innerHTML = '<div class="fz">' + cab + (st.cargando && d ? '<div class="fz-cargando">Actualizando…</div>' : '') + fallas + cuerpo + '</div>';
     if (d && (st.tab === 'ganancias' || st.tab === 'resumen')) dibujarChart(d);
     if (d && st.tab === 'compras' && st.sub === 'vip' && !st.vip.res) cargarVip();
     if (d && st.tab === 'compras' && st.sub === 'importar' && !st.jobs) cargarJobs();
@@ -151,7 +156,7 @@
       var mios = cp.filter(function (c) { return String(c.proveedor).toLowerCase() === String(p.alias).toLowerCase(); });
       var r = rp.find(function (x) { return String(x.nombre).toLowerCase() === String(p.alias).toLowerCase(); });
       var gastado = mios.reduce(function (a, c) { return a + c.costoHnl; }, 0);
-      return '<tr><td><div class="fz-prod"><span class="fz-logo sin"><i>' + esc(p.alias.slice(0, 1)) + '</i></span><div><b>' + esc(p.alias) + '</b><small>' + esc([p.pais, p.metodoPago, p.moneda].filter(Boolean).join(' · ')) + '</small></div></div></td>' +
+      return '<tr><td><div class="fz-prod"><span class="fz-logo sin"><i>' + esc(String(p.alias || '?').slice(0, 1)) + '</i></span><div><b>' + esc(p.alias) + '</b><small>' + esc([p.pais, p.metodoPago, p.moneda].filter(Boolean).join(' · ')) + '</small></div></div></td>' +
         '<td>' + (mios.map(function (c) { return '<span class="fz-chip' + (c.masEconomico ? ' ok' : '') + '">' + esc(c.producto) + ' · ' + L(c.promedioHnl, true) + '/u' + (c.masEconomico ? ' · más económico' : '') + '</span>'; }).join('') || '<span class="fz-sub">Sin compras</span>') + '</td>' +
         '<td class="n">' + (mios.reduce(function (a, c) { return a + c.compras; }, 0)) + '</td><td class="n">' + L(gastado) + '</td><td class="n">' + (r ? L(r.utilidadBrutaHnl) : '—') + '</td><td class="c">' + (p.activo ? pill({ a: ['Activo', 'ok'] }, 'a') : pill({ i: ['Inactivo', 'gris'] }, 'i')) + '</td>' +
         '<td class="c"><button type="button" class="fz-btn sec sm" data-fz="prov" data-id="' + esc(p.id) + '">Editar</button></td></tr>';
@@ -163,7 +168,7 @@
       '<p class="fz-pie">El proveedor de un extra VIP se toma del NOMBRE (Trap/Deku), nunca del precio. Los valores 2.50/2.70 USDT son solo referencia.</p></div>';
   }
   function vCompras(d) {
-    var subs = [['registradas', 'Compras registradas'], ['spotify', 'Spotify Familiar'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel VIP']];
+    var subs = [['registradas', 'Compras registradas'], ['spotify', 'Spotify Familiar'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
     var nav = '<div class="fz-subtabs">' + subs.map(function (s) { return '<button type="button" class="' + (st.sub === s[0] ? 'on' : '') + '" data-fz-sub="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (st.sub === 'vip') return nav + vVip();
     if (st.sub === 'importar') return nav + vImportar();
@@ -249,10 +254,11 @@
   async function cargarJobs() { try { st.jobs = (await api('finp_importaciones')).jobs; } catch (e) { st.jobs = []; } if (st.sub === 'importar') pintar(); }
   function vImportar() {
     var imp = st.imp;
-    var zona = '<label class="fz-drop" data-fz-drop><input type="file" accept=".xlsx" data-fz-file hidden>' + ico('upload') + '<b>Arrastre aquí «Sublichat_Netflix_VIP_Importacion.xlsx»</b><span>o toque para elegirlo · se leen solo EXTRAS_VIP y LOTES_COMPRAS · EJEMPLOS_NO_IMPORTAR y columnas _NO_IMPORTAR se ignoran</span></label>';
+    var zona = '<label class="fz-drop" data-fz-drop><input type="file" accept=".xlsx" data-fz-file hidden>' + ico('upload') + '<b>Arrastre aquí el Excel (VIP 4 columnas, Premium 6 columnas o plantilla de 5 hojas)</b><span>o toque para elegirlo · se reconoce solo por los encabezados · solo vincula cuentas que ya existen en Control Maestro</span></label>';
     var cuerpo = '';
     if (imp && imp.error) cuerpo = '<div class="fz-err">' + esc(imp.error) + '</div>';
     if (imp && imp.cargando) cuerpo = '<div class="fz-vacio-s"><span class="fz-spin"></span> Revisando el archivo…</div>';
+    if (imp && imp.simple && !imp.cargando) cuerpo = vSimple(imp);
     if (imp && imp.pv) {
       var r = imp.pv.resumen;
       var cont = [['Nuevos', r.nuevos, 'ok'], ['Actualizados', r.actualizados, 'ok'], ['Sin cambios', r.sinCambios, 'gris'], ['Ambiguos', r.ambiguos, 'warn'], ['Sin coincidencia', r.sinCoincidencia, 'mal'], ['Duplicados', r.duplicados, 'mal'], ['Costo inválido', r.costoInvalido, 'mal'], ['Fecha inválida', r.fechaInvalida, 'mal'], ['Lote sin referencia', r.loteSinReferencia, 'mal'], ['Proveedor desconocido', r.proveedorDesconocido, 'mal']];
@@ -299,11 +305,54 @@
       var buf = await file.arrayBuffer();
       var wb = window.XLSX.read(buf, { type: 'array', cellDates: false });
       var hojas = wb.SheetNames.slice();
-      if (hojas.indexOf('EXTRAS_VIP') < 0 || hojas.indexOf('LOTES_COMPRAS') < 0) throw new Error('Faltan las hojas EXTRAS_VIP y LOTES_COMPRAS: no es la plantilla.');
+      if (hojas.indexOf('EXTRAS_VIP') < 0 || hojas.indexOf('LOTES_COMPRAS') < 0) { // R196i · plantillas sencillas (primera hoja)
+        var aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[hojas[0]], { header: 1, raw: true, defval: null, blankrows: false });
+        var enc = (aoa[0] || []).map(function (h) { return h == null ? '' : String(h).trim(); });
+        var tipo = tipoSimple(enc);
+        if (!tipo) throw new Error('No reconozco el Excel. VIP: CORREO DEL EXTRA VIP · PROVEEDOR · FECHA DE RENOVACIÓN · PAGO POR CUENTA (USDT). Premium: CORREO NETFLIX PREMIUM · BANCO HONDUREÑO · NOMBRE TITULAR TARJETA · ÚLTIMOS 4 DÍGITOS TARJETA · FECHA DE COBRO / RENOVACIÓN · PAGO POR CUENTA (USD).');
+        var filas = aoa.slice(1).map(function (f, i) { return { _fila: i + 2, v: (f || []).slice(0, tipo === 'vip' ? 4 : 6) }; }).filter(function (f) { return f.v.some(function (x) { return x != null && String(x).trim() !== ''; }); });
+        st.imp = { simple: true, tipo: tipo, payload: { encabezados: enc, filas: filas, archivo: { nombre: file.name, bytes: file.size } }, archivo: { nombre: file.name }, res: {}, tasa: '' };
+        if (tipo === 'premium') await previaSimple(); else pintar(); // VIP pide primero la tasa Binance
+        return;
+      }
       var payload = { hojas: hojas, extras: leerHoja(wb.Sheets.EXTRAS_VIP, COLS_EXTRAS), lotes: leerHoja(wb.Sheets.LOTES_COMPRAS, COLS_LOTES), archivo: { nombre: file.name, bytes: file.size, hash: await hashArchivo(buf) } };
       st.imp = { payload: payload, archivo: payload.archivo, res: {}, cargando: true }; pintar();
       await previa();
     } catch (e) { st.imp = { error: e.message }; pintar(); }
+  }
+  // ---------------- R196i · Excel sencillo VIP (4 col.) / Premium (6 col.)
+  function nh(h) { return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9/() ]/g, '').replace(/\s+/g, ' ').trim(); }
+  var SIMPLES = { vip: ['CORREO DEL EXTRA VIP', 'PROVEEDOR', 'FECHA DE RENOVACIÓN', 'PAGO POR CUENTA (USDT)'], premium: ['CORREO NETFLIX PREMIUM', 'BANCO HONDUREÑO', 'NOMBRE TITULAR TARJETA', 'ÚLTIMOS 4 DÍGITOS TARJETA', 'FECHA DE COBRO / RENOVACIÓN', 'PAGO POR CUENTA (USD)'] };
+  function tipoSimple(enc) { var h = enc.map(nh); for (var k in SIMPLES) { if (SIMPLES[k].every(function (c, i) { return h[i] === nh(c); })) return k; } return null; }
+  async function previaSimple() {
+    var imp = st.imp; imp.cargando = true; imp.error = ''; pintar();
+    try { var r = await api('finp_simple_preview', Object.assign({}, imp.payload, { tasa: Number(imp.tasa) || 0, resoluciones: imp.res })); imp.pvs = r; imp.hash = r.hash; imp.confirmo = false; }
+    catch (e) { imp.error = e.message; }
+    imp.cargando = false; pintar();
+  }
+  async function confirmarSimple() {
+    var imp = st.imp; if (!imp || !imp.pvs) return;
+    if (!imp.confirmo) { toast('Marque la confirmación.', true); return; }
+    try { var r = await api('finp_simple_confirmar', Object.assign({}, imp.payload, { tasa: Number(imp.tasa) || 0, resoluciones: imp.res, hash: imp.hash, confirmo: true })); toast('Importado: ' + r.aplicados + ' cuenta(s) existentes. 0 ventas y 0 clientes creados.'); st.imp = null; st.jobs = null; st.vip.res = null; cargar(true); }
+    catch (e) { toast(e.message, true); }
+  }
+  function vSimple(imp) {
+    var vip = imp.tipo === 'vip';
+    var html = '<div class="fz-cab sub"><h3>' + (vip ? 'Netflix EXTRA VIP · 4 columnas' : 'Netflix PREMIUM madre · 6 columnas') + ' · ' + esc(imp.archivo.nombre) + '</h3><span class="fz-sub r">' + imp.payload.filas.length + ' fila(s)</span></div>' +
+      '<div class="fz-form in"><label>' + (vip ? 'Tasa Binance HNL por USDT (obligatoria)' : 'Tipo de cambio HNL por USD (opcional: si falta, el costo en L queda pendiente)') + '<input type="number" step="any" min="0" data-fz-tasa value="' + esc(imp.tasa) + '"></label><button type="button" class="fz-btn sec" data-fz="previasimple">Revisar</button></div>';
+    if (imp.error) html += '<div class="fz-err">' + esc(imp.error) + '</div>';
+    var r = imp.pvs; if (!r) return html;
+    var c = r.resumen;
+    html += '<div class="fz-cont">' + [['Nuevos', c.nuevos, 'ok'], ['Actualizados', c.actualizados, 'ok'], ['Sin cambios', c.sinCambios, 'gris'], ['Ambiguos', c.ambiguos, 'warn'], ['Sin coincidencia', c.sinCoincidencia, 'mal'], ['Duplicados', c.duplicados, 'mal'], ['Con error', c.conError, 'mal'], ['Ventas/clientes creados', 0, 'gris']].map(function (x) { return '<div class="' + (x[1] ? x[2] : 'gris') + '"><b>' + x[1] + '</b><span>' + x[0] + '</span></div>'; }).join('') + '</div>';
+    var amb = r.filas.filter(function (x) { return x.estado === 'ambiguo'; });
+    if (amb.length) html += '<h4 class="fz-h4">Correo repetido en Control Maestro: elija la cuenta</h4>' + amb.map(function (x) { return '<div class="fz-amb"><span>Fila ' + x.fila + ' · <b>' + esc(x.correo) + '</b></span><select data-fz-res="' + x.fila + '"><option value="">— elegir —</option>' + x.candidatos.map(function (k) { return '<option value="' + esc(k.id) + '"' + (imp.res[x.fila] === k.id ? ' selected' : '') + '>' + esc(k.id + ' · ' + (k.cliente || 'sin cliente')) + '</option>'; }).join('') + '</select></div>'; }).join('') + '<button type="button" class="fz-btn sec sm" data-fz="previasimple">Aplicar y revisar de nuevo</button>';
+    var est = { nuevo: ['Nuevo', 'ok'], actualiza: ['Actualiza', 'ok'], sin_cambios: ['Sin cambios', 'gris'], ambiguo: ['Ambiguo', 'warn'], sin_coincidencia: ['Sin coincidencia', 'pend'], duplicado: ['Duplicado', 'pend'], error: ['Error', 'pend'] };
+    html += '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Fila</th><th>Correo</th><th>Cliente (Control Maestro)</th>' + (vip ? '<th>Proveedor</th><th>Renovación</th><th class="n">USDT</th><th class="n">L</th>' : '<th>Banco</th><th>Tarjeta</th><th>Cobro</th><th class="n">USD</th><th class="n">L</th>') + '<th>Estado</th><th>Detalle</th></tr></thead><tbody>' +
+      r.filas.slice(0, 200).map(function (x) { var d = x.datos || {}; return '<tr><td>' + x.fila + '</td><td>' + esc(x.correo) + '</td><td>' + esc(x.cliente || '—') + '</td>' + (vip ? '<td>' + esc(d.proveedor || '—') + '</td><td>' + (d.proximoPagoProveedor ? fecha(d.proximoPagoProveedor) : '—') + '</td><td class="n">' + (d.costoMensualUsdt != null ? esc(d.costoMensualUsdt) : '—') + '</td><td class="n">' + (d.costoMensualHnl != null ? L(d.costoMensualHnl, true) : '—') + '</td>' : '<td>' + esc(d.banco || '—') + '</td><td>' + (d.ultimos4 ? '•••• ' + esc(d.ultimos4) : '—') + '</td><td>' + (d.fechaCobro ? fecha(d.fechaCobro) : '—') + '</td><td class="n">' + (d.pagoUsd != null ? esc(d.pagoUsd) : '—') + '</td><td class="n">' + (d.cargoHnl != null ? L(d.cargoHnl, true) : '<span class="fz-pend">Pendiente</span>') + '</td>') + '<td>' + pill(est, x.estado) + '</td><td>' + esc(x.errores.concat(x.avisos).join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    var hay = c.nuevos + c.actualizados;
+    html += '<label class="fz-check"><input type="checkbox" data-fz-confirmo' + (imp.confirmo ? ' checked' : '') + '> Confirmo: solo se guardan datos de Finanzas en cuentas que YA existen. No se crean clientes ni ventas y Control Maestro no cambia.</label>' +
+      '<div class="fz-acc"><button type="button" class="fz-btn" data-fz="importarsimple"' + (hay ? '' : ' disabled') + '>Confirmar (' + hay + ')</button><button type="button" class="fz-btn sec" data-fz="cancelarimp">Cancelar</button></div>';
+    return html;
   }
   async function previa() {
     var imp = st.imp; imp.cargando = true; imp.error = '';
@@ -489,6 +538,7 @@
       if (!(t = e.target.closest('[data-fz]'))) return;
       var a = t.dataset.fz;
       if (a === 'reintentar') cargar(true);
+      else if (a === 'costear') { t.disabled = true; t.textContent = 'Calculando…'; api('finp_costear', { limite: 40 }).then(function (r) { var c = r.costeo || {}; toast(c.activo === false ? (c.motivo || 'Costeo apagado.') : 'Costos al día: ' + (c.costeadas || 0) + ' venta(s) costeadas.'); cargar(true); }).catch(function (e) { toast(e.message, true); cargar(true); }); }
       else if (a === 'productos') abrirProductos();
       else if (a === 'compra') abrirCompra(t.dataset.prod || '');
       else if (a === 'prov') abrirProveedor(t.dataset.id || '');
@@ -497,6 +547,8 @@
       else if (a === 'errores') descargarErrores();
       else if (a === 'cancelarimp') { st.imp = null; pintar(); }
       else if (a === 'reprevia') previa();
+      else if (a === 'previasimple') previaSimple();
+      else if (a === 'importarsimple') confirmarSimple();
       else if (a === 'deshacer') modal('Deshacer importación', '<p>Restaura los vínculos y lotes VIP a como estaban antes de esa importación. Solo se puede deshacer la última.</p>', async function () { var r = await api('finp_vip_deshacer', { jobId: t.dataset.id }); toast('Deshecha: ' + r.extras + ' vínculo(s), ' + r.lotes + ' lote(s).'); st.jobs = null; st.vip.res = null; cargar(true); }, 'Deshacer');
       else if (a === 'excel') descargarExcel(t);
     });
@@ -506,6 +558,7 @@
       else if (t.matches('[data-fz-file]') && t.files[0]) leerArchivo(t.files[0]);
       else if (t.matches('[data-fz-res]')) { st.imp.res[t.dataset.fzRes] = t.value; }
       else if (t.matches('[data-fz-confirmo]')) { st.imp.confirmo = t.checked; }
+      else if (t.matches('[data-fz-tasa]')) { st.imp.tasa = t.value; }
       else if (t.matches('[data-fz-rep]')) { st.rep[t.dataset.fzRep] = t.value; }
     });
     var tq; h.addEventListener('input', function (e) { if (e.target.matches('[data-fz-vipq]')) { clearTimeout(tq); var v = e.target.value; tq = setTimeout(function () { st.vip.q = v; st.vip.pagina = 1; st.vip.res = null; cargarVip().then(function () { var i = h.querySelector('[data-fz-vipq]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }); }, 350); } });

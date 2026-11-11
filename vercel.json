@@ -115,7 +115,8 @@
       "memory": 1769
     },
     "api/finanzas.js": {
-      "includeFiles": "lib/**"
+      "includeFiles": "lib/**",
+      "maxDuration": 60
     },
     "api/tickets.js": {
       "maxDuration": 60
