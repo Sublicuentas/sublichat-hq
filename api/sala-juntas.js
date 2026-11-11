@@ -55,6 +55,13 @@ async function anularPendientes(db, reunionId, ahoraIso) {
 // R182 · estado de Telegram por usuario: 'listo' (vinculado y verificado por el bot, o fundadora con chat configurado
 // en Vercel), 'pendiente' (generó enlace, falta /start), 'bloqueado' (bloqueó al bot), 'sin_vincular'.
 const ENV_TG = { naara: ['TELEGRAM_CHAT_ID_SUBLICUENTAS', 'SUPER_ADMIN'], libni: ['TELEGRAM_CHAT_ID_RELOJES'], geisell: ['TELEGRAM_CHAT_ID_GEISELL', 'TELEGRAM_CHAT_ID_GEISSEL'] };
+// R196i · el nombre del bot lo publica el mismo bot de Render (getMe) en sala_config/telegram: ya no hace falta
+// TELEGRAM_BOT_USERNAME en Vercel (si existe, manda la variable).
+async function botUsernameDe(db, env) {
+  const v = String(env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '');
+  if (/^[A-Za-z0-9_]{5,40}$/.test(v)) return v;
+  try { const s = await db.collection('sala_config').doc('telegram').get(); const u = s.exists ? String((s.data() || {}).botUsername || '').replace(/^@/, '') : ''; return /^[A-Za-z0-9_]{5,40}$/.test(u) ? u : ''; } catch (_) { return ''; }
+}
 async function telegramDe(db, env, usuarios) {
   const out = {};
   for (const u of usuarios) {
@@ -222,7 +229,7 @@ async function handler(req, res, deps = {}) {
         fundadoras: miembros.map(({ id, nombre, cargo, anfitriona, asiento, invitado }) => ({ id, nombre, cargo, anfitriona, asiento, invitado: !!invitado })),
         avatares: await avataresDe(db, miembros), kpis: { reunionesMes: reuniones.filter((x) => x.inicioMs >= mesIni && x.inicioMs < mesFin && x.estado !== 'cancelada' && x.estado !== 'borrador').length, convocatoriasActivas: activas.length, acuerdosPendientes },
         proxima, reuniones, tiempoReal: !!(env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET), ahora, grabacionServidor: G.configGrabacion(env).ok,
-        telegram: S.puede.moderar(yo) ? await telegramDe(db, env, idsMiembros) : { [yo.id]: (await telegramDe(db, env, [yo.id]))[yo.id] }, botTelegram: !!String(env.TELEGRAM_BOT_USERNAME || '').trim(),
+        telegram: S.puede.moderar(yo) ? await telegramDe(db, env, idsMiembros) : { [yo.id]: (await telegramDe(db, env, [yo.id]))[yo.id] }, botTelegram: !!(await botUsernameDe(db, env)),
       });
     }
 
@@ -547,8 +554,8 @@ async function handler(req, res, deps = {}) {
 
     // ---------- R182 · vincular Telegram (enlace de un solo uso al bot existente de Render) ----------
     if (accion === 'telegram_vincular') {
-      const bot = String(env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '');
-      if (!/^[A-Za-z0-9_]{5,40}$/.test(bot)) throw err(503, 'Falta configurar TELEGRAM_BOT_USERNAME (nombre del bot de Sublicuentas) en Vercel.');
+      const bot = await botUsernameDe(db, env); // R196i
+      if (!bot) throw err(503, 'El bot de Telegram todavía no publicó su nombre: abra /spotifyf o espere 1 minuto con el bot encendido en Render y reintente.');
       const token = require('crypto').randomBytes(18).toString('base64url');
       const viejos = await db.collection(C.TGTOK).where('usuario', '==', yo.id).get(); for (const d of viejos.docs) await d.ref.delete(); // un enlace vivo por persona
       await db.collection(C.TGTOK).doc(token).set({ usuario: yo.id, expiraMs: ahora + 15 * 60000, creadoAt: iso, usado: false });

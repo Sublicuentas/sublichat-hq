@@ -889,7 +889,7 @@ export default async function handler(req, res) {
       if (!puede) return res.status(403).json({ ok: false, error: "Su usuario no tiene Finanzas. Sublicuentas lo activa en Permisos." });
       const cd = { R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(db, desde).get()) };
       const handled = await handlePanel(db, accion, body, identity, authUser, res, { hoyYmdHN, auditar, loadMethods, resumenInventario: resumenInvEmpresa, costosProveedor: costosProvPanel, rentabilidad: rentPanel, MODELOS: MODELOS_FIN, MONEDAS: MONEDAS_FIN,
-        correrCosteo: () => correrCosteoPanel(db, { ...cd, hoy: hoyYmdHN(), actor: "sistema", limite: 150 }) });
+        correrCosteo: (limite = 40) => correrCosteoPanel(db, { ...cd, hoy: hoyYmdHN(), actor: "sistema", limite }) }); // R196i · con tope, aparte del panel
       if (handled !== null) return handled;
     }
     if (ACCIONES_EMPRESA.includes(accion)) { // R135 · catálogo financiero, proveedores, precios con historial y Binance
