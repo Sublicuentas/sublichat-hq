@@ -118,5 +118,6 @@ test('estado de LiveKit → estado propio; fallas visibles; plantilla avisa STAR
   assert.match(t, /import\('\/sala-3d\.js/);
   const w = fs.readFileSync('sala-juntas.js', 'utf8');
   assert.match(w, /accion: 'grabacion_servidor', op: 'iniciar', id: V\.id, consentimiento: true/);
-  assert.match(w, /if \(CFG\.embebida\) return toast\('La grabación en el servidor todavía no está configurada/);
+  // R196j: la APK graba en el teléfono (CFG.guardarGrabacion); solo una APK vieja sin esa función ve el aviso.
+  assert.match(w, /if \(CFG\.embebida && !guardarApk\) return toast\('Esta versión de la APK no puede grabar/);
 });
