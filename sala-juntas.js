@@ -847,17 +847,25 @@
   async function alternarGrabacion() {
     const V = st.vivo; if (!V?.ctl || !st.data.permisos.moderar) return;
     if (st.data.grabacionServidor || V.grabSrv) return grabacionServidor();
-    if (CFG.embebida) return toast('La grabación en el servidor todavía no está configurada (falta el almacenamiento). En la APK no se graba en el teléfono.', true);
+    // R196j · APK: graba en el TELÉFONO igual que la web (MediaRecorder del WebView) y la guarda en Documentos/Sublichat.
+    const guardarApk = CFG.embebida && typeof CFG.guardarGrabacion === 'function';
+    if (CFG.embebida && !guardarApk) return toast('Esta versión de la APK no puede grabar. Actualice la APK.', true);
     if (V.grab) { V.grab.g.detener(); return; }
-    if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. El video se descarga solo en este equipo al detener (no se sube a internet).' + (V.modoGrab ? '' : '\n\nPara anuncios: active "Modo grabación" en Ajustes (plano frontal y escena limpia).'))) return;
+    if (!confirm('¿Grabar la reunión?\n\nSe avisará a todas que se está grabando. ' + (guardarApk ? 'El video se guarda en este teléfono (Documentos/Sublichat) al detener; no se sube a internet.' : 'El video se descarga solo en este equipo al detener (no se sube a internet).') + (V.modoGrab ? '' : '\n\nPara anuncios: active "Modo grabación" en Ajustes (plano frontal y escena limpia).'))) return;
     const lienzo = document.querySelector('#sj3dEscena canvas.sj3d-canvas'); if (!lienzo) return toast('La sala 3D todavía no está lista.', true);
     try {
-      const M = await import('/sala-grabar.js?v=20261105-r175');
+      const M = await import('/sala-grabar.js?v=20261111-r196j');
       const titulo = (st.sala3dReu && st.sala3dReu.titulo) || 'reunion';
       const g = M.crearGrabadora(lienzo, { pistasAudio: () => (V.ctl ? V.ctl.pistasAudio() : []), alAvisar: (t) => toast(t, true),
         alTerminar: async (r) => {
-          const nombre = M.descargar(r, `${titulo} ${new Date().toLocaleDateString('es-HN', { timeZone: 'America/Tegucigalpa' }).replace(/\//g, '-')}`);
-          toast(`Grabación lista: ${nombre} (${(r.bytes / 1048576).toFixed(1)} MB). Quedó en Descargas.`);
+          const base = `${titulo} ${new Date().toLocaleDateString('es-HN', { timeZone: 'America/Tegucigalpa' }).replace(/\//g, '-')}`;
+          if (guardarApk) {
+            try { const donde = await CFG.guardarGrabacion(r, base); toast(`Grabación lista (${(r.bytes / 1048576).toFixed(1)} MB). Quedó en ${donde}.`); }
+            catch (e) { toast('No se pudo guardar la grabación en el teléfono: ' + (e && e.message ? e.message : 'error'), true); }
+          } else {
+            const nombre = M.descargar(r, base);
+            toast(`Grabación lista: ${nombre} (${(r.bytes / 1048576).toFixed(1)} MB). Quedó en Descargas.`);
+          }
           try { await api({ accion: 'grabacion', id: V.id, estado: 'fin', duracionSeg: r.duracionSeg }); } catch (_) {}
         } });
       V.grab = { g, desde: Date.now() };

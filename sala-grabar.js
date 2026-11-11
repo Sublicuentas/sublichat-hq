@@ -13,6 +13,10 @@ export function crearGrabadora(lienzo3D, { pistasAudio = () => [], alTerminar = 
   if (!soportaGrabar()) throw new Error('Este navegador no puede grabar la reunión. Use Chrome o Edge en computadora.');
   const tipo = tipoArchivo(); if (!tipo) throw new Error('Este navegador no tiene un formato de video para grabar.');
   const ctx = new (window.AudioContext || window.webkitAudioContext)(); const destino = ctx.createMediaStreamDestination();
+  // R196j · si el audio nace «suspendido» (sin gesto reciente, típico en WebView/Android), el grabador no avanza y el video
+  // sale vacío. Se reanuda y, por si no arranca, un tono MUDO mantiene viva la pista de audio.
+  try { ctx.resume && ctx.resume().catch(() => {}); } catch (_) {}
+  try { const o = ctx.createOscillator(), gn = ctx.createGain(); gn.gain.value = 0; o.connect(gn); gn.connect(destino); o.start(); } catch (_) {}
   const fuentes = new Map(); // id de pista → nodo
   const sincronizar = () => {
     const vivas = new Set();
