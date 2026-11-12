@@ -116,7 +116,7 @@ async function handler(req, res, deps = {}) {
       const conocido = usuariosConfigurados(env).find((u) => u.usuario === usuario);
       const cfg0 = await P.leerConfig(db, { fresco: true });
       if (!usuario || (!conocido && !(cfg0.retirados || {})[usuario])) return res.status(400).json({ ok: false, error: 'Ese usuario no existe en Sublichat.' });
-      if (P.esSupervisor({ usuario, role: conocido ? conocido.role : 'asesor' })) return res.status(400).json({ ok: false, error: 'La cuenta Sublicuentas / Naara no se puede retirar.' });
+      if (P.esSupervisor({ usuario, role: conocido ? conocido.role : 'asesor' })) return res.status(400).json({ ok: false, error: 'La cuenta Sublicuentas no se puede retirar.' });
       if (accion === 'retirar' && String(body.confirmar || '').trim().toLowerCase() !== usuario) return res.status(400).json({ ok: false, error: `Para confirmar escriba el usuario exacto: ${usuario}` });
       const uid = uidDe(env, usuario);
       const ref = db.collection(P.DOC[0]).doc(P.DOC[1]);

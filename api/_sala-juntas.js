@@ -1,13 +1,13 @@
 // api/_sala-juntas.js · R167 — SubliStudio 3D · Sala de Juntas (Fase 1). Reglas puras, sin red: las usa api/sala-juntas.js.
 // ACL FIJA por identidad verificada (claim `usuario` del token de Sublichat), NUNCA por rol admin:
-//   Naara (anfitriona) = cuentas sublicuentas / naara · Libni = libni / relojes · Geisell = geisell / geissel.
+//   Sublicuentas (anfitriona) = cuentas sublicuentas / naara · Relojes = libni / relojes · Geisell = geisell / geissel.
 // Cualquier otro usuario → sin acceso (aunque tenga el módulo activado en Permisos).
 'use strict';
 
 const norm = (v) => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 const FUNDADORAS = Object.freeze([
-  { id: 'naara', nombre: 'Naara', cargo: 'Anfitriona · Super Admin', cuentas: ['sublicuentas', 'naara'], anfitriona: true, asiento: 'centro', chatEnv: 'TELEGRAM_CHAT_ID_SUBLICUENTAS' },
-  { id: 'libni', nombre: 'Libni', cargo: 'Fundadora', cuentas: ['libni', 'relojes'], anfitriona: false, asiento: 'izquierda', chatEnv: 'TELEGRAM_CHAT_ID_RELOJES' },
+  { id: 'naara', nombre: 'Sublicuentas', cargo: 'Anfitriona · Super Admin', cuentas: ['sublicuentas', 'naara'], anfitriona: true, asiento: 'centro', chatEnv: 'TELEGRAM_CHAT_ID_SUBLICUENTAS' },
+  { id: 'libni', nombre: 'Relojes', cargo: 'Fundadora', cuentas: ['libni', 'relojes'], anfitriona: false, asiento: 'izquierda', chatEnv: 'TELEGRAM_CHAT_ID_RELOJES' },
   { id: 'geisell', nombre: 'Geisell', cargo: 'Fundadora', cuentas: ['geisell', 'geissel'], anfitriona: false, asiento: 'derecha', chatEnv: 'TELEGRAM_CHAT_ID_GEISELL' },
 ]);
 const POR_ID = Object.fromEntries(FUNDADORAS.map((f) => [f.id, f]));
@@ -70,7 +70,7 @@ function validarConvocatoria(body = {}, { programar = true, ahora = Date.now(), 
     // R178 · se puede programar para "ya" (hasta 10 min atrás cuenta como ahora); antes de eso, avisa la hora real de Honduras
     else if (inicioMs < ahora - 10 * 60000) { const h = partesHN(ahora); const [hh, mm] = h.hora.split(':').map(Number); errores.push(`Esa fecha y hora ya pasó: en Honduras son las ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'} del ${h.fecha.split('-').reverse().join('/')}. Revise si es a. m. o p. m.`); }
     if (!agenda.length) errores.push('Agregue al menos un tema en la agenda.');
-    if (participantes.length < 2) errores.push('Elija al menos una persona además de Naara.');
+    if (participantes.length < 2) errores.push('Elija al menos una persona además de Sublicuentas.');
   } else if (body.fecha || body.hora) {
     if (!Number.isFinite(inicioMs)) errores.push('La fecha u hora no es válida.');
   }
