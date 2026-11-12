@@ -2187,6 +2187,17 @@ async function handlerCore(req, res) {
       }
     }
 
+    // R196m · Spotify Familiar: quitar Spotify o «No renovó» deja el espacio de la familia en «Retiro en Spotify pendiente»
+    // (con fecha y motivo). No libera el cupo: eso se confirma a mano cuando se retira en Spotify. Si falla, se informa
+    // «pendiente de revisión» y la baja del servicio (ya confirmada) no se revierte.
+    let spotifyRetiro = null;
+    const svBaja = (acc === "no_renovo" || acc === "eliminar") ? (mutation.servicioNoRenovado || mutation.inventarioPlan?.anterior) : null;
+    if (svBaja && spotifyFam.esPlataformaSpotify(svBaja.plataforma)) {
+      const correoBaja = String(svBaja.correo || (Array.isArray(svBaja.perfiles) && svBaja.perfiles[0] && svBaja.perfiles[0].correo) || "");
+      try { spotifyRetiro = await spotifyFam.retirarPorBaja(db, { correo: correoBaja, clienteId: docRef.id, compraId: String(svBaja.compraId || mutation.touchedCompraId || ""), motivo: acc === "no_renovo" ? "no_renovo" : "quitar_servicio", usuario: String(authUser?.usuario || authUser?.uid || "") }); }
+      catch (e) { spotifyRetiro = { pendienteRevision: true, error: String(e?.message || e).slice(0, 160) }; }
+    }
+
     // Una respuesta de escritura no basta: vuelve a leer el documento y confirma
     // por compraId (el índice puede cambiar si otra sesión da una baja al mismo tiempo).
     const persistedDoc = await docRef.get();
@@ -2255,6 +2266,7 @@ async function handlerCore(req, res) {
       ok: true,
       verified,
       accion: acc,
+      ...(spotifyRetiro ? { spotifyRetiro } : {}),
       ...(mutation.pagoOperacion ? { pagoOperacion: mutation.pagoOperacion } : {}),
       totalServicios: persistedServices.length,
       inventario: invResult,
