@@ -11,9 +11,9 @@ const en = (plat, disp) => B.vistaPlataforma(baul, plat).dispositivos.find((d) =
 
 test('Baúl: Oleada en Android TV lleva código Downloader y pasos; mismo registro que el bot', () => {
   const m = en('oleada', 'android_tv')[0].mensaje;
-  assert.match(m, /^SUBLICUENTAS \| Instalación de Oleada TV/);
-  assert.match(m, /Código Downloader: 9387291/);
-  assert.match(m, /3\. En Downloader escriba el código 9387291/);
+  // R196m · formato corto del PDF «Correcciones Spotify y entrega APK» (12/11/2026)
+  assert.match(m, /^\*Instalación en Android TV - Oleada TV\*/);
+  assert.match(m, /3\. Introduzca el código \*9387291\* en la casilla principal\./);
   const bot = fs.readFileSync('../bot-gh/lib_baul_apks.js', 'utf8').split('\n').slice(1).join('\n');
   assert.equal(bot, fs.readFileSync('api/_baul-apks.js', 'utf8').split('\n').slice(1).join('\n'), 'copia fiel');
 });
@@ -23,7 +23,7 @@ test('Baúl: iPhone sin APK ni Downloader; SmartOne con nota L85; Smart TV sin U
   assert.match(ip, /App Store/); assert.doesNotMatch(ip, /Downloader|\.apk/i);
   const tv = en('liontv', 'smart_tv');
   const so = tv.find((e) => e.id === 'smartone-tv').mensaje;
-  assert.match(so, /Importante: L85 para activar 12 meses POR DISPOSITIVO/);
+  assert.match(so, /\*Importante:\* L85 para activar 12 meses POR DISPOSITIVO/);
   for (const e of tv) assert.doesNotMatch(e.mensaje, /Enlace:|https?:/, 'tienda del TV sin URL');
 });
 
