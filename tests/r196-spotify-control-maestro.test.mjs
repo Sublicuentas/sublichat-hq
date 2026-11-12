@@ -97,7 +97,9 @@ test('17.5 · Netflix y VIP de Control Maestro no se tocan', async () => {
 
 test('Control Maestro: solo cambia lo de Spotify Familiar (contenedor + montaje + nombre/logo de la plataforma)', () => {
   const src = fs.readFileSync(new URL('../control-maestro.js', import.meta.url), 'utf8');
-  const lineas = src.split('\n').filter((l) => /R196(?!f)/.test(l));
+  const lineas = src.split('\n').filter((l) => /R196(?![fn])/.test(l));
+  // R196n · única otra modificación autorizada (PDF 12/11/2026): bajas de cuentas desde Telegram.
+  assert.ok(src.split('\n').filter((l) => /R196n/.test(l)).every((l) => /Telegram/.test(l)), 'R196n solo sincroniza bajas desde Telegram');
   assert.equal(lineas.length, 2);
   assert.ok(lineas.every((l) => /accountPlatform===\'spotifyfamiliar\'/.test(l)), 'el bloque solo se monta en la plataforma Spotify Familiar');
   const f = src.split('\n').filter((l) => /R196f/.test(l));
