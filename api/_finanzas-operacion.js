@@ -138,7 +138,7 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   const pagos = Array.isArray(prep.pagos) && prep.pagos.length ? prep.pagos : (banco && ep.recibido > 0 ? [{ bancoId: banco.id, banco: banco.nombre, monto: ep.recibido }] : []);
   const now = new Date().toISOString(), hoy = prep.fechaPago || hoyHN(); // R110: fecha real del pago
   const base = { ...financeMetadata({ docId: "", usuario: prep.usuario, userId: prep.uid }), registradoPor: prep.usuario, rol: prep.rol, origenCanal: prep.origen, ...fechaCampos(hoy, now) };
-  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}), ...asignacionesDe(rel) };
+  const r = { clienteId: clean(rel.clienteId), clienteNombre: clean(rel.clienteNombre, 80), compraId: clean(rel.compraId), plataforma: clean(rel.plataforma, 40), tipoOrigen, operacionId: opId, cicloId: lectura.cicloId, operationId: prep.operationId, fechaNueva: clean(rel.fechaNueva), fechaAnterior: clean(rel.fechaAnterior), vendedor: vendedorNombre, atomico: true, ...clasificacionVenta(rel, prep), ...(prep.grupo?.compraIds?.length ? { compraIds: prep.grupo.compraIds, servicios: prep.grupo.servicios } : {}), ...(prep.grupo?.plataforma ? { plataforma: prep.grupo.plataforma } : {}), ...asignacionesDe(rel), ...ajusteVentaDe(rel) };
   const ventaRef = db.collection("finanzas_movimientos").doc(`${opId}_venta`);
   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);
@@ -154,7 +154,14 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
 function asignacionesDe(rel = {}) {
   const a = Array.isArray(rel.asignaciones) ? rel.asignaciones.slice(0, 30) : [];
   if (!a.length) return {};
-  const asignaciones = a.map((x) => ({ compraId: clean(x.compraId), servicioIndex: Number.isInteger(x.servicioIndex) ? x.servicioIndex : null, plataforma: clean(x.plataforma, 40), montoCentavos: Math.round(Number(x.montoCentavos) || 0), monto: money((Math.round(Number(x.montoCentavos) || 0)) / 100), periodo: clean(x.periodo, 30), fechaAnterior: clean(x.fechaAnterior, 12), fechaNueva: clean(x.fechaNueva, 12) }));
+  const asignaciones = a.map((x) => ({ compraId: clean(x.compraId), servicioIndex: Number.isInteger(x.servicioIndex) ? x.servicioIndex : null, plataforma: clean(x.plataforma, 40), montoCentavos: Math.round(Number(x.montoCentavos) || 0), monto: money((Math.round(Number(x.montoCentavos) || 0)) / 100), ...(Number.isFinite(Number(x.montoEsperadoCentavos)) && x.montoEsperadoCentavos != null ? { montoEsperado: money(Math.round(Number(x.montoEsperadoCentavos)) / 100), descuento: money((Math.round(Number(x.montoEsperadoCentavos)) - Math.round(Number(x.montoCentavos) || 0)) / 100) } : {}), periodo: clean(x.periodo, 30), fechaAnterior: clean(x.fechaAnterior, 12), fechaNueva: clean(x.fechaNueva, 12) }));
   return { asignaciones, loteRenovacion: true, compraIds: asignaciones.map((x) => x.compraId).filter(Boolean), servicios: asignaciones.map((x) => ({ compraId: x.compraId, plataforma: x.plataforma, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, monto: x.monto })) };
+}
+// R196n · Renovación cobrada con Descuento / Cortesía / Otro ajuste: la venta vale lo COBRADO y guarda el ajuste aparte
+// (precio esperado, monto del ajuste, tipo, motivo y regla de reparto) para que Finanzas lo vea y concilie.
+function ajusteVentaDe(rel = {}) {
+  const a = rel.ajusteVenta; if (!a || typeof a !== "object") return {};
+  const aj = Math.round(Number(a.ajusteCentavos) || 0), esp = Math.round(Number(a.esperadoCentavos) || 0);
+  return { montoEsperado: money(esp / 100), descuento: money(aj / 100), ajusteCobro: { tipo: clean(a.tipo, 20), motivo: clean(a.motivo, 200), montoEsperado: money(esp / 100), monto: money(aj / 100), regla: clean(a.regla, 60) } };
 }
 export { money };

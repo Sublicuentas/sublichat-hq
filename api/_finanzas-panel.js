@@ -287,7 +287,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar"]); // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -569,6 +569,72 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       });
       try { await requireCjs("./_spotify-familias.js").sincronizarBodega(db, fid); } catch (_) {} // Bodega muestra pago y renovación
       return ok({ familiaId: fid });
+    }
+
+    // ---------------- R196n · HBO Max: modalidad por CUENTA (Control Maestro manda: aquí solo se leen sus cuentas madre).
+    //   «activacion» (USDT/Binance, por activación; sin costo mensual) — es la de siempre y queda por defecto.
+    //   «tarjeta»: tarjeta de banco hondureño (solo banco, titular y últimos 4) + cargos reales (USD/HNL → HNL real).
+    // Cada cargo es UNA compra real (fin_compra_registrar, con su operationId); aquí solo se anota a qué cuenta pertenece.
+    // Una tarjeta puede servir a varias cuentas (fin_tarjetas). Mismo cargo (cuenta + fecha + monto) dos veces: bloqueado.
+    if (accion === "finp_hbo_lista") {
+      const [cuentas, fin, tarjetas] = await Promise.all([(async () => (await col("inventario").where("plataforma", "==", "hbomax").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })))(), todos("fin_hbo_cuentas"), todos("fin_tarjetas")]);
+      const finDe = new Map(fin.map((x) => [x.id, x])), tDe = new Map(tarjetas.map((x) => [x.id, x]));
+      const en7 = new Date(Date.parse(`${hoy}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+      const filas = cuentas.filter((c) => String(c.estado || "activa") !== "eliminada" && c.eliminado !== true).map((c) => {
+        const x = finDe.get(c.id) || {}, tj = x.tarjetaId ? tDe.get(x.tarjetaId) : null;
+        return { cuentaId: c.id, correo: String(c.correo || c.email || ""), capacidad: Number(c.capacidad || c.perfilesTotales || 4) || 4, modalidad: x.modalidad === "tarjeta" ? "tarjeta" : "activacion",
+          tarjeta: tj ? { id: tj.id, banco: tj.banco, titular: tj.titular, ultimos4: tj.ultimos4 } : null, periodicidad: x.periodicidad || "", proximoCobro: x.proximoCobro || "",
+          pronto: !!(x.proximoCobro && x.proximoCobro <= en7), cargos: (x.cargos || []).slice(-6).reverse() };
+      }).sort((a, b) => a.modalidad.localeCompare(b.modalidad) || String(a.proximoCobro || "9999").localeCompare(String(b.proximoCobro || "9999")) || a.correo.localeCompare(b.correo));
+      return ok({ hoy, filas, tarjetas: tarjetas.map((x) => ({ id: x.id, banco: x.banco, titular: x.titular, ultimos4: x.ultimos4 })), porTarjeta: filas.filter((f) => f.modalidad === "tarjeta").length });
+    }
+    if (accion === "finp_hbo_guardar") {
+      const cid = txt(body.cuentaId, 120);
+      if (!cid) throw errUsuario("Falta la cuenta HBO Max.");
+      const modalidad = body.modalidad === "tarjeta" ? "tarjeta" : body.modalidad === "activacion" ? "activacion" : null;
+      let tarjetaNueva = null;
+      if (body.tarjetaNueva) {
+        const banco = txt(body.tarjetaNueva.banco, 60), titular = txt(body.tarjetaNueva.titular, 80), u4 = String(body.tarjetaNueva.ultimos4 || "").replace(/\s/g, "");
+        if (!/^\d{4}$/.test(u4)) throw errUsuario(/\d{5,}/.test(u4) ? "Escriba SOLO los últimos 4 dígitos. Nunca el número completo de la tarjeta." : "Los últimos 4 dígitos deben ser 4 números.");
+        if (banco.length < 2 || titular.length < 3) throw errUsuario("Escriba el banco y el nombre del titular de la tarjeta.");
+        tarjetaNueva = { banco, titular, ultimos4: u4 };
+      }
+      const per = ["mensual", "puntual"].includes(body.periodicidad) ? body.periodicidad : null;
+      const prox = body.proximoCobro === "" ? "" : body.proximoCobro ? fechaExcel(body.proximoCobro) : undefined;
+      if (prox === null) throw errUsuario("Fecha de próximo cobro inválida.");
+      const cargo = body.cargo && typeof body.cargo === "object" ? body.cargo : null;
+      const r = await db.runTransaction(async (tx) => {
+        const cref = col("inventario").doc(cid), ref = col("fin_hbo_cuentas").doc(cid);
+        const [sc, s] = [await tx.get(cref), await tx.get(ref)];
+        if (!sc.exists || String((sc.data() || {}).plataforma || "") !== "hbomax") throw errUsuario("Esa cuenta de HBO Max no está en Control Maestro.");
+        const a = s.exists ? s.data() || {} : {};
+        let tarjetaId = body.tarjetaId ? txt(body.tarjetaId, 120) : a.tarjetaId || "";
+        if (tarjetaNueva) { // misma tarjeta (banco + titular + últimos 4) = mismo registro: no se duplica
+          const id = `tj_${tarjetaNueva.banco}_${tarjetaNueva.ultimos4}_${tarjetaNueva.titular}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_]+/g, "-").slice(0, 120);
+          const tref = col("fin_tarjetas").doc(id), ts = await tx.get(tref);
+          if (!ts.exists) tx.set(tref, { ...tarjetaNueva, creadoAt: ahora, creadoPor: actor });
+          tarjetaId = id;
+        } else if (body.tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
+        const mod = modalidad || a.modalidad || "activacion";
+        if (mod === "tarjeta" && !tarjetaId) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
+        const cargos = [...(a.cargos || [])];
+        if (cargo) {
+          const fecha = fechaExcel(cargo.fecha), moneda = ["USD", "HNL"].includes(cargo.moneda) ? cargo.moneda : null, monto = r2(cargo.monto), hnl = r2(moneda === "HNL" ? cargo.monto : cargo.cargoHnl);
+          if (!fecha || fecha > hoy) throw errUsuario("Fecha del cargo inválida.");
+          if (!moneda || !(monto > 0) || !(hnl > 0)) throw errUsuario(moneda === "USD" ? "Escriba el monto en USD y el cargo REAL en Lempiras que cobró el banco." : "Escriba el monto del cargo.");
+          const opid = txt(cargo.operationId, 80);
+          if (opid && cargos.some((c) => c.operationId === opid)) return { duplicado: true }; // reintento del mismo cargo
+          if (!cargo.loteId && cargos.some((c) => c.fecha === fecha && Math.abs(Number(c.cargoHnl) - hnl) < 0.005)) throw errUsuario(`Ese cargo (L${hnl} del ${fecha}) ya está registrado en esta cuenta. No se suma dos veces.`);
+          if (!cargo.loteId) return { verificado: true }; // solo se comprobó que no está repetido (antes de registrar la compra)
+          cargos.push({ fecha, moneda, monto, cargoHnl: hnl, loteId: txt(cargo.loteId, 120), operationId: opid, tarjetaId, por: actor, at: ahora });
+        }
+        const n = { modalidad: mod, tarjetaId: mod === "tarjeta" ? tarjetaId : a.tarjetaId || "", periodicidad: per || a.periodicidad || (mod === "tarjeta" ? "mensual" : ""), ...(prox !== undefined ? { proximoCobro: prox } : {}) };
+        tx.set(ref, { ...a, ...n, cuentaId: cid, correo: String((sc.data() || {}).correo || ""), cargos: cargos.slice(-60), actualizadoAt: ahora, actualizadoPor: actor,
+          historial: [...(a.historial || []), { at: ahora, por: actor, antes: { modalidad: a.modalidad || "activacion", tarjetaId: a.tarjetaId || "", periodicidad: a.periodicidad || "" }, despues: n }].slice(-30) });
+        audit(tx, { accion: cargo ? (cargo.loteId ? "hbo_cargo_tarjeta" : "hbo_cargo_verificado") : "hbo_modalidad", targetType: "hbo_cuenta", targetId: cid, before: { modalidad: a.modalidad || "activacion" }, after: n });
+        return { cuentaId: cid, modalidad: mod, tarjetaId };
+      });
+      return ok(r);
     }
 
     if (accion === "finp_reporte") {

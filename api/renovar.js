@@ -2308,6 +2308,24 @@ function camposModificados(body = {}) {
 // usa su propio operationId (venta oper_op_*): si ya existe, no se vuelve a mover ninguna fecha.
 // body: { accion:"renovar_lote", clienteId, lineas:[{compraId?, servicioIndex?, plataforma, duracion:{unidad,cantidad}, periodos?, monto}],
 //         pago?, ajusteAdministrativo?, motivoAjuste?, confirmarAtraso?, soloVista?, origen, operationId }
+// R196n · Precio registrado del servicio para ESTA renovación: el de su ficha × periodos, solo si la duración coincide con
+// los meses que ese precio cubre (si no coincide o no hay precio, null → el operador lo escribe; no se inventa).
+function precioRegistradoCent(s = {}, l = {}) {
+  const p = aCentavos(s.precio); if (!(p > 0)) return null;
+  const meses = Number(s.mesesContratados || 1) || 1, d = l.duracion || {};
+  const durMeses = d.unidad === "dias" ? (Number(d.cantidad) >= 28 && Number(d.cantidad) <= 31 ? 1 : null) : Number(d.cantidad);
+  if (durMeses !== meses) return null;
+  return p * (Number(l.periodos) || 1);
+}
+// R196n · Reparto proporcional exacto en centavos (la suma da EXACTO lo cobrado; el redondeo va al más caro).
+export function prorratearCentavos(esperados = [], cobrado = 0) {
+  const tot = esperados.reduce((a, c) => a + c, 0); if (!(tot > 0)) return esperados.map(() => 0);
+  const out = esperados.map((c) => Math.floor((c * cobrado) / tot));
+  let resto = cobrado - out.reduce((a, c) => a + c, 0);
+  const orden = esperados.map((c, i) => [c, i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  for (let k = 0; resto > 0; k = (k + 1) % orden.length, resto--) out[orden[k][1]] += 1;
+  return out;
+}
 async function renovarLote(db, authUser, body, res) {
   const exactId = cleanExistingDocId(body.clienteId);
   if (!exactId) return res.status(200).json({ ok: false, error: "Falta el cliente (ID exacto)." });
@@ -2326,19 +2344,14 @@ async function renovarLote(db, authUser, body, res) {
     if (!dur) return res.status(200).json({ ok: false, error: "Cada servicio necesita su duración." });
     const cents = aCentavos(l.monto ?? 0);
     if (!Number.isInteger(cents) || cents < 0) return res.status(200).json({ ok: false, error: `Monto inválido en ${String(l.plataforma || "un servicio")}.` });
-    lineas.push({ compraId: String(l.compraId || "").trim().slice(0, 120), servicioIndex: Number.isInteger(l.servicioIndex) ? l.servicioIndex : null, plataforma: String(l.plataforma || "").slice(0, 80), correo: String(l.correo || "").slice(0, 120), duracion: { unidad: String(dur.unidad || "meses"), cantidad: Number(dur.cantidad) }, periodos: Math.max(1, Math.min(24, Math.round(Number(l.periodos) || 1))), montoCentavos: ajuste ? 0 : cents });
+    lineas.push({ compraId: String(l.compraId || "").trim().slice(0, 120), servicioIndex: Number.isInteger(l.servicioIndex) ? l.servicioIndex : null, plataforma: String(l.plataforma || "").slice(0, 80), correo: String(l.correo || "").slice(0, 120), duracion: { unidad: String(dur.unidad || "meses"), cantidad: Number(dur.cantidad) }, periodos: Math.max(1, Math.min(24, Math.round(Number(l.periodos) || 1))), montoCentavos: ajuste ? 0 : cents, montoEsperadoIn: aCentavos(l.montoEsperado ?? 0) });
   }
-  const totalCentavos = lineas.reduce((a, l) => a + l.montoCentavos, 0);
-  if (!ajuste && !body.soloVista && conPago) {
-    const totalPago = aCentavos(body.pago.montoTotal);
-    if (totalPago !== totalCentavos) return res.status(200).json({ ok: false, error: `La suma por servicio (L${deCentavos(totalCentavos)}) no coincide con el total del pago (L${deCentavos(totalPago)}).` });
-  }
+  let totalCentavos = lineas.reduce((a, l) => a + l.montoCentavos, 0);
   const docRef = db.collection("clientes").doc(exactId);
-  const prepPago = !ajuste && !body.soloVista && conPago ? await prepararPago(db, { ...body.pago, montoTotal: deCentavos(totalCentavos) }, authUser, "renovacion") : null;
+  let prepPago = null, opIdPago = "", ajusteVenta = null;
   const hoy = hoyDMYTegucigalpa();
   const usuario = String(authUser.usuario || authUser.uid || "sublichat");
   const origen = String(body.origen || "").slice(0, 20);
-  const opIdPago = prepPago?.opId || "";
 
   const calcular = (servicios) => {
     const vistos = new Set();
@@ -2362,11 +2375,38 @@ async function renovarLote(db, authUser, body, res) {
   let previa;
   try { previa = calcular(heredarVendedorServicios(data0.servicios || [], data0).map(limpiarServicioCRM)); }
   catch (e) { return res.status(200).json({ ok: false, error: e.crmUserMessage || e.message }); }
-  const vistaLineas = previa.map((x) => ({ compraId: String(x.s.compraId || x.l.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, regla: x.regla, periodos: x.l.periodos, sigueVencida: x.sigueVencida, monto: deCentavos(x.l.montoCentavos) }));
+  // R196n · precio REGISTRADO en la ficha (no el de lista): la APK cobra UN total y Finanzas reparte con estos precios.
+  const vistaLineas = previa.map((x) => { const pr = precioRegistradoCent(x.s, x.l); return { compraId: String(x.s.compraId || x.l.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, regla: x.regla, periodos: x.l.periodos, sigueVencida: x.sigueVencida, monto: deCentavos(x.l.montoCentavos), precioRegistrado: pr == null ? null : deCentavos(pr) }; });
   if (body.soloVista) return res.status(200).json({ ok: true, vista: true, clienteId: exactId, hoy, lineas: vistaLineas, totalCentavos, total: deCentavos(totalCentavos) });
   if (vistaLineas.some((x) => x.sigueVencida) && body.confirmarAtraso !== true) {
     return res.status(200).json({ ok: false, requiereConfirmacion: true, error: "Hay servicios que siguen vencidos aun después de renovar. Confirme cuántos periodos cobra (no se adelanta al día del pago).", lineas: vistaLineas, hoy });
   }
+  // R196n · Cobro con ajuste (Descuento / Cortesía / Otro ajuste): el ingreso es lo COBRADO; la diferencia queda como
+  // ajuste con motivo y se reparte PROPORCIONAL al precio registrado de cada servicio (regla aprobada 12/11/2026;
+  // los centavos del redondeo van al servicio más caro). No se inventa ingreso ni se crea pendiente.
+  if (!ajuste && conPago && body.pago.ajuste && typeof body.pago.ajuste === "object") {
+    const tipo = String(body.pago.ajuste.tipo || "");
+    if (!["descuento", "cortesia", "otro"].includes(tipo)) return res.status(200).json({ ok: false, error: "Elija el tipo de ajuste: Descuento, Cortesía u Otro ajuste." });
+    const motivo = String(body.pago.ajuste.motivo || "").trim().slice(0, 200);
+    if (tipo === "otro" && motivo.length < 4) return res.status(200).json({ ok: false, error: "Escriba el motivo del ajuste." });
+    const esperados = previa.map((x) => precioRegistradoCent(x.s, x.l) ?? (x.l.montoEsperadoIn > 0 ? x.l.montoEsperadoIn : null));
+    if (esperados.some((c) => c == null)) return res.status(200).json({ ok: false, error: "Falta el precio de algún servicio: escríbalo para poder calcular el ajuste." });
+    const esperado = esperados.reduce((a, c) => a + c, 0), cobrado = aCentavos(body.pago.recibido);
+    if (!(cobrado > 0)) return res.status(200).json({ ok: false, error: "Si no cobró nada, use «Ajuste sin pago» (cortesía completa): no se registra venta." });
+    if (!(cobrado < esperado)) return res.status(200).json({ ok: false, error: `El ajuste es para cobrar MENOS que L${deCentavos(esperado)}.` });
+    const montos = prorratearCentavos(esperados, cobrado);
+    lineas.forEach((l, i) => { l.montoCentavos = montos[i]; l.montoEsperadoCentavos = esperados[i]; });
+    ajusteVenta = { tipo, motivo: motivo || (tipo === "cortesia" ? "Cortesía" : "Descuento"), esperadoCentavos: esperado, ajusteCentavos: esperado - cobrado, regla: "proporcional_precio_registrado" };
+    body.pago = { ...body.pago, montoTotal: deCentavos(cobrado), recibido: deCentavos(cobrado) };
+    totalCentavos = cobrado;
+  }
+  if (!ajuste && conPago) {
+    const totalPago = aCentavos(body.pago.montoTotal);
+    if (totalPago !== totalCentavos) return res.status(200).json({ ok: false, error: `La suma por servicio (L${deCentavos(totalCentavos)}) no coincide con el total del pago (L${deCentavos(totalPago)}).` });
+  }
+  try { prepPago = !ajuste && conPago ? await prepararPago(db, { ...body.pago, montoTotal: deCentavos(totalCentavos) }, authUser, "renovacion") : null; }
+  catch (e) { return res.status(200).json({ ok: false, error: e.crmUserMessage || e.message }); }
+  opIdPago = prepPago?.opId || "";
 
   const mutation = await db.runTransaction(async (tx) => {
     const latest = await tx.get(docRef);
@@ -2392,8 +2432,8 @@ async function renovarLote(db, authUser, body, res) {
     const accesos = prepararAccesosBeneficiarios({ servicios, registroAnterior: data.accesosBeneficiarios, nombreTitular, tokenTitularAnterior: data.tokenAcceso });
     const serviciosLimpios = servicios.map(limpiarServicioCRM);
     tx.set(docRef, { servicios: serviciosLimpios, ...resumenVendedoresCliente(serviciosLimpios, data), tokenAcceso: accesos.tokenTitular, accesosBeneficiarios: accesos.registro, updatedAt: at }, { merge: true });
-    const asignaciones = calc.map((x) => ({ compraId: String(x.s.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), montoCentavos: x.l.montoCentavos, periodo: `${x.l.periodos > 1 ? `${x.l.periodos}×` : ""}${x.l.duracion.cantidad} ${x.l.duracion.unidad === "dias" ? "días" : "meses"}`, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva }));
-    const pagoOperacion = prepPago ? escribirPago(tx, db, prepPago, lecturaPago, { clienteId: docRef.id, clienteNombre: String(nombreTitular), compraId: asignaciones[0].compraId, plataforma: asignaciones.map((a) => a.plataforma).join(" + ").slice(0, 40), fechaAnterior: asignaciones[0].fechaAnterior, fechaNueva: asignaciones[0].fechaNueva, asignaciones }) : null;
+    const asignaciones = calc.map((x) => ({ compraId: String(x.s.compraId || ""), servicioIndex: x.idx, plataforma: String(x.s.plataforma || x.l.plataforma || ""), montoCentavos: x.l.montoCentavos, periodo: `${x.l.periodos > 1 ? `${x.l.periodos}×` : ""}${x.l.duracion.cantidad} ${x.l.duracion.unidad === "dias" ? "días" : "meses"}`, fechaAnterior: x.fechaAnterior, fechaNueva: x.fechaNueva, ...(x.l.montoEsperadoCentavos != null ? { montoEsperadoCentavos: x.l.montoEsperadoCentavos } : {}) }));
+    const pagoOperacion = prepPago ? escribirPago(tx, db, prepPago, lecturaPago, { clienteId: docRef.id, clienteNombre: String(nombreTitular), compraId: asignaciones[0].compraId, plataforma: asignaciones.map((a) => a.plataforma).join(" + ").slice(0, 40), fechaAnterior: asignaciones[0].fechaAnterior, fechaNueva: asignaciones[0].fechaNueva, asignaciones, ...(ajusteVenta ? { ajusteVenta } : {}) }) : null;
     tx.set(db.collection("auditoria_eventos").doc(), { tipo: ajuste ? "renovacion_lote_ajuste" : "renovacion_lote", accion: "renovar_lote", modulo: "renovaciones", clienteId: docRef.id, actorUsuario: usuario, rol: String(authUser.role || ""), origen, operationId: String(body.operationId || ""), pagoOperacionId: opIdPago, servicios: asignaciones.length, totalCentavos, antes: asignaciones.map((a) => `${a.plataforma}:${a.fechaAnterior}`), despues: asignaciones.map((a) => `${a.plataforma}:${a.fechaNueva}`), ...(ajuste ? { motivo: motivoAjuste } : {}), resultado: "ok", createdAt: at });
     return { serviciosLimpios, accesos, asignaciones, pagoOperacion, nombreTitular, data };
   });

@@ -579,6 +579,19 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
     }
 
+    // R196n · Cuentas de Bodega dadas de baja (hoy: desde el bot de Telegram, que las pasa a la Papelera de Integridad aunque
+    // tengan clientes vinculados). Es el MISMO registro compartido (papelera_operaciones · kind inventario_cuenta · status
+    // deleted), identificado por el ID interno estable de la cuenta. Control Maestro lo usa para no volver a mostrarla como
+    // activa a partir de los servicios de los clientes. Restaurar desde la Papelera la devuelve sola (status «restored»).
+    if (accion === "cuentasBaja") {
+      const snap = await db.collection("papelera_operaciones").where("kind", "==", "inventario_cuenta").limit(3000).get();
+      const ms = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : Date.parse(v || "") || 0);
+      const cuentas = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }))
+        .filter((x) => x.status === "deleted" && x.source && x.source.collection === "inventario" && x.source.id)
+        .map((x) => ({ inventarioId: String(x.source.id), plataforma: String((x.snapshot || {}).plataforma || ""), correo: String((x.snapshot || {}).correo || "").trim().toLowerCase(),
+          eliminadoAtMs: ms(x.deletedAt) || Number(x.deletedAtMs || 0) || 0, por: String((x.actor || {}).name || (x.actor || {}).userId || "").slice(0, 60), origen: String((x.actor || {}).source || "").slice(0, 30) }));
+      return res.status(200).json({ ok: true, cuentas });
+    }
     const usuarioAccion = String(authUser.usuario || authUser.uid || "sublicuentas");
 
     // Diagnóstico (solo lee) y reparación idempotente de Bodega ↔ fichas.
