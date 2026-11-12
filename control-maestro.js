@@ -141,7 +141,7 @@
   function source(){
     try{
       const x=typeof window.sublichatControlData==='function'?window.sublichatControlData():{};
-      return {version:Number(x.version)||0,ready:x.ready===true,error:String(x.error||''),servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[]};
+      return {version:Number(x.version)||0,ready:x.ready===true,error:String(x.error||''),servicios:Array.isArray(x.servicios)?x.servicios:[],cuentas:Array.isArray(x.cuentas)?x.cuentas:[],cuentasBaja:Array.isArray(x.cuentasBaja)?x.cuentasBaja:[]};
     }catch(_){return {version:0,ready:false,error:'',servicios:[],cuentas:[]};}
   }
 
@@ -609,6 +609,10 @@
       if(!g.clave&&s.clave!=null)g.clave=String(s.clave);
     });
 
+    // R196n · Baja desde Telegram (autorizado 12/11/2026): una cuenta que el bot pasó a la Papelera ya no existe en Bodega,
+    // pero sus clientes conservan el correo en su ficha y aquí se reconstruía como «cuenta». Si NO queda ninguna cuenta viva
+    // de Bodega con esa plataforma + correo, el grupo deja de mostrarse como activo. Fichas, ventas y pagos no se tocan.
+    //   (el filtro se aplica al final, después de Clientes y del Excel de respaldo, para que ninguno la reconstruya)
     // ⚠️ FIX: hojas de Excel tipo "solo lista de nombres" (NETFLIX VIP,
     // EXTRAS...) no tienen columna de correo por fila, así que antes cada
     // nombre quedaba en su propio grupo aislado sin cuenta en vivo y se
@@ -659,6 +663,8 @@
       });
     });
 
+    const bajas=new Set((src.cuentasBaja||[]).map((b)=>`${auditFamily(b.plataforma)}|${email(b.correo)}`).filter((k)=>!k.endsWith('|')));
+    if(bajas.size)groups.forEach((g,key)=>{if(!g.inventoryAccounts.length&&bajas.has(key))groups.delete(key);});
     const revisions=new Map((state.meta?.revisiones||[]).map((r)=>[String(r.accountKey||`${auditFamily(r.plataforma)}|${email(r.correo)}`),r]));
     const accounts=[];
     groups.forEach((g)=>{

@@ -89,6 +89,7 @@
     if (d && st.tab === 'compras' && st.sub === 'vip' && !st.vip.res) cargarVip();
     if (d && st.tab === 'compras' && st.sub === 'importar' && !st.jobs) cargarJobs();
     if (d && st.tab === 'compras' && st.sub === 'spotify' && !st.spf) cargarSpf();
+    if (d && st.tab === 'compras' && st.sub === 'hbo' && !st.hbo) cargarHbo();
   }
 
   function kpis(d) {
@@ -168,11 +169,12 @@
       '<p class="fz-pie">El proveedor de un extra VIP se toma del NOMBRE (Trap/Deku), nunca del precio. Los valores 2.50/2.70 USDT son solo referencia.</p></div>';
   }
   function vCompras(d) {
-    var subs = [['registradas', 'Compras registradas'], ['spotify', 'Spotify Familiar'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
+    var subs = [['registradas', 'Compras registradas'], ['spotify', 'Spotify Familiar'], ['hbo', 'HBO Max'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
     var nav = '<div class="fz-subtabs">' + subs.map(function (s) { return '<button type="button" class="' + (st.sub === s[0] ? 'on' : '') + '" data-fz-sub="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (st.sub === 'vip') return nav + vVip();
     if (st.sub === 'importar') return nav + vImportar();
     if (st.sub === 'spotify') return nav + vSpotify();
+    if (st.sub === 'hbo') return nav + vHbo();
     var rows = (d.lotes || []).map(function (l) {
       return '<tr><td>' + fecha(l.fecha) + '</td><td><div class="fz-prod">' + logo(l.producto) + '<b>' + esc(l.producto) + '</b></div></td><td>' + esc(l.proveedor || '—') + '</td><td class="n">' + esc(l.cantidad) + ' ' + esc(l.unidad || '') + '</td>' +
         '<td class="n">' + (l.moneda === 'HNL' ? L(l.costoTotalMoneda, true) : esc(l.costoTotalMoneda) + ' ' + esc(l.moneda)) + '</td><td class="n">' + (l.moneda === 'HNL' ? '—' : esc(l.tasa)) + '</td><td class="n"><b>' + L(l.costoTotalHnl, true) + '</b></td><td>' + esc(l.cuentaPagoNombre || l.pago) + '</td><td class="n">' + esc(l.disponible) + '</td></tr>';
@@ -224,6 +226,66 @@
       await api('finp_spf_guardar', { familiaId: id, costoMensualHnl: monto, proximaRenovacion: val(m, 'ren'), ultimoPago: val(m, 'fecha'), loteId: loteId });
       toast(prod ? 'Pago registrado (1 compra) y renovación guardada.' : 'Pago y renovación guardados.'); st.spf = null; cargar(true);
     }, 'Registrar pago');
+  }
+
+  // ---------------------------------------------------------------------------------------------------- R196n · HBO Max
+  // Por cuenta: «Activación USDT · Binance» (la de siempre, por activación, sin costo mensual) o «Tarjeta bancaria»
+  // (banco, titular y últimos 4; cargos reales). Cada cargo = UNA compra real con su costo en HNL; los meses viejos no cambian.
+  async function cargarHbo() { try { st.hbo = await api('finp_hbo_lista'); } catch (e) { st.hbo = { error: e.message }; } if (st.tab === 'compras' && st.sub === 'hbo') pintar(); }
+  function tjTxt(t) { return t ? esc(t.banco) + ' · ' + esc(t.titular) + ' · •••• ' + esc(t.ultimos4) : '<span class="fz-pend">Sin tarjeta</span>'; }
+  function vHbo() {
+    var r = st.hbo;
+    var cab = '<div class="fz-card"><div class="fz-cab">' + logo('HBO Max') + '<h3>HBO Max · cuentas madre</h3></div><p class="fz-sub">Las cuentas (y sus 4 perfiles) vienen de Control Maestro. Aquí solo se elige cómo se paga cada una: <b>Activación USDT · Binance</b> (cada activación es una compra con su costo real) o <b>Tarjeta bancaria</b> (cargos reales del banco). De la tarjeta solo se guarda banco, titular y últimos 4.</p>';
+    if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
+    if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
+    var rows = r.filas.map(function (f) {
+      var tj = f.modalidad === 'tarjeta';
+      var ult = f.cargos && f.cargos[0] ? fecha(f.cargos[0].fecha) + ' · ' + L(f.cargos[0].cargoHnl, true) + (f.cargos[0].moneda === 'USD' ? ' <small>(' + esc(f.cargos[0].monto) + ' USD)</small>' : '') : '—';
+      return '<tr><td><b>' + esc(f.correo) + '</b></td><td>' + (tj ? '<span class="fz-pill">Tarjeta</span>' : '<span class="fz-pill sec">Activación USDT</span>') + '</td><td>' + (tj ? tjTxt(f.tarjeta) : '<small>Binance · por activación</small>') + '</td>' +
+        '<td>' + (tj ? esc(f.periodicidad === 'puntual' ? 'Pago puntual' : 'Mensual') + (f.proximoCobro ? ' · ' + fecha(f.proximoCobro) + (f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '') : '—') + '</td><td>' + ult + '</td>' +
+        '<td class="c">' + (tj ? '<button type="button" class="fz-btn sm" data-fz-hbo="cargo" data-id="' + esc(f.cuentaId) + '">Registrar cargo</button> ' : '<button type="button" class="fz-btn sm" data-fz-hbo="activacion" data-id="' + esc(f.cuentaId) + '">Registrar activación</button> ') +
+        '<button type="button" class="fz-btn sec sm" data-fz-hbo="config" data-id="' + esc(f.cuentaId) + '">Cómo se paga</button></td></tr>';
+    }).join('');
+    var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + r.filas.length + '</b></div><div><small>Con tarjeta</small><b>' + r.porTarjeta + '</b></div><div><small>Por activación USDT</small><b>' + (r.filas.length - r.porTarjeta) + '</b></div></div>';
+    return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta madre</th><th>Modalidad</th><th>Medio de pago</th><th>Cobro</th><th>Último cargo</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="fz-vacio-s">No hay cuentas HBO Max en Control Maestro.</td></tr>') + '</tbody></table></div></div>';
+  }
+  function abrirHbo(acc, id) {
+    var r = st.hbo || {}, f = (r.filas || []).find(function (x) { return x.cuentaId === id; }); if (!f) return;
+    var d = st.data, hoy = d.hoy;
+    var prod = (d.productosCatalogo || []).find(function (p) { return p.activo !== false && p.plataformaKey === 'hbomax' && p.modelo === 'cuenta_madre'; }) || (d.productosCatalogo || []).find(function (p) { return /hbo/i.test(p.nombre) && p.modelo === 'cuenta_madre'; });
+    if (acc === 'activacion') { abrirCompra(((d.productosCatalogo || []).find(function (p) { return p.plataformaKey === 'hbomax' && p.modelo === 'link'; }) || prod || {}).id || ''); return; }
+    if (acc === 'config') {
+      var ops = (r.tarjetas || []).map(function (t) { return '<option value="' + esc(t.id) + '"' + (f.tarjeta && f.tarjeta.id === t.id ? ' selected' : '') + '>' + esc(t.banco + ' · ' + t.titular + ' · •••• ' + t.ultimos4) + '</option>'; }).join('');
+      var html = '<div class="fz-form"><label class="w2">Modalidad<select name="modalidad"><option value="activacion"' + (f.modalidad !== 'tarjeta' ? ' selected' : '') + '>Activación USDT · Binance (por activación)</option><option value="tarjeta"' + (f.modalidad === 'tarjeta' ? ' selected' : '') + '>Tarjeta de banco hondureño</option></select></label>' +
+        '<label class="w2">Tarjeta<select name="tarjetaId"><option value="">— nueva tarjeta —</option>' + ops + '</select></label>' +
+        '<label>Banco<input name="banco" maxlength="60" placeholder="Ej. BAC, Ficohsa"></label><label>Titular<input name="titular" maxlength="80"></label><label>Últimos 4 dígitos<input name="ultimos4" inputmode="numeric" maxlength="4" placeholder="1234"></label>' +
+        '<label>Cobro<select name="periodicidad"><option value="mensual"' + (f.periodicidad !== 'puntual' ? ' selected' : '') + '>Mensual</option><option value="puntual"' + (f.periodicidad === 'puntual' ? ' selected' : '') + '>Pago puntual</option></select></label><label>Próximo cobro<input type="date" name="prox" value="' + esc(f.proximoCobro || '') + '"></label></div>' +
+        '<p class="fz-sub">Solo banco, titular y los últimos 4 dígitos. Nunca escriba el número completo, el CVV ni claves. Una misma tarjeta puede pagar varias cuentas. Cambiar esto no modifica cargos ya registrados.</p>';
+      modal('Cómo se paga · ' + f.correo, html, async function (m) {
+        var mod = val(m, 'modalidad'), b = { cuentaId: id, modalidad: mod, periodicidad: val(m, 'periodicidad'), proximoCobro: val(m, 'prox') };
+        if (mod === 'tarjeta') { if (val(m, 'tarjetaId')) b.tarjetaId = val(m, 'tarjetaId'); else b.tarjetaNueva = { banco: val(m, 'banco'), titular: val(m, 'titular'), ultimos4: val(m, 'ultimos4') }; }
+        await api('finp_hbo_guardar', b); toast('Guardado.'); st.hbo = null; pintar();
+      });
+      return;
+    }
+    if (!prod) { toast('No hay producto «HBO Max» de cuenta madre en el catálogo: créelo en Productos para que el cargo cuente en Ganancias.'); return; }
+    var html2 = '<div class="fz-form"><label>Fecha del cargo<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '"></label><label>Moneda del cargo<select name="moneda"><option>USD</option><option>HNL</option></select></label>' +
+      '<label>Monto<input type="number" step="any" min="0" name="monto"></label><label>Cargo real en HNL<input type="number" step="any" min="0" name="cargoHnl" placeholder="Lo que cobró el banco (si fue en USD)"></label>' +
+      '<label class="w2">Debitado de<select name="bancoId"><option value="">— banco del libro —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Próximo cobro<input type="date" name="prox" value="' + esc(f.periodicidad === 'puntual' ? '' : masUnMes(f.proximoCobro && f.proximoCobro >= hoy ? f.proximoCobro : hoy)) + '"></label></div>' +
+      '<p class="fz-sub">Tarjeta: ' + tjTxt(f.tarjeta) + '. Se registra UNA compra de «' + esc(prod.nombre) + '» con el costo real en Lempiras (la tasa queda guardada y no cambia después). El mismo cargo no se puede registrar dos veces.</p>';
+    var opid = opId();
+    modal('Registrar cargo · ' + f.correo, html2, async function (m) {
+      var mon = val(m, 'moneda'), monto = Number(val(m, 'monto')), hnl = mon === 'HNL' ? monto : Number(val(m, 'cargoHnl'));
+      if (!(monto > 0)) throw new Error('Escriba el monto del cargo.');
+      if (!(hnl > 0)) throw new Error('Escriba el cargo real en Lempiras que cobró el banco.');
+      if (!val(m, 'bancoId')) throw new Error('Elija de qué banco del libro salió el pago.');
+      var cargo = { fecha: val(m, 'fecha'), moneda: mon, monto: monto, cargoHnl: hnl, operationId: opid };
+      await api('finp_hbo_guardar', { cuentaId: id, cargo: cargo }); // comprueba que no esté repetido (no escribe)
+      var c = await api('fin_compra_registrar', { operationId: opid, compra: { productoId: prod.id, fecha: cargo.fecha, cantidad: 1, costoTotal: monto, moneda: mon, cargoHnl: mon === 'HNL' ? 0 : hnl, pago: 'banco', bancoId: val(m, 'bancoId'), duracionDias: f.periodicidad === 'puntual' ? undefined : 30, cuentaInventarioId: id, referencia: 'HBO Max · tarjeta •••• ' + ((f.tarjeta || {}).ultimos4 || '') + ' · ' + f.correo } });
+      await api('finp_hbo_guardar', { cuentaId: id, cargo: Object.assign({}, cargo, { loteId: c.loteId || '' }), proximoCobro: val(m, 'prox') });
+      toast(c.duplicado ? 'Ese cargo ya estaba registrado (no se duplicó).' : 'Cargo registrado (1 compra).'); st.hbo = null; cargar(true);
+    }, 'Registrar cargo');
   }
 
   // ---------------------------------------------------------------------------------------------------- Netflix VIP (lista)
@@ -533,6 +595,7 @@
       if ((t = e.target.closest('[data-fz-pag]'))) { st.vip.pagina += Number(t.dataset.fzPag); st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-menu]'))) { var mm = t.parentNode; var abierto = mm.classList.contains('on'); h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); if (!abierto) mm.classList.add('on'); e.stopPropagation(); return; }
       if ((t = e.target.closest('[data-fz-spf]'))) { abrirSpf(t.dataset.fzSpf, t.dataset.id); return; }
+      if ((t = e.target.closest('[data-fz-hbo]'))) { abrirHbo(t.dataset.fzHbo, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-vip]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirVip(t.dataset.fzVip, t.dataset.id); return; }
       h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); });
       if (!(t = e.target.closest('[data-fz]'))) return;

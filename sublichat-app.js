@@ -358,7 +358,7 @@ const DEMO = [
 ];
 
 let FINANZAS_LISTAS=false; // R184 · Finanzas llega después del primer pintado
-let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[];
+let DATA = [], greeted=false, INVENTARIO=[], FINANZAS=[], RECUPERACION_EVENTOS=[], HISTORIAL_CLIENTES=[], CUENTAS_BAJA=[]; // R196n · bajas desde Telegram
 // Oct-2026 · sublichat-app.js es módulo: DATA no es global. Lectura para Atrapa tu Premio (buscar cliente al dar fichas).
 Object.defineProperty(window,"__sublichatClientes",{configurable:true,get:()=>DATA});
 let CONTROL_DATA_VERSION=0; // cambia cada vez que Clientes/Bodega reciben una lectura nueva
@@ -689,6 +689,8 @@ async function load(options={}){
       // R184 · Clientes y Bodega se piden A LA VEZ (antes: uno detrás del otro). Se siguen aplicando juntos (atómico).
       const pClientes=(async()=>{let x=null;if(!sharedControl&&!clientesLiveStarted&&!requireServer)x=await primeraFotoClientes(db,collection,onSnapshot);if(!x)x=await readCollection(CONFIG.collection);return x;})();
       const pInventario=readCollection("inventario").then(ok=>({ok}),err=>({err}));
+      // R196n · cuentas dadas de baja (Papelera de Integridad). Si no se puede leer, se sigue igual que antes.
+      const pBajas=fetch(CONFIG.inventarioEndpoint||'/api/inventario',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'cuentasBaja'})}).then(r=>r.json()).then(j=>j&&j.ok&&Array.isArray(j.cuentas)?j.cuentas:null).catch(()=>null);
       let snap=null;
       try{snap=await pClientes;}catch(e){await pInventario;throw e;}
       let invSnap=null,invError=null;
@@ -697,6 +699,7 @@ async function load(options={}){
       const nextData=snap.docs.flatMap(d=>flattenCliente(d.data(),d.id));
       const nextInventory=invSnap?invSnap.docs.map(d=>({id:d.id,...d.data()})):[];
       if(session!==CONTROL_SESSION_VERSION)return;
+      const bajas=await pBajas; if(Array.isArray(bajas))CUENTAS_BAJA=bajas;
       DATA=nextData;INVENTARIO=nextInventory;CONTROL_DATA_ERROR='';CONTROL_DATA_READY=true;
       bumpControlDataVersion();
       // Control Maestro puede abrirse antes de que termine la primera lectura de
@@ -806,7 +809,8 @@ window.sublichatControlData=()=>({
       slot:p.slot??p.perfil??p.profile??p.cupo??'',
       telefono:p.telefono||p.celular||p.phone||p.whatsapp||''
     })):[]
-  }))
+  })),
+  cuentasBaja:CUENTAS_BAJA.map(x=>({...x})) // R196n
 });
 window.sublichatControlReload=()=>load({forceServer:true,requireServer:true,controlOnly:true});
 
