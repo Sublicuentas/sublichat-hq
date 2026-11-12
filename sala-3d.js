@@ -386,7 +386,7 @@ export async function montarSala(contenedor, { avatares = {}, participantes = ['
   // nombres sobre cada personaje
   const capa = document.createElement('div'); capa.className = 'sj3d-nombres'; contenedor.appendChild(capa);
   // R177 · "Nombre visible" elegido en Mi personaje (si no hay, el nombre de usuaria)
-  const nombreBase = (id) => { const n = String(avatares[id]?.config?.nombre || '').trim() || (id.charAt(0).toUpperCase() + id.slice(1)); return id === 'naara' ? `👑 ${n} (Anfitriona)` : n; };
+  const nombreBase = (id) => { const n = String(avatares[id]?.config?.nombre || '').trim() || ({ naara: 'Sublicuentas', libni: 'Relojes' }[id] || (id.charAt(0).toUpperCase() + id.slice(1))); return id === 'naara' ? `👑 ${n} (Anfitriona)` : n; };
   for (const id of Object.keys(personajes)) { const e = document.createElement('span'); e.className = 'sj3d-nombre' + (id === 'naara' ? ' sj3d-anf' : ''); e.dataset.id = id; e.textContent = nombreBase(id); const o = document.createElement('i'); o.className = 'sj3d-ondas'; o.setAttribute('aria-hidden', 'true'); o.innerHTML = '<b></b><b></b><b></b>'; e.appendChild(o); capa.appendChild(e); etiquetas[id] = e; }
 
   let vivo = true, frames = 0, tMed = performance.now(), hablando = null; const t0 = performance.now(); const v3 = new THREE.Vector3();

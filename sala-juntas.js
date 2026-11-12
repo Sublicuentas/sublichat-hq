@@ -1,5 +1,5 @@
 /* sala-juntas.js · R167 — SubliStudio 3D · Sala de Juntas (Fase 1).
-   Pantallas: Panel principal · Crear/editar convocatoria (solo Naara) · Antesala virtual · Calendario · Mis reuniones ·
+   Pantallas: Panel principal · Crear/editar convocatoria (solo Sublicuentas) · Antesala virtual · Calendario · Mis reuniones ·
    Historial · Configuración. Datos reales de /api/sala-juntas (que repite TODA la autorización).
    Mi personaje (Fase 3) y la sala 3D con audio (Fase 4) se muestran como lo que son: todavía no habilitadas.
    Se carga en index.html pero solo dibuja cuando se abre la pantalla. No toca ningún otro módulo. */
@@ -157,7 +157,7 @@
         </div>
         <img class="sj-prox-img" src="/assets/sala/sala-escenario-c.webp" alt="Sala de Juntas · Escenario C" loading="lazy">
         <div class="sj-prox-acc"><button class="sj-btn sj-rojo" data-sj="antesala" data-id="${p.id}">${ico('sala')}Entrar a la reunión</button><button class="sj-btn sj-sec" data-sj="detalle" data-id="${p.id}">${ico('doc')}Ver detalles</button></div>
-      </div>` : `<div class="sj-card sj-prox sj-prox-vacia"><div class="sj-prox-t"><div class="sj-prox-h">${ico('cal')}<b>Próxima reunión</b></div><p>No hay reuniones programadas.${puedeCrear ? ' Cree la primera convocatoria.' : ' Cuando Naara convoque, aparecerá aquí y le llegará por Telegram.'}</p></div>${puedeCrear ? `<div class="sj-prox-acc"><button class="sj-btn sj-rojo" data-sj="nueva">${ico('calPlus')}Crear convocatoria</button></div>` : ''}</div>`;
+      </div>` : `<div class="sj-card sj-prox sj-prox-vacia"><div class="sj-prox-t"><div class="sj-prox-h">${ico('cal')}<b>Próxima reunión</b></div><p>No hay reuniones programadas.${puedeCrear ? ' Cree la primera convocatoria.' : ' Cuando Sublicuentas convoque, aparecerá aquí y le llegará por Telegram.'}</p></div>${puedeCrear ? `<div class="sj-prox-acc"><button class="sj-btn sj-rojo" data-sj="nueva">${ico('calPlus')}Crear convocatoria</button></div>` : ''}</div>`;
     const acc = [
       puedeCrear ? ['nueva', 'calPlus', 'Crear<br>convocatoria', true] : null,
       ['calendario', 'cal', 'Calendario<br>de reuniones'], ['mis', 'grupo', 'Mis reuniones<br><small>(agenda)</small>'], ['personaje', 'persona', 'Mi personaje<br><small>(Avatar)</small>'],
@@ -258,7 +258,7 @@
           <form class="sj-esc-guardar" id="sjEscF"><input name="nombre" maxlength="40" placeholder="Nombre del estilo (ej.: Junta mensual)" value="${esc(sel && (sel.creadoPor === yo || mod) ? sel.nombre : '')}" aria-label="Nombre del estilo">
             <button type="submit" class="sj-btn sj-rojo sj-mini">${sel && (sel.creadoPor === yo || mod) ? 'Actualizar estilo' : 'Guardar estilo'}</button>${sel ? `<button type="button" class="sj-btn sj-sec sj-mini" data-sj="escNuevo">Guardar como nuevo</button>` : ''}
             <button type="button" class="sj-btn sj-sec sj-mini" data-sj="escReset">Restablecer</button></form>
-          <p class="sj-hint">Cambiar el estilo no borra reuniones, personajes ni actas. ${mod ? 'El estilo marcado como oficial es el que se usa si la convocatoria no elige otro.' : 'Naara aprueba el estilo oficial de cada escenario.'}</p>
+          <p class="sj-hint">Cambiar el estilo no borra reuniones, personajes ni actas. ${mod ? 'El estilo marcado como oficial es el que se usa si la convocatoria no elige otro.' : 'Sublicuentas aprueba el estilo oficial de cada escenario.'}</p>
         </div></div></div>`;
   }
   async function montarEsc3D() {
@@ -342,7 +342,7 @@
     const cabA = `<div class="sj-ph">${ico('doc')}<b>${esc(r.titulo)}</b>${pill(r.estado)}</div>
       <div class="sj-acta-meta"><span>${ico('cal')}${esc(new Date(r.inicioMs).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Tegucigalpa' }))}</span>
       <span>${ico('reloj')}${A.duracionMin != null ? `Duración ${A.duracionMin} min` : 'Duración no registrada'}</span>
-      <span>${ico('grupo')}Asistieron: ${A.asistentes.length ? A.asistentes.map((u) => esc(funda(u).nombre)).join(', ') : 'sin registro de entrada'}</span>${A.grabada ? `<span>${ico('reloj')}Grabada (${Math.round(A.grabacionSeg / 60)} min) · el video quedó en el equipo de Naara</span>` : ''}</div>`;
+      <span>${ico('grupo')}Asistieron: ${A.asistentes.length ? A.asistentes.map((u) => esc(funda(u).nombre)).join(', ') : 'sin registro de entrada'}</span>${A.grabada ? `<span>${ico('reloj')}Grabada (${Math.round(A.grabacionSeg / 60)} min) · el video quedó en el equipo de Sublicuentas</span>` : ''}</div>`;
     if (A.editar && mod) {
       const k = (a && a.acuerdos && a.acuerdos.length ? a.acuerdos : [{ id: 'a1', texto: '', responsable: '', fecha: '' }]);
       const opR = (sel) => `<option value="">Responsable…</option>` + (r.participantes || []).map((u) => `<option value="${u}"${u === sel ? ' selected' : ''}>${esc(funda(u).nombre)}</option>`).join('');
@@ -393,7 +393,7 @@
           <div id="sjEscCampos">${escenarioCampos(r)}</div>
           <label class="sj-f"><span>Agenda / Temas a tratar * <small>(un tema por línea)</small></span><textarea name="agenda" rows="4" placeholder="Resultados de ventas del mes&#10;Campañas y promociones&#10;Objetivos y responsables">${esc((r.agenda || []).join('\n'))}</textarea></label>
         </div>
-        <div class="sj-form-d"><b class="sj-sub">¿Con quién es la reunión?</b><p class="sj-hint">Marque a quién invita. Naara siempre entra como anfitriona.</p>${parts}<p class="sj-hint">${st.data.fundadoras.some((f) => f.invitado) ? 'Las personas marcadas "Invitado" tienen el módulo Sala de Juntas activado; reciben la convocatoria en Sublichat (Telegram solo llega a las fundadoras).' : '¿Falta alguien? Sublicuentas activa el módulo "Sala de Juntas" a cualquier usuario en Permisos y aparece aquí.'}</p>
+        <div class="sj-form-d"><b class="sj-sub">¿Con quién es la reunión?</b><p class="sj-hint">Marque a quién invita. Sublicuentas siempre entra como anfitriona.</p>${parts}<p class="sj-hint">${st.data.fundadoras.some((f) => f.invitado) ? 'Las personas marcadas "Invitado" tienen el módulo Sala de Juntas activado; reciben la convocatoria en Sublichat (Telegram solo llega a las fundadoras).' : '¿Falta alguien? Sublicuentas activa el módulo "Sala de Juntas" a cualquier usuario en Permisos y aparece aquí.'}</p>
           <b class="sj-sub">Recordatorios automáticos (Telegram)</b>${rec}
           <p class="sj-hint">Hora de Honduras (UTC-6). Al programar, cada invitada recibe la convocatoria por Telegram con botones Confirmar / No asistiré.</p></div>
       </div>
@@ -550,7 +550,7 @@
   let M3 = null, ed3 = null, sala3 = null;
   async function modulo3D() {
     if (M3) return M3;
-    M3 = await import('/sala-3d.js?v=20261106-r183');
+    M3 = await import('/sala-3d.js?v=20261111-r196l');
     return M3;
   }
   function desmontar3D() { if (esc3) { try { esc3.destruir(); } catch (_) {} esc3 = null; } if (ed3) { try { ed3.destruir(); } catch (_) {} ed3 = null; } if (sala3) { try { sala3.destruir(); } catch (_) {} sala3 = null; } }
@@ -728,8 +728,8 @@
           if (st.data.permisos.moderar) m.cola.filter((x) => !antes.has(x.id) && x.id !== st.data.yo.id).forEach((x) => toast(`✋ ${funda(x.id).nombre} pidió la palabra.`));
           if (sala3) (st.sala3dReu?.participantes || []).forEach((u) => sala3.setMano(u, m.cola.some((x) => x.id === u)));
           pintarPanel(); pintarBarra(); pintarPres(); },
-        grabacion: (desde) => { if (st.vivo !== V) return; const antes = V.grabandoDesde; V.grabandoDesde = desde || 0; pintarRec(); if (desde && !antes && !V.grab) toast('Naara empezó a grabar la reunión.'); if (!desde && antes && !V.grab) toast('Terminó la grabación.'); },
-        turno: (quien) => { if (st.vivo !== V) return; if (sala3) sala3.saludar(quien); toast(quien === st.data.yo.id ? 'Naara le dio la palabra.' : `${funda(quien).nombre} tiene la palabra.`); },
+        grabacion: (desde) => { if (st.vivo !== V) return; const antes = V.grabandoDesde; V.grabandoDesde = desde || 0; pintarRec(); if (desde && !antes && !V.grab) toast('Sublicuentas empezó a grabar la reunión.'); if (!desde && antes && !V.grab) toast('Terminó la grabación.'); },
+        turno: (quien) => { if (st.vivo !== V) return; if (sala3) sala3.saludar(quien); toast(quien === st.data.yo.id ? 'Sublicuentas le dio la palabra.' : `${funda(quien).nombre} tiene la palabra.`); },
         aviso: (t) => toast(t),
         audioBloqueado: (b) => { const x = document.getElementById('sj3dAudio'); if (x) x.hidden = !b; },
       } });
@@ -1013,7 +1013,7 @@
     b.disabled = true;
     try {
       if (a === 'lkMic') await V.ctl.setMicro(!V.ctl.micro);
-      else if (a === 'lkMano') { const sube = !V.ctl.mano; await V.ctl.setMano(sube); if (sube) toast('Levantó la mano. Naara verá su turno en la cola.'); }
+      else if (a === 'lkMano') { const sube = !V.ctl.mano; await V.ctl.setMano(sube); if (sube) toast('Levantó la mano. Sublicuentas verá su turno en la cola.'); }
       else if (a === 'lkDarTurno') await V.ctl.darTurno(b.dataset.u);
       else if (a === 'lkFinTurno') { const sig = (V.manos?.cola || []).find((x) => x.id !== V.manos.turno); await V.ctl.darTurno(''); if (sig) toast(`Siguiente en la cola: ${funda(sig.id).nombre}.`); }
       else if (a === 'lkLimpiarCola') await V.ctl.limpiarCola();
