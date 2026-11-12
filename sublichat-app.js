@@ -1170,6 +1170,8 @@ function renderTable(){
 // más de una plataforma, se le pregunta cuál no renovó y las demás quedan
 // intactas; si era la única, el cliente queda sin servicios activos pero
 // su ficha e historial se conservan.
+// R196m · Spotify Familiar tras la baja: el espacio queda «Retiro en Spotify pendiente» (Sublichat no retira en Spotify).
+function spotifyRetiroTxt(r){if(!r)return"";if(r.pendienteRevision)return" · ⚠️ Spotify Familiar: no se pudo marcar el retiro, revíselo en Control Maestro";if(r.estado==="retiro_pendiente"||r.yaEstaba)return` · Spotify Familiar ${r.codigo||""}: «Retiro en Spotify pendiente». Quítelo en Spotify y confírmelo en Control Maestro`;return"";}
 async function noRenovoCliente(g){
   if(!g)return;
   const servicios=g.servicios||[];
@@ -1195,7 +1197,7 @@ async function noRenovoCliente(g){
     if(j.ok){
       recuperacionLoaded=false;
       const ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:"";
-      if(typeof mostrarToast==="function")mostrarToast(`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}`);
+      if(typeof mostrarToast==="function")mostrarToast(`❌ ${g.nombre}: ${s.plataforma} dado de baja (no renovó)${ex}${spotifyRetiroTxt(j.spotifyRetiro)}`);
       await load({forceServer:true});
     }else if(typeof mostrarToast==="function")mostrarToast("⚠️ "+(j.error||"No se pudo dar de baja."));
   }catch(e){if(typeof mostrarToast==="function")mostrarToast("⚠️ No pude conectar.");}
@@ -1524,29 +1526,34 @@ async function invSpotifyFamilias(){
   box.style.display="block";box.innerHTML="Cargando Spotify Familiar…";
   let j=null;try{j=await invPost({accion:"spotifyFamilias"});}catch(_){}
   if(!j||!j.ok){box.innerHTML="⚠️ "+clienteEsc(j&&j.error||"No pude leer las familias.");return;}
-  const st=window._spfSt=window._spfSt||{abierta:"",busqueda:null};
+  const st=window._spfSt=window._spfSt||{abierta:"",elegir:null,msg:""}; // R196m · alta directa por correo (sin listas)
   const fam=j.familias.find(f=>f.id===st.abierta);
   const lista=j.familias.map(f=>`<button class="cobro-btn" data-spf="${clienteEsc(f.id)}" type="button" style="width:100%;margin:4px 0;text-align:left;${f.id===st.abierta?"border-color:#e2231a":""}"><b>${clienteEsc(f.codigo)}</b> · ${clienteEsc(f.madreCorreo)} · <b>${f.ocupados}/${f.capacidad}</b>${f.estado==="inactiva"?" · inactiva":""}</button>`).join("")||`<p class="cr-hint">Todavía no hay familias.</p>`;
   const otras=j.familias.filter(f=>fam&&f.id!==fam.id&&f.libres>0);
   const detalle=fam?`<div class="cr-label" style="margin-top:12px">${clienteEsc(fam.codigo)} · Madre: ${clienteEsc(fam.madreCorreo)} · Invitados ${fam.ocupados}/${fam.capacidad}</div>
-    ${fam.miembros.filter(m=>m.estado==="activo").map(m=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(m.correo)}${m.clienteNombre?` · ${clienteEsc(m.clienteNombre)}`:" · <i>sin ficha</i>"} · <b style="color:#15803d">Vinculada</b></span>
+    ${fam.miembros.filter(m=>m.estado==="activo").map(m=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(m.correo)}${m.clienteNombre?` · ${clienteEsc(m.clienteNombre)}`:" · <i>sin ficha</i>"} · ${m.retiroPendiente?`<b style="color:#c81e1e">Retiro en Spotify pendiente${m.retiroAuto&&m.retiroAuto.motivo==="no_renovo"?" · No renovó":m.retiroAuto?" · Se quitó Spotify":""}</b>`:`<b style="color:#15803d">Vinculada</b>`}</span>
       ${otras.length?`<select class="serv-input" data-spm-dest="${clienteEsc(m.correo)}" style="width:auto;margin:0"><option value="">Mover a…</option>${otras.map(o=>`<option value="${clienteEsc(o.id)}">${clienteEsc(o.codigo)} (${o.ocupados}/${o.capacidad})</option>`).join("")}</select>`:""}
       <button class="cobro-btn" data-spd="${clienteEsc(m.correo)}" type="button" style="width:auto;margin:0">Desvincular</button></div>`).join("")}
     ${Array.from({length:fam.libres}).map(()=>`<div class="iv-row"><span class="cr-hint">+ Espacio disponible</span></div>`).join("")}
-    ${fam.libres?`<div class="cr-label" style="margin-top:10px">Vincular cuenta existente</div>
-      <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfQ" placeholder="Buscar ficha Spotify por correo o ID" style="flex:1;margin:0"><button class="cobro-btn" id="spfBuscar" type="button" style="width:auto;margin:0">Buscar</button></div>
-      ${st.busqueda?(st.busqueda.length?st.busqueda.map(s=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1">${clienteEsc(s.correo)} · ${clienteEsc(s.clienteNombre)} · vence ${clienteEsc(s.fechaRenovacion||"—")}${s.spotifyFamiliaId?" · ya tiene familia":""}</span>${s.spotifyFamiliaId?"":`<button class="cobro-btn renew" data-spv="${clienteEsc(s.correo)}" data-cli="${clienteEsc(s.clienteId)}" data-com="${clienteEsc(s.compraId)}" type="button" style="width:auto;margin:0">Vincular</button>`}</div>`).join(""):`<p class="cr-hint">Sin fichas Spotify con ese dato.</p>`):""}
-      <div class="cr-label" style="margin-top:10px">Agregar cuenta nueva</div>
-      <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfNuevo" placeholder="correo invitado" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfAgregar" type="button" style="width:auto;margin:0">Agregar</button></div>
-      <div class="cr-hint">Si el correo ya tiene ficha, use «Vincular cuenta existente» para no duplicar. Sublichat no envía invitaciones ni revisa Spotify.</div>`:`<p class="cr-hint">Familia completa (5 de 5).</p>`}`:"";
+    ${fam.libres?`<div class="cr-label" style="margin-top:10px">Correo del invitado</div>
+      <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfNuevo" type="email" placeholder="cliente@gmail.com" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfAgregar" type="button" style="width:auto;margin:0">Agregar</button></div>
+      ${st.elegir&&st.elegir.familiaId===fam.id?`<div class="cr-hint"><b>Ese correo está en ${st.elegir.opciones.length} fichas. ¿Cuál es?</b></div>${st.elegir.opciones.map((o,i)=>`<button class="cobro-btn" data-spe="${i}" type="button" style="width:100%;margin:4px 0;text-align:left">${clienteEsc(o.clienteNombre||o.clienteId)}${o.vence?` · vence ${clienteEsc(o.vence)}`:""}</button>`).join("")}`:""}
+      ${st.msg?`<div class="cr-hint" role="status">${clienteEsc(st.msg)}</div>`:""}
+      <div class="cr-hint">Si el correo tiene ficha Spotify, se vincula sola. Si no, queda «pendiente de vincular» (no se crea cliente ni venta). Sublichat no envía invitaciones ni revisa Spotify.</div>`:`<p class="cr-hint">Familia completa (5 de 5).</p>`}`:"";
   box.innerHTML=`<div class="cr-label">🎵 Spotify Familiar · ${j.familias.length} familia${j.familias.length===1?"":"s"}</div>${lista}
     <div class="iv-row" style="gap:8px;margin-top:8px"><input class="serv-input" id="spfMadre" placeholder="correo madre (administradora)" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfCrear" type="button" style="width:auto;margin:0">Crear familia</button></div>${detalle}`;
-  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok+(r.advertencia?` · ${r.advertencia}`:""));if(r.familia&&r.familia.id)st.abierta=r.familia.id;st.busqueda=null;invSpotifyFamilias();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
-  box.querySelectorAll("[data-spf]").forEach(b=>b.addEventListener("click",()=>{st.abierta=b.dataset.spf;st.busqueda=null;invSpotifyFamilias();}));
+  const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok+(r.advertencia?` · ${r.advertencia}`:""));if(r.familia&&r.familia.id)st.abierta=r.familia.id;st.elegir=null;invSpotifyFamilias();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
+  box.querySelectorAll("[data-spf]").forEach(b=>b.addEventListener("click",()=>{st.abierta=b.dataset.spf;st.elegir=null;st.msg="";invSpotifyFamilias();}));
   box.querySelector("#spfCrear")?.addEventListener("click",()=>{const m=box.querySelector("#spfMadre").value.trim();if(!m){mostrarToast("Escriba el correo madre.");return;}post({accion:"spotifyCrear",madreCorreo:m},"✅ Familia creada");});
-  box.querySelector("#spfBuscar")?.addEventListener("click",async()=>{const q=box.querySelector("#spfQ").value.trim();try{const r=await invPost({accion:"spotifyBuscar",q});st.busqueda=r.ok?r.servicios:[];}catch(_){st.busqueda=[];}invSpotifyFamilias();});
-  box.querySelectorAll("[data-spv]").forEach(b=>b.addEventListener("click",()=>post({accion:"spotifyVincular",familiaId:fam.id,correo:b.dataset.spv,clienteId:b.dataset.cli,compraId:b.dataset.com},"✅ Vinculada (misma ficha e historial)")));
-  box.querySelector("#spfAgregar")?.addEventListener("click",async()=>{const c=box.querySelector("#spfNuevo").value.trim();if(!c)return;try{const r=await invPost({accion:"spotifyBuscar",q:c});const ya=(r.servicios||[]).find(s=>s.correo===c.toLowerCase());if(ya&&!ya.spotifyFamiliaId&&confirm(`Ese correo ya tiene ficha (${ya.clienteNombre}). ¿Vincular esa misma ficha?`)){post({accion:"spotifyVincular",familiaId:fam.id,correo:c,clienteId:ya.clienteId,compraId:ya.compraId},"✅ Vinculada");return;}}catch(_){}post({accion:"spotifyVincular",familiaId:fam.id,correo:c},"✅ Invitado agregado");});
+  // R196m · 1 correo + Agregar. Varias fichas con ese correo → se elige solo entre esas.
+  const agregar=async(extra)=>{const inp=box.querySelector("#spfNuevo"),btn=box.querySelector("#spfAgregar");const c=extra?st.elegir.correo:(inp?inp.value.trim():"");if(!c){mostrarToast("Escriba el correo del invitado.");return;}if(btn)btn.disabled=true;
+    try{const r=await invPost({accion:"spotifyAgregarCorreo",familiaId:fam.id,correo:c,...(extra||{})});
+      if(!r.ok){st.msg="⚠️ "+(r.error||"No se pudo agregar.");invSpotifyFamilias();return;}
+      if(r.requiereElegir){st.elegir={familiaId:fam.id,correo:c,opciones:r.opciones||[]};invSpotifyFamilias();return;}
+      st.elegir=null;st.msg=r.pendienteVincular?"⚠️ "+r.aviso:(r.familia&&r.familia.idempotente?"Ese correo ya estaba en esta cuenta: no se duplicó.":"✅ Agregado y vinculado con su ficha.");invSpotifyFamilias();
+    }catch(_){mostrarToast("⚠️ No pude conectar.");if(btn)btn.disabled=false;}};
+  box.querySelector("#spfAgregar")?.addEventListener("click",()=>agregar(null));
+  box.querySelectorAll("[data-spe]").forEach(b=>b.addEventListener("click",()=>{const o=st.elegir&&st.elegir.opciones[+b.dataset.spe];if(o)agregar({clienteId:o.clienteId,compraId:o.compraId});}));
   box.querySelectorAll("[data-spm-dest]").forEach(sel=>sel.addEventListener("change",()=>{if(!sel.value)return;if(!confirm(`¿Mover ${sel.dataset.spmDest}? Se libera su espacio aquí y ocupa uno en la familia destino.`)){sel.value="";return;}post({accion:"spotifyMover",correo:sel.dataset.spmDest,destinoId:sel.value},"✅ Movido");}));
   box.querySelectorAll("[data-spd]").forEach(b=>b.addEventListener("click",()=>{if(confirm(`¿Desvincular ${b.dataset.spd}? El cliente y su historial NO se borran.`))post({accion:"spotifyDesvincular",correo:b.dataset.spd},"✅ Desvinculado");}));
 }
@@ -3784,7 +3791,7 @@ async function eliminarServicio(s){
     const r=await fetch(CONFIG.renovarEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({accion:"eliminar",clienteId:g.clienteId||s.clienteId||"",clienteNorm:g.nombreNorm||"",telefono:g.telefono||"",plataforma:s.plataformaRaw||s.plataforma,correo:s.correo||"",servicioIndex:(s.srvIndex!=null?s.srvIndex:null),compraId:s.compraId||""})});
     const j=await r.json();
-    if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}`); cerrarCobro(); await load({forceServer:true}); }
+    if(j.ok){ let ex=(j.inventario&&j.inventario.tocado)?` · cupo liberado (${j.inventario.disponibles} libres)`:""; mostrarToast(`🗑️ ${g.nombre}: ${s.plataforma} dado de baja${ex}${spotifyRetiroTxt(j.spotifyRetiro)}`); cerrarCobro(); await load({forceServer:true}); }
     else $cobro("cgHint").textContent="⚠️ "+(j.error||"Error");
   }catch(e){ $cobro("cgHint").textContent="⚠️ No pude conectar."; }
 }
