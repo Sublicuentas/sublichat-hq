@@ -25,7 +25,7 @@ test('S01: madre + 5 invitados = 6 registros lógicos, capacidad 5, ningún invi
   await assert.rejects(S.vincularInvitado(db, { familiaId: f.id, correo: 'principal@ejemplo.com' }), /ya|madre/);
   const g = await S.crearFamilia(db, { madreCorreo: 'otra@ejemplo.com' });
   assert.equal(g.codigo, 'SP-002');
-  await assert.rejects(S.vincularInvitado(db, { familiaId: g.id, correo: 'cuenta01@ejemplo.com' }), /otra familia/, 'exclusividad: un invitado activo en 1 sola familia');
+  await assert.rejects(S.vincularInvitado(db, { familiaId: g.id, correo: 'cuenta01@ejemplo.com' }), /ya está como invitado en SP-001\. Un correo solo puede estar en una cuenta/, 'exclusividad: un invitado activo en 1 sola familia');
   const menos = await S.crearFamilia(db, { madreCorreo: 'tres@ejemplo.com' });
   assert.equal(menos.ocupados, 0, 'una familia con menos de cinco se puede guardar');
 });
@@ -35,7 +35,7 @@ test('S02: sexto invitado se bloquea en el servidor y no altera cupos', async ()
   const f = await S.crearFamilia(db, { madreCorreo: 'm@ejemplo.com' });
   for (let i = 1; i <= 5; i++) await S.vincularInvitado(db, { familiaId: f.id, correo: `i${i}@ejemplo.com` });
   const antes = JSON.stringify(db._data.get(`spotify_familias/${f.id}`).data);
-  await assert.rejects(S.vincularInvitado(db, { familiaId: f.id, correo: 'sexto@ejemplo.com' }), /no hay espacios libres/);
+  await assert.rejects(S.vincularInvitado(db, { familiaId: f.id, correo: 'sexto@ejemplo.com' }), /llena \(5 de 5\): no se agregó nada/);
   assert.equal(JSON.stringify(db._data.get(`spotify_familias/${f.id}`).data), antes);
   assert.equal(db._data.has('spotify_indice/sexto@ejemplo.com'), false);
   // carrera: dos altas a la vez con 1 espacio libre → solo una entra
