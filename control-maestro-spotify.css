@@ -45,3 +45,13 @@
 .sp-fila{grid-template-columns:44px minmax(0,1.6fr) minmax(0,1.1fr) 120px 190px 36px}
 .sp-pill{white-space:normal;line-height:1.25}
 @media (max-width:720px){.sp-fila{grid-template-columns:34px 1fr auto}.sp-fila>span:nth-child(5){grid-column:2/3;align-self:center}.sp-fila>span:nth-child(6){grid-column:3/4;justify-self:end}}
+/* R196o · «Falta quitar en la app de Spotify» (ya liberados en Sublichat; no ocupan espacio) */
+.sp-quitar{margin-top:10px;background:#fff;border:1px solid #f1d9a8;border-radius:12px;padding:10px 12px;display:grid;gap:6px}
+.sp-quitar>div>b{font-size:13px;color:#8a5a00}
+.sp-quitar-fila{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;word-break:break-all}
+.sp-quitar-fila button{min-height:34px;padding:0 12px;border-radius:9px;border:1px solid #e3e8ef;background:#fff;font-weight:600;cursor:pointer;flex-shrink:0}
+/* R196o · en móvil nada se sale del panel (columnas que pueden encogerse) */
+.sp-cm,.sp-grid,.sp-lista,.sp-fam{min-width:0}
+.sp-cm{grid-template-columns:minmax(0,1fr)}
+@media (max-width:1000px){.sp-grid{grid-template-columns:minmax(0,1fr)}}
+.sp-alta,.sp-alta-fila{min-width:0}.sp-alta-fila input{min-width:0}
