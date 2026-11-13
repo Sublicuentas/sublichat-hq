@@ -45,21 +45,19 @@ let h = await abrirCM(1440, 1400); let pg = h.page;
 await recorte(pg, `1-cuenta-familiar${sufijo}.png`);
 if (!sufijo) {
   const txt = await pg.$eval('#cmSpotifyFamilias .sp-fam', (e) => e.innerText);
-  assert.match(txt, /Retiro en Spotify pendiente/); assert.match(txt, /No renovó/); assert.match(txt, /Correo del invitado/);
+  assert.match(txt, /Falta quitar en la app de Spotify/); assert.match(txt, /No renovó/); assert.match(txt, /Correo del invitado/); // R196o
   assert.equal(await pg.$$eval('#cmSpotifyFamilias select', (s) => s.length), 0, 'sin selector de cuentas');
-  // varias fichas con el mismo correo → elegir entre esas 2
-  await pg.fill(`#spAlta_${f1.id}`, 'compartido@ejemplo.test'); await pg.click(`[data-sp-alta="${f1.id}"] button[type="submit"]`);
-  await pg.waitForSelector('.sp-elegir', { timeout: 8000 }); await recorte(pg, '2-elegir-ficha.png');
-  assert.equal(await pg.$$eval('.sp-elegir [data-sp-elegir]', (b) => b.length), 3);
-  await pg.click('.sp-elegir [data-sp-elegir="1"]'); await pg.waitForSelector('.sp-msg.ok', { timeout: 8000 }); await pg.waitForTimeout(500);
+  // R196o · ya no se elige entre fichas: ese paso se quitó (ver tests/visual/r196o-spotify.mjs)
   // sin ficha → pendiente de vincular
   await pg.fill(`#spAlta_${f1.id}`, 'Nuevo.Cliente@Ejemplo.test'); await pg.click(`[data-sp-alta="${f1.id}"] button[type="submit"]`);
   await pg.waitForSelector('.sp-msg.warn', { timeout: 8000 }); await pg.waitForTimeout(500);
   await recorte(pg, '3-agregados-y-pendiente-de-vincular.png');
   const fam = await S.leerFamilia(db, f1.id);
-  assert.equal(fam.ocupados, 4); assert.ok(fam.miembros.some((m) => m.correo === 'nuevo.cliente@ejemplo.test' && !m.clienteId));
-  // 6.º invitado bloqueado
-  await pg.fill(`#spAlta_${f1.id}`, 'quinto@ejemplo.test'); await pg.click(`[data-sp-alta="${f1.id}"] button[type="submit"]`); await pg.waitForTimeout(900);
+  assert.equal(fam.ocupados, 2); // R196o · beto salió con «No renovó» assert.ok(fam.miembros.some((m) => m.correo === 'nuevo.cliente@ejemplo.test' && !m.clienteId));
+  // 6.º invitado bloqueado (R196o · se llena primero: beto ya liberó su espacio)
+  for (const c of ['c3@ejemplo.test', 'c4@ejemplo.test', 'c5@ejemplo.test']) await S.agregarPorCorreo(db, { familiaId: f1.id, correo: c });
+  await pg.evaluate(() => window.SublichatSpotifyCM && window.SublichatSpotifyCM.recargar()); await pg.waitForTimeout(800);
+  assert.equal(await pg.$(`#spAlta_${f1.id}`), null, 'llena: ya no hay campo para un 6.º');
   assert.match(await pg.$eval('#cmSpotifyFamilias .sp-fam', (e) => e.innerText), /Cuenta llena: 5 de 5/);
   await recorte(pg, '4-cuenta-llena.png');
   console.log('llamadas', [...new Set(llamadas)].join(','));
