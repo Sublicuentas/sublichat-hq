@@ -554,22 +554,25 @@ export default async function handler(req, res) {
     if (/^spotify[A-Z]/.test(accion)) {
       if (!(editorTv || PERMISOS.aplicar(permisosCtx, "spotify-familias", !!(PERMISOS.porDefecto && PERMISOS.porDefecto(authUser) || {})["spotify-familias"]))) return res.status(403).json({ ok: false, error: "No tiene acceso a Spotify Familiar." });
       const u = String(authUser.usuario || authUser.uid || "");
+      const adminMadres = spotifyFam.esAdministradorMadres(authUser); // R196o · crear/administrar madres: solo Sublicuentas
+      if (accion === "spotifyCrear" && !adminMadres) return res.status(403).json({ ok: false, error: "Solo Sublicuentas puede crear cuentas madre de Spotify." });
+      // R196o · Sin «Mover» ni «Desvincular»: el espacio se libera solo con «No renovó» o al quitar el servicio en la ficha.
+      if (accion === "spotifyMover" || accion === "spotifyDesvincular") return res.status(410).json({ ok: false, error: "Ya no se usa: el espacio se libera solo con «No renovó» o al quitar el servicio en la ficha." });
       try {
-        if (accion === "spotifyFamilias") return res.status(200).json({ ok: true, capacidad: spotifyFam.CAPACIDAD, familias: await spotifyFam.listarFamilias(db) });
+        if (accion === "spotifyFamilias") return res.status(200).json({ ok: true, puedeAdministrar: adminMadres, capacidad: spotifyFam.CAPACIDAD, familias: (await spotifyFam.listarFamilias(db)).filter((f) => f.estado !== "inactiva") });
         if (accion === "spotifyResolver") return res.status(200).json({ ok: true, familia: await spotifyFam.resolverCorreo(db, req.body.correo) });
         if (accion === "spotifyBuscar") return res.status(200).json({ ok: true, servicios: await spotifyFam.buscarServiciosSpotify(db, String(req.body.q || "")) });
         if (accion === "spotifyCrear") return res.status(200).json({ ok: true, familia: await spotifyFam.crearFamilia(db, { madreCorreo: req.body.madreCorreo, nota: req.body.nota, usuario: u }) });
         if (accion === "spotifyVincular") return res.status(200).json({ ok: true, familia: await spotifyFam.vincularInvitado(db, { familiaId: req.body.familiaId, correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u }) });
-        if (accion === "spotifyMover") return res.status(200).json({ ok: true, ...(await spotifyFam.moverInvitado(db, { correo: req.body.correo, destinoId: req.body.destinoId, usuario: u })) });
-        if (accion === "spotifyDesvincular") return res.status(200).json({ ok: true, ...(await spotifyFam.desvincular(db, { correo: req.body.correo, usuario: u })) });
         // R196 · Control Maestro › Spotify Premium Familiar (5 espacios por correo; cliente y vencimiento leídos de la ficha)
-        if (accion === "spotifyPanel") { try { await spotifyFam.sincronizarTodo(db); } catch (_) {} /* R196g · Bodega al día */ const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10); return res.status(200).json({ ok: true, hoy, capacidad: spotifyFam.CAPACIDAD, familias: await spotifyFam.panelFamilias(db, { hoy }) }); }
+        if (accion === "spotifyPanel") { try { await spotifyFam.sincronizarTodo(db); } catch (_) {} /* R196g · Bodega al día */ const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10); return res.status(200).json({ ok: true, hoy, puedeAdministrar: adminMadres, capacidad: spotifyFam.CAPACIDAD, familias: await spotifyFam.panelFamilias(db, { hoy }) }); }
         if (accion === "spotifyVincularEspacio") return res.status(200).json({ ok: true, familia: await spotifyFam.vincularInvitado(db, { familiaId: req.body.familiaId, correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, pendiente: req.body.pendiente === true, posicion: Number(req.body.posicion) || 0, usuario: u }) });
         // R196m · Alta directa por correo dentro de la cuenta madre (1 correo + Agregar, sin listas de cuentas).
         if (accion === "spotifyAgregarCorreo") return res.status(200).json({ ok: true, ...(await spotifyFam.agregarPorCorreo(db, { familiaId: req.body.familiaId, correo: req.body.correo, posicion: Number(req.body.posicion) || 0, clienteId: String(req.body.clienteId || ""), compraId: String(req.body.compraId || ""), usuario: u })) });
         if (accion === "spotifyCambiarCorreo") return res.status(200).json({ ok: true, ...(await spotifyFam.cambiarCorreo(db, { correoActual: req.body.correoActual, correoNuevo: req.body.correoNuevo, usuario: u })) });
         if (accion === "spotifyVincularFicha") return res.status(200).json({ ok: true, ...(await spotifyFam.vincularFicha(db, { correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u })) });
-        if (accion === "spotifyMarcar") return res.status(200).json({ ok: true, ...(await spotifyFam.marcarMiembro(db, { correo: req.body.correo, estadoInvitacion: req.body.estadoInvitacion, retiroPendiente: typeof req.body.retiroPendiente === "boolean" ? req.body.retiroPendiente : undefined, usuario: u })) });
+        if (accion === "spotifyMarcar") return res.status(200).json({ ok: true, ...(await spotifyFam.marcarMiembro(db, { correo: req.body.correo, estadoInvitacion: req.body.estadoInvitacion, retiroPendiente: req.body.retiroPendiente === false ? false : undefined /* R196o · no hay marca manual de retiro */, usuario: u })) });
+        if (accion === "spotifyConfirmarRetiro") return res.status(200).json({ ok: true, ...(await spotifyFam.confirmarRetiroExterno(db, { familiaId: req.body.familiaId, correo: req.body.correo, usuario: u })) }); // R196o
         if (accion === "spotifyLiberar") return res.status(200).json({ ok: true, ...(await spotifyFam.liberarEspacio(db, { correo: req.body.correo, confirmoRetiro: req.body.confirmoRetiro === true, usuario: u })) });
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e) }); }
       return res.status(400).json({ ok: false, error: "Acción de Spotify desconocida." });
