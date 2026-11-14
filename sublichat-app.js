@@ -1535,13 +1535,13 @@ async function invSpotifyFamilias(){
   const fam=j.familias.find(f=>f.id===st.abierta);
   const lista=j.familias.map(f=>`<button class="cobro-btn" data-spf="${clienteEsc(f.id)}" type="button" style="width:100%;margin:4px 0;text-align:left;${f.id===st.abierta?"border-color:#e2231a":""}"><b>${clienteEsc(f.codigo)}</b> · ${clienteEsc(f.madreCorreo)} · <b>${f.ocupados}/${f.capacidad}</b>${f.estado==="inactiva"?" · inactiva":""}</button>`).join("")||`<p class="cr-hint">Todavía no hay familias.</p>`;
   const detalle=fam?`<div class="cr-label" style="margin-top:12px">${clienteEsc(fam.codigo)} · Madre: ${clienteEsc(fam.madreCorreo)} · Invitados ${fam.ocupados}/${fam.capacidad}</div>
-    ${fam.miembros.filter(m=>m.estado==="activo").map(m=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(m.correo)}${m.clienteNombre?` · ${clienteEsc(m.clienteNombre)}`:" · <i>sin ficha</i>"} · ${m.retiroPendiente?`<b style="color:#c81e1e">Retiro en Spotify pendiente</b>`:`<b style="color:#15803d">Vinculada</b>`}</span></div>`).join("")}
+    ${fam.miembros.filter(m=>m.estado==="activo").map(m=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(m.correo)}${m.clienteNombre?` · ${clienteEsc(m.clienteNombre)}`:" · <i>sin ficha</i>"} · ${m.retiroPendiente?`<b style="color:#c81e1e">Retiro en Spotify pendiente</b>`:`<b style="color:#15803d">Vinculada</b>`}</span>${j.puedeAdministrar?`<button class="cobro-btn" data-spf-elim="${clienteEsc(m.correo)}" type="button" style="width:auto;margin:0">Eliminar correo</button>`:""}</div>`).join("")}
     ${Array.from({length:fam.libres}).map(()=>`<div class="iv-row"><span class="cr-hint">+ Espacio disponible</span></div>`).join("")}
     ${fam.libres?`<div class="cr-label" style="margin-top:10px">Correo del invitado</div>
       <div class="iv-row" style="gap:8px"><input class="serv-input" id="spfNuevo" type="email" placeholder="cliente@gmail.com" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfAgregar" type="button" style="width:auto;margin:0">Agregar</button></div>
       ${st.msg?`<div class="cr-hint" role="status">${clienteEsc(st.msg)}</div>`:""}
       <div class="cr-hint">Si el correo tiene ficha Spotify, se vincula sola. Si no, se vincula cuando se registre (no se crea cliente ni venta). «No renovó» en la ficha libera el espacio. Sublichat no envía invitaciones ni revisa Spotify.</div>`:`<p class="cr-hint">Familia completa (5 de 5).</p>`}
-    ${(fam.pendientesSpotify||[]).length?`<div class="cr-hint" style="margin-top:8px"><b>Falta quitar en la app de Spotify</b> (ya no ocupan espacio): ${fam.pendientesSpotify.map(p=>clienteEsc(p.correo)).join(", ")}</div>`:""}`:"";
+    ${(fam.pendientesSpotify||[]).length?`<div class="cr-hint" style="margin-top:8px"><b>Falta quitar en la app de Spotify</b> (ya no ocupan espacio):</div>${fam.pendientesSpotify.map(p=>`<div class="iv-row" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px">${clienteEsc(p.correo)}</span><button class="cobro-btn" data-spf-quitado="${clienteEsc(p.correo)}" type="button" style="width:auto;margin:0">Ya lo quité en Spotify</button></div>`).join("")}`:""}`:"";
   box.innerHTML=`<div class="cr-label">🎵 Spotify Familiar · ${j.familias.length} familia${j.familias.length===1?"":"s"}</div>${lista}
     ${j.puedeAdministrar?`<div class="iv-row" style="gap:8px;margin-top:8px"><input class="serv-input" id="spfMadre" placeholder="correo madre (administradora)" style="flex:1;margin:0"><button class="cobro-btn renew" id="spfCrear" type="button" style="width:auto;margin:0">Crear familia</button></div>`:""}${detalle}`;
   const post=async(body,ok)=>{try{const r=await invPost(body);if(r.ok){mostrarToast(ok+(r.advertencia?` · ${r.advertencia}`:""));if(r.familia&&r.familia.id)st.abierta=r.familia.id;invSpotifyFamilias();}else mostrarToast("⚠️ "+(r.error||"Error"));}catch(_){mostrarToast("⚠️ No pude conectar.");}};
@@ -1554,6 +1554,13 @@ async function invSpotifyFamilias(){
       st.msg=r.pendienteVincular?"⚠️ "+r.aviso:(r.familia&&r.familia.idempotente?"Ese correo ya estaba en esta cuenta: no se duplicó.":"✅ Agregado y vinculado con su ficha.");invSpotifyFamilias();
     }catch(_){mostrarToast("⚠️ No pude conectar.");if(btn)btn.disabled=false;}};
   box.querySelector("#spfAgregar")?.addEventListener("click",()=>agregar());
+  // R196p · Eliminar correo (solo Sublicuentas; el servidor también lo verifica): misma función que Telegram y APK.
+  box.querySelectorAll("[data-spf-elim]").forEach(b=>b.addEventListener("click",async()=>{const c=b.dataset.spfElim;if(!confirm(`¿Eliminar ${c} de la familia ${fam.codigo}?\n\nSe libera el espacio. El cliente, su ficha, ventas e historial no se borran. Falta quitarlo en la app de Spotify.`))return;b.disabled=true;
+    try{const r=await invPost({accion:"spotifyEliminarCorreo",familiaId:fam.id,correo:c});
+      if(!r.ok){mostrarToast("⚠️ "+(r.error||"No se pudo eliminar."));b.disabled=false;return;}
+      st.msg=r.yaEstaba?"▫️ "+r.aviso:`✅ Correo eliminado de ${r.codigo}. Espacios ocupados: ${r.ocupados}/${r.capacidad}. Falta quitarlo en la app de Spotify.`;mostrarToast(st.msg);invSpotifyFamilias();
+    }catch(_){mostrarToast("⚠️ No pude conectar: no se eliminó.");b.disabled=false;}}));
+  box.querySelectorAll("[data-spf-quitado]").forEach(b=>b.addEventListener("click",()=>{if(confirm(`¿Ya quitó a ${b.dataset.spfQuitado} de la familia en la app de Spotify?`))post({accion:"spotifyConfirmarRetiro",familiaId:fam.id,correo:b.dataset.spfQuitado},"✅ Listo");}));
 }
 async function invCargarPlanesTv(){try{const j=await invPost({accion:"planesTv"});if(j&&j.ok&&typeof window.sublichatAplicarPlanesTv==="function")window.sublichatAplicarPlanesTv(j.planes);}catch(_){}}
 // Validar (solo lee) y Reparar (idempotente) Bodega ↔ fichas.
