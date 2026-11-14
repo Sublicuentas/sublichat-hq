@@ -1130,7 +1130,7 @@
 
   function accountsForSelectedPlatform(audit=state.accountAudit){
     const accounts=audit?.accounts||[];
-    return state.accountPlatform==='all'?accounts:accounts.filter((a)=>a.family===state.accountPlatform);
+    return state.accountPlatform==='all'?accounts.filter((a)=>a.family!=='spotifyfamiliar'):accounts.filter((a)=>a.family===state.accountPlatform); // R196r · Spotify Familiar se revisa por familia (no por «cuentas» genéricas)
   }
 
   // La tarjeta y su filtro deben usar la misma condición, incluida una cuenta
@@ -1363,7 +1363,8 @@
     const groups=Object.keys(audit?.platforms||{}).map((family)=>{
       const accounts=(audit.accounts||[]).filter((a)=>a.family===family);
       const meta=platformTileMeta(family);
-      return {family,name:meta.label,short:meta.short,logo:meta.logo,color:platformColor(family),count:accounts.length,...reviewProgress(accounts)};
+      const sp=family==='spotifyfamiliar'&&window.SublichatSpotifyCM&&window.SublichatSpotifyCM.resumen?window.SublichatSpotifyCM.resumen():null; // R196r · Spotify Familiar: % de familias revisadas
+      return {family,name:meta.label,short:meta.short,logo:meta.logo,color:platformColor(family),count:accounts.length,...reviewProgress(accounts),...(sp&&sp.total?{count:sp.total,percent:sp.percent}:{})};
     });
     return platformOrder(groups);
   }
@@ -1554,16 +1555,16 @@
       </div>
       <p class="cm-platform-order-hint">Cuentas revisadas: de menor a mayor porcentaje · 100% al final.</p>
       <div class="cm-platform-row">${tiles.map((it)=>`<button type="button" class="cm-platform-tile ${state.accountPlatform===it.family?'on':''}" data-cm-audit-platform="${esc(it.family)}" title="${esc(it.name)}">${platformLogoHtml(it,'cm-platform-tile-logo',it.color)}<b>${esc(it.percent)}%</b><small>${esc(it.name)}</small></button>`).join('')}</div>
-      <div class="cm-workspace-search"><label class="cm-search"><span aria-hidden="true">⌕</span><input id="cmAccountSearch" aria-label="Buscar cuenta, cliente, correo, perfil o PIN" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>
+      ${state.accountPlatform==='spotifyfamiliar'?'':`<div class="cm-workspace-search"><label class="cm-search"><span aria-hidden="true">⌕</span><input id="cmAccountSearch" aria-label="Buscar cuenta, cliente, correo, perfil o PIN" value="${esc(state.accountQuery)}" placeholder="Buscar cuenta, cliente, correo, perfil o PIN…"></label></div>`}<!-- R196r · Spotify Familiar: familias reales (sin la lista genérica que mezclaba madres e invitados) -->
       <div class="cm-selected-platform">
         <div class="cm-selected-platform-head">
-          <div class="cm-selected-platform-main">${platformLogoHtml(selectedMeta,'cm-selected-platform-logo',selectedColor)}<div><h3>${esc(selectedName)}</h3><p>${scopedAccounts.length} cuentas totales</p></div></div>
-          <div class="cm-selected-progress"><div class="cm-selected-progress-bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>
+          <div class="cm-selected-platform-main">${platformLogoHtml(selectedMeta,'cm-selected-platform-logo',selectedColor)}<div><h3>${esc(selectedName)}</h3><p>${state.accountPlatform==='spotifyfamiliar'?'Familias reales · revisión por correo':`${scopedAccounts.length} cuentas totales`}</p></div></div>
+          ${state.accountPlatform==='spotifyfamiliar'?'':`<div class="cm-selected-progress"><div class="cm-selected-progress-bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>`}
         </div>
-        <div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>
+        ${state.accountPlatform==='spotifyfamiliar'?'':`<div class="cm-status-cards">${cards.map((card)=>`<button type="button" class="cm-status-card ${state.accountStatus===card.key?'on':''}" data-cm-audit-status="${card.key}"><span class="cm-status-icon">${card.icon}</span><span><small>${esc(card.label)}</small><b>${card.value}</b></span></button>`).join('')}</div>`}
       </div>
       ${state.accountPlatform==='spotifyfamiliar'?'<div id="cmSpotifyFamilias"></div>':''}<!-- R196 · solo Spotify Premium Familiar: 5 espacios por correo -->
-      <div id="cmAccountResults">${accountResultsHtml()}</div>
+      <div id="cmAccountResults">${state.accountPlatform==='spotifyfamiliar'?'':accountResultsHtml()}</div>
     </section>`;
   }
 
