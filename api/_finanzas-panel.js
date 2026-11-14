@@ -13,8 +13,8 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
-import { createRequire } from "node:module";
-const requireCjs = createRequire(import.meta.url);
+import spotifyFam from "./_spotify-familias.js"; // R196s · antes se cargaba con require dinámico + meta.url: Vercel compila api/ como CommonJS y esa
+// referencia de módulo ES tumbaba TODO /api/finanzas al cargar (500 «A server error has occurred» en Control financiero).
 
 const r2 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
 const r6 = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : 0; };
@@ -567,7 +567,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
           historial: [...(a.historial || []), { at: ahora, por: actor, antes: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, despues: n }].slice(-30) });
         audit(tx, { accion: "spotify_familiar_pago", targetType: "spotify_familia", targetId: fid, before: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, after: n });
       });
-      try { await requireCjs("./_spotify-familias.js").sincronizarBodega(db, fid); } catch (_) {} // Bodega muestra pago y renovación
+      try { await spotifyFam.sincronizarBodega(db, fid); } catch (_) {} // Bodega muestra pago y renovación
       return ok({ familiaId: fid });
     }
 
