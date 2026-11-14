@@ -294,7 +294,9 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   }
 
   if (accion === "finanzas_resumen") {
-    const { methods, libro, totales, saldos } = await estadoLibro(db);
+    const t0 = Date.now(); // R196s · medición para diagnosticar el 500 de la APK (sin datos de clientes ni montos en el log)
+    const { methods, libro, totales, saldos, movimientos } = await estadoLibro(db);
+    console.log("FINANZAS_RESUMEN", JSON.stringify({ movimientos: movimientos.length, desde: libro.lecturaDesde, ms: Date.now() - t0, rssMb: Math.round(process.memoryUsage().rss / 1048576), usuario: identity.role }));
     const [pagosSnap, cierresSnap] = await Promise.all([
       db.collection("planilla_pagos").where("cicloId", "==", libro.cicloId).get(),
       db.collection("finanzas_ciclos").orderBy("cerradoAt", "desc").limit(6).get().catch(() => ({ docs: [] })),
@@ -313,7 +315,8 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
   // R186 · Mes calendario de Honduras: tarjeta de la APK/Web y el Excel salen de esta misma consulta.
   if (accion === "finanzas_mes" || accion === "finanzas_conciliacion_mes") {
     const per = periodoHN(new Date(), String(body.periodo || ""));
-    const all = rowsOf(await movementsRangoQuery(db, per.desde, per.hasta).limit(20000).get());
+    const t0 = Date.now(); const all = rowsOf(await movementsRangoQuery(db, per.desde, per.hasta).limit(20000).get());
+    console.log("FINANZAS_MES", JSON.stringify({ movimientos: all.length, periodo: per.periodo, ms: Date.now() - t0, rssMb: Math.round(process.memoryUsage().rss / 1048576) })); // R196s · diagnóstico
     const ctx = await contextoProductosR193(db, all);
     const r = resumenMes(all, per, ctx);
     if (accion === "finanzas_mes") return res.status(200).json({ ok: true, accion, periodo: per.periodo, zona: "America/Tegucigalpa", generado: isoNow(), ...r, excel: { desde: per.desde, hasta: per.hasta, nombre: `finanzas_${per.periodo}.xlsx` } });
