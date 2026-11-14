@@ -110,7 +110,7 @@ test('T09/T10 · sin Mover, Desvincular ni listas de fichas en Web y Control Mae
   assert.match(app, /\$\{j\.puedeAdministrar\?`<div class="iv-row"/);
   assert.match(app, /espacio liberado \(\$\{r\.ocupados\}\/\$\{r\.capacidad\|\|5\}\)/);
   const html = R('index.html');
-  assert.match(html, /control-maestro-spotify\.js\?v=20261113-r196p/); assert.match(html, /sublichat-app\.js\?v=20261113-r196p/);
+  assert.match(html, /control-maestro-spotify\.js\?v=20261113-r196p/); assert.match(html, /sublichat-app\.js\?v=2026111[3-9]-r196[p-z]/);
   // la baja sigue usando la misma función del servidor en Web/APK (renovar.js) y en el bot (copia fiel)
   assert.match(R('api/renovar.js'), /spotifyFam\.retirarPorBaja\(db, \{ correo: correoBaja/);
   const bot = new URL('../../bot-gh/lib_spotify_familias.js', import.meta.url);
