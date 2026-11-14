@@ -556,6 +556,7 @@ export default async function handler(req, res) {
       const u = String(authUser.usuario || authUser.uid || "");
       const adminMadres = spotifyFam.esAdministradorMadres(authUser); // R196o · crear/administrar madres: solo Sublicuentas
       if (accion === "spotifyCrear" && !adminMadres) return res.status(403).json({ ok: false, error: "Solo Sublicuentas puede crear cuentas madre de Spotify." });
+      if (accion === "spotifyEliminarCorreo" && !adminMadres) return res.status(403).json({ ok: false, error: "Solo Sublicuentas puede eliminar correos de Spotify Familiar." }); // R196p
       // R196o · Sin «Mover» ni «Desvincular»: el espacio se libera solo con «No renovó» o al quitar el servicio en la ficha.
       if (accion === "spotifyMover" || accion === "spotifyDesvincular") return res.status(410).json({ ok: false, error: "Ya no se usa: el espacio se libera solo con «No renovó» o al quitar el servicio en la ficha." });
       try {
@@ -572,6 +573,7 @@ export default async function handler(req, res) {
         if (accion === "spotifyCambiarCorreo") return res.status(200).json({ ok: true, ...(await spotifyFam.cambiarCorreo(db, { correoActual: req.body.correoActual, correoNuevo: req.body.correoNuevo, usuario: u })) });
         if (accion === "spotifyVincularFicha") return res.status(200).json({ ok: true, ...(await spotifyFam.vincularFicha(db, { correo: req.body.correo, clienteId: req.body.clienteId, compraId: req.body.compraId, usuario: u })) });
         if (accion === "spotifyMarcar") return res.status(200).json({ ok: true, ...(await spotifyFam.marcarMiembro(db, { correo: req.body.correo, estadoInvitacion: req.body.estadoInvitacion, retiroPendiente: req.body.retiroPendiente === false ? false : undefined /* R196o · no hay marca manual de retiro */, usuario: u })) });
+        if (accion === "spotifyEliminarCorreo") return res.status(200).json({ ok: true, ...(await spotifyFam.eliminarCorreo(db, { familiaId: req.body.familiaId, correo: req.body.correo, usuario: u, motivo: "manual" })) }); // R196p
         if (accion === "spotifyConfirmarRetiro") return res.status(200).json({ ok: true, ...(await spotifyFam.confirmarRetiroExterno(db, { familiaId: req.body.familiaId, correo: req.body.correo, usuario: u })) }); // R196o
         if (accion === "spotifyLiberar") return res.status(200).json({ ok: true, ...(await spotifyFam.liberarEspacio(db, { correo: req.body.correo, confirmoRetiro: req.body.confirmoRetiro === true, usuario: u })) });
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e) }); }
