@@ -466,6 +466,8 @@ function flattenCliente(doc, clienteId=""){
       clienteCompartido:doc.clienteCompartido===true||canonicalVendedoresLista(doc.vendedores,vendedor).length>1,
       srvIndex,
       compraId:String(s.compraId||""),modalidad:perfiles.length>1?"multiperfil":"individual",cantidadPerfiles:perfiles.length,perfiles,
+      // R196q · modalidad comercial GUARDADA en la compra (la misma que lee Telegram); Viki solo existe como cuenta completa
+      tipoVenta:String(s.tipoVenta||"")==="cuenta_completa"||/^viki/i.test(String(s[F.s_plataforma]||""))?"cuenta_completa":String(s.tipoVenta||""),categoria:String(s.categoria||""),cuentaInventarioId:String(s.cuentaInventarioId||""),
       token:tokenGrupo,servicioToken:String(s.token||""),dispositivo:String(s.dispositivo||""),esRoku:!!s.esRoku,
       beneficiarioTipo,beneficiarioNombre,beneficiarioKey,
       visibilidadUrl:s.visibilidadUrl||{modo:"plataforma"},
@@ -789,7 +791,7 @@ window.sublichatControlData=()=>({
       const nombrePerfilReal=(usaBeneficiario?beneficiarioNombre:nombrePerfilGuardado)||pagadoPor||'Sin nombre';
       return {
         clienteId:c.clienteId||'',servicioIndex:Number(c.srvIndex)||0,perfilIndex,perfilId:p.perfilId||'',compraId:c.compraId||'',
-        cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),
+        cantidadPerfiles:Number(c.cantidadPerfiles)||1,modalidad:c.modalidad||'individual',perfiles:(c.perfiles||[]).map(x=>({...x})),tipoVenta:c.tipoVenta||'',cuentaInventarioId:c.cuentaInventarioId||'', // R196q
         titular:pagadoPor,pagadoPor,beneficiarioTipo:esTercero?'tercero':'titular',beneficiarioNombre,
         nombre:nombrePerfilReal,telefono:c.telefono||'',vendedor:c.vendedor||'',
         plataforma:c.plataformaRaw||c.plataforma||'',plataformaLabel:c.plataforma||'',precio:perfilIndex===0?(Number(c.precio)||0):0,precioCompra:Number(c.precio)||0,
@@ -800,7 +802,7 @@ window.sublichatControlData=()=>({
   }),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
-    disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
+    disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',modalidadVenta:c.modalidadVenta||'',exclusivaCompraId:c.exclusivaCompraId||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
       clienteId:p.clienteId||p.clientId||p.idCliente||'',
       compraId:p.compraId||p.servicioId||'',
       perfilId:p.perfilId||p.profileId||p.idPerfil||'',
@@ -3207,7 +3209,7 @@ function cobroEtiquetaServicios(servicios){
   if(servicios.length===1){
     const s=servicios[0]||{};
     const cantidad=Number(s.cantidadPerfiles)||1;
-    return `${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}${cantidad>1?` · ${cantidad} perfiles`:""}`;
+    return `${s.plataforma||platLabel(s.plataformaRaw)||"Servicio"}${s.tipoVenta==="cuenta_completa"?" · cuenta completa":cantidad>1?` · ${cantidad} perfiles`:""}`;
   }
   const conteo=new Map();
   servicios.forEach(s=>{
@@ -3777,7 +3779,7 @@ function pintarGestion(){
     <div class="cg-item">
       <div class="cg-info">
         <div class="cg-plat">${s.plataforma}</div>
-        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"} · 🧾 ${clienteEsc(s.vendedor||"Sin vendedor")}</div>
+        <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${s.tipoVenta==="cuenta_completa"?"<b>Cuenta completa</b>":`${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"}`} · 🧾 ${clienteEsc(s.vendedor||"Sin vendedor")}</div>
       </div>
       <div class="cg-act">
         <button class="edit" data-i="${i}" title="Editar">✏️</button>

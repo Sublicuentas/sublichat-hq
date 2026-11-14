@@ -564,6 +564,21 @@
     return allowed[0]||'sin_plataforma';
   }
 
+  // R196q · Tipo de venta de la cuenta (solo reconocimiento, autorizado 14/11/2026). Sale de la modalidad GUARDADA en la compra
+  // (tipoVenta) y de la marca de exclusividad que deja la conversión en Bodega; NUNCA de «tiene 1 perfil ocupado».
+  //   cuenta_completa → una sola compra «cuenta completa» y nadie más en la cuenta · perfil → ninguna compra «cuenta completa»
+  //   revisar → datos que no cuadran (p. ej. cuenta completa + perfiles de otros, o marca exclusiva sin su compra): no se convierte nada.
+  function accountSaleType(g){
+    const cc=new Set(),otros=new Set();
+    (g.services||[]).forEach((s)=>{const k=String(s.compraId||`${s.clienteId}|${s.servicioIndex}`);(String(s.tipoVenta||'')==='cuenta_completa'?cc:otros).add(k);});
+    const marcas=new Set((g.inventoryAccounts||[]).filter((a)=>String(a.modalidadVenta||'')==='cuenta_completa'&&a.exclusivaCompraId).map((a)=>String(a.exclusivaCompraId)));
+    (g.invClients||[]).forEach((p)=>{const k=String(p.compraId||'');if(!k||!cc.has(k))otros.add(k||`inv|${p.nombre||''}`);});
+    otros.forEach((k)=>{if(cc.has(k))otros.delete(k);});
+    if(!cc.size&&!marcas.size)return {code:'perfil',label:'PERFIL COMPARTIDO'};
+    if(cc.size===1&&!otros.size&&(!marcas.size||[...marcas].every((m)=>cc.has(m))))return {code:'cuenta_completa',label:'CUENTA COMPLETA'};
+    return {code:'revisar',label:'REVISAR TIPO'};
+  }
+  function saleTypeTag(a){const t=a&&a.saleType;return t&&t.code!=='perfil'?`<span class="cm-sale-type ${esc(t.code)}">${esc(t.label)}</span>`:'';}
   function buildAccountAudit(src,analysis){
     const groups=new Map();
     const hasExcelAudit=!!analysis?.sheets?.length;
@@ -779,7 +794,8 @@
       const capacity=g.capacidad||Math.max(occupied,maxExcelProfile);
       accounts.push({
         ...g,rawPlatforms:[...g.rawPlatforms],excelSheets:[...g.excelSheets],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
-        requiresPassword,requiresEmail,missingEmail,missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0
+        requiresPassword,requiresEmail,missingEmail,missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0,
+        saleType:accountSaleType(g)
       });
     });
 
@@ -1383,9 +1399,9 @@
       const tone=life.tone==='expired'?'bad':(life.tone==='soon'?'warn':'ok');
       return `<button type="button" class="cm-account-list-row ${isSelected?'is-selected':''}" data-cm-select-account="${esc(a.key)}">
         <span class="cm-account-list-num">${i+1}</span>
-        <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small></span>
+        <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small>${saleTypeTag(a)}</span>
         <span class="cm-account-list-info">
-          <span class="cm-account-list-meta"><small>${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles</small><small>${esc(review.rowText)}</small></span>
+          <span class="cm-account-list-meta"><small>${a.saleType&&a.saleType.code==='cuenta_completa'?'1 cliente · exclusiva':`${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles`}</small><small>${esc(review.rowText)}</small></span>
           <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
           <span class="cm-account-list-date">${esc(life.nextText)}</span>
         </span>
@@ -1457,7 +1473,7 @@
           <p><b>COINCIDE</b> en verde: el cliente está registrado en esta cuenta y en la base de datos del TG.</p>
         </div>
         <div class="cm-detail-side">
-          <span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>
+          ${account.saleType&&account.saleType.code==='cuenta_completa'?'<span class="cm-detail-badge">🔐 Cuenta completa · 1 cliente</span>':`<span class="cm-detail-badge">👥 ${(account.roster||[]).length} perfiles</span>`}${saleTypeTag(account)}
           <span class="cm-detail-review ${esc(review.tone)}">${review.isReviewed?'Cuenta revisada':'Cuenta por revisar'}</span>
           ${account.missingInventory?'<span class="cm-detail-review due">Cuenta no vinculada</span>':''}
         </div>
@@ -1465,7 +1481,7 @@
       <div class="cm-account-summary">
         <div class="cm-account-summary-main">
           ${platformLogoHtml(platformTileMeta(account.family),'cm-account-logo',platformColor(account.family))}
-          <div><b>${esc(account.email||'Sin cuenta')}</b><small>${esc(account.platform||auditPlatformLabel(account.family))} · ${(account.roster||[]).length}/${account.capacity||0} perfiles</small></div>
+          <div><b>${esc(account.email||'Sin cuenta')}</b><small>${esc(account.platform||auditPlatformLabel(account.family))} · ${account.saleType&&account.saleType.code==='cuenta_completa'?'CUENTA COMPLETA (exclusiva)':account.saleType&&account.saleType.code==='revisar'?'REVISAR TIPO':`${(account.roster||[]).length}/${account.capacity||0} perfiles · PERFIL COMPARTIDO`}</small></div>
         </div>
         <div class="cm-account-summary-metrics">
           <span class="cm-pill">${esc(life.label)}</span>
