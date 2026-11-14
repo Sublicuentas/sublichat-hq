@@ -101,17 +101,16 @@ test('T07 · renovar no pide madre, no mueve ni duplica; T08 · la ficha queda c
 
 test('T09/T10 · sin Mover, Desvincular ni listas de fichas en Web y Control Maestro; todo pasa por las mismas acciones del servidor', () => {
   const cm = R('control-maestro-spotify.js'), app = R('sublichat-app.js');
-  for (const [n, s] of [['control-maestro-spotify.js', cm], ['sublichat-app.js (Spotify)', app.slice(app.indexOf('async function invSpotifyFamilias'), app.indexOf('async function invCargarPlanesTv'))]]) {
+  // R196p · Control Maestro pasó a SOLO CONSULTA (sin acciones): ver r196p-spotify-cm-consulta. Aquí solo la web operativa.
+  assert.doesNotMatch(cm, /spotifyMover|spotifyDesvincular|data-sp-acc|spotifyAgregarCorreo/);
+  for (const [n, s] of [['sublichat-app.js (Spotify)', app.slice(app.indexOf('async function invSpotifyFamilias'), app.indexOf('async function invCargarPlanesTv'))]]) {
     assert.doesNotMatch(s, /spotifyMover|spotifyDesvincular|Mover a|>Desvincular<|data-spd=|data-sp-elegir|requiereElegir|elegirFicha|spotifyBuscar/, n);
     assert.match(s, /spotifyAgregarCorreo/, n);
   }
-  assert.doesNotMatch(cm, /b\('mover'|b\('retiro'|b\('ficha'/);
-  assert.match(cm, /accion: 'spotifyConfirmarRetiro'/);
-  assert.match(cm, /st\.puedeAdministrar \? '<button type="button" class="cm-btn primary" data-sp-acc="crear">/);
   assert.match(app, /\$\{j\.puedeAdministrar\?`<div class="iv-row"/);
   assert.match(app, /espacio liberado \(\$\{r\.ocupados\}\/\$\{r\.capacidad\|\|5\}\)/);
   const html = R('index.html');
-  assert.match(html, /control-maestro-spotify\.js\?v=20261112-r196o/); assert.match(html, /sublichat-app\.js\?v=20261112-r196o/);
+  assert.match(html, /control-maestro-spotify\.js\?v=20261113-r196p/); assert.match(html, /sublichat-app\.js\?v=20261113-r196p/);
   // la baja sigue usando la misma función del servidor en Web/APK (renovar.js) y en el bot (copia fiel)
   assert.match(R('api/renovar.js'), /spotifyFam\.retirarPorBaja\(db, \{ correo: correoBaja/);
   const bot = new URL('../../bot-gh/lib_spotify_familias.js', import.meta.url);

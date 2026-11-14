@@ -43,7 +43,7 @@ test('F · regresión: Netflix y Disney de la misma ficha no cambian; Control Ma
   assert.deepEqual(caro.servicios.find((s) => s.compraId === 'nf-caro'), { compraId: 'nf-caro', plataforma: 'netflix', correo: 'nf@ejemplo.com' });
   assert.deepEqual((await db.collection('clientes').doc('eva').get()).data(), semilla().clientes.eva);
   const cm = fs.readFileSync(new URL('../control-maestro-spotify.js', import.meta.url), 'utf8');
-  assert.match(cm, /data-sp-alta=/); assert.match(cm, /accion: 'spotifyAgregarCorreo'/);
+  assert.doesNotMatch(cm, /data-sp-alta=|spotifyAgregarCorreo/, 'R196p · Control Maestro es solo consulta: la alta está en Telegram, Bodega y APK');
   assert.doesNotMatch(cm, /b\('vincular', 'Vincular invitado/, 'la alta ya no abre la búsqueda de fichas');
   const app = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
   assert.doesNotMatch(app, /id="spfBuscar"/); assert.match(app, /accion:"spotifyAgregarCorreo"/);
