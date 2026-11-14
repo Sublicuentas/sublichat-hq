@@ -68,14 +68,17 @@ test('T11 · nunca 6: dos altas a la vez en el último espacio → entra una; la
 
 test('T05 · Control Maestro solo consulta: sin formulario, +, ⋮, Agregar, Mover, Desvincular, Eliminar ni «Relación con Sublichat»', () => {
   const cm = R('control-maestro-spotify.js').replace(/\/\*[\s\S]*?\*\//g, ''); // sin el comentario de cabecera
-  assert.doesNotMatch(cm, /<form|<button|<select|data-sp-acc|data-sp-menu|data-sp-slot|data-sp-alta|Relación con Sublichat|Correo del invitado|spotifyAgregarCorreo|spotifyEliminarCorreo|spotifyCrear|spotifyMover|spotifyDesvincular|spotifyMarcar|spotifyLiberar|prompt\(|confirm\(/);
-  assert.match(cm, /accion: 'spotifyPanel'/); assert.match(cm, /Cuenta madre: /); assert.match(cm, /'Espacio libre'/);
+  // R196r (PDF 14/11/2026): Control Maestro sigue sin alta/movimiento/baja; SOLO se agregan los controles de revisión.
+  assert.doesNotMatch(cm, /<form|<select|data-sp-acc|data-sp-menu|data-sp-slot|data-sp-alta|Relación con Sublichat|Correo del invitado|spotifyAgregarCorreo|spotifyEliminarCorreo|spotifyCrear|spotifyMover|spotifyDesvincular|spotifyMarcar|spotifyLiberar|confirm\(|>[^<]*(Mover|Desvincular|Agregar invitado|Eliminar)[^<]*</);
+  const botones = [...cm.matchAll(/data-sp-([a-z]+)=?/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(botones)].sort(), ['abrir', 'detalle', 'incidencia', 'recargar', 'resync', 'revisada', 'verificar']);
+  assert.match(cm, /accion: 'spotifyPanel'/); assert.match(cm, /'Espacio libre'/);
   assert.doesNotMatch(R('control-maestro-spotify.css'), /gradient/);
   // la web operativa (Bodega › Spotify) sí tiene «Eliminar correo», solo con permiso
   const app = R('sublichat-app.js');
   assert.match(app, /\$\{j\.puedeAdministrar\?`<button class="cobro-btn" data-spf-elim=/);
   assert.match(app, /invPost\(\{accion:"spotifyEliminarCorreo",familiaId:fam\.id,correo:c\}\)/);
-  assert.match(R('index.html'), /control-maestro-spotify\.css\?v=20261113-r196p/);
+  assert.match(R('index.html'), /control-maestro-spotify\.css\?v=2026111[3-9]-r196[p-z]/);
   const bot = new URL('../../bot-gh/lib_spotify_familias.js', import.meta.url);
   if (fs.existsSync(bot)) assert.equal(fs.readFileSync(bot, 'utf8').split('\n').slice(1).join('\n'), R('api/_spotify-familias.js').split('\n').slice(1).join('\n'), 'bot = copia fiel');
 });
