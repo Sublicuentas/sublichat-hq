@@ -92,7 +92,7 @@ export default async function handler(req, res) {
           console.error("PARTIDOS_HTTP", r.status, url.slice(0, 140));
           const reintentable = r.status === 429 || r.status >= 500;
           if (reintentable && n < tries) { await new Promise(x => setTimeout(x, 400)); continue; }
-          if (r.status !== 404) fallas.push(fuenteCorta(url) + " HTTP " + r.status); // 404 = liga sin calendario, no es falla
+          if (r.status !== 404) (opt.falla || (x => fallas.push(x)))(fuenteCorta(url) + " HTTP " + r.status); // 404 = liga sin calendario, no es falla
           break;
         }
         const d = await r.json();
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error("PARTIDOS_FETCH", (e && e.name) || "error", url.slice(0, 140));
         if (n < tries) { await new Promise(x => setTimeout(x, 400)); continue; }
-        fallas.push(fuenteCorta(url) + " " + ((e && e.name === "AbortError") ? "tiempo agotado" : "sin respuesta"));
+        (opt.falla || (x => fallas.push(x)))(fuenteCorta(url) + " " + ((e && e.name === "AbortError") ? "tiempo agotado" : "sin respuesta"));
       } finally {
         clearTimeout(t);
       }
@@ -115,12 +115,21 @@ export default async function handler(req, res) {
   const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
   const ymdCompact = d => diaHN(d).replace(/-/g, "");
 
+  // R196t · ESPN dejó de aceptar el rango «dates=AAAAMMDD-AAAAMMDD&limit=300» (HTTP 400 en todas las ligas desde el
+  // 15/11; log PARTIDOS_HTTP 400). La consulta de UN día (la que usa «Hoy») sigue respondiendo. Ahora el rango se arma
+  // con un día por consulta, en paralelo y con caché por URL; solo es falla si NINGÚN día respondió.
   async function espnScoreboardRango(path, diasAdelante = 7) {
-    const start = new Date();
-    const end = new Date(Date.now() + diasAdelante * 86400000);
-    const url = `${ESPN_BASE}/${path}/scoreboard?dates=${ymdCompact(start)}-${ymdCompact(end)}&limit=300`;
-    const d = await jget(url, { ms: 10000, tries: 2 });
-    return (d && d.events) || [];
+    const n = Math.max(1, Math.min(45, Math.round(Number(diasAdelante) || 7)));
+    const dias = Array.from({ length: n + 1 }, (_, i) => ymdCompact(new Date(Date.now() + i * 86400000)));
+    const nuevas = []; const falla = x => nuevas.push(x); // fallas de ESTE rango (no se mezclan con otras ligas en paralelo)
+    const res = [];
+    for (let i = 0; i < dias.length; i += 12) // de 12 en 12 para no saturar a ESPN (UFC 45 días, F1 30)
+      res.push(...await Promise.all(dias.slice(i, i + 12).map(ymd => jget(`${ESPN_BASE}/${path}/scoreboard?dates=${ymd}`, { ms: 7000, tries: 2, falla }))));
+    const ok = res.filter(Boolean);
+    if (!ok.length && nuevas.length) fallas.push(nuevas[0]); // solo es falla si ningún día respondió
+    const vistos = new Set(), evs = [];
+    for (const d of ok) for (const ev of (d.events || [])) { const k = ev && (ev.id || ev.uid || ev.name + ev.date); if (vistos.has(k)) continue; vistos.add(k); evs.push(ev); }
+    return evs;
   }
 
   function estadoEspn(ev) {
