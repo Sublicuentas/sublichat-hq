@@ -16,7 +16,7 @@ const bodega = (d) => fakeFirestore({ inventario: { h1: { plataforma: 'hbomax', 
 test('las opciones de venta se guardan como hbomax + planHbo (sin renombrar la plataforma)', () => {
   const s = venta('hbomax_standard'); assert.deepEqual([s.plataforma, s.planHbo, s.tipoVenta], ['hbomax', 'standard', 'perfil']);
   const c = venta('hbomax_platinum', { tipoVenta: 'cuenta_completa' }); assert.deepEqual([c.plataforma, c.planHbo, c.tipoVenta, c.categoria], ['hbomax', 'platinum', 'cuenta_completa', 'cuentas_completas']);
-  assert.deepEqual(P.OPCIONES_VENTA.map((o) => [o.label, o.labelCompleta]), [['HBO Standard · 3 perfiles', 'HBO Standard · cuenta completa'], ['HBO Platinum · 5 perfiles', 'HBO Platinum · cuenta completa']]);
+  assert.deepEqual(P.OPCIONES_VENTA.map((o) => [o.label, o.labelCompleta]), [['HBO Standard', 'HBO Standard · cuenta completa'], ['HBO Platinum', 'HBO Platinum · cuenta completa']]);
 });
 
 test('04 · Standard por perfil: 3 asignaciones; la 4.ª se BLOQUEA en el servidor', async () => {
@@ -69,17 +69,18 @@ test('12/13 · venta «HBO Max» antigua: se respeta; editar precio/fecha no se 
   assert.equal(sinNada.planHbo, undefined, 'cuenta sin plan → la venta queda sin plan (lista para asignación humana)');
 });
 
-test('09 · Web: opciones «HBO Standard · 3 / Platinum · 5» y «· cuenta completa»; editar conserva el plan; selector filtra por plan', () => {
+test('09 · Web: opciones «HBO Standard / HBO Platinum» (sin número de perfiles, pedido del dueño) y «· cuenta completa»; editar conserva el plan; selector filtra por plan', () => {
   const app = T('sublichat-app.js');
-  assert.match(app, /\["hbomax_standard","HBO Standard · 3 perfiles"\],\["hbomax_platinum","HBO Platinum · 5 perfiles"\],\["hbomax","HBO Max \(venta anterior, sin plan\)"\]/);
-  assert.match(app, /o\.textContent=cat==="cuentas_completas"\?`HBO \$\{ph==="platinum"\?"Platinum":"Standard"\} · cuenta completa`/);
+  assert.match(app, /\["hbomax_standard","HBO Standard"\],\["hbomax_platinum","HBO Platinum"\],\["hbomax","HBO Max \(venta anterior, sin plan\)"\]/);
+  assert.match(app, /o\.textContent=cat==="cuentas_completas"\?`HBO \$\{ph==="platinum"\?"Platinum":"Standard"\} · cuenta completa`:`HBO \$\{ph==="platinum"\?"Platinum":"Standard"\}`/);
+  assert.doesNotMatch(app, /[35] perfiles/, 'sin «3/5 perfiles» en las opciones');
   assert.match(app, /\.\.\.\(fichaPlanHboDe\(plat\)\?\{planHbo:fichaPlanHboDe\(plat\)\}:\{\}\), \/\/ R196v/);
   assert.match(app, /selectorPlataforma\.value=`hbomax_\$\{s\.planHbo\}`/);
   assert.match(app, /if\(planVenta&&String\(c\.planHbo\|\|""\)!==planVenta\)return false;/);
   assert.equal((T('api/renovar.js').match(/await validarHboServicio\(db, nuevo, /g) || []).length, 3, 'crear, agregar y editar validan en el servidor');
   const cm = T('control-maestro.js'); // 11 · Control Maestro solo MUESTRA plan; la cuenta completa ya la reconoce por la venta (R196q)
   assert.match(cm, /planHbo:\/hbo\/i\.test\(String\(g\.family\|\|''\)\)/);
-  assert.match(cm, /\{standard:'HBO Standard · 3',platinum:'HBO Platinum · 5',sin_plan:'HBO · plan sin definir'\}\[a\.planHbo\]/);
+  assert.match(cm, /\{standard:'HBO Standard',platinum:'HBO Platinum',sin_plan:'HBO · plan sin definir'\}\[a\.planHbo\]/);
   assert.ok(cm.split('\n').filter((l) => /R196v/.test(l)).every((l) => !/<button|<form|<input|addEventListener|fetch\(/.test(l)), 'sin flujos nuevos');
 });
 

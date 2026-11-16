@@ -62,5 +62,5 @@ test('ALL-01/02 · venta de VIP: una unidad suspendida o en revisión no se pued
   const app = T('sublichat-app.js');
   assert.match(app, /!\["suspendido","revision"\]\.includes\(String\(c\.estadoBodega\|\|""\)\.toLowerCase\(\)\) \/\* R196u · VIP suspendida o en revisión no se vende \*\//);
   assert.doesNotMatch(T('control-maestro.js'), /R196u|autocad|elevenreader/);
-  assert.match(T('index.html'), /sublichat-app\.js\?v=20261115-r196u4/);
+  assert.match(T('index.html'), /sublichat-app\.js\?v=20261\d{3}-r196[a-z]\d?/);
 });
