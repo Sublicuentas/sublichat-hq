@@ -77,5 +77,31 @@ test('09 · Web: opciones «HBO Standard · 3 / Platinum · 5» y «· cuenta co
   assert.match(app, /selectorPlataforma\.value=`hbomax_\$\{s\.planHbo\}`/);
   assert.match(app, /if\(planVenta&&String\(c\.planHbo\|\|""\)!==planVenta\)return false;/);
   assert.equal((T('api/renovar.js').match(/await validarHboServicio\(db, nuevo, /g) || []).length, 3, 'crear, agregar y editar validan en el servidor');
-  assert.doesNotMatch(T('control-maestro.js'), /R196v/);
+  const cm = T('control-maestro.js'); // 11 · Control Maestro solo MUESTRA plan; la cuenta completa ya la reconoce por la venta (R196q)
+  assert.match(cm, /planHbo:\/hbo\/i\.test\(String\(g\.family\|\|''\)\)/);
+  assert.match(cm, /\{standard:'HBO Standard · 3',platinum:'HBO Platinum · 5',sin_plan:'HBO · plan sin definir'\}\[a\.planHbo\]/);
+  assert.ok(cm.split('\n').filter((l) => /R196v/.test(l)).every((l) => !/<button|<form|<input|addEventListener|fetch\(/.test(l)), 'sin flujos nuevos');
+});
+
+test('12 · Diagnóstico HBO (solo lectura): cuentas sin plan, fuera de plan y ventas sin plan — separa lo verificable de lo que decide una persona', async () => {
+  const db = fakeFirestore({
+    inventario: {
+      s1: { plataforma: 'hbomax', planHbo: 'standard', correo: 'std@ejemplo.com', capacidad: 3, clientes: cli(4) },
+      n1: { plataforma: 'hbomax', correo: 'vieja5@ejemplo.com', capacidad: 5, clientes: cli(2) },
+      n2: { plataforma: 'hbomax', correo: 'rara4@ejemplo.com', capacidad: 4, clientes: [] },
+    },
+    clientes: {
+      a: { nombrePerfil: 'Cliente A', servicios: [{ plataforma: 'hbomax', correo: 'std@ejemplo.com', compraId: 'x1' }, { plataforma: 'netflix', correo: 'n@ejemplo.com' }] },
+      b: { nombrePerfil: 'Cliente B', servicios: [{ plataforma: 'hbomax', correo: 'vieja5@ejemplo.com', compraId: 'x2', tipoVenta: 'cuenta_completa' }, { plataforma: 'hbomax', planHbo: 'platinum', correo: 'p@ejemplo.com' }] },
+    },
+  });
+  const antes = JSON.stringify([...db._data.entries()]);
+  const r = await P.diagnosticoHbo(db);
+  assert.deepEqual(r.sinPlan.map((c) => c.correo).sort(), ['rara4@ejemplo.com', 'vieja5@ejemplo.com']);
+  assert.match(r.sinPlan.find((c) => c.correo === 'rara4@ejemplo.com').sugerencia, /decide una persona/);
+  assert.deepEqual(r.fueraDePlan.map((c) => [c.correo, c.ocupados, c.capacidad]), [['std@ejemplo.com', 4, 3]]);
+  assert.equal(r.ventasSinPlan.length, 2); assert.equal(r.ventasRequierenPersona, 1);
+  assert.equal(r.ventasSinPlan.find((v) => v.compraId === 'x1').planVerificable, 'standard');
+  assert.equal(JSON.stringify([...db._data.entries()]), antes, 'no escribe nada');
+  assert.match(T('api/inventario.js'), /if \(accion === "hboDiagnostico"\) \{ if \(!adminHbo\) return res\.status\(403\)/);
 });

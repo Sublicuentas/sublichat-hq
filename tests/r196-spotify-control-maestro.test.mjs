@@ -97,7 +97,9 @@ test('17.5 · Netflix y VIP de Control Maestro no se tocan', async () => {
 
 test('Control Maestro: solo cambia lo de Spotify Familiar (contenedor + montaje + nombre/logo de la plataforma)', () => {
   const src = fs.readFileSync(new URL('../control-maestro.js', import.meta.url), 'utf8');
-  const lineas = src.split('\n').filter((l) => /R196(?![fnqr])/.test(l));
+  const lineas = src.split('\n').filter((l) => /R196(?![fnqrv])/.test(l));
+  // R196v · autorizado (PDF «Netflix Hogar y HBO Standard/Platinum», 15/11/2026): Control Maestro MUESTRA el plan HBO, solo consulta.
+  assert.ok(src.split('\n').filter((l) => /R196v/.test(l)).every((l) => /planHbo/.test(l) && !/<button|<form|<input|addEventListener/.test(l)), 'R196v solo muestra el plan HBO (sin botones ni formularios)');
   // R196r · autorizado (PDF 14/11/2026): solo la vista y la conciliación de Spotify Familiar.
   assert.ok(src.split('\n').filter((l) => /R196r/.test(l)).every((l) => /spotifyfamiliar/.test(l)), 'R196r solo toca Spotify Familiar');
   // R196q · autorizado (PDF 14/11/2026): solo reconocer el tipo de venta (cuenta completa / perfil compartido).

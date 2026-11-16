@@ -44,6 +44,6 @@ test('HBO · solo cuentas HBO; Web/API no permiten editar la capacidad a mano co
 test('HBO · Web muestra «Platinum 4/5»; Control Maestro NO se toca (solo consulta)', async () => {
   const app = R('sublichat-app.js');
   assert.match(app, /function invPlanHbo\(c\)\{const p=\{platinum:\["Platinum",5\],standard:\["Standard",3\]\}/);
-  assert.doesNotMatch(R('control-maestro.js'), /planHbo|R196u/);
+  assert.doesNotMatch(R('control-maestro.js'), /R196u/); // R196v ya autorizó mostrar el plan (solo consulta): ver r196v-hbo-planes-venta
   await assert.rejects(P.cambiarPlan(fakeFirestore({ inventario: { n: { plataforma: 'netflix', capacidad: 5 } } }), { inventarioId: 'n', plan: 'standard' }), /solo aplica a cuentas HBO/);
 });
