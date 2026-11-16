@@ -240,21 +240,52 @@ export function detectarPlantilla(encabezados = []) {
   for (const [tipo, cols] of Object.entries(PLANTILLAS_SIMPLES)) { const c = cols.map(normHead); if (c.every((x, i) => h[i] === x)) return tipo; }
   return null;
 }
-export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes = new Map(), proveedores = [], tasa = null, resoluciones = {} } = {}) {
+// R196y · Netflix VIP 4 col.: el correo se busca en Control Maestro, Bodega Netflix VIP (misma colección `inventario`) y en las
+// asignaciones de Telegram (servicios VIP de las fichas). Si no aparece en ninguno, se guarda SOLO el dato financiero como
+// «Sin asignación comercial» (id = el mismo id que Bodega le daría a ese correo): no se crea venta, cliente ni entrada en
+// Control Maestro. Al entregarla luego desde Bodega, `asignar` la enlaza con este costo (ver _bodega-vip.js).
+export const normCorreoVip = (v) => String(v ?? "").replace(/[\u200b-\u200d\u2060\ufeff\u00a0\s]+/g, "").replace(/^mailto:/i, "").toLowerCase();
+export const docIdVipCorreo = (correo) => `vipnetflix__${normCorreoVip(correo).replace(/[.#$/\[\]\s]+/g, "_")}`;
+export const PLATAFORMAS_VIP_LEGADO = Object.freeze(["vipnetflix", "netflixvip", "vip", "netflix_vip", "netflix vip", "Netflix VIP", "VIP"]);
+export const esPlataformaVip = (p) => { const t = String(p || "").toLowerCase().replace(/[\s_+-]+/g, ""); return t === "vipnetflix" || t === "netflixvip" || t === "vip" || t === "netflixpremiumvip"; };
+const esUnidadBodega = (c = {}) => String(c.id || "").startsWith("vipnetflix__") || c.estadoBodega !== undefined || Array.isArray(c.historialBodega);
+const ETQ_BODEGA = { disponible: "Disponible", reservado: "Reservado", asignado: "Asignado", suspendido: "Suspendido", revision: "Requiere revisión" };
+function estadoBodegaDe(d = {}) {
+  const m = String(d.estadoBodega || "").toLowerCase(); if (m === "suspendido" || m === "revision") return m;
+  const o = Number(d.ocupados || 0) || (Array.isArray(d.clientes) ? d.clientes.length : 0);
+  if (o >= Math.max(1, Number(d.capacidad || 1))) return "asignado"; return m === "reservado" ? "reservado" : "disponible";
+}
+// Asignaciones VIP de Telegram (fichas de clientes). Solo lectura: devuelve correo + cliente, nunca claves.
+export function asignacionesVipDeClientes(clientes = []) {
+  const out = [];
+  for (const c of clientes) for (const sv of Array.isArray(c && c.servicios) ? c.servicios : []) {
+    if (!sv || !esPlataformaVip(sv.plataforma)) continue; const correo = normCorreoVip(sv.correo); if (!correo) continue;
+    out.push({ correo, clienteId: String(c.id || ""), nombre: txt(c.nombre || c.nombreCliente || "", 80) });
+  }
+  return out;
+}
+const igualCampo = (a, b) => (typeof a === "object" || typeof b === "object" ? JSON.stringify(a ?? null) === JSON.stringify(b ?? null) : String(a ?? "") === String(b ?? ""));
+
+export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes = new Map(), proveedores = [], tasa = null, resoluciones = {}, asignacionesTelegram = [] } = {}) {
   if (!PLANTILLAS_SIMPLES[tipo]) throw errUsuario("Formato de Excel no reconocido.");
   if (filas.length > MAX_FILAS) throw errUsuario(`Más de ${MAX_FILAS} filas: divida el archivo.`);
-  const porCorreo = new Map(); for (const c of cuentas) { const k = normEmail(c.correo); if (k) (porCorreo.get(k) || porCorreo.set(k, []).get(k)).push(c); }
+  const vipX = tipo === "vip"; const nc = vipX ? normCorreoVip : normEmail;
+  const porCorreo = new Map(); for (const c of cuentas) { const k = nc(c.correo); if (k) (porCorreo.get(k) || porCorreo.set(k, []).get(k)).push(c); }
+  const tgPorCorreo = new Map(); if (vipX) for (const a of asignacionesTelegram) { const k = normCorreoVip(a.correo); if (!k) continue; const l = tgPorCorreo.get(k) || tgPorCorreo.set(k, []).get(k); if (!l.some((x) => x.clienteId === a.clienteId)) l.push({ clienteId: a.clienteId, nombre: a.nombre }); }
+  const exPorCorreo = new Map(); if (vipX) for (const [id, x] of existentes) { if (!x || x.estadoSeguimiento === "reemplazado" || x.estadoSeguimiento === "vinculado") continue; const k = normCorreoVip(x.correo); if (k && !exPorCorreo.has(k)) exPorCorreo.set(k, { id, ...x }); }
   const vistos = new Map(); const out = [];
   filas.forEach((raw, i) => {
     const fila = Number(raw._fila) || i + 2; const v = Array.isArray(raw.v) ? raw.v : [];
     if (v.every((x) => x === null || x === undefined || String(x).trim() === "")) return;
-    const errores = [], avisos = []; const correo = normEmail(v[0]);
-    let match = null, candidatos = [];
+    const errores = [], avisos = []; const correo = nc(v[0]);
+    let match = null, candidatos = [], telegram = [], sinAsignacion = false;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) errores.push("Correo inválido");
     else {
       candidatos = porCorreo.get(correo) || [];
+      if (vipX) telegram = tgPorCorreo.get(correo) || [];
       if (candidatos.length === 1) match = candidatos[0];
       else if (candidatos.length > 1) { const el = resoluciones[String(fila)]; match = el ? candidatos.find((c) => c.id === el) || null : null; }
+      else if (vipX) sinAsignacion = true; // R196y · no está en Control Maestro ni en Bodega: se registra solo en Finanzas
       else errores.push("Ese correo no existe en Control Maestro");
       if (vistos.has(correo)) errores.push(`Duplicado en el archivo (fila ${vistos.get(correo)})`);
       vistos.set(correo, fila);
@@ -266,7 +297,11 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
       const fecha = fechaExcel(v[2]); if (!fecha) errores.push("Fecha de renovación inválida");
       const usdt = num(v[3]); if (!(usdt > 0 && usdt < 1000)) errores.push("Pago USDT inválido");
       if (!(Number(tasa) > 0)) errores.push("Falta la tasa Binance HNL por USDT de la operación");
-      if (!errores.length && match) datos = { cmId: match.id, correo, proveedorId: prov.id, proveedor: prov.alias, grupo: prov.grupo, proximoPagoProveedor: fecha, costoMensualUsdt: r6(usdt), tasa: r6(tasa), costoMensualHnl: r2(usdt * tasa), estadoSeguimiento: "activo" };
+      if (!errores.length && (match || sinAsignacion)) {
+        datos = { cmId: match ? match.id : "", correo, proveedorId: prov.id, proveedor: prov.alias, grupo: prov.grupo, proximoPagoProveedor: fecha, costoMensualUsdt: r6(usdt), tasa: r6(tasa), costoMensualHnl: r2(usdt * tasa), estadoSeguimiento: "activo" };
+        if (match) { datos.sinInventario = false; datos.sinAsignacionComercial = false; }
+        else { datos.sinInventario = true; datos.sinAsignacionComercial = !telegram.length; datos.asignacionesTelegram = telegram.slice(0, 5); }
+      }
     } else {
       const banco = txt(v[1], 60), titular = txt(v[2], 80); const dig = String(v[3] ?? "").replace(/\D/g, "");
       if (!banco) errores.push("Falta banco");
@@ -278,13 +313,27 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
       const tc = Number(tasa) > 0 ? Number(tasa) : null; if (!tc) avisos.push("Sin tipo de cambio: el costo en Lempiras queda pendiente");
       if (!errores.length && match) datos = { inventarioId: match.id, correo, banco, titular, ultimos4: dig.padStart(4, "0"), fechaCobro: fecha, pagoUsd: r2(usd), tipoCambio: tc ? r6(tc) : null, cargoHnl: tc ? r2(usd * tc) : null };
     }
-    let estado = errores.length ? (errores.some((e) => /Duplicado/.test(e)) ? "duplicado" : errores.some((e) => /no existe/.test(e)) ? "sin_coincidencia" : "error") : !match ? "ambiguo" : "nuevo";
-    let cambios = [];
-    if (datos) { const a = existentes.get(match.id); if (a) { cambios = Object.keys(datos).filter((k) => String(a[k] ?? "") !== String(datos[k] ?? "")); estado = cambios.length ? "actualiza" : "sin_cambios"; } }
-    out.push({ fila, correo, estado, errores, avisos, cmId: match ? match.id : "", cliente: match ? clienteDeInv(match) : "", candidatos: !match && candidatos.length > 1 ? candidatos.map((c) => ({ id: c.id, correo: normEmail(c.correo), cliente: clienteDeInv(c) })) : [], datos, cambios });
+    let estado = errores.length ? (errores.some((e) => /Duplicado/.test(e)) ? "duplicado" : errores.some((e) => /no existe/.test(e)) ? "sin_coincidencia" : "error") : !match && !sinAsignacion ? "ambiguo" : "nuevo";
+    let cambios = [], docId = match ? match.id : "", vinculaDesde = "";
+    // vínculo (VIP): de dónde salió la coincidencia, para la vista previa
+    const vinculo = !vipX ? "" : match ? (esUnidadBodega(match) ? "bodega" : "control_maestro") : sinAsignacion ? (telegram.length ? "telegram" : "sin_asignacion") : "";
+    if (datos) {
+      if (vipX && !match) docId = docIdVipCorreo(correo);
+      let a = existentes.get(docId);
+      if (vipX) { // sin duplicar: si ese correo ya tiene registro financiero (con otro id), se reutiliza
+        const porC = exPorCorreo.get(correo);
+        if (!a && porC && porC.id !== docId) { if (match) vinculaDesde = porC.id; else docId = porC.id; a = porC; }
+        if (!match && a && a.cmId) { datos.cmId = a.cmId; datos.sinInventario = !!a.sinInventario; datos.sinAsignacionComercial = !!a.sinAsignacionComercial; } // ya enlazado por Bodega: no se desvincula
+      }
+      if (a) { cambios = Object.keys(datos).filter((k) => !igualCampo(a[k], datos[k])); if (vinculaDesde) cambios = [...new Set([...cambios, "cmId"])]; estado = cambios.length ? "actualiza" : "sin_cambios"; }
+    }
+    const bodega = vipX && match && esUnidadBodega(match) ? ETQ_BODEGA[estadoBodegaDe(match)] : "";
+    const clienteTxt = match ? clienteDeInv(match) : telegram.map((t) => t.nombre).filter(Boolean).join(", ");
+    out.push({ fila, correo, estado, errores, avisos, cmId: match ? match.id : "", docId, vinculo, vinculaDesde, bodega, cliente: clienteTxt, candidatos: !match && candidatos.length > 1 ? candidatos.map((c) => ({ id: c.id, correo: nc(c.correo), cliente: clienteDeInv(c) })) : [], datos, cambios });
   });
   const n = (e) => out.filter((x) => x.estado === e).length;
-  return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ventasNuevas: 0, clientesNuevos: 0 } };
+  const nv = (vv) => out.filter((x) => x.datos && x.vinculo === vv).length;
+  return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
 export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
@@ -334,7 +383,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const anterior = await seguro("ganancias_mes_anterior", () => rentabilidadMes(consumosAnt, productos, mesAnterior(mes), cfg.umbralMargen), vacioRent(mesAnterior(mes)));
       const { inv, ex, lo } = await seguro("netflix_vip", () => leerVipBase(db), { inv: [], ex: [], lo: [] });
       const vipProv = { trap: 0, deku: 0, propio: 0, otro: 0, sin: 0 };
-      const exMap = new Map(ex.filter((x) => x.estadoSeguimiento !== "reemplazado").map((x) => [x.id, x]));
+      const exMap = new Map(ex.filter((x) => x.estadoSeguimiento !== "reemplazado" && x.estadoSeguimiento !== "vinculado").map((x) => [x.id, x]));
       for (const c of inv) { const x = exMap.get(c.id); const g = x ? x.grupo || "otro" : "sin"; vipProv[g] = (vipProv[g] || 0) + 1; }
       const en7 = new Date(Date.parse(`${hoy}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
       const proximos = ex.filter((x) => x.estadoSeguimiento === "activo" && x.proximoPagoProveedor && x.proximoPagoProveedor >= hoy && x.proximoPagoProveedor <= en7);
@@ -420,9 +469,16 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       if (!tipo) throw errUsuario("Encabezados no reconocidos. VIP: CORREO DEL EXTRA VIP · PROVEEDOR · FECHA DE RENOVACIÓN · PAGO POR CUENTA (USDT). Premium: CORREO NETFLIX PREMIUM · BANCO HONDUREÑO · NOMBRE TITULAR TARJETA · ÚLTIMOS 4 DÍGITOS TARJETA · FECHA DE COBRO / RENOVACIÓN · PAGO POR CUENTA (USD).");
       const filas = (Array.isArray(body.filas) ? body.filas : []).slice(0, MAX_FILAS + 1).map((f, i) => ({ _fila: Number(f && f._fila) || i + 2, v: (Array.isArray(f && f.v) ? f.v : []).slice(0, 6).map((x) => (typeof x === "number" ? x : x == null ? null : String(x).slice(0, 200))) }));
       const plat = tipo === "vip" ? "vipnetflix" : "netflix"; const colF = tipo === "vip" ? "fin_vip_extras" : "fin_premium_cuentas";
-      const cuentas = (await col("inventario").where("plataforma", "==", plat).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
+      let cuentas, asignacionesTelegram = [];
+      if (tipo === "vip") { // R196y · Control Maestro + Bodega (misma colección, incluye nombres de plataforma antiguos) + Telegram
+        const vistos = new Map();
+        for (const pl of PLATAFORMAS_VIP_LEGADO) for (const x of (await col("inventario").where("plataforma", "==", pl).get()).docs) if (!vistos.has(x.id)) vistos.set(x.id, { id: x.id, ...(x.data() || {}) });
+        cuentas = [...vistos.values()];
+        const qc = typeof col("clientes").select === "function" ? col("clientes").select("nombre", "nombreCliente", "servicios") : col("clientes");
+        asignacionesTelegram = asignacionesVipDeClientes((await qc.get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })));
+      } else cuentas = (await col("inventario").where("plataforma", "==", plat).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
       const ex = await todos(colF); const proveedores = await todos("fin_proveedores");
-      const pv = previsualizarSimple(tipo, filas, { cuentas, existentes: new Map(ex.map((x) => [x.id, x])), proveedores, tasa: Number(body.tasa) || null, resoluciones: body.resoluciones && typeof body.resoluciones === "object" ? body.resoluciones : {} });
+      const pv = previsualizarSimple(tipo, filas, { cuentas, asignacionesTelegram, existentes: new Map(ex.map((x) => [x.id, x])), proveedores, tasa: Number(body.tasa) || null, resoluciones: body.resoluciones && typeof body.resoluciones === "object" ? body.resoluciones : {} });
       const hash = hashFilas(filas, [tipo, Number(body.tasa) || 0]);
       if (accion === "finp_simple_preview") return ok({ hash, ...pv });
       if (body.confirmo !== true) throw errUsuario("Confirme la importación.");
@@ -432,13 +488,19 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       if (aplicar.length > 480) throw errUsuario("Máximo 480 filas por confirmación: divida el archivo.");
       const jobRef = col("fin_import_jobs").doc();
       const r = await db.runTransaction(async (tx) => {
-        const refs = aplicar.map((x) => col(colF).doc(x.cmId)); const snaps = await Promise.all(refs.map((rf) => tx.get(rf)));
+        const idDe = (x) => x.docId || x.cmId; // R196y · VIP sin asignación: id determinista por correo (el mismo que usa Bodega)
+        const refs = aplicar.map((x) => col(colF).doc(idDe(x))); const snaps = await Promise.all(refs.map((rf) => tx.get(rf)));
+        const desde = aplicar.filter((x) => x.vinculaDesde); const dRefs = desde.map((x) => col(colF).doc(x.vinculaDesde)); const dSnaps = await Promise.all(dRefs.map((rf) => tx.get(rf)));
         const antes = {};
-        aplicar.forEach((x, i) => { const a = snaps[i].exists ? snaps[i].data() : null; antes[x.cmId] = a;
-          tx.set(refs[i], { ...(a || {}), ...x.datos, importJobId: jobRef.id, actualizadoAt: ahora, actualizadoPor: actor, ...(a ? {} : { creadoAt: ahora, creadoPor: actor }), historial: [...((a && a.historial) || []), { at: ahora, por: actor, origen: "excel_simple", jobId: jobRef.id, cambios: x.cambios.length ? x.cambios : Object.keys(x.datos) }].slice(-30) }); });
+        desde.forEach((x, i) => { antes[x.vinculaDesde] = dSnaps[i].exists ? dSnaps[i].data() : null; });
+        aplicar.forEach((x, i) => { const a0 = snaps[i].exists ? snaps[i].data() : null; antes[idDe(x)] = a0;
+          const j = desde.indexOf(x); const a = a0 || (j >= 0 && dSnaps[j].exists ? dSnaps[j].data() : null);
+          tx.set(refs[i], { ...(a || {}), ...x.datos, importJobId: jobRef.id, actualizadoAt: ahora, actualizadoPor: actor, ...(a ? {} : { creadoAt: ahora, creadoPor: actor }), ...(j >= 0 ? { vinculadoDesde: x.vinculaDesde } : {}), historial: [...((a && a.historial) || []), { at: ahora, por: actor, origen: "excel_simple", jobId: jobRef.id, vinculo: x.vinculo || undefined, cambios: x.cambios.length ? x.cambios : Object.keys(x.datos) }].slice(-30) }); });
+        desde.forEach((x, i) => { if (dSnaps[i].exists) tx.set(dRefs[i], { ...dSnaps[i].data(), estadoSeguimiento: "vinculado", vinculadoA: idDe(x), importJobId: jobRef.id, actualizadoAt: ahora, actualizadoPor: actor }); });
+        const sinAsig = aplicar.filter((x) => x.vinculo === "sin_asignacion" || x.vinculo === "telegram").length;
         tx.set(jobRef, { tipo: `excel_${tipo}`, archivo: { nombre: txt(body.archivo?.nombre, 120), bytes: Number(body.archivo?.bytes) || 0 }, hash, actor, createdAt: ahora, estado: "aplicado", resumen: { ...pv.resumen, aplicadosExtras: aplicar.length, aplicadosLotes: 0 }, antesCol: { [colF]: antes } });
-        audit(tx, { accion: `importar_excel_${tipo}`, targetType: "importacion", targetId: jobRef.id, detalle: `${aplicar.length} cuenta(s) existentes vinculadas · 0 ventas · 0 clientes` });
-        return { jobId: jobRef.id, aplicados: aplicar.length, tipo };
+        audit(tx, { accion: `importar_excel_${tipo}`, targetType: "importacion", targetId: jobRef.id, detalle: `${aplicar.length - sinAsig} cuenta(s) existentes vinculadas · ${sinAsig} registro(s) solo financieros sin asignación comercial · 0 ventas · 0 clientes · 0 cuentas en Control Maestro` });
+        return { jobId: jobRef.id, aplicados: aplicar.length, vinculadas: aplicar.length - sinAsig, sinAsignacion: sinAsig, tipo };
       });
       return ok({ ...r, resumen: pv.resumen });
     }
@@ -481,10 +543,13 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
 
     if (accion === "finp_vip_lista") {
       const { inv, ex } = await leerVipBase(db);
-      const exMap = new Map(ex.filter((x) => x.estadoSeguimiento !== "reemplazado").map((x) => [x.id, x]));
+      const exMap = new Map(ex.filter((x) => x.estadoSeguimiento !== "reemplazado" && x.estadoSeguimiento !== "vinculado").map((x) => [x.id, x]));
       const tab = ["trap", "deku", "propio", "otro", "sin", "todos"].includes(body.tab) ? body.tab : "todos";
       const q = normTxt(body.q);
       let filas = inv.map((c) => { const x = exMap.get(c.id) || null; return { cmId: c.id, correo: normEmail(c.correo), madre: madreDe(c), cliente: clienteDeInv(c), estadoCM: c.estado || "", grupo: x ? x.grupo || "otro" : "sin", proveedor: x ? x.proveedor : "", costoMensualUsdt: x ? x.costoMensualUsdt : null, costoMensualHnl: x ? x.costoMensualHnl : null, tasa: x ? x.tasa : null, proximoPagoProveedor: x ? x.proximoPagoProveedor : "", ultimoPagoProveedor: x ? x.ultimoPagoProveedor : "", estado: x ? x.estadoSeguimiento : "sin_registro", loteId: x ? x.loteId : "", renovarProximoMes: x ? x.renovarProximoMes : null, notas: x ? x.notas || "" : "", historial: x ? (x.historial || []).slice(-10) : [] }; });
+      // R196y · registros solo financieros (aún sin unidad en Control Maestro/Bodega): se listan como «Sin asignación comercial»
+      const invIds = new Set(inv.map((c) => c.id));
+      for (const x of exMap.values()) if (!invIds.has(x.id) && !(x.cmId && invIds.has(x.cmId))) filas.push({ cmId: x.id, correo: normCorreoVip(x.correo), madre: "", cliente: (x.asignacionesTelegram || []).map((t) => t.nombre).filter(Boolean).join(", "), estadoCM: x.sinInventario ? (x.sinAsignacionComercial ? "sin_asignacion" : "telegram") : "", sinInventario: !!x.sinInventario, grupo: x.grupo || "otro", proveedor: x.proveedor, costoMensualUsdt: x.costoMensualUsdt ?? null, costoMensualHnl: x.costoMensualHnl ?? null, tasa: x.tasa ?? null, proximoPagoProveedor: x.proximoPagoProveedor || "", ultimoPagoProveedor: x.ultimoPagoProveedor || "", estado: x.estadoSeguimiento || "activo", loteId: x.loteId || "", renovarProximoMes: x.renovarProximoMes ?? null, notas: x.notas || "", historial: (x.historial || []).slice(-10) });
       const conteo = filas.reduce((a, f) => ((a[f.grupo] = (a[f.grupo] || 0) + 1), a), { trap: 0, deku: 0, propio: 0, otro: 0, sin: 0 });
       if (tab !== "todos") filas = filas.filter((f) => f.grupo === tab);
       if (q) filas = filas.filter((f) => normTxt(`${f.correo} ${f.madre} ${f.cliente} ${f.cmId}`).includes(q));
@@ -499,8 +564,9 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const proveedores = await todos("fin_proveedores");
       const r = await db.runTransaction(async (tx) => {
         const invS = await tx.get(col("inventario").doc(cmId));
-        if (!invS.exists || String(invS.data().plataforma || "") !== "vipnetflix") throw errUsuario("Ese acceso no es un Netflix VIP de Control Maestro.");
         const ref = col("fin_vip_extras").doc(cmId); const s = await tx.get(ref); const a = s.exists ? s.data() : {};
+        const soloFin = !invS.exists && s.exists && a.sinInventario === true; // R196y · registro sin asignación comercial: se edita solo en Finanzas
+        if (!soloFin && (!invS.exists || String(invS.data().plataforma || "") !== "vipnetflix")) throw errUsuario("Ese acceso no es un Netflix VIP de Control Maestro.");
         const n = {};
         if (c.proveedor !== undefined) { const p = proveedorVip(c.proveedor, proveedores); if (!p) throw errUsuario("Proveedor desconocido."); Object.assign(n, { proveedorId: p.id, proveedor: p.alias, grupo: p.grupo }); }
         if (c.costoMensualUsdt !== undefined) { const v = num(c.costoMensualUsdt); if (!(v > 0 && v < 1000)) throw errUsuario("Costo USDT inválido."); n.costoMensualUsdt = r6(v); }
@@ -513,7 +579,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         const fin = { ...a, ...n }; if (fin.costoMensualUsdt && fin.tasa) fin.costoMensualHnl = r2(fin.costoMensualUsdt * fin.tasa);
         if (!fin.proveedorId) throw errUsuario("Elija el proveedor.");
         const antes = Object.fromEntries(Object.keys(n).map((k) => [k, a[k] ?? null]));
-        tx.set(ref, { ...fin, cmId, correo: normEmail(invS.data().correo), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor, estadoSeguimiento: fin.estadoSeguimiento || "activo" }), historial: [...(a.historial || []), { at: ahora, por: actor, origen: "edicion", antes, despues: n }].slice(-30) });
+        tx.set(ref, { ...fin, cmId: soloFin ? a.cmId || "" : cmId, correo: soloFin ? a.correo : normEmail(invS.data().correo), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor, estadoSeguimiento: fin.estadoSeguimiento || "activo" }), historial: [...(a.historial || []), { at: ahora, por: actor, origen: "edicion", antes, despues: n }].slice(-30) });
         audit(tx, { accion: "editar_extra_vip", targetType: "fin_vip_extra", targetId: cmId, before: antes, after: n });
         return { cmId };
       });
