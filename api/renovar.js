@@ -208,6 +208,7 @@ const PLAT_ALIASES = {
   windows11: "windows11", win11: "windows11",
   adobeexpress: "adobeexpress", adobe: "adobeexpress",
   eset: "eset", esetnod32: "eset",
+  autocad: "autocad", autodesk: "autocad", autodeskautocad: "autocad", elevenreader: "elevenreader", eleven: "elevenreader", // R196u
   stellatv: "stellatv", stella: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1",
   icomplay: "icomplay1", icomplaymax: "icomplay1"
 };
@@ -339,7 +340,9 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("viki") ||
     p.includes("windows") ||
     p.includes("adobe") ||
-    p.includes("eset")
+    p.includes("eset") ||
+    p.includes("autocad") || // R196u
+    p.includes("eleven") // R196u
   );
 }
 
@@ -366,7 +369,7 @@ function servicioCredencialesSiempre(plataforma) {
   const p = canonPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
   if (p.startsWith("stellatv") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv")) return true;
-  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
+  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll", "elevenreader"].includes(p); // R196u · Eleven Reader: correo + contraseña
 }
 
 function servicioUsaSelectorDispositivo(plataforma) {
@@ -1237,6 +1240,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   // R188 · modalidad de acceso (Gemini/Duolingo/ChatGPT) y dispositivo de TV Digital: del SERVICIO, versionados con la ficha.
   { const mod = entrega.modalidadAcceso(plataformaFinal, { ...anterior, ...servicio });
     if (mod) out.modalidadAcceso = mod;
+    if (entrega.entregaPorInvitacion(plataformaFinal)) { const ei = servicio.estadoInvitacion !== undefined ? servicio.estadoInvitacion : anterior.estadoInvitacion; out.estadoInvitacion = entrega.estadoInvitacion({ estadoInvitacion: ei }); out.entregaModalidad = "invitacion"; } // R196u · AutoCAD
     if (entrega.familiaTv(plataformaFinal)) {
       const eq = servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv;
       try { out.equipoTv = entrega.validarEquipoTv(plataformaFinal, eq, servicio._baulVistas || null); } catch (e) { throw crmUserError(e.message); }
@@ -1599,7 +1603,7 @@ async function handlerCore(req, res) {
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !entrega.claveOpcional(nuevo.plataforma) /* R196u · AutoCAD */ && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
 
@@ -1991,7 +1995,7 @@ async function handlerCore(req, res) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!p.nombre || (servicioRequiereCorreo(nuevo.plataforma) && !p.correo)) throw crmUserError(`Complete los datos requeridos del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !entrega.claveOpcional(nuevo.plataforma) /* R196u · AutoCAD */ && !p.clave) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !p.pinPerfil) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`); // R142
         }
         touchedIndex = servicios.length;
@@ -2028,6 +2032,7 @@ async function handlerCore(req, res) {
           esRoku: servicio.esRoku != null ? servicio.esRoku : anterior.esRoku,
           _dispositivoElegido: servicio.dispositivo != null, // R188
           modalidadAcceso: servicio.modalidadAcceso != null ? servicio.modalidadAcceso : anterior.modalidadAcceso,
+          estadoInvitacion: servicio.estadoInvitacion != null ? servicio.estadoInvitacion : anterior.estadoInvitacion, // R196u
           equipoTv: servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv,
           _baulVistas: servicio._baulVistas,
           visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl,
@@ -2040,7 +2045,7 @@ async function handlerCore(req, res) {
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
           if (!String(p.nombre || "").trim()) throw crmUserError(`Falta el nombre del perfil ${i + 1}.`);
           if (servicioRequiereCorreo(nuevo.plataforma) && !String(p.correo || "").trim()) throw crmUserError(`Falta el correo o usuario del perfil ${i + 1}.`);
-          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
+          if (!servicioNoUsaClave(nuevo.plataforma, nuevo) && !entrega.claveOpcional(nuevo.plataforma) /* R196u · AutoCAD */ && !String(p.clave || "").trim()) throw crmUserError(`Falta la clave del perfil ${i + 1}.`);
           if (nuevo.tipoVenta !== "cuenta_completa" && !servicioNoUsaPinPerfil(nuevo.plataforma) && !String(p.pinPerfil || "").trim()) throw crmUserError(`Falta el PIN individual del perfil ${i + 1}.`);
         }
         // 2026-09-17 FIX: "cuando actualizo la clave de una cuenta, se debe

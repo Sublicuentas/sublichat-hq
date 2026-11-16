@@ -11,9 +11,9 @@ export const PRODUCTOS = Object.freeze({
   disneyp: "Disney Premium", disneys: "Disney Premium sin ESPN",
   hbomax: "HBO Max", primevideo: "Prime Video", paramount: "Paramount+", crunchyroll: "Crunchyroll", vix: "ViX",
   appletv: "Apple TV", universal: "Universal+", star: "Star+",
-  spotify: "Spotify", youtube: "YouTube", deezer: "Deezer",
+  spotify: "Spotify", youtube: "YouTube", deezer: "Deezer", elevenreader: "Eleven Reader", // R196u
   canva: "Canva", gemini: "Gemini Pro", chatgpt: "ChatGPT", duolingo: "Duolingo", office: "Office 365", office2021: "Office 2021",
-  adobeexpress: "Adobe Express", windows10: "Windows 10", windows11: "Windows 11", eset: "ESET NOD32", viki: "Viki Rakuten",
+  adobeexpress: "Adobe Express", windows10: "Windows 10", windows11: "Windows 11", eset: "ESET NOD32", viki: "Viki Rakuten", autocad: "Autodesk AutoCAD", // R196u
   stellatv: "Stella TV", oleada: "Oleada TV", latintv: "LatinTV", liontv: "LionTV", evoutouch: "Nanotech", icomplay: "ICOMPLAY", iptv: "IPTV anterior",
 });
 export const PENDIENTE = "pendiente_clasificar";
@@ -27,6 +27,7 @@ const CLAVES = Object.freeze({
   crunchyroll: "crunchyroll", vix: "vix", appletv: "appletv", universal: "universal", star: "star",
   spotify: "spotify", youtube: "youtube", deezer: "deezer", canva: "canva", gemini: "gemini", chatgpt: "chatgpt", duolingo: "duolingo",
   office: "office", microsoft: "office", m365: "office", office2021: "office2021", adobeexpress: "adobeexpress", windows10: "windows10", windows11: "windows11", eset: "eset", viki: "viki",
+  autocad: "autocad", autodesk: "autocad", autodeskautocad: "autocad", elevenreader: "elevenreader", eleven: "elevenreader", // R196u
 });
 
 export const normAlias = (v = "") => String(v || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
@@ -56,6 +57,8 @@ function familia(t) {
   if (/^spotify/.test(t)) return "spotify";
   if (/^youtube/.test(t)) return "youtube";
   if (/^deezer/.test(t)) return "deezer";
+  if (/^eleven/.test(t)) return "elevenreader"; // R196u
+  if (/^(autocad|autodesk)/.test(t)) return "autocad"; // R196u
   if (/^canva/.test(t)) return "canva";
   if (/^gemini/.test(t)) return "gemini";
   if (/^(chatgpt|openai)/.test(t)) return "chatgpt";

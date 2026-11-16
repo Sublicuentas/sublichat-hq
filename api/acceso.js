@@ -82,6 +82,7 @@ function canonPlat(v) {
     hbo: "hbomax", max: "hbomax", prime: "primevideo", paramountplus: "paramount",
     universalplus: "universal", universalp: "universal", rakutenviki: "viki", apple: "appletv", appletvplus: "appletv",
     office365: "office", office2021: "office2021", win10: "windows10", win11: "windows11",
+    autodesk: "autocad", autodeskautocad: "autocad", eleven: "elevenreader", // R196u
     adobe: "adobeexpress", esetnod32: "eset", stella: "stellatv", stellatv: "stellatv", evoutouch: "evoutouch1", evoutouch1: "evoutouch1", evoutouch2: "evoutouch2", evoutouch3: "evoutouch3", evoutouch4: "evoutouch1", icomplay: "icomplay1", icomplaymax: "icomplay1"
   };
   if (aliases[p]) return aliases[p];
@@ -110,7 +111,7 @@ function servicioNoUsaPinPerfil(plataforma) {
     p.includes("vix") || p.includes("canva") || p.includes("gemini") ||
     p.includes("chatgpt") || p.includes("duolingo") || p.includes("stella") || p.includes("oleada") ||
     p.includes("latintv") || p.includes("liontv") || p.includes("evoutouch") || p.includes("icomplay") || p.includes("iptv") || p.includes("viki") || p.includes("windows") ||
-    p.includes("adobe") || p.includes("eset")
+    p.includes("adobe") || p.includes("eset") || p.includes("autocad") || p.includes("eleven") // R196u
   );
 }
 function servicioNoUsaClave(plataforma, servicio = null) {
@@ -132,7 +133,7 @@ function servicioCredencialesSiempre(plataforma) {
   const p = normPlat(plataforma);
   if (p.includes("netflix") && p.includes("vip")) return true;
   if (p.startsWith("stellatv") || p.startsWith("stella") || p.startsWith("oleada") || p.startsWith("latintv") || p.startsWith("liontv") || p.startsWith("evoutouch") || p.startsWith("icomplay") || p.startsWith("iptv")) return true;
-  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll"].includes(p);
+  return ["vipnetflix", "spotify", "youtube", "viki", "deezer", "crunchyroll", "elevenreader"].includes(p); // R196u
 }
 function servicioUsaSelectorDispositivo(plataforma) {
   const p = normPlat(plataforma);
@@ -205,7 +206,8 @@ const PLAT_LABELS = {
   evoutouch1: "Nanotech (1 dispositivo)", evoutouch2: "Nanotech (2 dispositivos)", evoutouch3: "Nanotech (3 dispositivos)", evoutouch4: "Nanotech (1 dispositivo)", evoutouch: "Nanotech",
   icomplay: "ICOMPLAY", icomplay1: "ICOMPLAY (1 pantalla)", icomplay2: "ICOMPLAY (2 pantallas)", icomplay3: "ICOMPLAY (3 pantallas)", icomplay5: "ICOMPLAY (5 pantallas)", icomplay7: "ICOMPLAY (7 pantallas)",
   iptv: "IPTV anterior", iptv1: "IPTV anterior (1)", iptv3: "IPTV anterior (3)", iptv4: "IPTV anterior (4)", viki: "Viki Rakuten", appletv: "Apple TV",
-  windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32"
+  windows10: "Windows 10", windows11: "Windows 11", adobeexpress: "Adobe Express", eset: "ESET NOD32",
+  autocad: "Autodesk AutoCAD", elevenreader: "Eleven Reader" // R196u
 };
 function platLabel(plataforma) {
   const p = canonPlat(plataforma);
@@ -323,6 +325,11 @@ function resolverModo(servicio = {}) {
   // Windows y ESET son licencias: nunca se presentan como correo/contraseña.
   if (servicioEsSerial(plataforma)) {
     return { modo: "serial", mostrarCorreo: false, mostrarClave: true, mostrarPin: false };
+  }
+
+  // R196u · AutoCAD: invitación al correo; la contraseña solo se muestra si Sublicuentas de verdad la registró.
+  if (entrega.claveOpcional(plataforma)) {
+    return { modo: "cred", mostrarCorreo: true, mostrarClave: !!String(servicio.clave || "").trim(), mostrarPin: false };
   }
 
   // Estas plataformas siempre entregan correo/usuario + clave, sin importar
