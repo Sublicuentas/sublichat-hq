@@ -795,7 +795,8 @@
       accounts.push({
         ...g,rawPlatforms:[...g.rawPlatforms],excelSheets:[...g.excelSheets],roster,missingInventory,duplicateDocs,overCapacity,rosterIssues,issueCount,
         requiresPassword,requiresEmail,missingEmail,missingPassword,recordedIncident,internalIssueCount,revisionKey,revision,reviewAge,reviewDataChanged,reviewDue,occupied,capacity,free:Math.max(0,capacity-occupied),clean:issueCount===0,
-        saleType:accountSaleType(g)
+        saleType:accountSaleType(g),
+        planHbo:/hbo/i.test(String(g.family||''))?((g.inventoryAccounts||[]).map((x)=>String(x.planHbo||'')).find(Boolean)||'sin_plan'):'' // R196v · planHbo solo consulta: Standard 3 / Platinum 5 (PDF 15/11/2026)
       });
     });
 
@@ -1402,7 +1403,7 @@
         <span class="cm-account-list-num">${i+1}</span>
         <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small>${saleTypeTag(a)}</span>
         <span class="cm-account-list-info">
-          <span class="cm-account-list-meta"><small>${a.saleType&&a.saleType.code==='cuenta_completa'?'1 cliente · exclusiva':`${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles`}</small><small>${esc(review.rowText)}</small></span>
+          <span class="cm-account-list-meta"><small>${a.saleType&&a.saleType.code==='cuenta_completa'?'1 cliente · exclusiva':`${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles`}</small>${a.planHbo?`<small>${esc({standard:'HBO Standard · 3',platinum:'HBO Platinum · 5',sin_plan:'HBO · plan sin definir'}[a.planHbo]||'')}</small>`:''}<small>${esc(review.rowText)}</small></span><!-- R196v · planHbo (consulta) -->
           <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
           <span class="cm-account-list-date">${esc(life.nextText)}</span>
         </span>

@@ -134,10 +134,22 @@
       var k = r.contadores || null; // R196v · contadores separados por plan y modalidad
       if (k) html += '<div class="hbo-cont">' + ['standard', 'platinum'].map(function (p) { var o = k[p]; return '<div><b>HBO ' + (p === 'standard' ? 'Standard · 3' : 'Platinum · 5') + '</b><span>' + o.compartidas + ' compartidas · ' + o.libres + ' perfiles libres</span><span>' + o.completas + ' vendidas completas · ' + o.completasLibres + ' libres para completa</span></div>'; }).join('') + '</div><p class="vip-muted">' + k.sinPlan + ' cuenta(s) HBO Max sin plan: defínalas aquí (no se migran solas).</p>';
       else html += '<p class="vip-muted">Bodega: ' + r.platinum.cuentas + ' Platinum (' + r.platinum.libres + ' libres) · ' + r.standard.cuentas + ' Standard (' + r.standard.libres + ' libres) · ' + r.sinPlan + ' sin plan.</p>';
+      if (r.puedeEditar) html += '<button type="button" class="hg-btn" data-hbo-diag="1">Diagnóstico HBO (solo lectura)</button><div data-hbo-diag-out></div>'; // R196v
       box.innerHTML = html;
     });
   }
+  // R196v · lista de registros HBO que necesitan una persona: cuentas sin plan, cuentas fuera de su plan y ventas sin plan.
+  function pintarDiagHbo(out, r) {
+    if (!r.ok) { out.innerHTML = '<p class="vip-err">' + esc(r.error || 'No se pudo leer el diagnóstico.') + '</p>'; return; }
+    var h = '<p class="vip-muted">' + r.cuentas + ' cuentas HBO · ' + r.sinPlan.length + ' sin plan · ' + r.fueraDePlan.length + ' fuera de su plan · ' + r.ventasSinPlan.length + ' ventas sin plan (' + r.ventasRequierenPersona + ' requieren una persona).</p>';
+    h += r.sinPlan.map(function (c) { return '<div class="hg-row"><span><b>' + esc(c.correo) + '</b> · ' + c.ocupados + '/' + c.capacidad + ' · ' + esc(c.sugerencia) + '</span></div>'; }).join('');
+    h += r.fueraDePlan.map(function (c) { return '<div class="hg-row"><span>⚠️ <b>' + esc(c.correo) + '</b> · ' + esc(c.plan) + ' con ' + c.ocupados + '/' + c.capacidad + '</span></div>'; }).join('');
+    h += r.ventasSinPlan.map(function (v) { return '<div class="hg-row"><span>' + esc(v.cliente) + ' · ' + esc(v.correo || '—') + ' · ' + esc(v.modalidad) + ' · ' + esc(v.accion) + '</span></div>'; }).join('');
+    out.innerHTML = h;
+  }
   document.addEventListener('click', function (e) {
+    var dg = e.target.closest && e.target.closest('[data-hbo-diag]');
+    if (dg) { var out = dg.parentNode.querySelector('[data-hbo-diag-out]'); out.innerHTML = '<p class="vip-muted">Revisando…</p>'; api({ accion: 'hboDiagnostico' }).then(function (r) { pintarDiagHbo(out, r); }); return; }
     var b = e.target.closest && e.target.closest('[data-hbo-plan]'); if (!b) return;
     var box = b.closest('#invHboBox'); if (!box) return;
     var plan = b.getAttribute('data-hbo-plan');
