@@ -105,3 +105,31 @@
   });
   window.SublichatHogar = { montar: montar };
 })();
+
+// R196u Fase 3 · Plan HBO por cuenta (Platinum 5 / Standard 3). Bajar de plan con más ocupados que la nueva capacidad se bloquea.
+(function () {
+  'use strict';
+  function api(body) { return fetch('/api/inventario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Respuesta inválida del servidor.' }; }); }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var alCambiar = null;
+  function montar(box, cb) {
+    if (!box) return; alCambiar = cb || null;
+    api({ accion: 'hboResumen' }).then(function (r) {
+      if (!r.ok) return;
+      var id = box.getAttribute('data-inv-id'); var c = (r.cuentas || []).filter(function (x) { return x.id === id; })[0];
+      var html = '<div class="cr-label">📦 Plan HBO</div><p class="hg-estado' + (c && !c.plan ? ' sin_asignar' : '') + '">' + esc(c ? c.etiqueta : 'Plan sin definir') + (c && c.sobreocupada ? ' · ⚠️ sobreocupada' : '') + '</p>';
+      if (r.puedeEditar) html += '<div class="vip-row"><button type="button" class="hg-btn" data-hbo-plan="platinum"' + (c && c.plan === 'platinum' ? ' disabled' : '') + '>Platinum · 5 perfiles</button><button type="button" class="hg-btn" data-hbo-plan="standard"' + (c && c.plan === 'standard' ? ' disabled' : '') + '>Standard · 3 perfiles</button></div>';
+      html += '<p class="vip-muted">Bodega: ' + r.platinum.cuentas + ' Platinum (' + r.platinum.libres + ' libres) · ' + r.standard.cuentas + ' Standard (' + r.standard.libres + ' libres) · ' + r.sinPlan + ' sin plan.</p>';
+      box.innerHTML = html;
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-hbo-plan]'); if (!b) return;
+    var box = b.closest('#invHboBox'); if (!box) return;
+    var plan = b.getAttribute('data-hbo-plan');
+    if (!confirm('¿Cambiar esta cuenta a HBO Max ' + (plan === 'platinum' ? 'Platinum (5 perfiles)' : 'Standard (3 perfiles)') + '?')) return;
+    b.disabled = true;
+    api({ accion: 'hboPlan', docId: box.getAttribute('data-inv-id'), plan: plan }).then(function (r) { if (!r.ok) alert(r.error || 'No se pudo cambiar el plan.'); montar(box, alCambiar); if (r.ok && alCambiar) alCambiar(); });
+  });
+  window.SublichatHbo = { montar: montar };
+})();

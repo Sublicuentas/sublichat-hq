@@ -802,7 +802,7 @@ window.sublichatControlData=()=>({
   }),
   cuentas:INVENTARIO.map(c=>({
     id:c.id||'',plataforma:c.plataforma||'',correo:c.correo||'',clave:c.clave||'',capacidad:Number(c.capacidad)||0,
-    disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',modalidadVenta:c.modalidadVenta||'',exclusivaCompraId:c.exclusivaCompraId||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
+    disponibles:invDisp(c),ocupados:Number(c.ocupados ?? (Array.isArray(c.clientes)?c.clientes.length:0))||0,estado:c.estado||'',planHbo:c.planHbo||'' /* R196u */,modalidadVenta:c.modalidadVenta||'',exclusivaCompraId:c.exclusivaCompraId||'',clientes:Array.isArray(c.clientes)?c.clientes.map(p=>({
       clienteId:p.clienteId||p.clientId||p.idCliente||'',
       compraId:p.compraId||p.servicioId||'',
       perfilId:p.perfilId||p.profileId||p.idPerfil||'',
@@ -1355,7 +1355,7 @@ function invFiltrar(){
     return `<div class="inv-card" data-i="${i}">
       <div class="ic-top">
         <div style="flex:1;min-width:0">
-          <div class="ic-plat">${platLabel(c.plataforma)}</div>
+          <div class="ic-plat">${platLabel(c.plataforma)}${String(c.plataforma||"").toLowerCase()==="hbomax"?` <span class="ic-plan">${clienteEsc(invPlanHbo(c))}</span>`:""}</div>
           <div class="ic-correo">${c.correo||"sin acceso"}</div>
         </div>
         <span class="ic-cupo ${libre?"libre":"lleno"}">${sobre?`⚠️ sobreasignada`:(cap===1?(libre?"disponible":"asignada"):(libre?`${disp} libre${disp>1?"s":""}`:"llena"))}</span>${recomendadas.has(c)?`<span class="ic-cupo libre" style="margin-left:6px">⭐ Más vacía</span>`:""}
@@ -1369,6 +1369,8 @@ function invFiltrar(){
 ["invQ","invPlat","invCupo"].forEach(id=>{const el=document.getElementById(id);if(el){el.addEventListener("input",invFiltrar);el.addEventListener("change",invFiltrar);}});
 
 let invActual=null;
+// R196u · HBO: plan de la cuenta («Platinum 4/5», «Standard 2/3» o «plan sin definir»), igual que lib _hbo-planes.js.
+function invPlanHbo(c){const p={platinum:["Platinum",5],standard:["Standard",3]}[String(c.planHbo||"").toLowerCase()];const o=invOcupados(c);return p?`${p[0]} ${o}/${p[1]}`:`plan sin definir · ${o}/${invCap(c)}`;}
 function invAbrir(c){
   invActual=c;
   const identLabel=invUsaUsuario(c.plataforma)?"Usuario":"Correo";
@@ -1391,6 +1393,7 @@ function invAbrir(c){
     ${c.url?`<div class="iv-row"><span class="k">URL propia</span><span class="v">${clienteEsc(c.url)}</span></div>`:""}
     <div class="iv-row"><span class="k">Estado</span><span class="v">${c.estado||"—"}</span></div>
     ${perfilesHtml}
+    ${String(c.plataforma||"").toLowerCase()==="hbomax"?`<div id="invHboBox" class="iv-perfiles" data-inv-id="${clienteEsc(c.id||"")}"><div class="cr-label">📦 Plan HBO</div><p class="hg-estado">${clienteEsc(invPlanHbo(c))}</p></div>`:""}
     ${String(c.plataforma||"").toLowerCase()==="netflix"?`<div id="invHogarBox" class="iv-perfiles" data-inv-id="${clienteEsc(c.id||"")}"></div>`:""}
     <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar ${identLabel.toLowerCase()} / clave</button>
     <button class="cobro-btn iv-edit-btn" id="invCapBtn" style="width:100%;margin-top:8px">👥 Editar capacidad</button>
@@ -1402,6 +1405,7 @@ function invAbrir(c){
   const cb=document.getElementById("invCapBtn");if(cb)cb.addEventListener("click",()=>invEditarCapacidad(c));
   const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
   try{window.SublichatHogar?.montar(document.getElementById("invHogarBox"));}catch(_){} // R196u · Hogar Netflix Premium
+  try{window.SublichatHbo?.montar(document.getElementById("invHboBox"),()=>{if(typeof invCargar==="function")invCargar();});}catch(_){} // R196u · plan HBO
 }
 function invCerrar(){ document.getElementById("invModal").classList.remove("show"); }
 document.getElementById("invClose").addEventListener("click",invCerrar);
@@ -6226,7 +6230,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     box.innerHTML=`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px 10px;padding:8px 10px;font-size:12px;align-items:center">
       <b>Cuenta</b><b>Uso</b><b>Libres</b><b>Estado</b>
       ${lista.map((c,i)=>{const d=invDisp(c),cap=invCap(c),o=invOcupados(c);const estado=invSobreasignada(c)?"⚠️ Sobreasignada":(d<=0?(cap===1?"Asignada":"Llena"):(conBadge&&c===recomendada?"⭐ RECOMENDADA":"Disponible"));
-        return `<button type="button" data-cuenta-i="${i}" style="all:unset;cursor:${d>0?"pointer":"not-allowed"};opacity:${d>0?1:.55};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${clienteEsc(c.correo||"—")}</button><span>${o} / ${cap}</span><span>${d}</span><span style="${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${estado}</span>`;}).join("")}
+        return `<button type="button" data-cuenta-i="${i}" style="all:unset;cursor:${d>0?"pointer":"not-allowed"};opacity:${d>0?1:.55};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${clienteEsc(c.correo||"—")}${String(c.plataforma||"").toLowerCase()==="hbomax"?` · ${clienteEsc(invPlanHbo(c).split(" ")[0]==="plan"?"sin plan":invPlanHbo(c).split(" ")[0])}`:""}</button><span>${o} / ${cap}</span><span>${d}</span><span style="${conBadge&&c===recomendada?"font-weight:800;color:var(--good,#0f9f6e)":""}">${estado}</span>`;}).join("")}
     </div>`;
     box.style.display="block";
     box.querySelectorAll("[data-cuenta-i]").forEach(b=>b.addEventListener("click",ev=>{ev.preventDefault();ev.stopPropagation();
