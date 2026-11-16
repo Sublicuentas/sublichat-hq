@@ -599,6 +599,7 @@ export default async function handler(req, res) {
       const adminHbo = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["hbo-planes"] === true;
       try {
         if (accion === "hboResumen") return res.status(200).json({ ok: true, puedeEditar: adminHbo, planes: hboPlanes.PLANES, ...(await hboPlanes.resumenHbo(db)) });
+        if (accion === "hboDiagnostico") { if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas ve el diagnóstico HBO." }); return res.status(200).json(await hboPlanes.diagnosticoHbo(db)); } // R196v · solo lectura
         if (accion === "hboPlan") { if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el plan HBO." }); return res.status(200).json(await hboPlanes.cambiarPlan(db, { inventarioId: docId, plan: req.body.plan, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) })); }
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 260), code: e?.code || "" }); }
       return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
