@@ -280,7 +280,7 @@
     try{return new Intl.DateTimeFormat("es-HN",{timeZone:"America/Tegucigalpa",day:"numeric",month:"long",year:"numeric"}).format(new Date(ms));}catch(_){return "";}
   }
   // Logos que ya tiene Sublichat en /assets/platformas (los mismos del Control Maestro).
-  const LOGOS=[[/netflix/,"netflix"],[/disney/,"disney"],[/hbo|^max\b|\bmax\b/,"hbo"],[/prime|amazon/,"prime"],[/\bvix\b/,"vix"],[/viki/,"viki"],[/paramount/,"paramount"],[/crunchy/,"crunchyroll"],[/universal/,"universal"],[/apple/,"appletv"],[/spotify/,"spotify"],[/deezer/,"deezer"],[/youtube/,"youtube"],[/canva/,"canva"],[/gemini/,"gemini"],[/chatgpt|openai/,"chatgpt"],[/duolingo/,"duolingo"],[/office|microsoft 365|m365/,"office365"],[/windows 11/,"windows11"],[/windows/,"windows10"],[/eset/,"eset"],[/adobe/,"adobeexpress"],[/oleada/,"oleada"],[/stella/,"stella-tv"],[/latin/,"latin-tv"],[/iptv/,"iptv"]];
+  const LOGOS=[[/netflix/,"netflix"],[/disney/,"disney"],[/hbo|^max\b|\bmax\b/,"hbo"],[/prime|amazon/,"prime"],[/\bvix\b/,"vix"],[/viki/,"viki"],[/paramount/,"paramount"],[/crunchy/,"crunchyroll"],[/universal/,"universal"],[/apple/,"appletv"],[/eleven/,"elevenreader"],[/autocad|autodesk/,"autocad"],[/spotify/,"spotify"],[/deezer/,"deezer"],[/youtube/,"youtube"],[/canva/,"canva"],[/gemini/,"gemini"],[/chatgpt|openai/,"chatgpt"],[/duolingo/,"duolingo"],[/office|microsoft 365|m365/,"office365"],[/windows 11/,"windows11"],[/windows/,"windows10"],[/eset/,"eset"],[/adobe/,"adobeexpress"],[/oleada/,"oleada"],[/stella/,"stella-tv"],[/latin/,"latin-tv"],[/iptv/,"iptv"]];
   function logoHtml(nombre){
     const n=norm(nombre);const hit=LOGOS.find(([re])=>re.test(n));
     const ini=(String(nombre||"").trim().charAt(0).toUpperCase().match(/[A-Z0-9ÁÉÍÓÚÑ]/)||["•"])[0];
