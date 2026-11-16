@@ -4652,7 +4652,7 @@ function gCaminoBombas(){
 /* SUBLICHAT_CRM_WHATSAPP_AUTO_CRM_NOPINVIP_20260704 */
 (function(){
   const FICHA_PLATS=[
-    ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax","HBO Max"],
+    ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax_standard","HBO Standard · 3 perfiles"],["hbomax_platinum","HBO Platinum · 5 perfiles"],["hbomax","HBO Max (venta anterior, sin plan)"], /* R196v */
     ["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],["primevideo","Prime Video"],
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
@@ -5539,6 +5539,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     .sort((a,b)=>b.token.length-a.token.length);
   const fichaBaseRegla=plat=>{
     const p=fichaNorm(plat);
+    if(/^hbomax(standard|platinum)$/.test(p))return "hbomax"; // R196v · opción de venta con plan
     if(/^stellatv[123]$/.test(p))return "stellatv";
     if(/^oleadatv[13]$/.test(p))return "oleada";
     if(/^latintv[1234]$/.test(p))return "latintv";
@@ -5641,19 +5642,21 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   const fichaClaveOpcional=plat=>!fichaEsCuentaCompleta()&&fichaBaseRegla(plat)==="autocad";
   const fichaNeedsCorreo=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
   // R112 · Categorías: primero la categoría, después solo sus plataformas (mismo contrato que APK y bot).
+  // R196v · plan HBO de la opción elegida («hbomax_standard» / «hbomax_platinum»); "" = venta anterior sin plan.
+  function fichaPlanHboDe(v){ const m=String(v||"").toLowerCase().match(/^hbomax_(standard|platinum)$/); return m?m[1]:""; }
   function fichaCategoriaDe(plat,tipoVenta=""){ return r112Clasificar({plataforma:plat,tipoVenta}).categoria; }
   function fichaPintarCategorias(){
     const cat=fichaGetVal("fichaCategoria")||fichaCategoriaDe(fichaGetVal("fichaPlat"));
     document.querySelectorAll("[data-ficha-cat]").forEach(b=>b.classList.toggle("on",b.dataset.fichaCat===cat));
-    const sel=fichaQ("fichaPlat"); if(sel){ const actual=sel.value; [...sel.options].forEach(o=>{ const visible=cat==="cuentas_completas"?R112_CC.includes(o.value):fichaCategoriaDe(o.value)===cat; o.hidden=!visible&&o.value!==actual; }); }
+    const sel=fichaQ("fichaPlat"); if(sel){ const actual=sel.value; [...sel.options].forEach(o=>{ const visible=(cat==="cuentas_completas"?R112_CC.includes(fichaBaseRegla(o.value)):fichaCategoriaDe(o.value)===cat)&&o.value!=="hbomax"; o.hidden=!visible&&o.value!==actual; const ph=fichaPlanHboDe(o.value); if(ph)o.textContent=cat==="cuentas_completas"?`HBO ${ph==="platinum"?"Platinum":"Standard"} · cuenta completa`:`HBO ${ph==="platinum"?"Platinum · 5":"Standard · 3"} perfiles`; }); } // R196v · «HBO Max» genérico solo aparece al editar una venta anterior
     const nota=document.getElementById("fichaCatNota"); if(nota)nota.hidden=cat!=="cuentas_completas";
     const add=document.getElementById("fichaAddProfile"); if(add)add.style.display=cat==="cuentas_completas"?"none":"";
   }
   function fichaSetCategoria(cat,{desdePlataforma=false}={}){
     const hid=fichaQ("fichaCategoria"); if(hid)hid.value=cat;
     const sel=fichaQ("fichaPlat");
-    if(!desdePlataforma&&sel){ const ok=cat==="cuentas_completas"?R112_CC.includes(sel.value):fichaCategoriaDe(sel.value)===cat;
-      if(!ok){ const first=[...sel.options].find(o=>cat==="cuentas_completas"?R112_CC.includes(o.value):fichaCategoriaDe(o.value)===cat); if(first){ sel.value=first.value; sel.dispatchEvent(new Event("change")); } } }
+    if(!desdePlataforma&&sel){ const ok=cat==="cuentas_completas"?R112_CC.includes(fichaBaseRegla(sel.value)):fichaCategoriaDe(sel.value)===cat;
+      if(!ok){ const first=[...sel.options].find(o=>o.value!=="hbomax"&&(cat==="cuentas_completas"?R112_CC.includes(fichaBaseRegla(o.value)):fichaCategoriaDe(o.value)===cat)); if(first){ sel.value=first.value; sel.dispatchEvent(new Event("change")); } } }
     fichaPintarCategorias(); try{ fichaRenderPerfilesExtra(); }catch(_){}
   }
   const fichaEsSerial=plat=>FICHA_SERIAL.has(fichaBaseRegla(plat));
@@ -5854,6 +5857,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   };
   const fichaPlatformLabel=plat=>{
     const p=fichaNorm(plat);
+    if(/^hbomax(standard|platinum)$/.test(p))return p.endsWith("platinum")?"HBO Max Platinum":"HBO Max Standard"; // R196v
+    if(p==="hbomax")return "HBO Max";
     if(p==="vipnetflix"||p==="vip"||(p.includes("netflix")&&p.includes("vip")))return "⭐ Netflix Premium VIP";
     const propia=FICHA_PLATS.find(([codigo])=>fichaNorm(codigo)===p);
     if(propia)return propia[1];
@@ -6106,6 +6111,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   }
   function fichaPlataformaGuardar(plat=fichaGetVal("fichaPlat")){
     const p=fichaBaseRegla(plat);
+    if(p==="hbomax") return "hbomax"; // R196v · el plan va aparte en planHbo
     if(p==="stellatv"){
       const n=["1","2","3"].includes(fichaGetVal("fichaOleadaDispositivos"))?fichaGetVal("fichaOleadaDispositivos"):"1";
       return `stellatv${n}`;
@@ -6260,7 +6266,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(box.style.display==="block"){box.style.display="none";return;}
     const plat=fichaPlataformaGuardar(fichaGetVal("fichaPlat"));
     const fam=invFamilia(plat);
-    const lista=invOrdenarPorVacia((typeof INVENTARIO!=="undefined"?INVENTARIO:[]).filter(c=>invFamilia(c.plataforma)===fam&&String(c.estado||"activa").toLowerCase()!=="suspendida"&&!["suspendido","revision"].includes(String(c.estadoBodega||"").toLowerCase()) /* R196u · VIP suspendida o en revisión no se vende */));
+    const planVenta=fichaPlanHboDe(fichaGetVal("fichaPlat")); // R196v · HBO: solo cuentas del mismo plan y modalidad compatible
+    const hboOk=c=>{ if(fam!==invFamilia("hbomax"))return true; if(planVenta&&String(c.planHbo||"")!==planVenta)return false; const cs=Array.isArray(c.clientes)?c.clientes:[]; if(cs.some(x=>x&&x.cuentaCompleta===true))return false; return fichaEsCuentaCompleta()?invOcupados(c)===0:true; };
+    const lista=invOrdenarPorVacia((typeof INVENTARIO!=="undefined"?INVENTARIO:[]).filter(c=>invFamilia(c.plataforma)===fam&&String(c.estado||"activa").toLowerCase()!=="suspendida"&&!["suspendido","revision"].includes(String(c.estadoBodega||"").toLowerCase()) /* R196u · VIP suspendida o en revisión no se vende */&&hboOk(c)));
     const conBadge=!fichaEsCuentaCompleta()&&!fichaEsIptv(fichaBaseRegla(plat));
     if(!lista.length){box.innerHTML=`<div style="padding:10px;font-size:12.5px;color:var(--muted)">No hay cuentas de ${clienteEsc(fichaPlatformLabel(plat))} en Bodega.</div>`;box.style.display="block";return;}
     const recomendada=lista.find(c=>invDisp(c)>0&&invCap(c)>1);
@@ -6515,6 +6523,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       compraId:compraIdGuardar,
       modalidad:perfiles.length>1?"multiperfil":"individual",
       plataforma:plataformaGuardar,
+      ...(fichaPlanHboDe(plat)?{planHbo:fichaPlanHboDe(plat)}:{}), // R196v
       precio:fichaPrecioActual(),
       fechaRenovacion:fecha,
       mesesContratados:fichaMesesContratadosActual(fecha),
@@ -6875,6 +6884,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       selectorPlataforma.appendChild(opcion);
     }
     selectorPlataforma.value=plataformaFormulario;
+    if(fichaBaseRegla(plataformaFormulario)==="hbomax"&&["standard","platinum"].includes(String(s.planHbo||""))) selectorPlataforma.value=`hbomax_${s.planHbo}`; // R196v · conserva el plan; sin plan queda «HBO Max (venta anterior)»
     if(![...selectorPlataforma.options].some(o=>o.value===selectorPlataforma.value)) selectorPlataforma.value=FICHA_PLATS[0][0];
     const cantidadGuardada=String(s.iptvPantallas||s.oleadaDispositivos||s.stellaDispositivos||fichaCantidadDesdePlataforma(plataformaGuardada,"1"));
     if(fichaEsIptv(fichaQ("fichaPlat").value)){
