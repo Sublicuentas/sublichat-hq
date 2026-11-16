@@ -8,6 +8,7 @@ import tvDigital from "./_tv-digital.js";
 import baulApks from "./_baul-apks.js"; // R187 · Baúl de APKs (fuente única Web/APK/bot)
 import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (ICOMPLAY)
 import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fuente única Web/APK/bot)
+import bodegaVip from "./_bodega-vip.js"; // R196u · Bodega Netflix VIP (fuente única Web/APK/bot)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -586,6 +587,22 @@ export default async function handler(req, res) {
     const puedeInventario = PERMISOS.aplicar(permisosCtx, "control-maestro", isAdminUser(authUser)) || permisosCtx.overrides?.bodega === true;
     if (!puedeInventario) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
+    }
+
+    // R196u · Bodega Netflix VIP (PDF v2.0 · 01/02). Lotes y estados: solo Sublicuentas o quien tenga el permiso explícito
+    // «bodega-vip»; listar/asignar: quien ya puede modificar inventario. Nunca se devuelven claves.
+    if (/^vip[A-Z]/.test(accion)) {
+      const usr = String(authUser.usuario || authUser.uid || "");
+      const adminVip = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["bodega-vip"] === true;
+      if (["vipPrevisualizar", "vipImportar", "vipEstado"].includes(accion) && !adminVip) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) carga lotes VIP." });
+      try {
+        if (accion === "vipListar") return res.status(200).json({ ok: true, puedeCargar: adminVip, proveedores: bodegaVip.PROVEEDORES, ...(await bodegaVip.listar(db, { estado: String(req.body.estado || "") })) });
+        if (accion === "vipPrevisualizar") return res.status(200).json({ ok: true, ...(await bodegaVip.previsualizar(db, String(req.body.texto || ""))) });
+        if (accion === "vipImportar") return res.status(200).json({ ok: true, ...(await bodegaVip.importar(db, { texto: String(req.body.texto || ""), proveedor: req.body.proveedor, lote: req.body.lote, costoUsdt: req.body.costoUsdt, vencimientoProveedor: req.body.vencimientoProveedor, usuario: usr, origen: "web" })) });
+        if (accion === "vipAsignar") return res.status(200).json(await bodegaVip.asignar(db, { inventarioId: req.body.inventarioId, clienteId: req.body.clienteId, compraId: req.body.compraId, nombre: req.body.nombre, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) }));
+        if (accion === "vipEstado") return res.status(200).json(await bodegaVip.marcarEstado(db, { inventarioId: req.body.inventarioId, estado: req.body.estado, nota: req.body.nota, usuario: usr }));
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 200) }); }
+      return res.status(200).json({ ok: false, error: "Acción VIP desconocida." });
     }
 
     // R196n · Cuentas de Bodega dadas de baja (hoy: desde el bot de Telegram, que las pasa a la Papelera de Integridad aunque
