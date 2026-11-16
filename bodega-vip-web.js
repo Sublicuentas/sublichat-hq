@@ -81,6 +81,8 @@
         (puede ? '<button type="button" class="hg-btn" data-hg-cli="' + esc(p.clienteId) + '" data-hg-compra="' + esc(p.compraId) + '">Marcar Hogar</button>' : '') + '</div>';
     }).join('') + '</div>';
     if (r.puedeEditar && h.estado && h.estado !== 'sin_asignar') html += '<button type="button" class="hg-btn hg-quitar" data-hg-quitar="1">Quitar Hogar</button>';
+    if (r.incidencia) html += '<p class="hg-incidencia">⚠️ ' + esc(r.incidencia) + '</p>'; // R196v · madre duplicada en Bodega
+    if (r.puedeEditar) html += '<button type="button" class="hg-btn" data-hg-diag="1">Diagnóstico de Hogar (solo lectura)</button><div data-hg-diag-out></div>';
     html += '<p class="vip-muted">Seguimiento interno de Sublichat: no cambia la configuración de Netflix.</p>';
     box.innerHTML = html;
   }
@@ -89,7 +91,17 @@
     box.innerHTML = '<div class="cr-label">🏠 Hogar Netflix</div><p class="vip-muted">Cargando…</p>';
     api({ accion: 'hogarVer', docId: id }).then(function (r) { pintar(box, r); });
   }
+  // R196v · Diagnóstico de solo lectura: cuentas madre duplicadas y Hogares pendientes (registros que decide una persona).
+  function pintarDiag(out, r) {
+    if (!r.ok) { out.innerHTML = '<p class="vip-err">' + esc(r.error || 'No se pudo leer el diagnóstico.') + '</p>'; return; }
+    var h = '<p class="vip-muted">' + r.madres + ' cuentas madre · ' + r.conHogar + ' con Hogar · ' + r.duplicadas.length + ' duplicadas · ' + r.pendientes.length + ' Hogar pendiente.</p>';
+    h += r.duplicadas.map(function (g) { return '<div class="hg-row"><span><b>' + esc(g.correo) + '</b> · ' + g.copias.length + ' copias: ' + g.copias.map(function (c) { return esc(c.id) + ' (' + c.ocupados + ' ocupados' + (c.hogar ? ' · ' + esc(c.hogar) : '') + ')'; }).join(' / ') + '</span></div>'; }).join('');
+    h += r.pendientes.map(function (p) { return '<div class="hg-row"><span><b>' + esc(p.correo) + '</b> · ' + esc(p.texto) + '</span></div>'; }).join('');
+    out.innerHTML = h;
+  }
   document.addEventListener('click', function (e) {
+    var dg = e.target.closest && e.target.closest('[data-hg-diag]');
+    if (dg) { var out = dg.parentNode.querySelector('[data-hg-diag-out]'); out.innerHTML = '<p class="vip-muted">Revisando…</p>'; api({ accion: 'hogarDiagnostico' }).then(function (r) { pintarDiag(out, r); }); return; }
     var b = e.target.closest && e.target.closest('[data-hg-cli],[data-hg-quitar]'); if (!b) return;
     var box = b.closest('#invHogarBox'); if (!box) return; var id = box.getAttribute('data-inv-id');
     if (b.hasAttribute('data-hg-quitar')) { if (!confirm('¿Quitar el Hogar de esta cuenta madre?')) return; api({ accion: 'hogarQuitar', docId: id }).then(function () { montar(box); }); return; }
