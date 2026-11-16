@@ -54,7 +54,9 @@ test('Catálogo · nombres, Finanzas y sin tarifa fija (precio por venta)', () =
   assert.equal(resolverProducto('Autodesk AutoCAD').id, 'autocad'); assert.equal(resolverProducto('Eleven Reader').nombre, 'Eleven Reader');
   assert.match(T('sublichat-app.js'), /autocad:0, elevenreader:0 \/\* R196u · sin tarifa fija/);
   assert.match(T('sublichat-app.js'), /\["adobeexpress","Adobe Express"\],\["autocad","Autodesk AutoCAD"\],\["windows10"/);
-  assert.match(T('acceso.html'), /autocad:\{logo:"",bg:"#ffffff",fallback:"CAD"/, 'sin logo oficial: ícono de respaldo (no se crea uno con IA)');
+  assert.match(T('acceso.html'), /autocad:\{logo:"\/assets\/platformas\/autocad\.jpg",bg:"#ffffff",fallback:"CAD"/, 'R196x · logo oficial enviado por Sublicuentas (con respaldo si no carga)');
+  assert.match(T('acceso.html'), /elevenreader:\{logo:"\/assets\/platformas\/elevenreader\.jpg"/);
+  for (const f of ['autocad.jpg', 'elevenreader.jpg']) assert.ok(fs.existsSync(new URL('../assets/platformas/' + f, import.meta.url)), f);
   for (const f of ['catalogo-categorias.js']) assert.equal(T(f).split('\n').slice(4).join('\n'), T('api/_catalogo-categorias.js').split('\n').slice(4).join('\n'), 'copia del navegador = API');
 });
 
