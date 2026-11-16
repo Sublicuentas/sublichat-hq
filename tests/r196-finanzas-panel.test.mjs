@@ -232,13 +232,14 @@ test('R196i · Excel VIP 4 col.: vista previa, tasa obligatoria, proveedor «otr
   const sinTasa = await call(db, 'finp_simple_preview', { encabezados: enc, filas });
   assert.match(sinTasa.filas[0].errores.join(), /tasa Binance/);
   const pv = await call(db, 'finp_simple_preview', { encabezados: enc, filas, tasa: 26.5 });
-  assert.deepEqual(pv.filas.map((x) => x.estado), ['nuevo', 'nuevo', 'sin_coincidencia', 'ambiguo']);
+  assert.deepEqual(pv.filas.map((x) => x.estado), ['nuevo', 'nuevo', 'nuevo', 'ambiguo']); // R196y · sin coincidencia = registro solo financiero
+  assert.equal(pv.filas[2].vinculo, 'sin_asignacion');
   assert.deepEqual([pv.filas[0].datos.costoMensualHnl, pv.filas[1].datos.grupo, pv.filas[1].datos.proveedor], [66.25, 'otro', 'Proveedor Nuevo SA']);
   const c = await call(db, 'finp_simple_confirmar', { encabezados: enc, filas, tasa: 26.5, hash: pv.hash, confirmo: true });
-  assert.equal(c.ok, true); assert.equal(c.aplicados, 2);
+  assert.equal(c.ok, true); assert.equal(c.aplicados, 3); assert.equal(c.sinAsignacion, 1);
   assert.equal(db._data.get('fin_vip_extras/vip-1').data.proximoPagoProveedor, '2026-12-07');
   const pv2 = await call(db, 'finp_simple_preview', { encabezados: enc, filas, tasa: 26.5 });
-  assert.equal(pv2.resumen.sinCambios, 2, 're-importar no duplica');
+  assert.equal(pv2.resumen.sinCambios, 3, 're-importar no duplica');
   assert.equal(JSON.stringify([...db._data.entries()].filter(([k]) => k.startsWith('inventario/') || k.startsWith('clientes/'))), antes, 'Control Maestro y clientes intactos');
   const jobs = (await call(db, 'finp_importaciones', {})).jobs;
   const d = await call(db, 'finp_vip_deshacer', { jobId: jobs[0].id });
