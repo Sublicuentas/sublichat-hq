@@ -10,6 +10,7 @@ import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (
 import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fuente única Web/APK/bot)
 import bodegaVip from "./_bodega-vip.js"; // R196u · Bodega Netflix VIP (fuente única Web/APK/bot)
 import netflixHogar from "./_netflix-hogar.js"; // R196u · Hogar de Netflix Premium (un Hogar por madre)
+import hboPlanes from "./_hbo-planes.js"; // R196u · HBO Platinum 5 / Standard 3 por cuenta
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -590,6 +591,17 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
     }
 
+    // R196u · HBO Platinum 5 / Standard 3 (PDF v2.0 · 06): ver = quien puede inventario; cambiar plan = Sublicuentas o permiso «hbo-planes».
+    if (/^hbo[A-Z]/.test(accion)) {
+      const usr = String(authUser.usuario || authUser.uid || "");
+      const adminHbo = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["hbo-planes"] === true;
+      try {
+        if (accion === "hboResumen") return res.status(200).json({ ok: true, puedeEditar: adminHbo, planes: hboPlanes.PLANES, ...(await hboPlanes.resumenHbo(db)) });
+        if (accion === "hboPlan") { if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el plan HBO." }); return res.status(200).json(await hboPlanes.cambiarPlan(db, { inventarioId: docId, plan: req.body.plan, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) })); }
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 260), code: e?.code || "" }); }
+      return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
+    }
+
     // R196u · Hogar de Netflix Premium (PDF v2.0 · 03): ver = quien puede inventario; asignar/quitar = Sublicuentas o permiso «hogar-netflix».
     if (/^hogar[A-Z]/.test(accion)) {
       const usr = String(authUser.usuario || authUser.uid || "");
@@ -674,6 +686,7 @@ export default async function handler(req, res) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+      if (nuevaCuenta.plataforma === hboPlanes.PLAT_HBO && hboPlanes.planPorCapacidad(cap)) nuevaCuenta.planHbo = hboPlanes.planPorCapacidad(cap); // R196u · 5 = Platinum, 3 = Standard
       const ref = db.collection("inventario").doc();
       await ref.set({ ...nuevaCuenta, accountId: ref.id });
       await db.collection("auditoria_eventos").add({tipo:"inventario_cuenta_creada",inventarioId:ref.id,plataforma:nuevaCuenta.plataforma,correo:nuevaCuenta.correo,capacidad:cap,usuario:usuarioAccion,createdAt:new Date().toISOString()});
@@ -705,6 +718,7 @@ export default async function handler(req, res) {
       if (capacidad != null) {
         const cap = Math.max(1, Math.round(Number(capacidad) || 0));
         if (cap < clients.length) return res.status(200).json({ error: `La capacidad no puede ser menor que los ${clients.length} clientes asignados.` });
+        { const pl = hboPlanes.planDeCuenta(current); if (pl && cap !== pl.capacidad) return res.status(200).json({ error: `Esta cuenta es ${pl.nombre} (${pl.capacidad} perfiles): cambie el plan en lugar de la capacidad.` }); } // R196u
         update.capacidad = cap;
         update.ocupados = clients.length;
         update.disponibles = Math.max(0, cap - clients.length);
