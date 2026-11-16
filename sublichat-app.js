@@ -1391,6 +1391,7 @@ function invAbrir(c){
     ${c.url?`<div class="iv-row"><span class="k">URL propia</span><span class="v">${clienteEsc(c.url)}</span></div>`:""}
     <div class="iv-row"><span class="k">Estado</span><span class="v">${c.estado||"—"}</span></div>
     ${perfilesHtml}
+    ${String(c.plataforma||"").toLowerCase()==="netflix"?`<div id="invHogarBox" class="iv-perfiles" data-inv-id="${clienteEsc(c.id||"")}"></div>`:""}
     <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar ${identLabel.toLowerCase()} / clave</button>
     <button class="cobro-btn iv-edit-btn" id="invCapBtn" style="width:100%;margin-top:8px">👥 Editar capacidad</button>
     ${invEsTvDigital(c.plataforma)?`<button class="cobro-btn iv-edit-btn" id="invUrlBtn" style="width:100%;margin-top:8px">🌐 URL propia de esta cuenta</button>`:""}
@@ -1400,6 +1401,7 @@ function invAbrir(c){
   if(eb)eb.addEventListener("click",()=>invEditar(c));
   const cb=document.getElementById("invCapBtn");if(cb)cb.addEventListener("click",()=>invEditarCapacidad(c));
   const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
+  try{window.SublichatHogar?.montar(document.getElementById("invHogarBox"));}catch(_){} // R196u · Hogar Netflix Premium
 }
 function invCerrar(){ document.getElementById("invModal").classList.remove("show"); }
 document.getElementById("invClose").addEventListener("click",invCerrar);
@@ -3774,11 +3776,13 @@ if(gestionBtn)gestionBtn.addEventListener("click",()=>{
 });
 function pintarGestion(){
   const g=cobroActual; if(!g)return;
+  // R196u · indicador «🏠 Hogar» si este servicio es el Hogar de su cuenta madre Netflix Premium (dato de Bodega).
+  const cgHogarBadge=(g,sv)=>{const cid=String(g.clienteId||g.id||"");const h=(window._invRows||[]).find(r=>String(r.plataforma||"").toLowerCase()==="netflix"&&r.hogar&&String(r.hogar.clienteId)===cid&&(!r.hogar.compraId||!sv.compraId||String(r.hogar.compraId)===String(sv.compraId)));return h?` <span class="cg-hogar" title="Responsable del Hogar en ${clienteEsc(h.correo||"")}">🏠 Hogar</span>`:"";};
   const servicios=g.serviciosCliente||g.servicios||[{plataformaRaw:g.plataformaRaw,plataforma:g.plataforma,precio:g.precio,fechaRaw:g.fechaRaw,correo:g.correo,pin:g.pin}];
   $cobro("cgList").innerHTML=servicios.map((s,i)=>`
     <div class="cg-item">
       <div class="cg-info">
-        <div class="cg-plat">${s.plataforma}</div>
+        <div class="cg-plat">${s.plataforma}${cgHogarBadge(g,s)}</div>
         <div class="cg-meta">${fmt(s.precio)} · ${s.fechaRaw||"sin fecha"} · ${s.tipoVenta==="cuenta_completa"?"<b>Cuenta completa</b>":`${Number(s.cantidadPerfiles)||1} perfil${(Number(s.cantidadPerfiles)||1)===1?"":"es"}`} · 🧾 ${clienteEsc(s.vendedor||"Sin vendedor")}</div>
       </div>
       <div class="cg-act">
@@ -4918,7 +4922,7 @@ Hola, *_{nombre}_*. Le hacemos entrega oficial de sus credenciales de acceso:
 
 *👤 Perfil / cliente: {perfil}*
 *📧 Correo: {correo}*
-*🔑 Contraseña: {clave}*
+*🔑 Contraseña: {clave}*{pinVipLine}
 
 📺 Puede iniciar sesión en el dispositivo que prefiera (celular, TV, tablet, etc.), pero la reproducción es en UNO a la vez — no se puede ver en varios dispositivos al mismo tiempo.
 *⏳ Próximo pago: {fecha}*
@@ -5594,6 +5598,9 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   const fichaModalidadDe=plat=>{const b=fichaBaseRegla(plat);if(b==="chatgpt")return "proveedor";if(b==="gemini"||b==="duolingo")return fichaGetVal("fichaModalidad")==="proveedor"?"proveedor":"correo_cliente";return "";};
   const fichaNeedsClave=plat=>{const m=fichaModalidadDe(plat);if(m)return m==="proveedor";return fichaEsCuentaCompleta()||!FICHA_SIN_CLAVE.has(fichaBaseRegla(plat));};
   const fichaNeedsPin=plat=>!fichaEsCuentaCompleta()&&!FICHA_SIN_PIN.has(fichaBaseRegla(plat));
+  // R196u · Netflix VIP: PIN de perfil OPCIONAL (solo si el cliente lo pidió). No es obligatorio ni sale «PIN: —».
+  const fichaPinOpcional=plat=>!fichaEsCuentaCompleta()&&fichaBaseRegla(plat)==="vipnetflix";
+  const fichaPermitePin=plat=>fichaNeedsPin(plat)||fichaPinOpcional(plat);
   const fichaNeedsCorreo=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
   // R112 · Categorías: primero la categoría, después solo sus plataformas (mismo contrato que APK y bot).
   function fichaCategoriaDe(plat,tipoVenta=""){ return r112Clasificar({plataforma:plat,tipoVenta}).categoria; }
@@ -5927,7 +5934,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       nombre:fichaGetVal("fichaPerfil")||titular,
       perfil:fichaGetVal("fichaPerfil")||titular,
       correo:fichaNeedsCorreo(plat)?fichaGetVal("fichaCorreo"):"",clave:fichaNeedsClave(plat)?fichaGetVal("fichaClave"):"",
-      pinPerfil:fichaNeedsPin(plat)?fichaGetVal("fichaPinPerfil"):"",
+      pinPerfil:fichaPermitePin(plat)?fichaGetVal("fichaPinPerfil"):"",
       dispositivo:fichaUsaSelectorDispositivo(plat)?fichaGetVal("fichaDispositivo"):"",
       esRoku:fichaUsaSelectorDispositivo(plat)&&fichaGetVal("fichaDispositivo")==="tv"&&fichaGetVal("fichaEsRoku")==="si",
       visibilidadUrl:fichaVisibilidadUrlActual()
@@ -5937,7 +5944,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       perfilId:p.perfilId||fichaNuevoId("perfil"),nombre:String(p.nombre||p.perfil||`Perfil ${index+2}`).trim(),
       perfil:String(p.perfil||p.nombre||`Perfil ${index+2}`).trim(),correo:fichaNeedsCorreo(plat)?String(p.correo||"").trim():"",
       clave:fichaNeedsClave(plat)?String(p.clave||"").trim():"",
-      pinPerfil:fichaNeedsPin(plat)?String(p.pinPerfil||"").trim():"",
+      pinPerfil:fichaPermitePin(plat)?String(p.pinPerfil||"").trim():"",
       dispositivo:fichaUsaSelectorDispositivo(plat)?String(p.dispositivo||"").trim():"",
       esRoku:fichaUsaSelectorDispositivo(plat)&&String(p.dispositivo||"").trim()==="tv"&&p.esRoku===true,
       visibilidadUrl:fichaNormalizarVisibilidadUrl(p.visibilidadUrl||{modo:"plataforma"})
@@ -6167,6 +6174,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const renovTexto = fecha ? (fichaISOToDMY(fecha)||"—") : (dia ? (fichaD2(dia)+" de cada mes") : "—");
     const claveLine=fichaNeedsClave(plat)?`\n*🔑 Clave: ${clave||"—"}*`:"";
     const pinLine=fichaNeedsPin(plat)?`\n*📎 Pin: ${pin||"—"}*`:"";
+    const pinVipLine=fichaPinOpcional(plat)&&String(pin||"").trim()?`\n*🔏 PIN de perfil: ${String(pin).trim()}*`:""; // R196u · sin PIN no hay línea
     const iptvProv=fichaGetVal("fichaIptvProveedor")||"latintv";
     const cuentaBodega=fichaCuentaBodegaPara(plat,correo);
     const iptvurl=(cuentaBodega&&cuentaBodega.url)||(fichaBaseRegla(plat)==="icomplay"?IPTV_URLS.icomplay:"")||IPTV_URLS[iptvProv]||IPTV_URLS.latintv;
@@ -6182,7 +6190,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const perfiles=fichaRecolectarPerfiles();
     const variables={
       plat:fichaPlatformLabel(plat),nombre:nombre||"Cliente",perfil:perfil||nombre||"Cliente",correo,clave:clave||"—",pin:pin||"—",
-      claveLine,pinLine,urlcuentaLine,correoTitulo:fichaModalidadDe(plat)==="proveedor"?"Correo de acceso:":"Invitación enviada a:",iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
+      claveLine,pinLine,pinVipLine,urlcuentaLine,correoTitulo:fichaModalidadDe(plat)==="proveedor"?"Correo de acceso:":"Invitación enviada a:",iptvurl,iptvlista,iptvhora,maxplayer:fichaMaxPlayerTexto(plat),iptvpantallas,oleadalimite,stellalimite,planmeses,renovTexto,
       dia:dia?fichaD2(dia):"—",fecha:fichaISOToDMY(fecha || fichaNextDateFromDay(dia)) || "—",precio:precio?String(precio):"—"
     };
     const aplicarVariables=texto=>Object.entries(variables).reduce((salida,[key,value])=>salida.replaceAll(`{${key}}`,String(value??"")),String(texto||""));
@@ -6365,7 +6373,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     // decide qué ve el CLIENTE en su ficha pública (ver fichaAvisoDispositivo).
     const showCorreo=fichaNeedsCorreo(plat);
     const showClave=fichaNeedsClave(plat);
-    const showPin=fichaNeedsPin(plat);
+    const showPin=fichaPermitePin(plat); // R196u · VIP: PIN opcional
     const showDispositivo=fichaUsaSelectorDispositivo(plat);
     const showIptv=fichaEsIptv(plat);
     const showTvDigital=["oleada","stellatv"].includes(fichaBaseRegla(plat));
@@ -6438,7 +6446,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     else if(campos.modo==="codigo") msg="📲 El cliente verá correo, perfil y PIN cuando la plataforma lo requiera; debe presionar Siguiente y luego \"Iniciar sesión con código\".";
     else if(campos.modo==="perfil") msg="📺 El cliente no verá correo ni clave — solo su perfil y PIN, porque el TV ya tiene la cuenta vinculada.";
     else if(fichaBaseRegla(plat)==="appletv") msg="🍎 Apple TV conserva correo, clave y PIN en el CRM; en la URL del cliente se muestra únicamente el PIN.";
-    else if(fichaNorm(plat)==="vipnetflix") msg="✅ Netflix Premium VIP mostrará siempre correo y clave, sin preguntar dispositivo y sin PIN de acceso.";
+    else if(fichaNorm(plat)==="vipnetflix") msg="✅ Netflix Premium VIP mostrará siempre correo y clave, sin preguntar dispositivo. El PIN de perfil es opcional: solo aparece si se registró.";
     else if(fichaNorm(plat)==="primevideo"&&dispositivo==="cel") msg="✅ Prime Video mostrará correo y clave. Si la app solicita un código de acceso, el cliente deberá pedirlo a su vendedor.";
     else msg="✅ El cliente verá correo"+(campos.clave?" y clave":"")+(campos.pin?" y PIN":"")+" normalmente.";
     box.style.display="block";
@@ -6500,6 +6508,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(fichaBaseRegla(plat)==="oleada") servicio.oleadaDispositivos=Number(fichaGetVal("fichaOleadaDispositivos")||1);
     if(fichaBaseRegla(plat)==="stellatv") servicio.stellaDispositivos=Number(fichaGetVal("fichaOleadaDispositivos")||1);
     if(fichaNeedsPin(plat)) servicio.pinPerfil=principal.pinPerfil||fichaGetVal("fichaPinPerfil");
+    else if(fichaPinOpcional(plat)&&String(principal.pinPerfil||fichaGetVal("fichaPinPerfil")||"").trim()) servicio.pinPerfil=String(principal.pinPerfil||fichaGetVal("fichaPinPerfil")).trim(); // R196u · VIP con PIN pedido
     else servicio.sinPinPerfil=true; // Ej: Netflix VIP no lleva PIN; también limpia PIN viejo si existía.
     return {
       accion:"ficha_upsert",

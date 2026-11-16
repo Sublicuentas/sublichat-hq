@@ -64,3 +64,44 @@
   function restaurar() { if (!guardado) return; ['vipLote', 'vipCosto', 'vipVenc', 'vipTexto'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = guardado[{ vipLote: 'lote', vipCosto: 'costoUsdt', vipVenc: 'vencimientoProveedor', vipTexto: 'texto' }[id]]; }); var s = document.getElementById('vipProv'); if (s && guardado.proveedor) { var hay = [].some.call(s.options, function (o) { return o.value === guardado.proveedor; }); s.value = hay ? guardado.proveedor : '__otro'; var o = document.getElementById('vipProvOtro'); if (!hay && o) { o.style.display = ''; o.value = guardado.proveedor; } } }
   window.SublichatBodegaVip = { cargar: cargar, _st: st };
 })();
+
+// R196u Fase 2 · Hogar de Netflix Premium en el detalle de la cuenta madre (Bodega web). Un Hogar por madre; reemplazar pide
+// confirmación; es un dato de seguimiento en Sublichat (no cambia nada en Netflix).
+(function () {
+  'use strict';
+  function api(body) { return fetch('/api/inventario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Respuesta inválida del servidor.' }; }); }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function pintar(box, r) {
+    if (!r.ok) { box.innerHTML = '<div class="cr-label">🏠 Hogar</div><p class="vip-err">' + esc(r.error || 'No se pudo leer el Hogar.') + '</p>'; return; }
+    var h = r.hogar || {};
+    var html = '<div class="cr-label">🏠 Hogar Netflix</div><p class="hg-estado ' + esc(h.estado || '') + '">' + esc(h.texto || 'Hogar sin asignar') + '</p>';
+    html += '<div class="hg-list">' + (r.perfiles || []).map(function (p) {
+      var puede = r.puedeEditar && p.clienteId && !p.hogar;
+      return '<div class="hg-row' + (p.hogar ? ' on' : '') + '"><span>Perfil ' + p.perfil + ' · ' + esc(p.cliente) + (p.hogar ? ' <b>🏠 Hogar</b>' : '') + '</span>' +
+        (puede ? '<button type="button" class="hg-btn" data-hg-cli="' + esc(p.clienteId) + '" data-hg-compra="' + esc(p.compraId) + '">Marcar Hogar</button>' : '') + '</div>';
+    }).join('') + '</div>';
+    if (r.puedeEditar && h.estado && h.estado !== 'sin_asignar') html += '<button type="button" class="hg-btn hg-quitar" data-hg-quitar="1">Quitar Hogar</button>';
+    html += '<p class="vip-muted">Seguimiento interno de Sublichat: no cambia la configuración de Netflix.</p>';
+    box.innerHTML = html;
+  }
+  function montar(box) {
+    if (!box) return; var id = box.getAttribute('data-inv-id'); if (!id) return;
+    box.innerHTML = '<div class="cr-label">🏠 Hogar Netflix</div><p class="vip-muted">Cargando…</p>';
+    api({ accion: 'hogarVer', docId: id }).then(function (r) { pintar(box, r); });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-hg-cli],[data-hg-quitar]'); if (!b) return;
+    var box = b.closest('#invHogarBox'); if (!box) return; var id = box.getAttribute('data-inv-id');
+    if (b.hasAttribute('data-hg-quitar')) { if (!confirm('¿Quitar el Hogar de esta cuenta madre?')) return; api({ accion: 'hogarQuitar', docId: id }).then(function () { montar(box); }); return; }
+    var body = { accion: 'hogarAsignar', docId: id, clienteId: b.getAttribute('data-hg-cli'), compraId: b.getAttribute('data-hg-compra') };
+    b.disabled = true;
+    api(body).then(function (r) {
+      if (!r.ok && r.code === 'requiere_confirmacion') {
+        if (!confirm(r.error + '\n\n¿Reemplazar el Hogar?')) { b.disabled = false; return; }
+        body.confirmarReemplazo = true; return api(body).then(function (r2) { if (!r2.ok) alert(r2.error); montar(box); });
+      }
+      if (!r.ok) alert(r.error || 'No se pudo asignar.'); montar(box);
+    });
+  });
+  window.SublichatHogar = { montar: montar };
+})();
