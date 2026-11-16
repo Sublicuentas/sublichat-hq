@@ -12,6 +12,7 @@ import { registrarEventoSorteosSeguro } from "./_sorteos-eventos.js";
 import { prepararPago, leerPago, escribirPago, esUsuarioLibro } from "./_finanzas-operacion.js";
 import { sumarPeriodo, sigueVencida, aCentavos, deCentavos } from "./_renovacion-motor.js"; // R186 · motor único de fechas
 import entrega from "./_entrega-plataforma.js";
+import hboPlanes from "./_hbo-planes.js"; // R196v · HBO Standard 3 / Platinum 5 en la venta
 import spotifyFam from "./_spotify-familias.js"; // R188 · ficha Spotify → familia del correo invitado // R188 · avisos, modalidad de acceso y dispositivo por servicio
 import { clasificarServicio, normalizarServicioVenta } from "./_catalogo-categorias.js"; // R112 // R107: pago en la misma transacción
 
@@ -214,6 +215,7 @@ const PLAT_ALIASES = {
 };
 function canonPlat(v) {
   const key = normPlatKey(v);
+  if (/^hbomax(standard|platinum)$/.test(key)) return "hbomax"; // R196v · opción de venta con plan
   if (PLAT_ALIASES[key]) return PLAT_ALIASES[key];
   const stella = key.match(/^stella(?:tv)?([123])(?:dispositivos?)?$/);
   if (stella) return `stellatv${stella[1]}`;
@@ -809,7 +811,8 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
       nombreCliente: nombrePerfilRealInventario(nuevo,p,nombreTitular,despues.length),
       pagadoPor: nombreTitular, pin: p.pinPerfil || "",
       perfilId: p.perfilId || "", compraId: nuevo?.compraId || "",
-      clienteId, inventarioId: p.inventarioId || ""
+      clienteId, inventarioId: p.inventarioId || "",
+      cuentaCompleta: familiaInventario(plataformaNueva) === "hbomax" && nuevo?.tipoVenta === "cuenta_completa" // R196v
     });
     resultados.push(r);
     if (r?.accountId && p.perfilId && r.accountId !== p.inventarioId) enlaces.push({ perfilId: p.perfilId, inventarioId: r.accountId });
@@ -826,6 +829,25 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
     sobreasignadas: resultados.filter((x) => x?.sobreasignada).length,
     advertencias: resultados.filter((x) => x && !x.tocado && x.motivo).map((x) => x.motivo)
   };
+}
+
+// R196v · HBO Standard (3) / Platinum (5): el SERVIDOR valida plan, cupos y cuenta completa antes de guardar la venta.
+// · Solo revisa cuentas de Bodega que la venta ocupa por primera vez o si cambió plan/modalidad (editar precio o fecha
+//   de una venta vieja nunca se bloquea). · Venta sin plan («HBO Max» anterior): toma el plan SOLO si su cuenta ya lo tiene.
+async function validarHboServicio(db, nuevo = null, anterior = null) {
+  if (!nuevo || canonPlat(nuevo.plataforma) !== "hbomax") return;
+  const completa = nuevo.tipoVenta === "cuenta_completa";
+  const mismoModo = !!anterior && canonPlat(anterior.plataforma) === "hbomax" && String(anterior.planHbo || "") === String(nuevo.planHbo || "") && (anterior.tipoVenta === "cuenta_completa") === completa;
+  const correosAntes = new Set((anterior ? perfilesOperativos(anterior, "") : []).map((p) => normCorreo(p.correo)));
+  for (const p of perfilesOperativos(nuevo, "")) {
+    if (mismoModo && correosAntes.has(normCorreo(p.correo))) continue;
+    const cuenta = await buscarCuentaInventario(db, { plataforma: "hbomax", correo: p.correo, inventarioId: p.inventarioId || "" });
+    if (!cuenta) continue; // cuenta fuera de Bodega: igual que hasta hoy
+    const d = cuenta.data() || {};
+    const motivo = hboPlanes.validarAsignacion(d, { plan: nuevo.planHbo || "", completa, compraId: nuevo.compraId || "" });
+    if (motivo) throw crmUserError(motivo);
+    if (!nuevo.planHbo && hboPlanes.planValido(d.planHbo)) nuevo.planHbo = hboPlanes.planValido(d.planHbo); // verificable por la cuenta
+  }
 }
 
 // Guarda en la ficha el accountId (inventarioId) de cada perfil recién enlazado.
@@ -965,7 +987,7 @@ async function buscarCuentaInventario(db, { plataforma, correo, inventarioId = "
 //   la sobreasignación queda visible (sobreasignada:true, 0 libres) en vez de esconder al cliente.
 //   Antes se devolvía "cuenta llena" sin registrarlo y la cuenta mostraba menos clientes de los reales.
 // - "liberar" nunca quita a otro cliente: antes, si no encontraba el perfil, sacaba el último de la lista.
-async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "", clienteId = "", inventarioId = "" }) {
+async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "", clienteId = "", inventarioId = "", cuentaCompleta = false }) {
   if (!correo && !inventarioId) return { tocado: false, motivo: "sin correo" };
   try {
     const familiaBuscada = familiaInventario(plataforma);
@@ -1014,6 +1036,7 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
           };
           if (pagadoPor && normName(pagadoPor) !== normName(nombreCliente)) actualizado.pagadoPor = String(pagadoPor).trim();
           else delete actualizado.pagadoPor;
+          if (familiaBuscada === "hbomax") { if (cuentaCompleta) actualizado.cuentaCompleta = true; else delete actualizado.cuentaCompleta; } // R196v
           clientes[idxExiste] = actualizado;
         } else {
           const usados = clientes.map(c => Number(c.slot) || 0);
@@ -1023,7 +1046,8 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
             ...(perfilKey ? { perfilId: perfilKey } : {}),
             ...(compraKey ? { compraId: compraKey } : {}),
             ...(clienteKey ? { clienteId: clienteKey } : {}),
-            ...(pagadoPor && normName(pagadoPor) !== normName(nombreCliente) ? { pagadoPor: String(pagadoPor).trim() } : {})
+            ...(pagadoPor && normName(pagadoPor) !== normName(nombreCliente) ? { pagadoPor: String(pagadoPor).trim() } : {}),
+            ...(familiaBuscada === "hbomax" && cuentaCompleta ? { cuentaCompleta: true } : {}) // R196v
           });
         }
       } else if (modo === "liberar") {
@@ -1038,7 +1062,7 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
       }
 
       const ocupados = clientes.length;
-      const disponibles = Math.max(0, cap - ocupados);
+      const disponibles = familiaBuscada === "hbomax" && clientes.some(c => c && c.cuentaCompleta === true) ? 0 : Math.max(0, cap - ocupados); // R196v · completa = 0 para terceros
       const update = { clientes, ocupados, disponibles, accountId: ref.id, sobreasignada: cap > 0 && ocupados > cap, updatedAt: isoNow() };
       if (data.disp != null) update.disp = disponibles;
       transaction.set(ref, update, { merge: true });
@@ -1138,7 +1162,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
     beneficiarioNombre: servicio.beneficiarioNombre != null ? servicio.beneficiarioNombre : anterior.beneficiarioNombre,
     beneficiario: servicio.beneficiario != null ? servicio.beneficiario : anterior.beneficiario
   }, nombreTitular);
-  const plataformaFinal = servicio.plataforma || anterior.plataforma || "";
+  const plataformaFinal = hboPlanes.planDesdePlataforma(servicio.plataforma) ? "hbomax" : (servicio.plataforma || anterior.plataforma || ""); // R196v · «hbomax_standard» se guarda como hbomax + planHbo
   const usaDispositivo = servicioUsaSelectorDispositivo(plataformaFinal);
   const dispositivoFinal = usaDispositivo && ["tv", "cel"].includes(String(principal.dispositivo || ""))
     ? String(principal.dispositivo)
@@ -1240,6 +1264,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   // R188 · modalidad de acceso (Gemini/Duolingo/ChatGPT) y dispositivo de TV Digital: del SERVICIO, versionados con la ficha.
   { const mod = entrega.modalidadAcceso(plataformaFinal, { ...anterior, ...servicio });
     if (mod) out.modalidadAcceso = mod;
+    if (canonPlat(plataformaFinal) === "hbomax") { const ph = hboPlanes.planDesdePlataforma(servicio.plataforma) || hboPlanes.planValido(servicio.planHbo) || hboPlanes.planValido(anterior.planHbo); if (ph) out.planHbo = ph; } // R196v · plan HBO de la venta (sin plan = venta anterior «HBO Max», se respeta)
     if (entrega.entregaPorInvitacion(plataformaFinal)) { const ei = servicio.estadoInvitacion !== undefined ? servicio.estadoInvitacion : anterior.estadoInvitacion; out.estadoInvitacion = entrega.estadoInvitacion({ estadoInvitacion: ei }); out.entregaModalidad = "invitacion"; } // R196u · AutoCAD
     if (entrega.familiaTv(plataformaFinal)) {
       const eq = servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv;
@@ -1598,6 +1623,7 @@ async function handlerCore(req, res) {
           vendedor_norm: normName(vendedor || servicioAnterior?.vendedor_norm || data.vendedor_norm || ""),
           vendedorTelefono: vendedorTelefono || servicioAnterior?.vendedorTelefono || ""
         }, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
+        await validarHboServicio(db, nuevo, servicioAnterior); // R196v
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -1991,6 +2017,7 @@ async function handlerCore(req, res) {
               : ""
           )
         }, "", {}, nombreTitular);
+        await validarHboServicio(db, nuevo, null); // R196v
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -2033,6 +2060,7 @@ async function handlerCore(req, res) {
           _dispositivoElegido: servicio.dispositivo != null, // R188
           modalidadAcceso: servicio.modalidadAcceso != null ? servicio.modalidadAcceso : anterior.modalidadAcceso,
           estadoInvitacion: servicio.estadoInvitacion != null ? servicio.estadoInvitacion : anterior.estadoInvitacion, // R196u
+          planHbo: servicio.planHbo != null ? servicio.planHbo : anterior.planHbo, // R196v
           equipoTv: servicio.equipoTv !== undefined ? servicio.equipoTv : anterior.equipoTv,
           _baulVistas: servicio._baulVistas,
           visibilidadUrl: servicio.visibilidadUrl != null ? servicio.visibilidadUrl : anterior.visibilidadUrl,
@@ -2040,6 +2068,7 @@ async function handlerCore(req, res) {
           vendedor_norm: servicio.vendedor_norm != null ? servicio.vendedor_norm : anterior.vendedor_norm,
           vendedorTelefono: servicio.vendedorTelefono != null ? servicio.vendedorTelefono : anterior.vendedorTelefono
         }, servicio.fichaTexto || anterior.fichaTexto || "", anterior, nombreTitular);
+        await validarHboServicio(db, nuevo, anterior); // R196v
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -2516,4 +2545,4 @@ export default async function handler(req, res) {
 }
 export const __wrapperInternal = { camposModificados, OP_ID_RE };
 export const __r186 = { renovarLote, calcularRenovacionPorDuracion }; // pruebas R186
-export const __r188 = { buildServicio }; // pruebas R188 (dispositivo por servicio, modalidad)
+export const __r188 = { buildServicio, validarHboServicio, sincronizarInventarioServicio }; // pruebas R188 (dispositivo por servicio, modalidad) · R196v (HBO)

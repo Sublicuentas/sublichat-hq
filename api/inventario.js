@@ -192,7 +192,8 @@ export async function reconciliarInventario(db, accounts = [], opciones = {}) {
             vinculoInventario:JSON.stringify([identity, occurrence]),
             nombre:tercero && (profiles.length === 1 || normText(nombre) === normText(titular)) ? tercero : nombre,
             pin:plainClientValue(p?.pinPerfil || p?.pin_perfil || p?.perfilPin || (p !== service ? p?.pin : "") || ""),
-            telefono:String(client.telefono || ""), ...(titular && normText(titular) !== normText(nombre) ? { pagadoPor:titular } : {}) });
+            telefono:String(client.telefono || ""), ...(titular && normText(titular) !== normText(nombre) ? { pagadoPor:titular } : {}),
+            ...(canonPlatform(service?.plataforma) === "hbomax" && service?.tipoVenta === "cuenta_completa" ? { cuentaCompleta:true } : {}) }); // R196v
         });
       });
     }
@@ -226,12 +227,13 @@ export async function reconciliarInventario(db, accounts = [], opciones = {}) {
       used.add(index);
       const old = clients[index];
       clients[index] = {...old, ...row, pin:row.pin || old.pin || ""};
+      if (!row.cuentaCompleta) delete clients[index].cuentaCompleta; // R196v · la venta dejó de ser completa
       if (old.edicionManualInventario) for (const field of ["nombre", "pin", "telefono"]) {
         if (old[field] != null) clients[index][field] = old[field];
       }
     }
     const capacidad = Number(account.capacidad) || 0;
-    const disponibles = Math.max(0, capacidad - clients.length);
+    const disponibles = canonPlatform(account.plataforma) === "hbomax" && clients.some(c => c && c.cuentaCompleta === true) ? 0 : Math.max(0, capacidad - clients.length); // R196v
     return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}),
       ...(account.id ? { accountId:String(account.id) } : {}), sobreasignada: capacidad > 0 && clients.length > capacidad };
   };
