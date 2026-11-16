@@ -607,7 +607,8 @@ export default async function handler(req, res) {
       const usr = String(authUser.usuario || authUser.uid || "");
       const adminHogar = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["hogar-netflix"] === true;
       try {
-        if (accion === "hogarVer") { const s = await db.collection("inventario").doc(String(docId || "")).get(); if (!s.exists) return res.status(200).json({ ok: false, error: "No encontré esa cuenta." }); const d = s.data() || {}; return res.status(200).json({ ok: true, puedeEditar: adminHogar, hogar: netflixHogar.estadoHogar(d), perfiles: netflixHogar.perfilesConHogar(d) }); }
+        if (accion === "hogarVer") return res.status(200).json({ ...(await netflixHogar.consultaHogar(db, { inventarioId: docId })), puedeEditar: adminHogar }); // R196v · misma consulta que APK y Telegram
+        if (accion === "hogarDiagnostico") { if (!adminHogar) return res.status(403).json({ ok: false, error: "Solo Sublicuentas ve el diagnóstico de Hogar." }); return res.status(200).json(await netflixHogar.diagnosticoHogar(db)); } // R196v · solo lectura
         if (accion === "hogarPendientes") return res.status(200).json({ ok: true, pendientes: await netflixHogar.hogaresPendientes(db) });
         if (!adminHogar) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) asigna el Hogar." });
         if (accion === "hogarAsignar") return res.status(200).json(await netflixHogar.asignarHogar(db, { inventarioId: docId, clienteId: req.body.clienteId, compraId: req.body.compraId, perfilId: req.body.perfilId, confirmarReemplazo: req.body.confirmarReemplazo === true, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) }));
