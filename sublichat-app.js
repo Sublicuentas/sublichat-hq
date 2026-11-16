@@ -4652,7 +4652,7 @@ function gCaminoBombas(){
 /* SUBLICHAT_CRM_WHATSAPP_AUTO_CRM_NOPINVIP_20260704 */
 (function(){
   const FICHA_PLATS=[
-    ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax_standard","HBO Standard · 3 perfiles"],["hbomax_platinum","HBO Platinum · 5 perfiles"],["hbomax","HBO Max (venta anterior, sin plan)"], /* R196v */
+    ["netflix","Netflix Premium"],["vipnetflix","⭐ Netflix Premium VIP"],["hbomax_standard","HBO Standard"],["hbomax_platinum","HBO Platinum"],["hbomax","HBO Max (venta anterior, sin plan)"], /* R196v */
     ["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],["primevideo","Prime Video"],
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
@@ -5648,7 +5648,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   function fichaPintarCategorias(){
     const cat=fichaGetVal("fichaCategoria")||fichaCategoriaDe(fichaGetVal("fichaPlat"));
     document.querySelectorAll("[data-ficha-cat]").forEach(b=>b.classList.toggle("on",b.dataset.fichaCat===cat));
-    const sel=fichaQ("fichaPlat"); if(sel){ const actual=sel.value; [...sel.options].forEach(o=>{ const visible=(cat==="cuentas_completas"?R112_CC.includes(fichaBaseRegla(o.value)):fichaCategoriaDe(o.value)===cat)&&o.value!=="hbomax"; o.hidden=!visible&&o.value!==actual; const ph=fichaPlanHboDe(o.value); if(ph)o.textContent=cat==="cuentas_completas"?`HBO ${ph==="platinum"?"Platinum":"Standard"} · cuenta completa`:`HBO ${ph==="platinum"?"Platinum · 5":"Standard · 3"} perfiles`; }); } // R196v · «HBO Max» genérico solo aparece al editar una venta anterior
+    const sel=fichaQ("fichaPlat"); if(sel){ const actual=sel.value; [...sel.options].forEach(o=>{ const visible=(cat==="cuentas_completas"?R112_CC.includes(fichaBaseRegla(o.value)):fichaCategoriaDe(o.value)===cat)&&o.value!=="hbomax"; o.hidden=!visible&&o.value!==actual; const ph=fichaPlanHboDe(o.value); if(ph)o.textContent=cat==="cuentas_completas"?`HBO ${ph==="platinum"?"Platinum":"Standard"} · cuenta completa`:`HBO ${ph==="platinum"?"Platinum":"Standard"}`; }); } // R196v · «HBO Max» genérico solo aparece al editar una venta anterior
     const nota=document.getElementById("fichaCatNota"); if(nota)nota.hidden=cat!=="cuentas_completas";
     const add=document.getElementById("fichaAddProfile"); if(add)add.style.display=cat==="cuentas_completas"?"none":"";
   }

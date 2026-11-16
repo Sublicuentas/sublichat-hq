@@ -130,9 +130,9 @@
       if (!r.ok) return;
       var id = box.getAttribute('data-inv-id'); var c = (r.cuentas || []).filter(function (x) { return x.id === id; })[0];
       var html = '<div class="cr-label">📦 Plan HBO</div><p class="hg-estado' + (c && !c.plan ? ' sin_asignar' : '') + '">' + esc(c ? c.etiqueta : 'Plan sin definir') + (c && c.sobreocupada ? ' · ⚠️ sobreocupada' : '') + '</p>';
-      if (r.puedeEditar) html += '<div class="vip-row"><button type="button" class="hg-btn" data-hbo-plan="platinum"' + (c && c.plan === 'platinum' ? ' disabled' : '') + '>Platinum · 5 perfiles</button><button type="button" class="hg-btn" data-hbo-plan="standard"' + (c && c.plan === 'standard' ? ' disabled' : '') + '>Standard · 3 perfiles</button></div>';
+      if (r.puedeEditar) html += '<div class="vip-row"><button type="button" class="hg-btn" data-hbo-plan="platinum"' + (c && c.plan === 'platinum' ? ' disabled' : '') + '>Platinum</button><button type="button" class="hg-btn" data-hbo-plan="standard"' + (c && c.plan === 'standard' ? ' disabled' : '') + '>Standard</button></div>';
       var k = r.contadores || null; // R196v · contadores separados por plan y modalidad
-      if (k) html += '<div class="hbo-cont">' + ['standard', 'platinum'].map(function (p) { var o = k[p]; return '<div><b>HBO ' + (p === 'standard' ? 'Standard · 3' : 'Platinum · 5') + '</b><span>' + o.compartidas + ' compartidas · ' + o.libres + ' perfiles libres</span><span>' + o.completas + ' vendidas completas · ' + o.completasLibres + ' libres para completa</span></div>'; }).join('') + '</div><p class="vip-muted">' + k.sinPlan + ' cuenta(s) HBO Max sin plan: defínalas aquí (no se migran solas).</p>';
+      if (k) html += '<div class="hbo-cont">' + ['standard', 'platinum'].map(function (p) { var o = k[p]; return '<div><b>HBO ' + (p === 'standard' ? 'Standard' : 'Platinum') + '</b><span>' + o.compartidas + ' compartidas · ' + o.libres + ' perfiles libres</span><span>' + o.completas + ' vendidas completas · ' + o.completasLibres + ' libres para completa</span></div>'; }).join('') + '</div><p class="vip-muted">' + k.sinPlan + ' cuenta(s) HBO Max sin plan: defínalas aquí (no se migran solas).</p>';
       else html += '<p class="vip-muted">Bodega: ' + r.platinum.cuentas + ' Platinum (' + r.platinum.libres + ' libres) · ' + r.standard.cuentas + ' Standard (' + r.standard.libres + ' libres) · ' + r.sinPlan + ' sin plan.</p>';
       if (r.puedeEditar) html += '<button type="button" class="hg-btn" data-hbo-diag="1">Diagnóstico HBO (solo lectura)</button><div data-hbo-diag-out></div>'; // R196v
       box.innerHTML = html;
@@ -153,7 +153,7 @@
     var b = e.target.closest && e.target.closest('[data-hbo-plan]'); if (!b) return;
     var box = b.closest('#invHboBox'); if (!box) return;
     var plan = b.getAttribute('data-hbo-plan');
-    if (!confirm('¿Cambiar esta cuenta a HBO Max ' + (plan === 'platinum' ? 'Platinum (5 perfiles)' : 'Standard (3 perfiles)') + '?')) return;
+    if (!confirm('¿Cambiar esta cuenta a HBO Max ' + (plan === 'platinum' ? 'Platinum' : 'Standard') + '?')) return;
     b.disabled = true;
     api({ accion: 'hboPlan', docId: box.getAttribute('data-inv-id'), plan: plan }).then(function (r) { if (!r.ok) alert(r.error || 'No se pudo cambiar el plan.'); montar(box, alCambiar); if (r.ok && alCambiar) alCambiar(); });
   });

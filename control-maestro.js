@@ -1403,7 +1403,7 @@
         <span class="cm-account-list-num">${i+1}</span>
         <span class="cm-account-list-main"><b>${esc(a.email||'Sin cuenta')}</b><small>${esc(primary?.name||'Sin cliente principal')}</small>${saleTypeTag(a)}</span>
         <span class="cm-account-list-info">
-          <span class="cm-account-list-meta"><small>${a.saleType&&a.saleType.code==='cuenta_completa'?'1 cliente · exclusiva':`${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles`}</small>${a.planHbo?`<small>${esc({standard:'HBO Standard · 3',platinum:'HBO Platinum · 5',sin_plan:'HBO · plan sin definir'}[a.planHbo]||'')}</small>`:''}<small>${esc(review.rowText)}</small></span><!-- R196v · planHbo (consulta) -->
+          <span class="cm-account-list-meta"><small>${a.saleType&&a.saleType.code==='cuenta_completa'?'1 cliente · exclusiva':`${esc(String((a.roster||[]).length))}/${esc(String(a.capacity||0))} perfiles`}</small>${a.planHbo?`<small>${esc({standard:'HBO Standard',platinum:'HBO Platinum',sin_plan:'HBO · plan sin definir'}[a.planHbo]||'')}</small>`:''}<small>${esc(review.rowText)}</small></span><!-- R196v · planHbo (consulta) -->
           <span class="cm-account-list-state ${tone}">${esc(life.label)}</span>
           <span class="cm-account-list-date">${esc(life.nextText)}</span>
         </span>
