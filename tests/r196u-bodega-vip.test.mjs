@@ -86,7 +86,7 @@ test('VIP · cuentas VIP que ya existían (sin campos nuevos) se leen bien y no 
 
 test('ALL-02 · API: solo Sublicuentas o permiso explícito carga lotes; las acciones VIP no devuelven claves', () => {
   const s = R('api/inventario.js');
-  assert.match(s, /\["vipPrevisualizar", "vipImportar", "vipEstado"\]\.includes\(accion\) && !adminVip\) return res\.status\(403\)/);
+  assert.match(s, /\["vipPrevisualizar", "vipImportar", "vipEstado", "vipPin"\]\.includes\(accion\) && !adminVip\) return res\.status\(403\)/);
   assert.match(s, /const adminVip = spotifyFam\.esAdministradorMadres\(authUser\) \|\| permisosCtx\.overrides\?\.\["bodega-vip"\] === true;/);
   const i = s.indexOf('if (/^vip[A-Z]/.test(accion))'), j = s.indexOf('const puedeInventario');
   assert.ok(j > 0 && i > j, 'el bloque VIP va después del control general de inventario');
