@@ -1,4 +1,4 @@
-import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261023-r150"; // R112
+import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261115-r196u4"; // R112
 const CONFIG = {
   firebase: {
     apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
@@ -321,7 +321,7 @@ const PLAT_LABELS = {
   vix:"ViX",
   appletv:"Apple TV", "apple tv":"Apple TV", apple:"Apple TV",
   universal:"Universal+", universalp:"Universal+", "universal+":"Universal+",
-  spotify:"Spotify", spotifyfamiliar:"Spotify Familiar", youtube:"YouTube", deezer:"Deezer", duolingo:"Duolingo",
+  spotify:"Spotify", spotifyfamiliar:"Spotify Familiar", youtube:"YouTube", deezer:"Deezer", elevenreader:"Eleven Reader", autocad:"Autodesk AutoCAD", duolingo:"Duolingo", /* R196u */
   stellatv:"Stella TV", stella:"Stella TV", stellatv1:"Stella TV (1 dispositivo)", stellatv2:"Stella TV (2 dispositivos)", stellatv3:"Stella TV (3 dispositivos)",
   oleada:"Oleada TV", oleada1:"Oleada TV (1)", oleada3:"Oleada TV (3)", oleadatv:"Oleada TV",
   oleadatv1:"Oleada TV (1)", oleadatv3:"Oleada TV (3)", oleadatv4:"Oleada TV (4)",
@@ -1217,9 +1217,9 @@ const INV_PLAT_CANON=[
   ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["crunchyroll","Crunchyroll"],["universal","Universal+"],
   ["vix","ViX"],["paramount","Paramount+"],["star","Star+"],["appletv","Apple TV"],["viki","Viki Rakuten"],
-  ["spotify","Spotify"],["youtube","YouTube"],["deezer","Deezer"],["duolingo","Duolingo"],
+  ["spotify","Spotify"],["youtube","YouTube"],["deezer","Deezer"],["elevenreader","Eleven Reader"],["duolingo","Duolingo"],
   ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["office","Office 365"],["office2021","Office 2021"],
-  ["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
+  ["adobeexpress","Adobe Express"],["autocad","Autodesk AutoCAD"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET"],
   ["stellatv1","Stella TV (1 dispositivo)"],["stellatv2","Stella TV (2 dispositivos)"],["stellatv3","Stella TV (3 dispositivos)"],
   ["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
   ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
@@ -3749,12 +3749,12 @@ const PLATS_DISPONIBLES=[
   ["netflix","Netflix"],["vipnetflix","⭐ Netflix Premium VIP"],["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],
   ["hbomax","HBO Max"],["primevideo","Prime Video"],["paramount","Paramount+"],["crunchyroll","Crunchyroll"],
   ["vix","ViX"],["viki","Viki Rakuten"],["appletv","Apple TV"],["universal","Universal+"],["spotify","Spotify"],["youtube","YouTube"],
-  ["deezer","Deezer"],["duolingo","Duolingo"],["stellatv1","Stella TV (1 dispositivo)"],["stellatv2","Stella TV (2 dispositivos)"],["stellatv3","Stella TV (3 dispositivos)"],
+  ["deezer","Deezer"],["elevenreader","Eleven Reader"],["duolingo","Duolingo"],["stellatv1","Stella TV (1 dispositivo)"],["stellatv2","Stella TV (2 dispositivos)"],["stellatv3","Stella TV (3 dispositivos)"],
   ["oleadatv1","Oleada TV (1 dispositivo)"],["oleadatv3","Oleada TV (3 dispositivos)"],
   ["latintv1","LatinTV (1 dispositivo)"],["latintv2","LatinTV (2 dispositivos)"],["latintv3","LatinTV (3 dispositivos)"],["latintv4","LatinTV (4 dispositivos)"],
   ["liontv1","LionTV (1 dispositivo)"],["liontv2","LionTV (2 dispositivos)"],["liontv3","LionTV (3 dispositivos)"],["liontv5","LionTV (5 dispositivos)"],
   ["canva","Canva"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],
-  ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"]
+  ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["autocad","Autodesk AutoCAD"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"]
 ];
 const VENDEDORES_SERVICIO=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
 const VENDEDORES_SERVICIO_TEL={relojes:"32126332",sublicuentas:"89464277","sublicuentas 2":"89464328",yami:"96877246",jimena:"88501036",heber:"32174922",abner:"94306551",manuel:"87989267"};
@@ -3880,7 +3880,7 @@ function servPlataformaBase(value){
   if(p.startsWith("iptv"))return "iptv";
   return p;
 }
-const SERVICIO_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset"]);
+const SERVICIO_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset","autocad","elevenreader"]); /* R196u */
 const SERVICIO_SIN_CLAVE=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
 const SERVICIO_SERIAL=new Set(["windows10","windows11","eset"]);
 const servNeedsCorreo=plat=>!SERVICIO_SERIAL.has(servPlataformaBase(plat));
@@ -4656,9 +4656,9 @@ function gCaminoBombas(){
     ["disneyp","Disney Premium"],["disneys","Disney Premium sin ESPN"],["primevideo","Prime Video"],
     ["crunchyroll","Crunchyroll"],["universal","Universal+"],["vix","ViX+"],
     ["paramount","Paramount+"],["viki","Viki Rakuten"],["appletv","Apple TV"],
-    ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["youtube","YouTube Premium"],
+    ["spotify","Spotify Premium"],["deezer","Deezer Premium HiFi"],["elevenreader","Eleven Reader"],["youtube","YouTube Premium"],
     ["canva","Canva · 1 mes"],["gemini","Gemini Pro"],["chatgpt","ChatGPT"],["duolingo","Duolingo"],
-    ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
+    ["office","Office 365"],["office2021","Office 2021"],["adobeexpress","Adobe Express"],["autocad","Autodesk AutoCAD"],["windows10","Windows 10"],["windows11","Windows 11"],["eset","ESET NOD32"],
     ["stellatv","Stella TV"],["oleada","Oleada TV"],["latintv","LatinTV"],["liontv","LionTV"],["evoutouch","Nanotech"],["icomplay","ICOMPLAY"]
   ];
   const FICHA_VENDEDORES=["Relojes","Sublicuentas","Sublicuentas 2","Geisell","Yami","Manuel","Heber","Abner","Jimena","Elizabeth","Lucy","WolfTeam"];
@@ -4818,7 +4818,7 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
     crunchyroll:75, universal:60, vix:80, paramount:60, spotify:100, deezer:60,
     youtube:90, canva:50, gemini:500, chatgpt:0, duolingo:0, office:350, stellatv:0, oleada:90, evoutouch:0, evoutouch1:0, evoutouch2:0, evoutouch3:0, iptv:130,
     icomplay1:179, icomplay2:219, icomplay3:249, icomplay5:329, icomplay7:399,
-    office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0
+    office2021:0, viki:0, appletv:0, adobeexpress:0, windows10:0, windows11:0, eset:0, autocad:0, elevenreader:0 /* R196u · sin tarifa fija: precio por venta */
   };
   const FICHA_PRECIOS_ESPECIALES={
     netflix:130, vipnetflix:150, disneyp:100, disneys:70, hbomax:80, primevideo:80,
@@ -4838,11 +4838,11 @@ Hola, *{nombre}*. Su perfil exclusivo ya está configurado con la mayor segurida
   // dispositivo para impedir que Netflix VIP u otra cuenta directa herede la
   // regla "TV ya vinculada" y oculte correo/clave.
   const FICHA_SOLO_CORREO=new Set(["canva","gemini","chatgpt","duolingo","adobeexpress"]);
-  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset"]);
+  const FICHA_SIN_PIN=new Set(["vipnetflix","paramount","vix","viki","spotify","deezer","youtube","canva","gemini","chatgpt","duolingo","office","office2021","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","windows10","windows11","adobeexpress","eset","autocad","elevenreader"]); /* R196u */
   const FICHA_SERIAL=new Set(["windows10","windows11","eset"]);
   const FICHA_SIN_CLAVE=new Set([...FICHA_SOLO_CORREO]);
   const FICHA_SIN_CORREO=new Set([...FICHA_SERIAL]);
-  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","viki","deezer","crunchyroll"]);
+  const FICHA_CREDENCIALES_SIEMPRE=new Set(["vipnetflix","spotify","youtube","stellatv","oleada","latintv","liontv","evoutouch","icomplay","iptv","viki","deezer","crunchyroll","elevenreader"]); /* R196u */
   const FICHA_CON_DISPOSITIVO=new Set(["netflix","disneyp","disneys","hbomax","vix","universal","primevideo"]);
   // Respaldo local; las URLs vigentes llegan del servidor (Bodega → URLs TV Digital) y reemplazan estos valores.
   const IPTV_URLS={latintv:"http://latgt.com:8080", latintv2:"http://enlatv.com", liontv:"http://liontv.es:80", evoutouch:"http://smarterstv99.dyndns.tv:25461/", icomplay:"http://latinostream.xyz:80"};
@@ -5227,6 +5227,38 @@ Cliente: *_{perfil}_*
 
 🚀 Sublicuentas`,
 
+    // R196u · Eleven Reader (Música): correo + contraseña.
+    elevenreader:
+`*🎧 Acceso: Eleven Reader 🎧*
+
+👤 Usuario: *_{perfil}_*
+*📧 Correo: {correo}*{claveLine}
+*📅 Renovación: {fecha}*
+
+🛡️ Condiciones del servicio:
+🚫 No cambiar el correo ni la contraseña.
+✔️ Garantía vigente durante todo el periodo adquirido.
+
+🚀 Sublicuentas`,
+
+    // R196u · Autodesk AutoCAD (Software): entrega por INVITACIÓN al correo. La contraseña solo sale si está registrada.
+    autocad:
+`*📐 Acceso: Autodesk AutoCAD 📐*
+
+👤 Usuario: *_{perfil}_*
+*📧 Correo invitado: {correo}*{claveLine}
+*⏳ Próximo pago: {fecha}*
+
+📩 Cómo activarlo:
+1️⃣ Abra el correo de invitación de Autodesk (revise también Spam o Promociones).
+2️⃣ Toque «Aceptar invitación».
+3️⃣ Inicie sesión en Autodesk con ese mismo correo (si no tiene cuenta, créela con ese correo).
+4️⃣ Descargue AutoCAD desde su cuenta Autodesk.
+
+⚠️ Si no le llegó la invitación, escríbanos.
+
+🚀 Sublicuentas`,
+
     office:
 `*💻 Acceso Exclusivo: Office 365 💻*
 
@@ -5605,6 +5637,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   // R196u · Netflix VIP: PIN de perfil OPCIONAL (solo si el cliente lo pidió). No es obligatorio ni sale «PIN: —».
   const fichaPinOpcional=plat=>!fichaEsCuentaCompleta()&&fichaBaseRegla(plat)==="vipnetflix";
   const fichaPermitePin=plat=>fichaNeedsPin(plat)||fichaPinOpcional(plat);
+  // R196u · AutoCAD: invitación al correo; contraseña OPCIONAL (solo si Sublicuentas de verdad la entrega).
+  const fichaClaveOpcional=plat=>!fichaEsCuentaCompleta()&&fichaBaseRegla(plat)==="autocad";
   const fichaNeedsCorreo=plat=>fichaEsCuentaCompleta()||!FICHA_SIN_CORREO.has(fichaBaseRegla(plat));
   // R112 · Categorías: primero la categoría, después solo sus plataformas (mismo contrato que APK y bot).
   function fichaCategoriaDe(plat,tipoVenta=""){ return r112Clasificar({plataforma:plat,tipoVenta}).categoria; }
@@ -5633,7 +5667,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const plat=fichaGetVal("fichaPlat");
     if(fichaEsSerial(plat)) return {correo:false,clave:true,pin:false,modo:"serial"};
     if(fichaBaseRegla(plat)==="appletv") return {correo:false,clave:false,pin:true,modo:"pin"};
-    const correo=fichaNeedsCorreo(plat),clave=fichaNeedsClave(plat),pin=fichaNeedsPin(plat);
+    const correo=fichaNeedsCorreo(plat),clave=fichaNeedsClave(plat)&&(!fichaClaveOpcional(plat)||!!String(fichaGetVal("fichaClave")||"").trim()),pin=fichaNeedsPin(plat); // R196u
     return {correo,clave,pin,modo:clave?"cred":"invite"};
   }
 
@@ -5831,7 +5865,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(p.includes("netflix"))return "🎬";
     if(p.includes("disney"))return "🏰";
     if(p.includes("hbo")||p==="max")return "🍿";
-    if(p.includes("spotify")||p.includes("deezer"))return "🎧";
+    if(p.includes("spotify")||p.includes("deezer")||p.includes("eleven"))return "🎧";
+    if(p.includes("autocad"))return "📐"; // R196u
     if(p.includes("youtube"))return "▶️";
     if(p.includes("crunchy"))return "🌀";
     if(p.includes("viki"))return "💙";
@@ -5849,6 +5884,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(!n) return "netflix";
     if(n.includes("netflix") && (n.includes("vip") || n.includes("exclusivo"))) return "vipnetflix";
     if(n.includes("netflix")) return "netflix";
+    if(n.includes("autocad") || n.includes("autodesk")) return "autocad"; // R196u
+    if(n.includes("elevenreader") || n.startsWith("eleven")) return "elevenreader"; // R196u
     // Los códigos internos también pasan por esta función al volver a editar.
     // "disneys" contiene la palabra "disney" y antes caía por error en
     // Disney Premium. Resolver primero los códigos/etiquetas exactos impide
@@ -6176,7 +6213,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     // completa, no "X de cada mes" — eso solo aplica cuando NO hay fecha exacta,
     // solamente el día del mes.
     const renovTexto = fecha ? (fichaISOToDMY(fecha)||"—") : (dia ? (fichaD2(dia)+" de cada mes") : "—");
-    const claveLine=fichaNeedsClave(plat)?`\n*🔑 Clave: ${clave||"—"}*`:"";
+    const claveLine=fichaNeedsClave(plat)&&(!fichaClaveOpcional(plat)||String(clave||"").trim())?`\n*🔑 ${fichaClaveOpcional(plat)?"Contraseña":"Clave"}: ${clave||"—"}*`:""; // R196u · AutoCAD: solo si está registrada
     const pinLine=fichaNeedsPin(plat)?`\n*📎 Pin: ${pin||"—"}*`:"";
     const pinVipLine=fichaPinOpcional(plat)&&String(pin||"").trim()?`\n*🔏 PIN de perfil: ${String(pin).trim()}*`:""; // R196u · sin PIN no hay línea
     const iptvProv=fichaGetVal("fichaIptvProveedor")||"latintv";
@@ -6223,7 +6260,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(box.style.display==="block"){box.style.display="none";return;}
     const plat=fichaPlataformaGuardar(fichaGetVal("fichaPlat"));
     const fam=invFamilia(plat);
-    const lista=invOrdenarPorVacia((typeof INVENTARIO!=="undefined"?INVENTARIO:[]).filter(c=>invFamilia(c.plataforma)===fam&&String(c.estado||"activa").toLowerCase()!=="suspendida"));
+    const lista=invOrdenarPorVacia((typeof INVENTARIO!=="undefined"?INVENTARIO:[]).filter(c=>invFamilia(c.plataforma)===fam&&String(c.estado||"activa").toLowerCase()!=="suspendida"&&!["suspendido","revision"].includes(String(c.estadoBodega||"").toLowerCase()) /* R196u · VIP suspendida o en revisión no se vende */));
     const conBadge=!fichaEsCuentaCompleta()&&!fichaEsIptv(fichaBaseRegla(plat));
     if(!lista.length){box.innerHTML=`<div style="padding:10px;font-size:12.5px;color:var(--muted)">No hay cuentas de ${clienteEsc(fichaPlatformLabel(plat))} en Bodega.</div>`;box.style.display="block";return;}
     const recomendada=lista.find(c=>invDisp(c)>0&&invCap(c)>1);
@@ -6357,6 +6394,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     if(eq){const actual=eq.dataset.valor!=null?eq.dataset.valor:eq.value;const ids=Object.keys(FICHA_EQUIPOS_TV).filter(k=>!(fam==="stellatv"&&(k==="iphone"||k==="pc")));
       eq.innerHTML=`<option value="">Pendiente de seleccionar</option>`+ids.map(k=>`<option value="${k}">${FICHA_EQUIPOS_TV[k]}</option>`).join("");eq.value=ids.includes(actual)?actual:"";delete eq.dataset.valor;}
     const b=fichaBaseRegla(plat);if(modBox)modBox.style.display=(b==="gemini"||b==="duolingo")?"block":"none";
+    { const invBox=fichaQ("fichaEstadoInvitacionBox"); if(invBox)invBox.style.display=b==="autocad"?"block":"none"; } // R196u
   }
   // R188 · Ficha Spotify: al escribir el correo invitado se busca su familia (madre, código y espacio). Solo personal con permiso.
   async function fichaSpotifyResolver(){
@@ -6498,6 +6536,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     };
     if(fichaFamiliaTv(plat))servicio.equipoTv=fichaGetVal("fichaEquipoTv")||""; // R188 · dispositivo de ESTE servicio
     if(fichaModalidadDe(plat))servicio.modalidadAcceso=fichaModalidadDe(plat);
+    if(fichaBaseRegla(plat)==="autocad")servicio.estadoInvitacion=fichaGetVal("fichaEstadoInvitacion")||"pendiente"; // R196u
     if(fichaEsIptv(plat)){
       servicio.iptvProveedor=fichaGetVal("fichaIptvProveedor")||fichaBaseRegla(plat);
       servicio.iptvPantallas=Number(fichaGetVal("fichaIptvPantallas")||1);
@@ -6861,7 +6900,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     fichaQ("fichaDia").value=fichaDayFromDate(fechaISO || s.fechaRaw);
     const dispositivo=fichaUsaSelectorDispositivo(fichaQ("fichaPlat").value)&&["tv","cel"].includes(String(principal.dispositivo||s.dispositivo||""))?String(principal.dispositivo||s.dispositivo):"";
     fichaQ("fichaDispositivo").value=dispositivo;
-    { const eq=fichaQ("fichaEquipoTv"); if(eq){ eq.dataset.valor=String(s.equipoTv||""); eq.value=String(s.equipoTv||""); } const md=fichaQ("fichaModalidad"); if(md) md.value=s.modalidadAcceso==="proveedor"?"proveedor":"correo_cliente"; } // R188
+    { const eq=fichaQ("fichaEquipoTv"); if(eq){ eq.dataset.valor=String(s.equipoTv||""); eq.value=String(s.equipoTv||""); } const md=fichaQ("fichaModalidad"); if(md) md.value=s.modalidadAcceso==="proveedor"?"proveedor":"correo_cliente"; const ei=fichaQ("fichaEstadoInvitacion"); if(ei) ei.value=["pendiente","enviada","aceptada"].includes(s.estadoInvitacion)?s.estadoInvitacion:"pendiente"; /* R196u */ } // R188
     fichaQ("fichaEsRoku").value=(principal.esRoku===true||(!principal.dispositivo&&s.esRoku))?"si":"no";
     fichaAplicarVisibilidadUrl(principal.visibilidadUrl||s.visibilidadUrl||{modo:"plataforma"});
     const rokuBox=fichaQ("fichaRokuBox");
@@ -7160,6 +7199,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
           <label class="ficha-field" id="fichaDispositivoBox"><span>📺📱 Perfil 1 · ¿Dónde va a usar este perfil?</span><select class="ficha-select" id="fichaDispositivo"><option value="">Pregunte al cliente…</option><option value="tv">TV</option><option value="cel">Celular</option></select></label>
           <label class="ficha-field" id="fichaRokuBox" style="display:none"><span>Perfil 1 · ¿El TV es Roku?</span><select class="ficha-select" id="fichaEsRoku"><option value="no">No es Roku</option><option value="si">Sí, es Roku</option></select></label>
           <label class="ficha-field" id="fichaEquipoTvBox" style="display:none"><span>📺 Dispositivo del cliente (este servicio)</span><select class="ficha-select" id="fichaEquipoTv"><option value="">Pendiente de seleccionar</option></select></label>
+          <label class="ficha-field" id="fichaEstadoInvitacionBox" style="display:none"><span>📩 Invitación Autodesk</span><select class="ficha-select" id="fichaEstadoInvitacion"><option value="pendiente">Pendiente de enviar</option><option value="enviada">Invitación enviada</option><option value="aceptada">Invitación aceptada</option></select></label>
           <label class="ficha-field" id="fichaModalidadBox" style="display:none"><span>🔐 Modalidad de acceso</span><select class="ficha-select" id="fichaModalidad"><option value="correo_cliente">Correo propio del cliente (sin contraseña)</option><option value="proveedor">Cuenta entregada por Sublicuentas (correo + contraseña)</option></select></label>
           <div class="ficha-field" id="fichaSpotifyBox" style="display:none;grid-column:1/-1;background:#fff;border:1px solid #dbe3ee;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#0f2d52"></div>
           <div class="ficha-url-visibility">

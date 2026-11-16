@@ -286,17 +286,20 @@
     windows10:{logo:"/assets/platformas/windows10.jpg",bg:"#1674c8",fallback:"W10"},
     windows11:{logo:"/assets/platformas/windows11.jpg",bg:"#eaf5ff",fallback:"W11",color:"#1674c8"},
     adobeexpress:{logo:"/assets/platformas/adobeexpress.jpg",bg:"#ffffff",fallback:"Ae",color:"#e536d2"},
-    eset:{logo:"/assets/platformas/eset.jpg",bg:"#0a909c",fallback:"ESET"}
+    eset:{logo:"/assets/platformas/eset.jpg",bg:"#0a909c",fallback:"ESET"},
+    /* R196u · sin logo oficial en los recursos: ícono de respaldo (no se crean logos con IA) */
+    autocad:{logo:"",bg:"#ffffff",fallback:"CAD",color:"#0f2d52"},
+    elevenreader:{logo:"",bg:"#ffffff",fallback:"ER",color:"#0f2d52"}
   };
 
-  const PLAT_ALIASES={netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset",stella:"stellatv",evoutouch4:"evoutouch",evoutouch:"evoutouch"};
+  const PLAT_ALIASES={autodesk:"autocad",autodeskautocad:"autocad",eleven:"elevenreader",/* R196u */netflixpremium:"netflix",vip:"vipnetflix",netflixpremiumvip:"vipnetflix",disneypremium:"disneyp",disneystandard:"disneys",disneystandardsinespn:"disneys",disney:"disneyp",hbo:"hbomax",max:"hbomax",prime:"primevideo",paramountplus:"paramount",universalp:"universal",apple:"appletv",win10:"windows10",win11:"windows11",adobe:"adobeexpress",esetnod32:"eset",stella:"stellatv",evoutouch4:"evoutouch",evoutouch:"evoutouch"};
 
   const PLAT_EMOJI={
     netflix:"🎬",vipnetflix:"🎬",hbomax:"🍿",disneyp:"🏰",disneys:"🏰",
     primevideo:"🎥",crunchyroll:"🌀",universal:"🌐",vix:"✅",paramount:"⭐",
     spotify:"🎧",deezer:"🎧",youtube:"▶️",canva:"🎨",gemini:"✦",
     chatgpt:"🤖",duolingo:"📚",office:"💻",office2021:"💻",stellatv:"🔥",oleada:"🌊",latintv:"📺",liontv:"🦁",evoutouch:"📡",icomplay:"📺",iptv:"📺",
-    viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️"
+    viki:"📺",appletv:"🍎",windows10:"💻",windows11:"💻",adobeexpress:"🎨",eset:"🛡️",autocad:"📐",elevenreader:"🎧"
   };
 
   function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
