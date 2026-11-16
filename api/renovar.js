@@ -310,6 +310,10 @@ function crmUserError(message) {
   return error;
 }
 
+// R196u · Netflix VIP: el PIN de perfil NO es obligatorio, pero se GUARDA si el operador lo registró (cliente que lo pidió).
+function servicioPinOpcional(plataforma) { const p = normPlat(plataforma).replace(/\s+/g, ""); return p.includes("netflixvip") || p === "vipnetflix" || (p.includes("netflix") && p.includes("vip")); }
+// «No usa PIN» para guardar = no lo usa Y no es opcional.
+function servicioDescartaPin(plataforma) { return servicioNoUsaPinPerfil(plataforma) && !servicioPinOpcional(plataforma); }
 function servicioNoUsaPinPerfil(plataforma) {
   const p = normPlat(plataforma).replace(/\s+/g, "");
   return (
@@ -711,7 +715,7 @@ function normalizarPerfilesServicio(servicio = {}, anterior = {}, nombreTitular 
   const plataforma = servicio.plataforma || anterior.plataforma || "";
   const sinCorreo = !servicioRequiereCorreo(plataforma);
   const sinClave = servicioNoUsaClave(plataforma, { ...anterior, ...servicio });
-  const sinPin = servicioNoUsaPinPerfil(plataforma);
+  const sinPin = servicioDescartaPin(plataforma); // R196u · VIP: PIN opcional
   const usaDispositivo = servicioUsaSelectorDispositivo(plataforma);
 
   return base.map((raw = {}, index) => {
@@ -1113,7 +1117,7 @@ function buildServicio(servicio = {}, fichaTexto = "", anterior = {}, nombreTitu
   //   Apple TV guarda correo, clave y PIN; la ficha pública entrega únicamente el PIN.
   const tieneClaveNueva =
     servicio.clave != null || servicio.password != null || servicio.contrasena != null || servicio.pinClave != null;
-  const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioNoUsaPinPerfil(servicio.plataforma);
+  const sinPinPerfil = servicio.sinPinPerfil === true || servicio.removePinPerfil === true || servicio.pinPerfil === null || servicioDescartaPin(servicio.plataforma); // R196u
   const sinClave = servicio.sinClave === true || servicio.removeClave === true || servicioNoUsaClave(servicio.plataforma || anterior.plataforma, { ...anterior, ...servicio });
 
   const clave = sinClave ? "" : (servicio.clave != null
@@ -1284,7 +1288,7 @@ function limpiarServicioCRM(servicio = {}) {
   if (tieneClave && (s.pinPerfil == null || s.pinPerfil === "") && s.pin != null) s.pinPerfil = String(s.pin || "");
 
   if (servicioNoUsaClave(s.plataforma, s)) s.clave = "";
-  if (servicioNoUsaPinPerfil(s.plataforma)) delete s.pinPerfil;
+  if (servicioDescartaPin(s.plataforma)) delete s.pinPerfil; // R196u · VIP conserva su PIN opcional
   if (!servicioRequiereCorreo(s.plataforma)) s.correo = "";
   if (s.pinPerfil == null || s.pinPerfil === "") delete s.pinPerfil;
   const usaDispositivo = servicioUsaSelectorDispositivo(s.plataforma);
@@ -1296,7 +1300,7 @@ function limpiarServicioCRM(servicio = {}) {
       p.perfil = String(p.perfil || p.nombrePerfil || p.nombre || "").trim();
       p.correo = servicioRequiereCorreo(s.plataforma) ? String(p.correo ?? s.correo ?? "").trim() : "";
       p.clave = servicioNoUsaClave(s.plataforma, s) ? "" : String(p.clave ?? p.password ?? p.contrasena ?? s.clave ?? "").trim();
-      const pPin = servicioNoUsaPinPerfil(s.plataforma) ? "" : perfilPinRaw(p);
+      const pPin = servicioDescartaPin(s.plataforma) ? "" : perfilPinRaw(p); // R196u
       if (pPin) p.pinPerfil = pPin;
       else delete p.pinPerfil;
       p.visibilidadUrl = normalizarVisibilidadUrl(

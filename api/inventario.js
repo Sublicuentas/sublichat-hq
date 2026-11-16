@@ -9,6 +9,7 @@ import baulApks from "./_baul-apks.js"; // R187 · Baúl de APKs (fuente única 
 import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (ICOMPLAY)
 import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fuente única Web/APK/bot)
 import bodegaVip from "./_bodega-vip.js"; // R196u · Bodega Netflix VIP (fuente única Web/APK/bot)
+import netflixHogar from "./_netflix-hogar.js"; // R196u · Hogar de Netflix Premium (un Hogar por madre)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -589,17 +590,32 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: "No tiene permiso para modificar el inventario." });
     }
 
+    // R196u · Hogar de Netflix Premium (PDF v2.0 · 03): ver = quien puede inventario; asignar/quitar = Sublicuentas o permiso «hogar-netflix».
+    if (/^hogar[A-Z]/.test(accion)) {
+      const usr = String(authUser.usuario || authUser.uid || "");
+      const adminHogar = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["hogar-netflix"] === true;
+      try {
+        if (accion === "hogarVer") { const s = await db.collection("inventario").doc(String(docId || "")).get(); if (!s.exists) return res.status(200).json({ ok: false, error: "No encontré esa cuenta." }); const d = s.data() || {}; return res.status(200).json({ ok: true, puedeEditar: adminHogar, hogar: netflixHogar.estadoHogar(d), perfiles: netflixHogar.perfilesConHogar(d) }); }
+        if (accion === "hogarPendientes") return res.status(200).json({ ok: true, pendientes: await netflixHogar.hogaresPendientes(db) });
+        if (!adminHogar) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) asigna el Hogar." });
+        if (accion === "hogarAsignar") return res.status(200).json(await netflixHogar.asignarHogar(db, { inventarioId: docId, clienteId: req.body.clienteId, compraId: req.body.compraId, perfilId: req.body.perfilId, confirmarReemplazo: req.body.confirmarReemplazo === true, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) }));
+        if (accion === "hogarQuitar") return res.status(200).json(await netflixHogar.quitarHogar(db, { inventarioId: docId, usuario: usr }));
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 220), code: e?.code || "" }); }
+      return res.status(200).json({ ok: false, error: "Acción de Hogar desconocida." });
+    }
+
     // R196u · Bodega Netflix VIP (PDF v2.0 · 01/02). Lotes y estados: solo Sublicuentas o quien tenga el permiso explícito
     // «bodega-vip»; listar/asignar: quien ya puede modificar inventario. Nunca se devuelven claves.
     if (/^vip[A-Z]/.test(accion)) {
       const usr = String(authUser.usuario || authUser.uid || "");
       const adminVip = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["bodega-vip"] === true;
-      if (["vipPrevisualizar", "vipImportar", "vipEstado"].includes(accion) && !adminVip) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) carga lotes VIP." });
+      if (["vipPrevisualizar", "vipImportar", "vipEstado", "vipPin"].includes(accion) && !adminVip) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) carga lotes VIP." });
       try {
         if (accion === "vipListar") return res.status(200).json({ ok: true, puedeCargar: adminVip, proveedores: bodegaVip.PROVEEDORES, ...(await bodegaVip.listar(db, { estado: String(req.body.estado || "") })) });
         if (accion === "vipPrevisualizar") return res.status(200).json({ ok: true, ...(await bodegaVip.previsualizar(db, String(req.body.texto || ""))) });
         if (accion === "vipImportar") return res.status(200).json({ ok: true, ...(await bodegaVip.importar(db, { texto: String(req.body.texto || ""), proveedor: req.body.proveedor, lote: req.body.lote, costoUsdt: req.body.costoUsdt, vencimientoProveedor: req.body.vencimientoProveedor, usuario: usr, origen: "web" })) });
         if (accion === "vipAsignar") return res.status(200).json(await bodegaVip.asignar(db, { inventarioId: req.body.inventarioId, clienteId: req.body.clienteId, compraId: req.body.compraId, nombre: req.body.nombre, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) }));
+        if (accion === "vipPin") return res.status(200).json(await bodegaVip.guardarPin(db, { inventarioId: req.body.inventarioId, pin: req.body.pin, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) })); // R196u · PIN opcional (no se devuelve el valor)
         if (accion === "vipEstado") return res.status(200).json(await bodegaVip.marcarEstado(db, { inventarioId: req.body.inventarioId, estado: req.body.estado, nota: req.body.nota, usuario: usr }));
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 200) }); }
       return res.status(200).json({ ok: false, error: "Acción VIP desconocida." });
