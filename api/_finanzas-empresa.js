@@ -210,6 +210,12 @@ export function costearCompra({ producto = {}, cantidad, costoTotal, moneda, pag
   const cargo = r2(pago.cargoHnl);
   let costoTotalHnl, tasa = 0, salida = null;
   if (cero) costoTotalHnl = 0;
+  else if (tipo === "binance" && pago.historico) { // R196z2 · compra YA pagada en Binance (gasto histórico): no exige ni descuenta saldo
+    if (mon !== "USDT") throw errUsuario("Con Binance la compra se paga en USDT.");
+    const t = r6(pago.tasa) > 0 ? r6(pago.tasa) : cargo > 0 ? r6(cargo / total) : 0;
+    if (!(t > 0)) throw errUsuario("Escriba la tasa HNL/USDT de ese pago (o su equivalente en Lempiras).");
+    tasa = t; costoTotalHnl = cargo > 0 ? cargo : r2(total * t);
+  }
   else if (tipo === "binance") {
     if (mon !== "USDT") throw errUsuario("Con Binance la compra se paga en USDT.");
     salida = aplicarSalida(billetera, total);
@@ -436,7 +442,18 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     const opId = d.libroOpDocId("compra", body, authUser.uid);
     if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
     const fecha = ymdOk(c.fecha) && c.fecha <= hoy ? c.fecha : hoy;
+    // R196z2 · Binance histórico: la compra ya se pagó (fuera de Sublichat). Se guarda USDT, fecha real, tasa y Lempiras;
+    // NO toca la billetera interna ni ningún banco (no hay descuento ficticio). Aplica a TODA compra en USDT, no solo HBO.
+    const historico = pagoTipo === "binance" && (c.binanceHistorico === true || c.historico === true);
+    const fechaActivacion = ymdOk(c.fechaActivacion) ? c.fechaActivacion : "";
+    if (fechaActivacion && fechaActivacion > hoy) return res.status(200).json({ ok: false, error: "La fecha de activación no puede ser futura." });
+    const cuentaInv = txt(c.cuentaInventarioId, 80);
     const loteRef = col("fin_lotes").doc(opId), movRef = col("finanzas_movimientos").doc(`${opId}_pago`);
+    if (cuentaInv && !body.forzar) { // mismo gasto dos veces (otra pantalla, otro operationId): bloqueado
+      const prev = (await col("fin_lotes").where("cuentaInventarioId", "==", cuentaInv).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
+      const igual = prev.find((l) => l.id !== loteRef.id && l.estado !== "anulado" && l.fecha === fecha && String(l.moneda) === String(c.moneda) && Math.abs(Number(l.costoTotalMoneda) - Number(c.costoTotal)) < 0.000001);
+      if (igual) return res.status(200).json({ ok: false, error: `Ese gasto ya está registrado para esta cuenta (${c.costoTotal} ${c.moneda} del ${fecha}, folio ${String(igual.id).slice(-8).toUpperCase()}). No se suma dos veces.` });
+    }
     const r = await run(async (tx) => {
       if ((await tx.get(loteRef)).exists) return { duplicado: true, loteId: loteRef.id };
       const pSnap = await tx.get(col("fin_productos").doc(String(c.productoId || "")));
@@ -446,7 +463,7 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       if (c.proveedorId) { const s2 = await tx.get(col("fin_proveedores").doc(String(c.proveedorId))); if (!s2.exists) throw errUsuario("Proveedor no encontrado."); proveedor = { id: s2.id, ...s2.data() }; }
       const bSnap = await tx.get(billeteraRef);
       const billetera = bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio();
-      const k = costearCompra({ producto, cantidad: c.cantidad, costoTotal: c.costoTotal, moneda: c.moneda, pago: { tipo: pagoTipo, cargoHnl: c.cargoHnl }, billetera });
+      const k = costearCompra({ producto, cantidad: c.cantidad, costoTotal: c.costoTotal, moneda: c.moneda, pago: { tipo: pagoTipo, cargoHnl: c.cargoHnl, historico, tasa: c.tasa }, billetera });
       if (banco) {
         const { saldos } = await d.estadoLibro(db, tx);
         const b = saldos.bancos.find((x) => x.id === banco.id);
@@ -456,7 +473,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       // La vigencia automática solo aplica a lo que de verdad vence como lote (cuenta madre, gift card, panel). Créditos,
       // unidades y links duran X días DESPUÉS de venderse: su lote no vence solo (se puede poner vencimiento a mano).
       const venceSolo = ["cuenta_madre", "gift_card", "panel"].includes(producto.modelo);
-      const vigenciaHasta = ymdOk(c.vigenciaHasta) ? c.vigenciaHasta : (dur && venceSolo ? (() => { const [y, m, dd] = fecha.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + dur, 12)).toISOString().slice(0, 10); })() : "");
+      const inicio = fechaActivacion || fecha; // R196z2 · la cobertura corre desde la activación (si se conoce), no desde el pago
+      const vigenciaHasta = ymdOk(c.vigenciaHasta) ? c.vigenciaHasta : (dur && venceSolo ? (() => { const [y, m, dd] = inicio.split("-").map(Number); return new Date(Date.UTC(y, m - 1, dd + dur, 12)).toISOString().slice(0, 10); })() : "");
       const uni = producto.unidad || "unidad", unis = Number(k.cantidad) === 1 ? uni : (/[dlrn]$/i.test(uni) ? `${uni}es` : `${uni}s`);
       const detalle = `${producto.nombre} · ${k.cantidad} ${unis}${proveedor ? ` · ${proveedor.alias}` : ""}`;
       // R137 · Cuenta madre / panel / gift card: el lote se lleva en PERFILES-MES (cuentas × capacidad × meses), así cada
@@ -467,14 +485,16 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const lote = {
         compraId: loteRef.id, cuentasCompradas: porCupo ? k.cantidad : 0, proveedorId: proveedor?.id || "", proveedor: proveedor?.alias || "", productoId: producto.id, producto: producto.nombre, modelo: producto.modelo, unidad: porCupo ? "perfil-mes" : (producto.unidad || ""),
         cantidad: unidades, disponible: unidades, consumido: 0, moneda: k.moneda, costoUnitarioMoneda: k.costoUnitarioMoneda, costoTotalMoneda: k.costoTotalMoneda, tasa: k.tasa,
-        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, pago: pagoTipo, cuentaPago: pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: pagoTipo === "binance" ? "Binance" : pagoTipo === "credito" ? "A crédito (por pagar)" : (banco?.nombre || PAGOS_COMPRA.inicial),
-        fecha, vigenciaHasta, duracionDias: dur, capacidadPorUnidad: producto.modelo === "cuenta_madre" ? producto.capacidad : 1,
-        cuentaInventarioId: txt(c.cuentaInventarioId, 80), referencia: txt(c.referencia, 80), notas: txt(c.notas, 300),
+        costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, pago: pagoTipo, ...(historico ? { binanceHistorico: true } : {}), cuentaPago: historico ? "binance_historico" : pagoTipo === "binance" ? BINANCE_ID : (banco?.id || ""), cuentaPagoNombre: historico ? "Binance · pago histórico" : pagoTipo === "binance" ? "Binance" : pagoTipo === "credito" ? "A crédito (por pagar)" : (banco?.nombre || PAGOS_COMPRA.inicial),
+        fecha, fechaPago: fecha, fechaActivacion, vigenciaHasta, duracionDias: dur, capacidadPorUnidad: producto.modelo === "cuenta_madre" ? producto.capacidad : 1,
+        cuentaInventarioId: cuentaInv, referencia: txt(c.referencia, 80), notas: txt(c.notas, 300),
         operationId: String(body.operationId), movimientoId: pagoTipo === "inicial" ? "" : movRef.id, estado: "activo", createdBy: actor, createdAt: ahora, updatedAt: ahora,
       };
       tx.set(loteRef, lote);
       const comun = { ...d.baseMov(identity, authUser, body), movimientoId: movRef.id, operationId: String(body.operationId), loteId: loteRef.id, productoId: producto.id, proveedorId: proveedor?.id || "", motivo: `Compra · ${detalle}`, ...d.canonicalFinanceDate(fecha, hoy) };
-      if (pagoTipo === "binance") {
+      if (historico) { // sin billetera ni banco: compra registrada una sola vez, contra «pagado fuera del libro»
+        tx.set(movRef, { ...comun, tipo: "compra", subtipo: "compra_binance_historica", direccion: "entrada", monto: k.costoTotalHnl, bancoId: "fuera_libro", banco: "Pago histórico (fuera del libro)", moneda: "USDT", montoMoneda: k.costoTotalMoneda, montoUsdt: k.costoTotalMoneda, tasa: k.tasa, ...(fechaActivacion ? { fechaActivacion } : {}) });
+      } else if (pagoTipo === "binance") {
         tx.set(movRef, { ...comun, tipo: "billetera", subtipo: "pago_proveedor", direccion: "salida", billeteraId: BINANCE_ID, moneda: "USDT", montoUsdt: k.costoTotalMoneda, monto: k.costoTotalHnl, tasa: k.tasa, banco: "Binance", saldoUsdtAntes: billetera.saldo, saldoUsdtDespues: k.salidaBinance.estado.saldo });
         tx.set(billeteraRef, { ...k.salidaBinance.estado, updatedAt: ahora });
       } else if (pagoTipo === "banco") {
@@ -489,8 +509,8 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
         tx.set(movRef, { ...comun, tipo: "compra", subtipo: "inventario_inicial", direccion: "entrada", monto: k.costoTotalHnl, banco: "Inventario inicial", moneda: k.moneda, montoMoneda: k.costoTotalMoneda, tasa: k.tasa });
         tx.set(loteRef, { movimientoId: movRef.id }, { merge: true });
       }
-      audit(tx, { accion: pagoTipo === "inicial" ? "inventario_inicial" : "compra_inventario", targetType: "lote", targetId: loteRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: k.costoTotalHnl, detalle: `${detalle} · ${k.costoTotalMoneda} ${k.moneda} = L${k.costoTotalHnl} (L${k.costoUnitarioHnl} c/u) · pagado: ${lote.cuentaPagoNombre}` });
-      return { duplicado: false, loteId: loteRef.id, costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, unidades, tasa: k.tasa, billetera: k.salidaBinance ? k.salidaBinance.estado : undefined };
+      audit(tx, { accion: pagoTipo === "inicial" ? "inventario_inicial" : historico ? "compra_binance_historica" : "compra_inventario", targetType: "lote", targetId: loteRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: k.costoTotalHnl, detalle: `${detalle} · ${k.costoTotalMoneda} ${k.moneda} = L${k.costoTotalHnl} (L${k.costoUnitarioHnl} c/u) · pagado: ${lote.cuentaPagoNombre}` });
+      return { duplicado: false, loteId: loteRef.id, costoTotalHnl: k.costoTotalHnl, costoUnitarioHnl: unitHnl, unidades, tasa: k.tasa, historico, costoTotalMoneda: k.costoTotalMoneda, moneda: k.moneda, billetera: k.salidaBinance ? k.salidaBinance.estado : undefined };
     });
     return reply(r);
   }
@@ -556,7 +576,9 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const billetera = bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio();
       // Lempiras que de verdad salen
       let pagadoHnl, salida = null;
-      if (pago === "binance") { if (cx.moneda !== "USDT") throw errUsuario("Con Binance solo se pagan deudas en USDT."); salida = aplicarSalida(billetera, monto); pagadoHnl = salida.costoHnl; }
+      const histCxp = pago === "binance" && body.historico === true; // R196z2 · pago a proveedor YA hecho en Binance: sin saldo interno
+      if (histCxp) { if (cx.moneda !== "USDT") throw errUsuario("Con Binance solo se pagan deudas en USDT."); const t = r6(body.tasa) > 0 ? r6(body.tasa) : r2(body.montoHnl) > 0 ? r6(r2(body.montoHnl) / monto) : 0; if (!(t > 0)) throw errUsuario("Escriba la tasa HNL/USDT de ese pago (o su equivalente en Lempiras)."); pagadoHnl = r2(body.montoHnl) > 0 ? r2(body.montoHnl) : r2(monto * t); }
+      else if (pago === "binance") { if (cx.moneda !== "USDT") throw errUsuario("Con Binance solo se pagan deudas en USDT."); salida = aplicarSalida(billetera, monto); pagadoHnl = salida.costoHnl; }
       else if (cx.moneda === "HNL") pagadoHnl = r2(monto);
       else { pagadoHnl = r2(body.montoHnl); if (!(pagadoHnl > 0)) throw errUsuario(`Escriba cuántos Lempiras salieron del banco por esos ${monto} ${cx.moneda}.`); }
       if (banco) { const { saldos } = await d.estadoLibro(db, tx); const b = saldos.bancos.find((x) => x.id === banco.id); if (b && pagadoHnl > b.saldo + 0.001 && !body.forzar) throw errUsuario(`Saldo insuficiente en ${banco.nombre} según el libro (L${b.saldo}).`); }
@@ -564,10 +586,11 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
       const saldadoHnl = liquida ? r2(cx.saldoHnl) : r2((monto / r6(cx.saldo)) * r2(cx.saldoHnl)); // parte de la deuda (en Lempiras de libro) que se cancela
       const diferencialHnl = r2(pagadoHnl - saldadoHnl); // + pérdida / − ganancia por tipo de cambio
       const comun = { ...d.baseMov(identity, authUser, body), movimientoId: movRef.id, operationId: String(body.operationId), cxpId: cRef.id, proveedorId: cx.proveedorId, proveedor: cx.proveedor, montoCxpHnl: saldadoHnl, diferencialHnl, motivo: `Pago a ${cx.proveedor} · ${cx.concepto}`, ...d.canonicalFinanceDate(fecha, hoy) };
-      if (pago === "binance") { tx.set(movRef, { ...comun, tipo: "billetera", subtipo: "pago_cxp", direccion: "salida", billeteraId: BINANCE_ID, moneda: "USDT", montoUsdt: monto, monto: pagadoHnl, tasa: billetera.costoPromedio, banco: "Binance" }); tx.set(billeteraRef, { ...salida.estado, updatedAt: ahora }); }
+      if (histCxp) tx.set(movRef, { ...comun, tipo: "pago_cxp", subtipo: "pago_binance_historico", direccion: "salida", monto: pagadoHnl, bancoId: "fuera_libro", banco: "Pago histórico (fuera del libro)", moneda: "USDT", montoMoneda: monto, montoUsdt: monto, tasa: r6(pagadoHnl / monto) });
+      else if (pago === "binance") { tx.set(movRef, { ...comun, tipo: "billetera", subtipo: "pago_cxp", direccion: "salida", billeteraId: BINANCE_ID, moneda: "USDT", montoUsdt: monto, monto: pagadoHnl, tasa: billetera.costoPromedio, banco: "Binance" }); tx.set(billeteraRef, { ...salida.estado, updatedAt: ahora }); }
       else tx.set(movRef, { ...comun, tipo: "pago_cxp", subtipo: "pago_proveedor", direccion: "salida", monto: pagadoHnl, bancoId: banco.id, banco: banco.nombre, moneda: cx.moneda, montoMoneda: monto });
       const saldo = r6(cx.saldo - monto), saldoHnl = r2(cx.saldoHnl - saldadoHnl);
-      tx.set(cRef, { saldo: liquida ? 0 : saldo, saldoHnl: liquida ? 0 : saldoHnl, estado: liquida ? "pagado" : "parcial", pagos: [...(cx.pagos || []), { movimientoId: movRef.id, monto, moneda: cx.moneda, pagadoHnl, saldadoHnl, diferencialHnl, con: pago === "binance" ? "Binance" : banco.nombre, fecha, por: actor }], updatedAt: ahora }, { merge: true });
+      tx.set(cRef, { saldo: liquida ? 0 : saldo, saldoHnl: liquida ? 0 : saldoHnl, estado: liquida ? "pagado" : "parcial", pagos: [...(cx.pagos || []), { movimientoId: movRef.id, monto, moneda: cx.moneda, pagadoHnl, saldadoHnl, diferencialHnl, con: histCxp ? "Binance · pago histórico" : pago === "binance" ? "Binance" : banco.nombre, fecha, por: actor }], updatedAt: ahora }, { merge: true });
       audit(tx, { accion: "pago_cuenta_por_pagar", targetType: "cuenta_por_pagar", targetId: cRef.id, movimientoId: movRef.id, operationId: String(body.operationId), monto: pagadoHnl, before: { saldo: cx.saldo }, after: { saldo: liquida ? 0 : saldo }, detalle: `${cx.proveedor}: ${monto} ${cx.moneda} con ${pago === "binance" ? "Binance" : banco.nombre} (L${pagadoHnl}${diferencialHnl ? ` · diferencial ${diferencialHnl}` : ""})` });
       return { duplicado: false, saldo: liquida ? 0 : saldo, estado: liquida ? "pagado" : "parcial", pagadoHnl, diferencialHnl };
     });

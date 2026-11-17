@@ -695,7 +695,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
           if (opid && cargos.some((c) => c.operationId === opid)) return { duplicado: true }; // reintento del mismo cargo
           if (!cargo.loteId && cargos.some((c) => c.fecha === fecha && Math.abs(Number(c.cargoHnl) - hnl) < 0.005)) throw errUsuario(`Ese cargo (L${hnl} del ${fecha}) ya está registrado en esta cuenta. No se suma dos veces.`);
           if (!cargo.loteId) return { verificado: true }; // solo se comprobó que no está repetido (antes de registrar la compra)
-          cargos.push({ fecha, moneda, monto, cargoHnl: hnl, loteId: txt(cargo.loteId, 120), operationId: opid, tarjetaId: moneda === "USDT" ? "" : tarjetaId, ...(moneda === "USDT" ? { tipo: "activacion" } : {}), por: actor, at: ahora });
+          cargos.push({ fecha, moneda, monto, cargoHnl: hnl, loteId: txt(cargo.loteId, 120), operationId: opid, tarjetaId: moneda === "USDT" ? "" : tarjetaId, ...(moneda === "USDT" ? { tipo: "activacion", tasa: Number(cargo.tasa) || 0, ...(fechaExcel(cargo.fechaActivacion) ? { fechaActivacion: fechaExcel(cargo.fechaActivacion) } : {}) } : {}), por: actor, at: ahora });
         }
         const n = { modalidad: mod, tarjetaId: mod === "tarjeta" ? tarjetaId : a.tarjetaId || "", periodicidad: per || a.periodicidad || (mod === "tarjeta" ? "mensual" : ""), ...(prox !== undefined ? { proximoCobro: prox } : {}) };
         tx.set(ref, { ...a, ...n, cuentaId: cid, correo: String((sc.data() || {}).correo || ""), cargos: cargos.slice(-60), actualizadoAt: ahora, actualizadoPor: actor,

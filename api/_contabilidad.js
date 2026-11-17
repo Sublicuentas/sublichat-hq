@@ -77,7 +77,7 @@ function asientoDe(m = {}, methods = [], clasificar = null) {
   }
   else if (kind === "pago_cxp" || (kind === "billetera" && m.subtipo === "pago_cxp")) { // R138 · pago de cuenta por pagar
     const pagado = Math.abs(monto), saldado = Math.abs(Number(m.montoCxpHnl ?? monto)), dif = money(pagado - saldado);
-    const sale = kind === "billetera" ? cuentaFija("1150-binance") : banco;
+    const sale = kind === "billetera" ? cuentaFija("1150-binance") : m.subtipo === "pago_binance_historico" ? cuentaFija("3100") : banco; // R196z2: pagado fuera del libro
     lineas = [linea(cuentaFija("2100"), saldado, 0), ...(dif ? [dif > 0 ? linea(cuentaFija("5900"), dif, 0) : linea(cuentaFija("5900"), 0, -dif)] : []), linea(sale, 0, pagado)];
     base.descripcion = `Pago a proveedor · ${String(m.proveedor || m.motivo || "").slice(0, 60)}`; if (kind === "billetera") base.banco = "Binance";
     return { ...base, monto: pagado, lineas };
@@ -92,9 +92,10 @@ function asientoDe(m = {}, methods = [], clasificar = null) {
   }
   else if (kind === "compra") { // R136 · compra de inventario: NO es gasto. Banco → Inventario (o Capital si es inventario inicial)
     const a = Math.abs(monto), inv = cuentaFija("1300");
-    lineas = m.subtipo === "inventario_inicial" ? [linea(inv, a, 0), linea(cuentaFija("3100"), 0, a)] : m.subtipo === "compra_credito" ? [linea(inv, a, 0), linea(cuentaFija("2100"), 0, a)] : [linea(inv, a, 0), linea(banco, 0, a)]; // R138: a crédito = por pagar
+    lineas = m.subtipo === "inventario_inicial" || m.subtipo === "compra_binance_historica" ? [linea(inv, a, 0), linea(cuentaFija("3100"), 0, a)] : m.subtipo === "compra_credito" ? [linea(inv, a, 0), linea(cuentaFija("2100"), 0, a)] : [linea(inv, a, 0), linea(banco, 0, a)]; // R138: a crédito = por pagar
     base.descripcion = `${m.subtipo === "inventario_inicial" ? "Inventario inicial" : "Compra de inventario"} · ${String(m.motivo || "").replace(/^Compra · /, "").slice(0, 60)}`;
     if (m.subtipo === "inventario_inicial") base.banco = "Inventario inicial";
+    if (m.subtipo === "compra_binance_historica") { base.banco = "Binance · pago histórico"; base.descripcion = base.descripcion.replace("Compra de inventario", "Compra pagada antes en Binance"); } // R196z2
     if (m.subtipo === "compra_credito") { base.banco = "Por pagar"; base.descripcion = base.descripcion.replace("Compra de inventario", "Compra a crédito"); }
     return { ...base, monto: a, lineas };
   }
