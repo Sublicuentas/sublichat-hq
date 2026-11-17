@@ -138,8 +138,107 @@
           return '<tr><td><div class="fz-prod">' + logo(p.producto) + '<b>' + esc(p.producto) + '</b></div></td><td class="n">' + p.ventas + '</td><td class="n">' + L(p.ingresoHnl) + '</td><td class="n">' + costo + '</td><td class="n">' + gan + nota + '</td><td class="c">' + mg + '</td><td class="c">' + pill(ESTADO_PROD, p.estado) + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="fz-vacio-s">Sin ventas en ' + esc(nombreMes(st.mes)) + '.</div>') + '</div>';
   }
+  // ---------------------------------------------------------------------------------------------- R197 · GANANCIAS (motor único)
+  // Todo sale de finp_ganancias (api/_finanzas-ganancias.js): ingresos COBRADOS del libro, pendientes y ESPERADOS (renovaciones
+  // de las fichas, que no son dinero), costos reales según la forma de compra de cada producto y el detalle por cuenta madre.
+  // Solo lectura: no crea ni cambia ventas, clientes, cuentas ni compras.
+  st.gan = st.gan || {}; st.ganF = st.ganF || { plat: '', cuentas: '' };
+  function ganRango() { if (st.ganR && st.ganR.desde) return st.ganR; var m = st.mes || ''; var p = m.split('-'); var ult = new Date(Date.UTC(+p[0], +p[1], 0)).getUTCDate(); return { desde: m + '-01', hasta: m + '-' + String(ult).padStart(2, '0') }; }
+  function ganClave() { var r = ganRango(); return r.desde + '_' + r.hasta; }
+  async function cargarGan(forzar) {
+    var k = ganClave(); if (st.gan[k] && !forzar) return; st.gan[k] = { cargando: true };
+    try { var r = ganRango(); st.gan[k] = await api('finp_ganancias', { desde: r.desde, hasta: r.hasta }); } catch (e) { st.gan[k] = { error: e.message }; }
+    if (st.tab === 'ganancias' || st.tab === 'resumen') pintar();
+  }
+  var EST_PLAT = { ok: ['Con costo', 'ok'], costo_pendiente: ['Costo pendiente', 'warn'], sin_ingreso: ['Sin ingreso cobrado', 'gris'] };
+  var BAND = { sin_coincidencia: 'Sin coincidencia', pago_pendiente: 'Pago pendiente', costo_pendiente: 'Costo pendiente', datos_incompletos: 'Datos incompletos', ingreso_sin_confirmar: 'Ingreso sin confirmar' };
+  var REGLA = { cobertura: 'Por vigencia', activacion: 'Por activación', consumo: 'Por consumo', lote_sin_consumo: 'Lote sin consumo', mensual_acceso: 'Mensual por acceso', mensual_familia: 'Mensual por familia' };
+  function ganKpis(g) {
+    var r = g.resumen, a = g.anterior || {};
+    function dl(x, y) { if (!(y > 0)) return '<em class="fz-delta n">sin dato del período anterior</em>'; var v = Math.round((x - y) / Math.abs(y) * 1000) / 10; return '<em class="fz-delta ' + (v >= 0 ? 'ok' : 'mal') + '">' + ico(v >= 0 ? 'up' : 'down') + (v > 0 ? '+' : '') + v + '% <span>vs. ' + esc(nombreMes(a.mes)) + '</span></em>'; }
+    function card(ic, cls, t, val, extra) { return '<div class="fz-card fz-kpi"><span class="fz-kpi-i ' + cls + '">' + ico(ic) + '</span><div><small>' + t + '</small><strong>' + val + '</strong>' + (extra || '') + '</div></div>'; }
+    var sinDatos = r.estado === 'sin_datos';
+    var res = sinDatos ? '<span class="fz-pend">Sin datos</span>' : L(r.resultadoHnl);
+    return '<div class="fz-kpis">' +
+      card('coins', 'v', 'Ingresos cobrados', sinDatos ? '<span class="fz-pend">Sin ventas registradas</span>' : L(r.cobradoHnl), dl(r.cobradoHnl, a.cobradoHnl) + '<em class="fz-nota">Pendiente de cobro ' + L(r.pendienteHnl) + ' · Esperado sin confirmar ' + L(r.esperadoHnl) + '</em>') +
+      card('layers', 'r', 'Costos asignados al período', L(r.costoHnl), '<em class="fz-nota">Pagos a proveedores (caja): ' + L(r.desembolsoHnl) + '</em>') +
+      card('cols', 'v', 'Resultado después de costos directos', res, (r.cobradoSinCostoHnl > 0 ? '<em class="fz-nota">' + L(r.cobradoSinCostoHnl) + ' cobrados sin compra registrada (Costo pendiente)</em>' : '') + dl(r.resultadoHnl, a.resultadoHnl)) +
+      card('pct', 'a', 'Margen', P(r.margen), '<em class="fz-nota">' + r.ventas + ' venta(s) · ' + r.lineas + ' servicio(s)</em>') + '</div>';
+  }
+  function ganPeriodo(g) {
+    var r = ganRango();
+    return '<div class="fz-card"><div class="fz-cab">' + ico('trend') + '<h3>Período</h3><span class="fz-sub r">' + fecha(r.desde) + ' → ' + fecha(r.hasta) + '</span></div>' +
+      '<div class="fz-filtros">' + (g && g.meses ? g.meses.map(function (m) { var on = r.desde === m.mes + '-01' && r.hasta.slice(0, 7) === m.mes; return '<button type="button" class="' + (on ? 'on' : '') + '" data-fz-ganmes="' + esc(m.mes) + '">' + esc(nombreMes(m.mes)) + '</button>'; }).join('') : '') +
+      '<button type="button" data-fz-gantri="1">Últimos 3 meses</button></div>' +
+      '<div class="fz-form in" style="margin-top:10px"><label>Desde<input type="date" data-fz-ganr="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-ganr="hasta" value="' + esc(r.hasta) + '"></label><button type="button" class="fz-btn sec" data-fz="ganrango">Ver rango</button><button type="button" class="fz-btn sec" data-fz="ganexcel">' + ico('dl') + 'Excel del detalle</button></div>' +
+      (g && g.meses ? '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Mes</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th><th class="n">Costos</th><th class="n">Pagos a proveedores</th><th class="n">Resultado</th><th class="c">Margen</th></tr></thead><tbody>' +
+        g.meses.map(function (m) { return '<tr><td><b>' + esc(nombreMes(m.mes)) + '</b></td><td class="n">' + L(m.cobradoHnl) + '</td><td class="n">' + L(m.pendienteHnl) + '</td><td class="n">' + L(m.esperadoHnl) + '</td><td class="n">' + L(m.costoHnl) + '</td><td class="n">' + L(m.desembolsoHnl) + '</td><td class="n">' + (m.estado === 'sin_datos' ? '<span class="fz-pend">Sin datos</span>' : '<b class="' + (m.resultadoHnl >= 0 ? 'vd' : 'rj') + '">' + L(m.resultadoHnl) + '</b>') + '</td><td class="c">' + P(m.margen) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') + '</div>';
+  }
+  function ganPlataformas(g) {
+    var f = g.porPlataforma || [];
+    return '<div class="fz-card fz-rent"><div class="fz-cab">' + ico('layers') + '<h3>Rentabilidad por plataforma</h3></div>' +
+      (f.length ? '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Plataforma</th><th class="n">Ventas</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th><th class="n">Costo</th><th class="n">Resultado</th><th class="c">Margen</th><th class="c">Estado</th><th></th></tr></thead><tbody>' +
+        f.map(function (p) { return '<tr><td><div class="fz-prod">' + logo(p.nombre) + '<b>' + esc(p.nombre) + '</b></div><small>' + p.cuentas + ' cuenta(s) · ' + p.clientes + ' cliente(s)</small></td><td class="n">' + p.ventas + '</td><td class="n">' + L(p.cobradoHnl) + '</td><td class="n">' + L(p.pendienteHnl) + '</td><td class="n">' + L(p.esperadoHnl) + '</td><td class="n">' + (p.costoHnl > 0 ? L(p.costoHnl) : '<span class="fz-pend">Costo pendiente</span>') + '</td><td class="n">' + (p.resultadoHnl == null ? '<span class="fz-pend">Costo pendiente</span>' : '<b class="' + (p.resultadoHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.resultadoHnl) + '</b>') + '</td><td class="c">' + P(p.margen) + '</td><td class="c">' + pill(EST_PLAT, p.estado) + '</td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-ganplat="' + esc(p.plataforma) + '">Cuentas</button></td></tr>'; }).join('') +
+        '</tbody></table></div>' : '<div class="fz-vacio-s">No hay ventas ni costos registrados en este período.</div>') + '</div>';
+  }
+  function ganCuentas(g) {
+    var fp = st.ganF.plat, q = (st.ganF.cuentas || '').toLowerCase();
+    var plats = []; (g.cuentas || []).forEach(function (c) { if (plats.indexOf(c.plataforma) < 0) plats.push(c.plataforma); });
+    var f = (g.cuentas || []).filter(function (c) { return (!fp || c.plataforma === fp) && (!q || String(c.correo).toLowerCase().indexOf(q) >= 0); });
+    return '<div class="fz-card"><div class="fz-cab">' + ico('users') + '<h3>Cuentas madre y accesos</h3><span class="fz-sub r">' + f.length + ' de ' + (g.cuentas || []).length + '</span></div>' +
+      '<div class="fz-form in"><label>Plataforma<select data-fz-ganf="plat"><option value="">Todas</option>' + plats.map(function (p) { var x = (g.porPlataforma || []).find(function (y) { return y.plataforma === p; }); return '<option value="' + esc(p) + '"' + (p === fp ? ' selected' : '') + '>' + esc(x ? x.nombre : p) + '</option>'; }).join('') + '</select></label><label>Buscar correo<input data-fz-ganf="cuentas" value="' + esc(st.ganF.cuentas || '') + '" placeholder="correo de la cuenta"></label></div>' +
+      (f.length ? '<div class="fz-tw" style="margin-top:10px"><table class="fz-t"><thead><tr><th>Cuenta</th><th class="n">Clientes</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th><th class="n">Costo</th><th class="n">Resultado</th><th></th></tr></thead><tbody>' +
+        f.slice(0, 300).map(function (c) { return '<tr><td><b>' + esc(c.correo || c.cuentaId) + '</b><small>' + esc(c.nombre) + '</small></td><td class="n">' + c.clientes + '</td><td class="n">' + L(c.cobradoHnl) + '</td><td class="n">' + L(c.pendienteHnl) + '</td><td class="n">' + L(c.esperadoHnl) + '</td><td class="n">' + (c.costoHnl > 0 ? L(c.costoHnl) : '<span class="fz-pend">Costo pendiente</span>') + '</td><td class="n">' + (c.resultadoHnl == null ? '—' : '<b class="' + (c.resultadoHnl >= 0 ? 'vd' : 'rj') + '">' + L(c.resultadoHnl) + '</b>') + '</td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-gancta="' + esc(c.cuentaId) + '">Ver clientes</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="fz-vacio-s">Sin cuentas con movimiento en este período.</div>') + '</div>';
+  }
+  function ganBandeja(g) {
+    var c = g.bandejaConteo || {}, b = g.bandeja || [];
+    return '<div class="fz-card fz-alertas"><div class="fz-cab">' + ico('alert', 'am') + '<h3>Bandeja de conciliación</h3><span class="fz-badge">' + b.length + '</span></div>' +
+      '<div class="fz-hojas">' + Object.keys(BAND).map(function (k) { return '<span class="fz-chip">' + BAND[k] + ': ' + (c[k] || 0) + '</span>'; }).join('') + '</div>' +
+      (g.costeo && !g.costeo.activo ? '<p class="fz-sub">El cálculo de consumo (créditos y licencias) no tiene fecha de inicio: esos costos se toman por lote hasta activarlo.</p>' : '') +
+      (b.length ? b.slice(0, 60).map(function (x) { return '<div class="fz-alerta warn"><div><b>' + esc(BAND[x.tipo] || x.tipo) + '</b><span>' + [esc(x.texto), esc(x.beneficiario || ''), x.fecha ? fecha(x.fecha) : '', L(x.monto)].filter(Boolean).join(' · ') + '</span></div></div>'; }).join('') : '<div class="fz-ok">Todo conciliado en este período.</div>') +
+      '<p class="fz-sub">Nada se inventa ni se corrige solo: aquí se ve lo que falta para que el resultado sea completo.</p></div>';
+  }
   function vGanancias(d) {
-    return kpis(d) + '<div class="fz-g2">' + chartHtml('Ganancia por categoría') + topHtml(d) + '</div><div class="fz-g2 b">' + tablaRent(d) + alertasHtml(d) + '</div>' + notaCosteo(d);
+    var g = st.gan[ganClave()];
+    if (!g || g.cargando) { cargarGan(); return ganPeriodo(null) + '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando ganancias con ventas, cobros y compras…</b></div>'; }
+    if (g.error) return ganPeriodo(null) + '<div class="fz-card fz-vacio"><b>No se pudo calcular</b><span>' + esc(g.error) + '</span><button type="button" class="fz-btn" data-fz="ganrecargar">Reintentar</button></div>';
+    var vend = (g.vendedores || []).slice(0, 10);
+    return ganKpis(g) + ganPeriodo(g) + ganPlataformas(g) + '<div class="fz-g2 b">' + ganCuentas(g) + ganBandeja(g) + '</div>' +
+      '<div class="fz-card"><div class="fz-cab">' + ico('trophy') + '<h3>Por vendedor</h3></div>' + (vend.length ? vend.map(function (v) { return '<div class="fz-lin"><div><b>' + esc(v.vendedor) + '</b><small>' + v.ventas + ' servicio(s)</small></div><strong>' + L(v.cobradoHnl) + '</strong></div>'; }).join('') : '<div class="fz-vacio-s">Sin ventas.</div>') + '</div>' +
+      '<p class="fz-pie">Resultado = ingresos cobrados − costos directos asignados al período. Los pagos a proveedores (caja) se muestran aparte y no se descuentan dos veces. Una renovación programada no cuenta como cobrada. Activaciones sin vigencia: un desembolso en su fecha (no se inventan meses). Gastos operativos van en Egresos/Cierre.</p>';
+  }
+  function abrirGanCuenta(id) {
+    var r = ganRango();
+    var mm = modal('Cuenta · detalle financiero', '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div>'); mm.classList.add('ancho');
+    api('finp_ganancias_cuenta', { cuentaId: id, desde: r.desde, hasta: r.hasta }).then(function (x) {
+      var c = x.cuenta, b = mm.querySelector('.fz-modal-b'); if (!b) return;
+      var cab = '<div class="fz-cuenta-ro"><small>' + esc(c.nombre) + (c.plan ? ' · ' + esc(c.plan) : '') + ' · ' + c.ocupados + '/' + c.capacidad + ' ocupados · ' + c.disponibles + ' libres</small><b>' + esc(c.correo) + '</b><span>' + fecha(r.desde) + ' → ' + fecha(r.hasta) + '</span></div>';
+      var mini = '<div class="fz-mini" style="margin-top:10px"><div><small>Cobrado</small><b>' + L(c.cobradoHnl) + '</b></div><div><small>Pendiente</small><b>' + L(c.pendienteHnl) + '</b></div><div><small>Esperado</small><b>' + L(c.esperadoHnl) + '</b></div><div><small>Costo del período</small><b>' + (c.costos.length ? L(c.costoPeriodoHnl) : 'Costo pendiente') + '</b></div></div>' +
+        '<p class="fz-sub">Resultado del período: <b>' + (c.resultadoPeriodoHnl == null ? 'Costo pendiente' : L(c.resultadoPeriodoHnl, true)) + '</b>' + (c.margen != null ? ' · margen ' + P(c.margen) : '') + (c.costoCicloHnl != null ? ' · Resultado del ciclo de la última compra (' + L(c.costoCicloHnl, true) + '): <b>' + L(c.resultadoCicloHnl, true) + '</b>' : '') + '</p>';
+      var per = '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Perfil</th><th>Beneficiario</th><th>Titular de ficha</th><th>Vendedor</th><th class="n">Precio</th><th>Última venta</th><th>Vence</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th></tr></thead><tbody>' +
+        c.perfiles.map(function (p) { return '<tr><td>' + esc(p.perfil) + '</td><td><b>' + esc(p.beneficiario || '—') + '</b></td><td>' + esc(p.titular || '—') + '</td><td>' + esc(p.vendedor) + '</td><td class="n">' + (p.precio == null ? '—' : L(p.precio)) + '</td><td>' + (p.ultimaVenta ? fecha(p.ultimaVenta) + '<small>' + esc(p.ultimoTipo) + '</small>' : '—') + '</td><td>' + fecha(p.proximoVencimiento) + '</td><td class="n">' + L(p.cobradoHnl) + '</td><td class="n">' + L(p.pendienteHnl) + '</td><td class="n">' + L(p.esperadoHnl) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      var cos = c.costos.length ? '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Compra</th><th>Regla</th><th class="n">Costo del período</th><th>Criterio</th></tr></thead><tbody>' + c.costos.map(function (k) { return '<tr><td>' + esc(k.producto) + '<small>' + (k.fechaCompra ? fecha(k.fechaCompra) : '') + (k.moneda && k.moneda !== 'HNL' ? ' · ' + esc(k.montoMoneda) + ' ' + esc(k.moneda) + ' × ' + esc(k.tasa) : '') + '</small></td><td>' + esc(REGLA[k.regla] || k.regla) + '</td><td class="n">' + L(k.costoHnl, true) + '</td><td><small>' + esc(k.criterio) + '</small></td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="fz-pend">Costo pendiente: esta cuenta no tiene compra registrada que cubra el período.</p>';
+      var compras = c.compras.length ? c.compras.map(function (k) { return '<div class="fz-lin"><div><b>' + esc(k.producto) + '</b><small>Pago ' + fecha(k.fecha) + (k.fechaActivacion ? ' · activación ' + fecha(k.fechaActivacion) : '') + ' · ' + esc(k.montoMoneda) + ' ' + esc(k.moneda) + (k.moneda !== 'HNL' ? ' × ' + esc(k.tasa) : '') + ' · ' + esc(k.pago) + '</small></div><strong>' + L(k.costoHnl, true) + '</strong></div>'; }).join('') : '<div class="fz-vacio-s">Sin compras vinculadas a esta cuenta.</div>';
+      var movs = c.lineas.length ? c.lineas.map(function (l) { return '<div class="fz-lin"><div><b>' + esc(l.beneficiario) + '</b><small>' + fecha(l.fecha) + ' · ' + esc(l.tipo) + (l.combo ? ' · parte de un combo' : '') + ' · ref ' + esc(String(l.referencia).slice(-12)) + '</small></div><strong>' + L(l.cobrado, true) + (l.pendiente > 0 ? '<small class="fz-pend">' + L(l.pendiente, true) + ' pendiente</small>' : '') + '</strong></div>'; }).join('') : '<div class="fz-vacio-s">Sin cobros en el período.</div>';
+      b.innerHTML = cab + mini + '<h4>Clientes y beneficiarios</h4>' + per + '<h4>Costos asignados</h4>' + cos + '<h4>Compras de proveedor vinculadas</h4>' + compras + '<details><summary>Movimientos que explican el ingreso</summary>' + movs + '</details>';
+    }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
+  }
+  async function ganExcel(btn) {
+    if (!window.ExcelJS) { toast('No cargó el generador de Excel. Recargue la página.', true); return; }
+    btn.disabled = true; var t0 = btn.innerHTML; btn.textContent = 'Generando…';
+    try {
+      var r = ganRango(); var x = await api('finp_ganancias_excel', { desde: r.desde, hasta: r.hasta });
+      var wb = new window.ExcelJS.Workbook(); var ws = wb.addWorksheet('Detalle de ganancias', { views: [{ state: 'frozen', ySplit: 1 }] });
+      var cols = x.filas.length ? Object.keys(x.filas[0]) : ['Fecha'];
+      ws.columns = cols.map(function (k) { return { header: k, key: k, width: Math.max(12, Math.min(30, k.length + 6)) }; });
+      x.filas.forEach(function (f) { ws.addRow(f); });
+      var h = ws.getRow(1); h.font = { bold: true, color: { argb: 'FFFFFFFF' } }; h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2231A' } };
+      ['Ingreso cobrado', 'Ingreso pendiente', 'Costo imputado'].forEach(function (k) { var i = cols.indexOf(k); if (i >= 0) ws.getColumn(i + 1).numFmt = '"L"#,##0.00'; });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+      var buf = await wb.xlsx.writeBuffer(); var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'Sublichat_Ganancias_' + r.desde + '_' + r.hasta + '.xlsx'; a.click();
+      toast('Excel listo' + (x.truncado ? ' (primeras 20 000 filas)' : '') + '.');
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false; btn.innerHTML = t0;
   }
   function notaCosteo(d) {
     var k = d.kpis; return '<p class="fz-pie">Ganancia = ingresos con costo registrado − costo asignado (PEPS) de esas ventas. ' + (k.ventasSinCosto ? k.ventasSinCosto + ' venta(s) quedan «Pendiente de costo» y no entran al margen. ' : '') + 'No incluye gastos operativos: esos van en Egresos/Cierre.</p>';
@@ -150,7 +249,9 @@
       [['Trap', pv.trap], ['Deku', pv.deku], ['Propios', pv.propio], ['Sin proveedor', pv.sin]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + (x[1] || 0) + '</b></div>'; }).join('') + '</div><p class="fz-sub">' + (v.proximos7 || 0) + ' con cobro del proveedor en 7 días · ' + (v.lotes || 0) + ' lotes pagados registrados</p></div>';
     var compras = '<div class="fz-card"><div class="fz-cab">' + ico('cart') + '<h3>Últimas compras</h3><button type="button" class="fz-btn sm" data-fz="compra">' + ico('plus') + 'Registrar compra</button></div>' +
       ((d.lotes || []).slice(0, 6).map(function (l) { return '<div class="fz-lin">' + logo(l.producto) + '<div><b>' + esc(l.producto) + '</b><small>' + fecha(l.fecha) + ' · ' + esc(l.proveedor || 'Sin proveedor') + ' · ' + esc(l.cuentaPagoNombre || l.pago || '') + '</small></div><strong>' + L(l.costoTotalHnl) + '</strong></div>'; }).join('') || '<div class="fz-vacio-s">Sin compras registradas.</div>') + '</div>';
-    return kpis(d) + '<div class="fz-g2">' + chartHtml('Ganancia por categoría') + alertasHtml(d, 4) + '</div><div class="fz-g2 c">' + compras + vip + '</div>' + notaCosteo(d);
+    var g = st.gan[ganClave()]; if (!g) cargarGan(); // R197 · mismas cifras que Ganancias
+    var cab = g && g.resumen ? ganKpis(g) : '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando…</b></div>';
+    return cab + '<div class="fz-g2">' + chartHtml('Ganancia por categoría') + alertasHtml(d, 4) + '</div><div class="fz-g2 c">' + compras + vip + '</div>' + notaCosteo(d);
   }
   function vProveedores(d) {
     var cp = d.costosProveedor || [], rp = d.rentProveedores || [];
@@ -752,6 +853,10 @@
       if ((t = e.target.closest('[data-fz-menu]'))) { var mm = t.parentNode; var abierto = mm.classList.contains('on'); h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); if (!abierto) mm.classList.add('on'); e.stopPropagation(); return; }
       if ((t = e.target.closest('[data-fz-spf]'))) { abrirSpf(t.dataset.fzSpf, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-hbo]'))) { abrirHbo(t.dataset.fzHbo, t.dataset.id); return; }
+      if ((t = e.target.closest('[data-fz-ganmes]'))) { var mg = t.dataset.fzGanmes, pg = mg.split('-'); st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); return; }
+      if ((t = e.target.closest('[data-fz-gantri]'))) { var gm = (st.gan[ganClave()] || {}).meses || []; if (gm.length >= 3) { var u = gm[gm.length - 1].mes, pu = u.split('-'); st.ganR = { desde: gm[gm.length - 3].mes + '-01', hasta: u + '-' + String(new Date(Date.UTC(+pu[0], +pu[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); } return; }
+      if ((t = e.target.closest('[data-fz-ganplat]'))) { st.ganF.plat = t.dataset.fzGanplat; pintar(); return; }
+      if ((t = e.target.closest('[data-fz-gancta]'))) { abrirGanCuenta(t.dataset.fzGancta); return; }
       if ((t = e.target.closest('[data-fz-cta]'))) { abrirCuenta(t.dataset.fzCta, t.dataset.plat, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ctaf]'))) { st.ctaF[st.sub] = t.dataset.fzCtaf; pintar(); return; }
       if ((t = e.target.closest('[data-fz-vip]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirVip(t.dataset.fzVip, t.dataset.id); return; }
@@ -759,6 +864,9 @@
       if (!(t = e.target.closest('[data-fz]'))) return;
       var a = t.dataset.fz;
       if (a === 'reintentar') cargar(true);
+      else if (a === 'ganrango') { var dd = (document.querySelector('[data-fz-ganr="desde"]') || {}).value, hh = (document.querySelector('[data-fz-ganr="hasta"]') || {}).value; if (/^\d{4}-\d{2}-\d{2}$/.test(dd) && /^\d{4}-\d{2}-\d{2}$/.test(hh)) { st.ganR = { desde: dd, hasta: hh }; pintar(); } }
+      else if (a === 'ganexcel') ganExcel(t);
+      else if (a === 'ganrecargar') { delete st.gan[ganClave()]; pintar(); }
       else if (a === 'costear') { t.disabled = true; t.textContent = 'Calculando…'; api('finp_costear', { limite: 40 }).then(function (r) { var c = r.costeo || {}; toast(c.activo === false ? (c.motivo || 'Costeo apagado.') : 'Costos al día: ' + (c.costeadas || 0) + ' venta(s) costeadas.'); cargar(true); }).catch(function (e) { toast(e.message, true); cargar(true); }); }
       else if (a === 'productos') abrirProductos();
       else if (a === 'compra') abrirCompra(t.dataset.prod || '');
@@ -775,7 +883,8 @@
     });
     h.addEventListener('change', function (e) {
       var t = e.target;
-      if (t.matches('[data-fz-mes]')) { if (/^\d{4}-\d{2}$/.test(t.value)) { st.mes = t.value; st.rep.desde = st.rep.hasta = ''; cargar(true); } }
+      if (t.matches('[data-fz-mes]')) { if (/^\d{4}-\d{2}$/.test(t.value)) { st.mes = t.value; st.ganR = null; st.rep.desde = st.rep.hasta = ''; cargar(true); } }
+      if (t.matches('[data-fz-ganf]')) { st.ganF[t.dataset.fzGanf] = t.value; pintar(); }
       else if (t.matches('[data-fz-file]') && t.files[0]) leerArchivo(t.files[0]);
       else if (t.matches('[data-fz-res]')) { st.imp.res[t.dataset.fzRes] = t.value; }
       else if (t.matches('[data-fz-confirmo]')) { st.imp.confirmo = t.checked; }
