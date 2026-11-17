@@ -13,6 +13,8 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
+import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
+import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
 import spotifyFam from "./_spotify-familias.js"; // R196s · antes se cargaba con require dinámico + meta.url: Vercel compila api/ como CommonJS y esa
 // referencia de módulo ES tumbaba TODO /api/finanzas al cargar (500 «A server error has occurred» en Control financiero).
 
@@ -336,7 +338,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -648,7 +650,8 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const en7 = new Date(Date.parse(`${hoy}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
       const filas = cuentas.filter((c) => String(c.estado || "activa") !== "eliminada" && c.eliminado !== true).map((c) => {
         const x = finDe.get(c.id) || {}, tj = x.tarjetaId ? tDe.get(x.tarjetaId) : null;
-        return { cuentaId: c.id, correo: String(c.correo || c.email || ""), capacidad: Number(c.capacidad || c.perfilesTotales || 4) || 4, modalidad: x.modalidad === "tarjeta" ? "tarjeta" : "activacion",
+        const rp = hboPlanes.resumenCuenta(c); // R196z · plan real: Standard 3 / Platinum 5 (cuentas viejas: su capacidad, sin tocarla)
+        return { cuentaId: c.id, correo: String(c.correo || c.email || ""), plan: rp.plan, nombrePlan: rp.nombrePlan, ocupados: rp.ocupados, capacidad: rp.capacidad, modalidad: x.modalidad === "tarjeta" ? "tarjeta" : "activacion",
           tarjeta: tj ? { id: tj.id, banco: tj.banco, titular: tj.titular, ultimos4: tj.ultimos4 } : null, periodicidad: x.periodicidad || "", proximoCobro: x.proximoCobro || "",
           pronto: !!(x.proximoCobro && x.proximoCobro <= en7), cargos: (x.cargos || []).slice(-6).reverse() };
       }).sort((a, b) => a.modalidad.localeCompare(b.modalidad) || String(a.proximoCobro || "9999").localeCompare(String(b.proximoCobro || "9999")) || a.correo.localeCompare(b.correo));
@@ -682,17 +685,17 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
           tarjetaId = id;
         } else if (body.tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
         const mod = modalidad || a.modalidad || "activacion";
-        if (mod === "tarjeta" && !tarjetaId) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
+        if (mod === "tarjeta" && !tarjetaId && !(cargo && cargo.activacion === true)) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
         const cargos = [...(a.cargos || [])];
         if (cargo) {
-          const fecha = fechaExcel(cargo.fecha), moneda = ["USD", "HNL"].includes(cargo.moneda) ? cargo.moneda : null, monto = r2(cargo.monto), hnl = r2(moneda === "HNL" ? cargo.monto : cargo.cargoHnl);
+          const fecha = fechaExcel(cargo.fecha), moneda = ["USD", "HNL"].includes(cargo.moneda) || (cargo.moneda === "USDT" && cargo.activacion === true) ? cargo.moneda : null, monto = r2(cargo.monto), hnl = r2(moneda === "HNL" ? cargo.monto : cargo.cargoHnl); // R196z · activación Binance (USDT): se anota tras la compra real
           if (!fecha || fecha > hoy) throw errUsuario("Fecha del cargo inválida.");
           if (!moneda || !(monto > 0) || !(hnl > 0)) throw errUsuario(moneda === "USD" ? "Escriba el monto en USD y el cargo REAL en Lempiras que cobró el banco." : "Escriba el monto del cargo.");
           const opid = txt(cargo.operationId, 80);
           if (opid && cargos.some((c) => c.operationId === opid)) return { duplicado: true }; // reintento del mismo cargo
           if (!cargo.loteId && cargos.some((c) => c.fecha === fecha && Math.abs(Number(c.cargoHnl) - hnl) < 0.005)) throw errUsuario(`Ese cargo (L${hnl} del ${fecha}) ya está registrado en esta cuenta. No se suma dos veces.`);
           if (!cargo.loteId) return { verificado: true }; // solo se comprobó que no está repetido (antes de registrar la compra)
-          cargos.push({ fecha, moneda, monto, cargoHnl: hnl, loteId: txt(cargo.loteId, 120), operationId: opid, tarjetaId, por: actor, at: ahora });
+          cargos.push({ fecha, moneda, monto, cargoHnl: hnl, loteId: txt(cargo.loteId, 120), operationId: opid, tarjetaId: moneda === "USDT" ? "" : tarjetaId, ...(moneda === "USDT" ? { tipo: "activacion" } : {}), por: actor, at: ahora });
         }
         const n = { modalidad: mod, tarjetaId: mod === "tarjeta" ? tarjetaId : a.tarjetaId || "", periodicidad: per || a.periodicidad || (mod === "tarjeta" ? "mensual" : ""), ...(prox !== undefined ? { proximoCobro: prox } : {}) };
         tx.set(ref, { ...a, ...n, cuentaId: cid, correo: String((sc.data() || {}).correo || ""), cargos: cargos.slice(-60), actualizadoAt: ahora, actualizadoPor: actor,
@@ -701,6 +704,69 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         return { cuentaId: cid, modalidad: mod, tarjetaId };
       });
       return ok(r);
+    }
+
+    // ---------------- R196z · Cuentas madre automáticas (Netflix Premium, Paramount+, Crunchyroll, Prime Video, HBO Max)
+    // Se LEEN de Control Maestro; aquí no se crean cuentas, compras, ventas ni ingresos. «pendientes» = todas sin compra.
+    if (accion === "finp_cuentas_lista") {
+      const pedida = String(body.plataforma || "");
+      const plats = pedida === "pendientes" ? Object.keys(finCuentas.PLATAFORMAS) : finCuentas.PLATAFORMAS[pedida] ? [pedida] : null;
+      if (!plats) throw errUsuario("Plataforma no administrada aquí.");
+      const [inv, cfgs, tarjetas, productos] = await Promise.all([todos("inventario"), todos("fin_cuentas_costo"), todos("fin_tarjetas"), todos("fin_productos")]);
+      const cuentas = inv.filter((c) => finCuentas.activa(c) && plats.includes(finCuentas.plataformaDe(c.plataforma)));
+      const ids = new Set(cuentas.map((c) => c.id));
+      const prodIds = productos.filter((p) => plats.includes(finCuentas.plataformaDe(p.plataformaKey))).map((p) => p.id);
+      const lotes = (await Promise.all(prodIds.map((pid) => col("fin_lotes").where("productoId", "==", pid).get().then((sn) => sn.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })))))).flat()
+        .filter((l) => l.estado !== "anulado" && ids.has(String(l.cuentaInventarioId || ""))).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      const porCuenta = new Map(); for (const l of lotes) { const k = l.cuentaInventarioId; (porCuenta.get(k) || porCuenta.set(k, []).get(k)).push(l); }
+      const cfgDe = new Map(cfgs.map((x) => [x.id, x])), tDe = new Map(tarjetas.map((x) => [x.id, x]));
+      let filas = cuentas.map((c) => { const cfg = cfgDe.get(c.id) || null; return finCuentas.filaCuenta(c, cfg, porCuenta.get(c.id) || [], cfg && cfg.tarjetaId ? tDe.get(cfg.tarjetaId) : null, hoy); });
+      if (pedida === "pendientes") filas = filas.filter((f) => f.estadoCosto === "pendiente");
+      filas.sort((a, b) => a.plataforma.localeCompare(b.plataforma) || (a.estadoCosto === b.estadoCosto ? 0 : a.estadoCosto === "pendiente" ? -1 : 1) || String(a.proximoPago || "9999").localeCompare(String(b.proximoPago || "9999")) || a.correo.localeCompare(b.correo));
+      const resumen = { cuentas: filas.length, conCosto: filas.filter((f) => f.estadoCosto === "con_costo").length, pendientes: filas.filter((f) => f.estadoCosto === "pendiente").length, proximos: filas.filter((f) => f.pronto).length };
+      return ok({ hoy, plataforma: pedida, filas, resumen, plataformas: finCuentas.PLATAFORMAS, modalidades: finCuentas.MODALIDADES, frecuencias: finCuentas.FRECUENCIAS,
+        tarjetas: tarjetas.map((x) => ({ id: x.id, banco: x.banco, titular: x.titular, ultimos4: x.ultimos4 })),
+        productos: productos.filter((p) => p.activo !== false && plats.includes(finCuentas.plataformaDe(p.plataformaKey))).map((p) => ({ id: p.id, nombre: p.nombre, modelo: p.modelo, plataforma: finCuentas.plataformaDe(p.plataformaKey) })) });
+    }
+    if (accion === "finp_cuenta_config") { // solo Finanzas: modalidad, moneda, frecuencia, tarjeta mínima y próximo pago
+      const cid = txt(body.cuentaId, 120); if (!cid) throw errUsuario("Falta la cuenta.");
+      let tarjetaNueva = null;
+      if (body.tarjetaNueva) {
+        const banco = txt(body.tarjetaNueva.banco, 60), titular = txt(body.tarjetaNueva.titular, 80), u4 = String(body.tarjetaNueva.ultimos4 || "").replace(/\s/g, "");
+        if (!/^\d{4}$/.test(u4)) throw errUsuario(/\d{5,}/.test(u4) ? "Escriba SOLO los últimos 4 dígitos. Nunca el número completo de la tarjeta." : "Los últimos 4 dígitos deben ser 4 números.");
+        if (banco.length < 2 || titular.length < 3) throw errUsuario("Escriba el banco y el nombre del titular de la tarjeta.");
+        tarjetaNueva = { banco, titular, ultimos4: u4 };
+      }
+      const r = await db.runTransaction(async (tx) => {
+        const cref = col("inventario").doc(cid), ref = col("fin_cuentas_costo").doc(cid);
+        const [sc, s] = [await tx.get(cref), await tx.get(ref)];
+        const plat = sc.exists ? finCuentas.plataformaDe((sc.data() || {}).plataforma) : "";
+        if (!sc.exists || !plat) throw errUsuario("Esa cuenta no está en Control Maestro.");
+        const lc = finCuentas.limpiarConfig(plat, body); if (lc.error) throw errUsuario(lc.error);
+        const a = s.exists ? s.data() || {} : {};
+        let tarjetaId = body.tarjetaId ? txt(body.tarjetaId, 120) : "";
+        if (tarjetaNueva) {
+          const id = `tj_${tarjetaNueva.banco}_${tarjetaNueva.ultimos4}_${tarjetaNueva.titular}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_]+/g, "-").slice(0, 120);
+          const tref = col("fin_tarjetas").doc(id), ts = await tx.get(tref);
+          if (!ts.exists) tx.set(tref, { ...tarjetaNueva, creadoAt: ahora, creadoPor: actor });
+          tarjetaId = id;
+        } else if (tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
+        if (lc.config.modalidad === "tarjeta" && !tarjetaId) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
+        const n = { ...lc.config, tarjetaId: lc.config.modalidad === "tarjeta" ? tarjetaId : "" };
+        const antes = { modalidad: a.modalidad || "", moneda: a.moneda || "", frecuencia: a.frecuencia || "", tarjetaId: a.tarjetaId || "", proximoPago: a.proximoPago || "" };
+        tx.set(ref, { ...a, ...n, cuentaId: cid, plataforma: plat, correo: String((sc.data() || {}).correo || "").toLowerCase(), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor }),
+          historial: [...(a.historial || []), { at: ahora, por: actor, antes, despues: n }].slice(-30) });
+        audit(tx, { accion: "cuenta_costo_config", targetType: "fin_cuenta", targetId: cid, before: antes, after: n });
+        return { cuentaId: cid, plataforma: plat };
+      });
+      return ok(r);
+    }
+    if (accion === "finp_cuenta_historial") { // compras reales de UNA cuenta (más reciente primero); no cambia nada
+      const cid = txt(body.cuentaId, 120); if (!cid) throw errUsuario("Falta la cuenta.");
+      const lotes = (await col("fin_lotes").where("cuentaInventarioId", "==", cid).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+      const cfg = await col("fin_cuentas_costo").doc(cid).get();
+      return ok({ cuentaId: cid, compras: lotes.map((l) => ({ loteId: l.id, fecha: l.fecha, producto: l.producto, moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: l.costoTotalHnl, duracionDias: l.duracionDias || 0, vigenciaHasta: l.vigenciaHasta || "", pago: l.cuentaPagoNombre || l.pago, referencia: l.referencia || "", estado: l.estado || "activo", por: l.createdBy || "" })),
+        cambios: cfg.exists ? (cfg.data().historial || []).slice(-10).reverse() : [] });
     }
 
     if (accion === "finp_reporte") {
