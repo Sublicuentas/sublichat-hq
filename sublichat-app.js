@@ -1370,7 +1370,7 @@ function invFiltrar(){
 
 let invActual=null;
 // R196u · HBO: plan de la cuenta («Platinum 4/5», «Standard 2/3» o «plan sin definir»), igual que lib _hbo-planes.js.
-function invPlanHbo(c){const p={platinum:["Platinum",5],standard:["Standard",3]}[String(c.planHbo||"").toLowerCase()];const o=invOcupados(c);return p?`${p[0]} ${o}/${p[1]}`:`plan sin definir · ${o}/${invCap(c)}`;}
+function invPlanHbo(c){const p={platinum:["Platinum",5],standard:["Standard",3]}[String(c.planHbo||"").toLowerCase()];const o=invOcupados(c),k=invCap(c);/* R196z3 · capacidad de la CUENTA (igual que Telegram y APK); el plan da el predeterminado */return p?`${p[0]} · ${o}/${k}${k!==p[1]?" · Capacidad personalizada":""}`:`plan sin definir · ${o}/${k}`;}
 function invAbrir(c){
   invActual=c;
   const identLabel=invUsaUsuario(c.plataforma)?"Usuario":"Correo";

@@ -129,8 +129,9 @@
     api({ accion: 'hboResumen' }).then(function (r) {
       if (!r.ok) return;
       var id = box.getAttribute('data-inv-id'); var c = (r.cuentas || []).filter(function (x) { return x.id === id; })[0];
-      var html = '<div class="cr-label">📦 Plan HBO</div><p class="hg-estado' + (c && !c.plan ? ' sin_asignar' : '') + '">' + esc(c ? c.etiqueta : 'Plan sin definir') + (c && c.sobreocupada ? ' · ⚠️ sobreocupada' : '') + '</p>';
-      if (r.puedeEditar) html += '<div class="vip-row"><button type="button" class="hg-btn" data-hbo-plan="platinum"' + (c && c.plan === 'platinum' ? ' disabled' : '') + '>Platinum</button><button type="button" class="hg-btn" data-hbo-plan="standard"' + (c && c.plan === 'standard' ? ' disabled' : '') + '>Standard</button></div>';
+      var html = '<div class="cr-label">📦 Plan HBO</div><p class="hg-estado' + (c && !c.plan ? ' sin_asignar' : '') + '">' + esc(c ? c.etiqueta : 'Plan sin definir') + (c && c.sobreocupada ? ' · ⚠️ sobreocupada' : '') + '</p>' +
+        (c && c.personalizada ? '<p class="vip-muted">Predeterminado de ' + esc(c.nombrePlan) + ': ' + c.capacidadPlan + ' perfiles. Esta cuenta tiene ' + c.capacidad + (c.excepcion ? ' (excepción confirmada por ' + esc(c.excepcion.por || '—') + ')' : ' (sin excepción registrada: revise en el Diagnóstico)') + '.</p>' : '');
+      if (r.puedeEditar) html += '<div class="vip-row"><button type="button" class="hg-btn" data-hbo-plan="platinum"' + (c && c.plan === 'platinum' ? ' disabled' : '') + '>Platinum</button><button type="button" class="hg-btn" data-hbo-plan="standard"' + (c && c.plan === 'standard' ? ' disabled' : '') + '>Standard</button>' + (c && c.plan ? '<button type="button" class="hg-btn" data-hbo-cap="1">Editar capacidad</button>' : '') + '</div>';
       var k = r.contadores || null; // R196v · contadores separados por plan y modalidad
       if (k) html += '<div class="hbo-cont">' + ['standard', 'platinum'].map(function (p) { var o = k[p]; return '<div><b>HBO ' + (p === 'standard' ? 'Standard' : 'Platinum') + '</b><span>' + o.compartidas + ' compartidas · ' + o.libres + ' perfiles libres</span><span>' + o.completas + ' vendidas completas · ' + o.completasLibres + ' libres para completa</span></div>'; }).join('') + '</div><p class="vip-muted">' + k.sinPlan + ' cuenta(s) HBO Max sin plan: defínalas aquí (no se migran solas).</p>';
       else html += '<p class="vip-muted">Bodega: ' + r.platinum.cuentas + ' Platinum (' + r.platinum.libres + ' libres) · ' + r.standard.cuentas + ' Standard (' + r.standard.libres + ' libres) · ' + r.sinPlan + ' sin plan.</p>';
@@ -143,6 +144,7 @@
     if (!r.ok) { out.innerHTML = '<p class="vip-err">' + esc(r.error || 'No se pudo leer el diagnóstico.') + '</p>'; return; }
     var h = '<p class="vip-muted">' + r.cuentas + ' cuentas HBO · ' + r.sinPlan.length + ' sin plan · ' + r.fueraDePlan.length + ' fuera de su plan · ' + r.ventasSinPlan.length + ' ventas sin plan (' + r.ventasRequierenPersona + ' requieren una persona).</p>';
     h += r.sinPlan.map(function (c) { return '<div class="hg-row"><span><b>' + esc(c.correo) + '</b> · ' + c.ocupados + '/' + c.capacidad + ' · ' + esc(c.sugerencia) + '</span></div>'; }).join('');
+    h += (r.capacidadDistinta || []).map(function (c) { return '<div class="hg-row"><span>🔎 <b>' + esc(c.correo) + '</b> · ' + esc(c.plan) + ' guardado con capacidad ' + c.capacidadGuardada + ' (el plan trae ' + c.capacidadPlan + ') · ' + c.ocupados + ' ocupados · ' + esc(c.sugerencia) + '</span></div>'; }).join('');
     h += r.fueraDePlan.map(function (c) { return '<div class="hg-row"><span>⚠️ <b>' + esc(c.correo) + '</b> · ' + esc(c.plan) + ' con ' + c.ocupados + '/' + c.capacidad + '</span></div>'; }).join('');
     h += r.ventasSinPlan.map(function (v) { return '<div class="hg-row"><span>' + esc(v.cliente) + ' · ' + esc(v.correo || '—') + ' · ' + esc(v.modalidad) + ' · ' + esc(v.accion) + '</span></div>'; }).join('');
     out.innerHTML = h;
@@ -150,12 +152,33 @@
   document.addEventListener('click', function (e) {
     var dg = e.target.closest && e.target.closest('[data-hbo-diag]');
     if (dg) { var out = dg.parentNode.querySelector('[data-hbo-diag-out]'); out.innerHTML = '<p class="vip-muted">Revisando…</p>'; api({ accion: 'hboDiagnostico' }).then(function (r) { pintarDiagHbo(out, r); }); return; }
+    var bc = e.target.closest && e.target.closest('[data-hbo-cap]');
+    if (bc) { var boxc = bc.closest('#invHboBox'); if (!boxc) return; var v = prompt('Nueva capacidad de esta cuenta (perfiles). Standard trae 3 y Platinum 5; otro número queda como excepción de esta cuenta:'); if (v == null || !String(v).trim()) return; enviarHbo(boxc, { accion: 'hboCapacidad', capacidad: Number(v) }); return; }
     var b = e.target.closest && e.target.closest('[data-hbo-plan]'); if (!b) return;
     var box = b.closest('#invHboBox'); if (!box) return;
     var plan = b.getAttribute('data-hbo-plan');
     if (!confirm('¿Cambiar esta cuenta a HBO Max ' + (plan === 'platinum' ? 'Platinum' : 'Standard') + '?')) return;
     b.disabled = true;
-    api({ accion: 'hboPlan', docId: box.getAttribute('data-inv-id'), plan: plan }).then(function (r) { if (!r.ok) alert(r.error || 'No se pudo cambiar el plan.'); montar(box, alCambiar); if (r.ok && alCambiar) alCambiar(); });
+    enviarHbo(box, { accion: 'hboPlan', plan: plan });
   });
+  // R196z3 · Si la capacidad nueva deja más ocupados o se sale del predeterminado, el servidor pide confirmar una EXCEPCIÓN
+  // de esta cuenta (conserva a todos los clientes). Nunca se saca, mueve ni desactiva un perfil vendido.
+  function enviarHbo(box, cuerpo) {
+    cuerpo.docId = box.getAttribute('data-inv-id');
+    api(cuerpo).then(function (r) {
+      if (!r.ok && r.code === 'requiere_excepcion' || !r.ok && r.code === 'sobreocupacion') {
+        var cap = r.capacidadSugerida;
+        if (cap && confirm(r.error + '\n\n¿Confirmar capacidad excepcional de ' + cap + ' para esta cuenta? No se elimina ningún cliente.')) {
+          var motivo = prompt('Motivo de la excepción (opcional):', 'Perfiles ya vendidos') || '';
+          var c2 = { accion: cuerpo.accion, docId: cuerpo.docId, plan: cuerpo.plan || r.plan || undefined, capacidad: cap, autorizarExcepcion: true, motivo: motivo };
+          if (cuerpo.accion === 'hboCapacidad') delete c2.plan;
+          return api(c2).then(function (r2) { if (!r2.ok) alert(r2.error || 'No se pudo guardar.'); montar(box, alCambiar); if (r2.ok && alCambiar) alCambiar(); });
+        }
+        montar(box, alCambiar); return;
+      }
+      if (!r.ok) alert(r.error || 'No se pudo guardar.');
+      montar(box, alCambiar); if (r.ok && alCambiar) alCambiar();
+    });
+  }
   window.SublichatHbo = { montar: montar };
 })();
