@@ -178,6 +178,8 @@ function costosRango(ctx, desde, hasta) {
 }
 
 // ---------------------------------------------------------------- 3) CONTEXTO (una sola lectura de datos)
+// Cuentas = cuentas madre de Control Maestro / Bodega (`inventario`) + accesos Netflix VIP registrados en Finanzas
+// (`fin_vip_extras`) que no tienen documento local: un Extra VIP es un ACCESO INDIVIDUAL, no «0 cuentas».
 export function prepararContexto({ clientes = [], inventario = [], lotes = [], productos = [], consumos = [], vipExtras = [], spotify = [], premium = [] } = {}) {
   const servPorCompra = new Map(), clientePorId = new Map(), servicios = [];
   for (const c of clientes) {
@@ -186,23 +188,42 @@ export function prepararContexto({ clientes = [], inventario = [], lotes = [], p
     for (const sv of Array.isArray(c.servicios) ? c.servicios : []) { if (!sv) continue; const x = { ...sv, _clienteId: c.id }; servicios.push(x); if (sv.compraId) servPorCompra.set(String(sv.compraId), x); }
   }
   const cuentaPorCompra = new Map(), cuentasPorId = new Map(), cuentasPorCorreo = new Map();
-  for (const a of inventario) {
-    if (!a || a.estado === "eliminada" || a.eliminado === true) continue;
+  const registrar = (a, pseudo = false) => {
     const perfilPorCompra = new Map(), slotPorCompra = new Map();
-    for (const cl of Array.isArray(a.clientes) ? a.clientes : []) { if (!cl) continue; const cid = String(cl.compraId || ""); if (cid) { perfilPorCompra.set(cid, s(cl.nombre, 80)); slotPorCompra.set(cid, cl.slot != null ? `Perfil ${cl.slot}` : ""); if (!cuentaPorCompra.has(cid)) cuentaPorCompra.set(cid, null); } }
-    const cta = { ...a, _perfilPorCompra: perfilPorCompra, _slotPorCompra: slotPorCompra };
+    for (const cl of Array.isArray(a.clientes) ? a.clientes : []) { if (!cl) continue; const cid = String(cl.compraId || ""); if (cid) { perfilPorCompra.set(cid, s(cl.nombre, 80)); slotPorCompra.set(cid, cl.slot != null ? `Perfil ${cl.slot}` : ""); } }
+    const cta = { ...a, _perfilPorCompra: perfilPorCompra, _slotPorCompra: slotPorCompra, _pseudo: pseudo, _familia: familia(a.plataforma, a.planHbo) };
     cuentasPorId.set(a.id, cta);
     for (const cid of perfilPorCompra.keys()) cuentaPorCompra.set(cid, cta);
-    const k = `${base(familia(a.plataforma))}|${s(a.correo).toLowerCase()}`; if (!cuentasPorCorreo.has(k)) cuentasPorCorreo.set(k, cta);
+    const k = `${base(cta._familia)}|${s(a.correo).toLowerCase()}`; if (s(a.correo) && !cuentasPorCorreo.has(k)) cuentasPorCorreo.set(k, cta);
+    return cta;
+  };
+  for (const a of inventario) { if (!a || a.estado === "eliminada" || a.eliminado === true) continue; registrar(a); }
+  for (const x of vipExtras) { // accesos VIP sin documento en Control Maestro: se ven igual, como acceso individual
+    if (!x || ["reemplazado", "vinculado"].includes(String(x.estadoSeguimiento || ""))) continue;
+    const id = String(x.cmId || x.id); if (cuentasPorId.has(id)) continue;
+    registrar({ id, plataforma: "vipnetflix", correo: s(x.correo), capacidad: 1, clientes: [], proveedor: x.proveedor || "" }, true);
   }
-  // Venta sin enlace por compraId: se busca la cuenta por correo + plataforma del servicio (apoyo controlado)
+  // Servicio sin enlace por compraId: se busca por correo + plataforma (apoyo controlado; queda marcado como «por correo»)
+  const enlacePorCorreo = new Set();
   for (const sv of servicios) {
-    if (!sv.compraId || cuentaPorCompra.get(String(sv.compraId))) continue;
+    const cid = String(sv.compraId || ""); if (!cid || cuentaPorCompra.get(cid)) continue;
     const c = cuentasPorCorreo.get(`${base(familia(sv.plataforma))}|${s(sv.correo).toLowerCase()}`);
-    if (c) cuentaPorCompra.set(String(sv.compraId), c);
+    if (c) { cuentaPorCompra.set(cid, c); enlacePorCorreo.add(cid); }
   }
-  return { servPorCompra, clientePorId, servicios, cuentaPorCompra, cuentasPorId, cuentasPorCorreo, lotes, productosPorId: new Map(productos.map((p) => [p.id, p])), consumos, vipExtras, spotify, premium };
+  return { servPorCompra, clientePorId, servicios, cuentaPorCompra, enlacePorCorreo, cuentasPorId, cuentasPorCorreo, lotes, productosPorId: new Map(productos.map((p) => [p.id, p])), consumos, vipExtras, spotify, premium };
 }
+
+const PLAT_CUENTA = new Set(["netflix", "vipnetflix", "disneyp", "disneys", "hbomax", "hbomax_standard", "hbomax_platinum", "primevideo", "paramount", "crunchyroll", "spotify", "youtube", "appletv", "vix", "universal", "viki", "deezer", "canva"]);
+export const DEFINICIONES = Object.freeze({
+  altas: "Ventas nuevas creadas en el período (eventos de venta con pago registrado).",
+  renovaciones: "Renovaciones COBRADAS en el período (no las programadas).",
+  cobrado: "Dinero recibido, repartido a cada servicio; un combo cuenta una sola vez.",
+  pendiente: "Saldo por cobrar de ventas o renovaciones del período (pago parcial o a crédito).",
+  esperado: "Renovaciones que vencen en el período sin cobro registrado. NO es dinero cobrado.",
+  costo: "Costo directo atribuible al período, con la tasa y el costo históricos de cada compra.",
+  cobertura: "Parte de lo cobrado cuya cuenta/plataforma tiene costo registrado. Si es menor a 100 %, el margen no es definitivo.",
+  resultado: "Cobrado con costo − costo directo. Lo cobrado sin costo se muestra aparte («costo incompleto»), nunca como ganancia.",
+});
 
 // ---------------------------------------------------------------- 4) MOTOR por rango
 // deps: { R: { movementYmd, movementKind, anuladoOReversa }, ventasACostear }
@@ -210,13 +231,23 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
   const { R, ventasACostear } = deps;
   const vigente = (m) => !R.anuladoOReversa(m);
   const enRango = (m) => { const f = R.movementYmd(m); return f && f >= desde && f <= hasta; };
-  // Ventas del período (devengado) y su reparto en líneas
+  const porId = new Map(movimientos.map((m) => [m.id, m]));
+  const cobrosPorRaiz = new Map(); // «oper_op_x_cobro», «…_cobro_2»: un índice evita recorrer todo el libro por venta
+  for (const m of movimientos) { const k = String(m.id || "").match(/^(.*)_cobro(_\d+)?$/); if (k && vigente(m)) (cobrosPorRaiz.get(k[1]) || cobrosPorRaiz.set(k[1], []).get(k[1])).push(m); }
+  const cobrosDe = (v) => cobrosPorRaiz.get(String(v.id).replace(/_venta$/, "")) || [];
+  // Ventas del período (altas + renovaciones + cobros manuales con servicio) y su reparto en líneas
   const ventas = ventasACostear(movimientos, desde, R, { paraIngresos: true }).filter((v) => v.fecha <= hasta && !v.anulada);
-  const lineas = ventas.flatMap((v) => lineasDeVenta(v, ctx));
-  // Caja: lo que realmente entró en el período (cobros de ventas, abonos de pendientes, ingresos manuales)
+  const lineas = ventas.flatMap((v) => {
+    const cobros = v.origenVenta === "venta" ? cobrosDe(v) : [v];
+    const extra = { banco: [...new Set(cobros.map((c) => s(c.banco || c.metodoPago || c.bancoId, 40)).filter(Boolean))].join(" + ") || (v.estadoPago === "pendiente" ? "Sin pago" : ""), fuente: s(v.origenCanal || v.origen || (porId.get(v.id) || {}).origenCanal, 20) || "web", registradoPor: s(v.registradoPor || v.usuario, 40), cobroIds: cobros.map((c) => c.id) };
+    return lineasDeVenta(v, ctx).map((l) => ({ ...l, ...extra, enlace: !l.cuentaId ? (PLAT_CUENTA.has(l.plataforma) ? "sin_cuenta" : "no_aplica") : ctx.enlacePorCorreo.has(l.compraId) ? "por_correo" : "por_id", planSinClasificar: l.plataforma === "hbomax" }));
+  });
+  // Caja del período y cuadre de integridad: cobros originales = asignado a servicios + abonos + no asignado
   const ingresosCaja = movimientos.filter((m) => vigente(m) && enRango(m) && R.movementKind(m) === "ingreso");
   const cobradoCaja = r2(ingresosCaja.reduce((a, m) => a + Number(m.monto || 0), 0));
-  const abonos = r2(ingresosCaja.filter((m) => /^cobro_pendiente|abono/.test(String(m.subtipo || "")) || (m.cuentaId && !/_cobro($|_)/.test(String(m.id)))).reduce((a, m) => a + Number(m.monto || 0), 0));
+  const idsLinea = new Set(lineas.flatMap((l) => l.cobroIds || []));
+  const abonos = r2(ingresosCaja.filter((m) => !idsLinea.has(m.id) && (m.cuentaId || /^cobro_pendiente|abono/.test(String(m.subtipo || "")))).reduce((a, m) => a + Number(m.monto || 0), 0));
+  const fueraDeVentas = r2(ingresosCaja.filter((m) => !idsLinea.has(m.id) && !(m.cuentaId || /^cobro_pendiente|abono/.test(String(m.subtipo || "")))).reduce((a, m) => a + Number(m.monto || 0), 0));
   // Esperados: renovaciones que vencen en el período y no tienen cobro registrado (no son dinero)
   const conVenta = new Set(lineas.map((l) => l.compraId).filter(Boolean));
   const esperados = ctx.servicios.filter((sv) => { const f = ymd(sv.fechaRenovacion); return f && f >= desde && f <= hasta && r2(sv.precio) > 0 && !conVenta.has(String(sv.compraId || "")); }).map((sv) => {
@@ -226,50 +257,133 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
   });
   const { piezas, caja } = costosRango(ctx, desde, hasta);
 
+  // ---- cobertura de costos: una línea está cubierta si su cuenta tiene costo en el período o su plataforma tiene costo general
+  const ctaConCosto = new Set(piezas.filter((c) => c.cuentaId).map((c) => c.cuentaId)), platPool = new Set(piezas.filter((c) => !c.cuentaId).map((c) => c.plataforma));
+  const cubierta = (l) => (l.cuentaId && ctaConCosto.has(l.cuentaId)) || platPool.has(l.plataforma);
+  for (const l of lineas) l.costoCubierto = !!cubierta(l);
+
   // ---- por plataforma
   const plats = new Map();
-  const P = (k) => plats.get(k) || plats.set(k, { plataforma: k, nombre: nombrePlataforma(k), ventas: 0, ingresoHnl: 0, cobradoHnl: 0, pendienteHnl: 0, esperadoHnl: 0, costoHnl: 0, desembolsoHnl: 0, cuentas: new Set(), clientes: new Set() }).get(k);
-  for (const l of lineas) { const x = P(l.plataforma); x.ventas++; x.ingresoHnl += l.monto; x.cobradoHnl += l.cobrado; x.pendienteHnl += l.pendiente; if (l.cuentaId) x.cuentas.add(l.cuentaId); if (l.clienteId) x.clientes.add(l.clienteId); }
+  const P = (k) => plats.get(k) || plats.set(k, { plataforma: k, nombre: nombrePlataforma(k), altas: 0, renovaciones: 0, otros: 0, ingresoHnl: 0, cobradoHnl: 0, cobradoCubiertoHnl: 0, pendienteHnl: 0, esperadoHnl: 0, costoHnl: 0, desembolsoHnl: 0, cuentas: new Set(), clientes: new Set(), servicios: new Set(), sinCuenta: 0, planSinClasificar: 0 }).get(k);
+  for (const l of lineas) {
+    const x = P(l.plataforma); if (l.tipo === "venta") x.altas++; else if (l.tipo === "renovacion") x.renovaciones++; else x.otros++;
+    x.ingresoHnl += l.monto; x.cobradoHnl += l.cobrado; if (l.costoCubierto) x.cobradoCubiertoHnl += l.cobrado; x.pendienteHnl += l.pendiente;
+    if (l.cuentaId) x.cuentas.add(l.cuentaId); if (l.clienteId) x.clientes.add(l.clienteId); if (l.compraId) x.servicios.add(l.compraId);
+    if (l.enlace === "sin_cuenta") x.sinCuenta++; if (l.planSinClasificar) x.planSinClasificar++;
+  }
   for (const e of esperados) P(e.plataforma).esperadoHnl += e.precio;
   for (const c of piezas) P(c.plataforma).costoHnl += c.costoHnl;
   for (const c of caja) P(c.plataforma).desembolsoHnl += c.costoHnl;
   const porPlataforma = [...plats.values()].map((x) => {
-    const sinCosto = x.cobradoHnl > 0 && !(x.costoHnl > 0);
-    const resultado = sinCosto ? null : r2(x.cobradoHnl - x.costoHnl);
-    return { ...x, cuentas: x.cuentas.size, clientes: x.clientes.size, ingresoHnl: r2(x.ingresoHnl), cobradoHnl: r2(x.cobradoHnl), pendienteHnl: r2(x.pendienteHnl), esperadoHnl: r2(x.esperadoHnl), costoHnl: r2(x.costoHnl), desembolsoHnl: r2(x.desembolsoHnl),
-      resultadoHnl: resultado, margen: resultado == null ? null : pct(resultado, x.cobradoHnl), estado: sinCosto ? "costo_pendiente" : x.cobradoHnl === 0 && x.costoHnl > 0 ? "sin_ingreso" : "ok" };
-  }).sort((a, b) => (b.resultadoHnl ?? -1e12) - (a.resultadoHnl ?? -1e12) || b.cobradoHnl - a.cobradoHnl);
+    const cobrado = r2(x.cobradoHnl), cub = r2(x.cobradoCubiertoHnl), costo = r2(x.costoHnl);
+    const cobertura = cobrado > 0 ? pct(cub, cobrado) : null;
+    const resultado = cub > 0 || costo > 0 ? r2(cub - costo) : null;
+    const estado = cobrado === 0 && costo === 0 ? "sin_movimiento" : cobrado > 0 && cub === 0 ? "costo_pendiente" : cobrado === 0 ? "sin_ingreso" : cobertura < 99.5 ? "cobertura_parcial" : "ok";
+    return { ...x, cuentas: x.cuentas.size, clientes: x.clientes.size, servicios: x.servicios.size, ventas: x.altas + x.renovaciones + x.otros, ingresoHnl: r2(x.ingresoHnl), cobradoHnl: cobrado, cobradoCubiertoHnl: cub, cobradoSinCostoHnl: r2(cobrado - cub), pendienteHnl: r2(x.pendienteHnl), esperadoHnl: r2(x.esperadoHnl), costoHnl: costo, desembolsoHnl: r2(x.desembolsoHnl),
+      coberturaCostos: cobertura, resultadoHnl: estado === "costo_pendiente" ? null : resultado, margen: resultado != null && cub > 0 && estado !== "costo_pendiente" ? pct(resultado, cub) : null, margenDefinitivo: estado === "ok", estado };
+  }).sort((a, b) => b.cobradoHnl - a.cobradoHnl || b.esperadoHnl - a.esperadoHnl);
 
   // ---- resumen (mismo motor para Resumen, Ganancias y Reportes)
   const cobradoVentas = r2(lineas.reduce((a, l) => a + l.cobrado, 0));
+  const cobradoCub = r2(lineas.filter((l) => l.costoCubierto).reduce((a, l) => a + l.cobrado, 0));
   const costo = r2(piezas.reduce((a, c) => a + c.costoHnl, 0));
-  const cobradoSinCosto = r2(porPlataforma.filter((p) => p.estado === "costo_pendiente").reduce((a, p) => a + p.cobradoHnl, 0));
+  const cobertura = cobradoVentas > 0 ? pct(cobradoCub, cobradoVentas) : null;
+  const resultado = cobradoCub > 0 || costo > 0 ? r2(cobradoCub - costo) : null;
   const resumen = {
     desde, hasta, ventas: ventas.length, lineas: lineas.length,
-    ingresoVentasHnl: r2(lineas.reduce((a, l) => a + l.monto, 0)), cobradoHnl: cobradoVentas, cobradoCajaHnl: cobradoCaja, abonosHnl: abonos,
+    altas: lineas.filter((l) => l.tipo === "venta").length, renovaciones: lineas.filter((l) => l.tipo === "renovacion").length, otrosCobros: lineas.filter((l) => l.tipo === "ingreso_manual").length,
+    clientesUnicos: new Set(lineas.map((l) => l.clienteId).filter(Boolean)).size, servicios: new Set(lineas.map((l) => l.compraId).filter(Boolean)).size,
+    ingresoVentasHnl: r2(lineas.reduce((a, l) => a + l.monto, 0)), cobradoHnl: cobradoVentas, cobradoCubiertoHnl: cobradoCub, cobradoSinCostoHnl: r2(cobradoVentas - cobradoCub),
     pendienteHnl: r2(lineas.reduce((a, l) => a + l.pendiente, 0)), esperadoHnl: r2(esperados.reduce((a, e) => a + e.precio, 0)), esperados: esperados.length,
     descuentosHnl: r2(lineas.reduce((a, l) => a + (l.descuento > 0 ? l.descuento : 0), 0)),
     costoHnl: costo, desembolsoHnl: r2(caja.reduce((a, c) => a + c.costoHnl, 0)),
     costoActivacionesHnl: r2(piezas.filter((c) => c.regla === "activacion").reduce((a, c) => a + c.costoHnl, 0)),
     costoSinConsumoHnl: r2(piezas.filter((c) => c.regla === "lote_sin_consumo").reduce((a, c) => a + c.costoHnl, 0)),
-    resultadoHnl: r2(cobradoVentas - costo), margen: pct(r2(cobradoVentas - costo), cobradoVentas), cobradoSinCostoHnl: cobradoSinCosto,
-    estado: !ventas.length && !costo ? "sin_datos" : cobradoSinCosto > 0 ? "costos_pendientes" : "ok",
+    coberturaCostos: cobertura, resultadoHnl: resultado, margen: resultado != null && cobradoCub > 0 ? pct(resultado, cobradoCub) : null, margenDefinitivo: cobertura != null && cobertura >= 99.5,
+    flujoCajaHnl: r2(cobradoCaja - caja.reduce((a, c) => a + c.costoHnl, 0)),
+    cuadre: { cobrosOriginalesHnl: cobradoCaja, asignadoServiciosHnl: r2(lineas.reduce((a, l) => a + (l.cobroIds.length ? l.cobrado : 0), 0)), abonosVentasAnterioresHnl: abonos, noAsignadoHnl: fueraDeVentas,
+      diferenciaHnl: r2(cobradoCaja - r2(lineas.reduce((a, l) => a + (l.cobroIds.length ? l.cobrado : 0), 0)) - abonos - fueraDeVentas) },
+    cobradoCajaHnl: cobradoCaja, abonosHnl: abonos,
+    estado: !ventas.length && !costo ? "sin_datos" : cobradoVentas > 0 && cobradoCub === 0 ? "costo_incompleto" : cobertura != null && cobertura < 99.5 ? "cobertura_parcial" : "ok",
+    calculadoAt: new Date().toISOString(),
   };
 
   // ---- bandeja de conciliación (nada se inventa: solo se muestra)
   const bandeja = [];
-  for (const l of lineas) if (!l.cuentaId && ["netflix", "vipnetflix", "disneyp", "hbomax", "hbomax_standard", "hbomax_platinum", "primevideo", "paramount", "crunchyroll", "spotify"].includes(l.plataforma)) bandeja.push({ tipo: "sin_coincidencia", texto: "Venta sin cuenta madre vinculada", plataforma: l.plataforma, fecha: l.fecha, beneficiario: l.beneficiario, monto: l.monto, referencia: l.referencia, compraId: l.compraId });
+  for (const l of lineas) if (l.enlace === "sin_cuenta") bandeja.push({ tipo: "sin_coincidencia", texto: "Asignación pendiente de conciliar: el servicio no encuentra su cuenta madre", plataforma: l.plataforma, fecha: l.fecha, beneficiario: l.beneficiario, monto: l.monto, referencia: l.referencia, compraId: l.compraId, clienteId: l.clienteId });
+  for (const l of lineas) if (l.planSinClasificar) bandeja.push({ tipo: "plan_sin_clasificar", texto: "HBO con plan histórico sin clasificar (no se infiere por capacidad)", plataforma: l.plataforma, fecha: l.fecha, beneficiario: l.beneficiario, monto: l.monto, referencia: l.referencia, compraId: l.compraId });
   for (const l of lineas) if (l.pendiente > 0) bandeja.push({ tipo: "pago_pendiente", texto: "Venta con saldo por cobrar", plataforma: l.plataforma, fecha: l.fecha, beneficiario: l.beneficiario, monto: l.pendiente, referencia: l.referencia });
   for (const p of porPlataforma) if (p.estado === "costo_pendiente") bandeja.push({ tipo: "costo_pendiente", texto: `Ingresos sin compra registrada para ${p.nombre}`, plataforma: p.plataforma, monto: p.cobradoHnl });
-  { // cuentas con cobros pero sin compra que las cubra (ni costo general de su plataforma): costo pendiente por cuenta
-    const conCosto = new Set(piezas.filter((c) => c.cuentaId).map((c) => c.cuentaId)), poolPlat = new Set(piezas.filter((c) => !c.cuentaId).map((c) => c.plataforma));
-    const vistas = new Map(); for (const l of lineas) if (l.cuentaId && l.cobrado > 0 && !conCosto.has(l.cuentaId) && !poolPlat.has(l.plataforma)) vistas.set(l.cuentaId, { plataforma: l.plataforma, correo: l.cuentaCorreo, monto: r2((vistas.get(l.cuentaId) || { monto: 0 }).monto + l.cobrado) });
-    for (const [id, v] of vistas) bandeja.push({ tipo: "costo_pendiente", texto: `Cuenta ${v.correo || id} sin compra registrada que cubra el período`, plataforma: v.plataforma, monto: v.monto, referencia: id });
-  }
+  { const vistas = new Map(); for (const l of lineas) if (l.cuentaId && l.cobrado > 0 && !l.costoCubierto) vistas.set(l.cuentaId, { plataforma: l.plataforma, correo: l.cuentaCorreo, monto: r2((vistas.get(l.cuentaId) || { monto: 0 }).monto + l.cobrado) });
+    for (const [id, v] of vistas) bandeja.push({ tipo: "costo_pendiente", texto: `Cuenta ${v.correo || id} sin compra que cubra el período`, plataforma: v.plataforma, monto: v.monto, referencia: id }); }
   for (const c of piezas) if (c.aviso) bandeja.push({ tipo: "datos_incompletos", texto: `Lote sin consumo calculado: ${c.producto}`, plataforma: c.plataforma, fecha: c.fechaCompra, monto: c.costoHnl, referencia: c.loteId });
   for (const e of esperados) bandeja.push({ tipo: "ingreso_sin_confirmar", texto: e.estado === "vencido_sin_cobro" ? "Renovación vencida sin cobro registrado" : "Renovación por cobrar", plataforma: e.plataforma, fecha: e.fecha, beneficiario: e.beneficiario, monto: e.precio, compraId: e.compraId });
 
-  return { resumen, porPlataforma, lineas, esperados, costos: piezas, desembolsos: caja, bandeja };
+  return { resumen, porPlataforma, lineas, esperados, costos: piezas, desembolsos: caja, bandeja, _movs: movimientos };
+}
+
+// ---------------------------------------------------------------- 5) CONCILIACIÓN DE CARTERA (CRM ↔ movimientos)
+// Explica por qué «75 clientes vigentes» del CRM no son «35 clientes con cobro en noviembre»: cada servicio vigente al corte
+// queda en un estado (cobrado, parcial, sin movimiento, sin cuenta, plan sin clasificar) con su último cobro y próxima renovación.
+export function conciliarCartera(ctx, calc, { plataforma = "", vendedor = "", desde, hasta, hoy = "" }, deps) {
+  const corte = hoy && hasta > hoy ? hoy : hasta;
+  const famOk = (f) => !plataforma || f === plataforma || (plataforma === "hbomax_todas" && String(f).startsWith("hbomax")) || (plataforma === "hbomax" && String(f).startsWith("hbomax"));
+  const vendOk = (v) => !vendedor || String(v || "Sin vendedor").toLowerCase() === vendedor.toLowerCase();
+  // último cobro de cada servicio (con los movimientos leídos), para «sin movimiento en el período»
+  const ultimo = new Map();
+  for (const v of deps.ventasACostear(calc._movs, "2000-01-01", deps.R, { paraIngresos: true })) { if (v.anulada) continue; for (const cid of [v.compraId, ...(v.compraIds || []), ...((v.asignaciones || []).map((a) => a.compraId))].filter(Boolean)) { const u = ultimo.get(cid); if (!u || v.fecha > u.fecha) ultimo.set(cid, { fecha: v.fecha, monto: r2(v.monto), tipo: v.subtipo === "compra_nueva" ? "alta" : "renovación" }); } }
+  const lineasPor = new Map(); for (const l of calc.lineas) { if (!l.compraId) continue; (lineasPor.get(l.compraId) || lineasPor.set(l.compraId, []).get(l.compraId)).push(l); }
+  const filas = [];
+  const vistos = new Set();
+  for (const sv of ctx.servicios) {
+    const cid = String(sv.compraId || ""); const cta = cid ? ctx.cuentaPorCompra.get(cid) : null;
+    const fam = familia(sv.plataforma, sv.planHbo || (cta && cta.planHbo)); if (!famOk(fam) || !vendOk(sv.vendedor)) continue;
+    const venc = ymd(sv.fechaRenovacion); const mis = lineasPor.get(cid) || [];
+    const vig = !!venc && venc >= corte;
+    if (!vig && !mis.length) continue;
+    vistos.add(cid);
+    const cli = ctx.clientePorId.get(sv._clienteId) || {};
+    const cobrado = r2(mis.reduce((a, l) => a + l.cobrado, 0)), pend = r2(mis.reduce((a, l) => a + l.pendiente, 0));
+    let estado = mis.length ? (pend > 0 ? (cobrado > 0 ? "parcial" : "pendiente") : mis.some((l) => l.tipo === "venta") ? "alta_cobrada" : "renovacion_cobrada") : "sin_movimiento";
+    const avisos = [];
+    if (!cta && PLAT_CUENTA.has(fam)) avisos.push("sin_cuenta");
+    if (fam === "hbomax") avisos.push("plan_sin_clasificar");
+    if (mis.some((l) => l.combo)) avisos.push("combo");
+    const u = ultimo.get(cid);
+    filas.push({ compraId: cid, clienteId: sv._clienteId, titular: s(cli.nombre, 80), beneficiario: s(sv.beneficiarioNombre || sv.beneficiario || (cta && cta._perfilPorCompra.get(cid)) || cli.nombre, 80), vendedor: s(sv.vendedor, 60) || "Sin vendedor",
+      plataforma: fam, cuentaId: cta ? cta.id : "", cuentaCorreo: cta ? s(cta.correo) : s(sv.correo), perfil: cta ? s(cta._slotPorCompra.get(cid), 20) : "", precio: r2(sv.precio), vigente: vig, proximaRenovacion: venc,
+      estado, cobradoHnl: cobrado, pendienteHnl: pend, movimientos: mis.map((l) => ({ fecha: l.fecha, tipo: l.tipo, cobrado: l.cobrado, banco: l.banco, fuente: l.fuente, referencia: l.referencia })),
+      ultimoCobro: u || null, avisos });
+  }
+  // cobros del período cuyo servicio ya no está en ninguna ficha (o sin compraId): se muestran, no se descartan
+  for (const l of calc.lineas) { if (!famOk(l.plataforma) || !vendOk(l.vendedor) || (l.compraId && vistos.has(l.compraId))) continue; filas.push({ compraId: l.compraId, clienteId: l.clienteId, titular: l.titular, beneficiario: l.beneficiario, vendedor: l.vendedor, plataforma: l.plataforma, cuentaId: l.cuentaId, cuentaCorreo: l.cuentaCorreo, perfil: l.perfil, precio: l.precioFicha, vigente: false, proximaRenovacion: "", estado: l.pendiente > 0 ? "parcial" : l.tipo === "venta" ? "alta_cobrada" : "renovacion_cobrada", cobradoHnl: l.cobrado, pendienteHnl: l.pendiente, movimientos: [{ fecha: l.fecha, tipo: l.tipo, cobrado: l.cobrado, banco: l.banco, fuente: l.fuente, referencia: l.referencia }], ultimoCobro: null, avisos: [l.compraId ? "servicio_sin_ficha" : "sin_identificador"] }); }
+  const vig = filas.filter((f) => f.vigente);
+  const resumen = {
+    corte, serviciosVigentes: vig.length, clientesVigentes: new Set(vig.map((f) => f.clienteId)).size,
+    conCobroEnPeriodo: filas.filter((f) => f.cobradoHnl > 0).length, clientesConCobro: new Set(filas.filter((f) => f.cobradoHnl > 0).map((f) => f.clienteId)).size,
+    vigentesSinMovimiento: vig.filter((f) => f.estado === "sin_movimiento").length, pendientesOParciales: filas.filter((f) => f.estado === "pendiente" || f.estado === "parcial").length,
+    altas: filas.filter((f) => f.estado === "alta_cobrada").length, renovaciones: filas.filter((f) => f.estado === "renovacion_cobrada").length,
+    sinCuenta: filas.filter((f) => f.avisos.includes("sin_cuenta")).length, planSinClasificar: filas.filter((f) => f.avisos.includes("plan_sin_clasificar")).length,
+    cobradoHnl: r2(filas.reduce((a, f) => a + f.cobradoHnl, 0)),
+  };
+  return { resumen, filas: filas.sort((a, b) => (a.estado === b.estado ? 0 : a.estado === "sin_movimiento" ? 1 : -1) || a.beneficiario.localeCompare(b.beneficiario)) };
+}
+
+// Todas las cuentas de una plataforma (con o sin movimiento): estado de vinculación y costo — botón «Cuentas».
+export function cuentasDePlataforma(ctx, calc, plataforma) {
+  const famOk = (f) => f === plataforma || (plataforma === "hbomax" && String(f).startsWith("hbomax"));
+  const out = [];
+  for (const a of ctx.cuentasPorId.values()) {
+    if (!famOk(a._familia)) continue;
+    const lin = calc.lineas.filter((l) => l.cuentaId === a.id), cos = calc.costos.filter((c) => c.cuentaId === a.id), esp = calc.esperados.filter((e) => e.cuentaId === a.id);
+    const ocupados = Array.isArray(a.clientes) ? a.clientes.length : Number(a.ocupados) || 0;
+    const cobrado = r2(lin.reduce((x, l) => x + l.cobrado, 0)), costo = r2(cos.reduce((x, c) => x + c.costoHnl, 0));
+    out.push({ cuentaId: a.id, correo: s(a.correo), plataforma: a._familia, nombre: nombrePlataforma(a._familia), plan: s(a.planHbo || a.plan, 20), capacidad: Number(a.capacidad) || ocupados, ocupados, acceso: a._pseudo ? "acceso_individual" : "cuenta_madre", proveedor: s(a.proveedor, 40),
+      clientes: new Set(lin.map((l) => l.clienteId).filter(Boolean)).size, altas: lin.filter((l) => l.tipo === "venta").length, renovaciones: lin.filter((l) => l.tipo === "renovacion").length,
+      cobradoHnl: cobrado, pendienteHnl: r2(lin.reduce((x, l) => x + l.pendiente, 0)), esperadoHnl: r2(esp.reduce((x, e) => x + e.precio, 0)), costoHnl: costo, conCosto: cos.length > 0 || lin.some((l) => l.costoCubierto),
+      resultadoHnl: cos.length ? r2(cobrado - costo) : null, sinMovimiento: !lin.length && !esp.length, planSinClasificar: a._familia === "hbomax" });
+  }
+  return out.sort((a, b) => b.cobradoHnl - a.cobradoHnl || a.correo.localeCompare(b.correo));
 }
 
 // Detalle de UNA cuenta madre (Fase 3): perfiles, clientes y beneficiarios, precios, cobros, esperados, compras y resultado.
@@ -283,7 +397,7 @@ export function detalleCuenta(ctx, calc, cuentaId) {
     const mis = lineas.filter((l) => l.compraId === cid).sort((x, y) => y.fecha.localeCompare(x.fecha));
     return { perfil: cl.slot != null ? `Perfil ${cl.slot}` : `Perfil ${i + 1}`, beneficiario: s((sv && (sv.beneficiarioNombre || sv.beneficiario)) || cl.nombre || fic.nombre, 80), titular: s(fic.nombre, 80), vendedor: s(sv && sv.vendedor, 60) || "Sin vendedor",
       precio: sv ? r2(sv.precio) : null, ultimaVenta: mis[0] ? mis[0].fecha : "", ultimoTipo: mis[0] ? mis[0].tipo : "", proximoVencimiento: sv ? ymd(sv.fechaRenovacion) : "",
-      cobradoHnl: r2(mis.reduce((x, l) => x + l.cobrado, 0)), pendienteHnl: r2(mis.reduce((x, l) => x + l.pendiente, 0)), descuentoHnl: r2(mis.reduce((x, l) => x + (l.descuento || 0), 0)),
+      cobradoHnl: r2(mis.reduce((x, l) => x + l.cobrado, 0)), pendienteHnl: r2(mis.reduce((x, l) => x + l.pendiente, 0)), descuentoHnl: r2(mis.reduce((x, l) => x + (l.descuento || 0), 0)), recibos: mis.map((l) => ({ fecha: l.fecha, tipo: l.tipo, monto: l.monto, cobrado: l.cobrado, banco: l.banco, fuente: l.fuente, registradoPor: l.registradoPor, referencia: l.referencia, combo: l.combo })),
       esperadoHnl: r2(esperados.filter((e) => e.compraId === cid).reduce((x, e) => x + e.precio, 0)), compraId: cid, referencias: mis.map((l) => l.referencia) };
   });
   const cobrado = r2(lineas.reduce((x, l) => x + l.cobrado, 0)), costo = r2(costos.reduce((x, c) => x + c.costoHnl, 0));
@@ -301,8 +415,8 @@ export function detalleCuenta(ctx, calc, cuentaId) {
 // Filas para Excel (Fase 7): una por línea de ingreso, esperado y costo. El beneficiario NO se cambia por el titular.
 export function filasExcel(calc) {
   const f = [];
-  for (const l of calc.lineas) f.push({ Fecha: l.fecha, Tipo: l.tipo === "renovacion" ? "Renovación" : l.tipo === "venta" ? "Venta" : "Ingreso manual", Plataforma: nombrePlataforma(l.plataforma), "Cuenta madre": l.cuentaCorreo, Perfil: l.perfil, Beneficiario: l.beneficiario, "Titular de ficha": l.titular, Vendedor: l.vendedor, Proveedor: "", "Ingreso cobrado": l.cobrado, "Ingreso pendiente": l.pendiente, "Costo imputado": "", Resultado: "", Moneda: "HNL", Tasa: "", Estado: l.pendiente > 0 ? "Pago pendiente" : l.cuentaId || !["netflix", "vipnetflix", "hbomax", "hbomax_standard", "hbomax_platinum", "disneyp", "primevideo", "paramount", "crunchyroll", "spotify"].includes(l.plataforma) ? "Conciliado" : "Sin coincidencia", Referencia: l.referencia });
-  for (const e of calc.esperados) f.push({ Fecha: e.fecha, Tipo: "Renovación esperada", Plataforma: nombrePlataforma(e.plataforma), "Cuenta madre": e.cuentaCorreo, Perfil: "", Beneficiario: e.beneficiario, "Titular de ficha": e.titular, Vendedor: e.vendedor, Proveedor: "", "Ingreso cobrado": 0, "Ingreso pendiente": e.precio, "Costo imputado": "", Resultado: "", Moneda: "HNL", Tasa: "", Estado: "Ingreso sin confirmar", Referencia: e.compraId });
-  for (const c of calc.costos) f.push({ Fecha: c.fechaCompra || "", Tipo: `Costo · ${c.regla}`, Plataforma: nombrePlataforma(c.plataforma), "Cuenta madre": c.correo || "", Perfil: "", Beneficiario: "", "Titular de ficha": "", Vendedor: "", Proveedor: c.proveedor || "", "Ingreso cobrado": "", "Ingreso pendiente": "", "Costo imputado": c.costoHnl, Resultado: "", Moneda: c.moneda || "HNL", Tasa: c.tasa ?? "", Estado: c.aviso ? "Datos incompletos" : "Costo real", Referencia: c.loteId || c.familiaId || "" });
+  for (const l of calc.lineas) f.push({ Fecha: l.fecha, Tipo: l.tipo === "renovacion" ? "Renovación cobrada" : l.tipo === "venta" ? "Alta nueva" : "Otro cobro", Plataforma: nombrePlataforma(l.plataforma), "Cuenta madre": l.cuentaCorreo, Perfil: l.perfil, Beneficiario: l.beneficiario, "Titular de ficha": l.titular, Vendedor: l.vendedor, Proveedor: "", "Ingreso cobrado": l.cobrado, "Ingreso pendiente": l.pendiente, "Costo imputado": "", Resultado: "", Moneda: "HNL", Tasa: "", Estado: l.pendiente > 0 ? (l.cobrado > 0 ? "Pago parcial" : "Pago pendiente") : l.enlace === "sin_cuenta" ? "Asignación pendiente de conciliar" : l.costoCubierto ? "Conciliado" : "Costo incompleto", Fuente: l.fuente, Banco: l.banco, "Registrado por": l.registradoPor, Combo: l.combo ? "Sí" : "", Referencia: l.referencia });
+  for (const e of calc.esperados) f.push({ Fecha: e.fecha, Tipo: "Renovación esperada", Plataforma: nombrePlataforma(e.plataforma), "Cuenta madre": e.cuentaCorreo, Perfil: "", Beneficiario: e.beneficiario, "Titular de ficha": e.titular, Vendedor: e.vendedor, Proveedor: "", "Ingreso cobrado": 0, "Ingreso pendiente": e.precio, "Costo imputado": "", Resultado: "", Moneda: "HNL", Tasa: "", Estado: "Ingreso sin confirmar", Fuente: "", Banco: "", "Registrado por": "", Combo: "", Referencia: e.compraId });
+  for (const c of calc.costos) f.push({ Fecha: c.fechaCompra || "", Tipo: `Costo · ${c.regla}`, Plataforma: nombrePlataforma(c.plataforma), "Cuenta madre": c.correo || "", Perfil: "", Beneficiario: "", "Titular de ficha": "", Vendedor: "", Proveedor: c.proveedor || "", "Ingreso cobrado": "", "Ingreso pendiente": "", "Costo imputado": c.costoHnl, Resultado: "", Moneda: c.moneda || "HNL", Tasa: c.tasa ?? "", Estado: c.aviso ? "Datos incompletos" : "Costo real", Fuente: "", Banco: "", "Registrado por": "", Combo: "", Referencia: c.loteId || c.familiaId || "" });
   return f;
 }
