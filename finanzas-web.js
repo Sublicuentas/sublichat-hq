@@ -242,7 +242,7 @@
     if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
     var rows = r.filas.map(function (f) {
       var tj = f.modalidad === 'tarjeta';
-      var ult = f.cargos && f.cargos[0] ? fecha(f.cargos[0].fecha) + ' · ' + L(f.cargos[0].cargoHnl, true) + (f.cargos[0].moneda !== 'HNL' ? ' <small>(' + esc(f.cargos[0].monto) + ' ' + esc(f.cargos[0].moneda) + (f.cargos[0].tipo === 'activacion' ? ' · activación' : '') + ')</small>' : '') : '—';
+      var ult = f.cargos && f.cargos[0] ? fecha(f.cargos[0].fecha) + ' · ' + L(f.cargos[0].cargoHnl, true) + (f.cargos[0].moneda !== 'HNL' ? ' <small>(' + esc(f.cargos[0].monto) + ' ' + esc(f.cargos[0].moneda) + (f.cargos[0].tipo === 'activacion' ? ' · activación' + (f.cargos[0].fechaActivacion ? ' ' + fecha(f.cargos[0].fechaActivacion) : '') : '') + ')</small>' : '') : '—';
       return '<tr><td><b>' + esc(f.correo) + '</b><small>' + esc(f.nombrePlan || '') + (f.capacidad ? ' · ' + f.ocupados + '/' + f.capacidad + ' perfiles' : '') + '</small></td><td>' + (tj ? '<span class="fz-pill">Tarjeta</span>' : '<span class="fz-pill sec">Activación USDT</span>') + '</td><td>' + (tj ? tjTxt(f.tarjeta) : '<small>Binance · por activación</small>') + '</td>' +
         '<td>' + (tj ? esc(f.periodicidad === 'puntual' ? 'Pago puntual' : 'Mensual') + (f.proximoCobro ? ' · ' + fecha(f.proximoCobro) + (f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '') : '—') + '</td><td>' + ult + '</td>' +
         '<td class="c">' + (tj ? '<button type="button" class="fz-btn sm" data-fz-hbo="cargo" data-id="' + esc(f.cuentaId) + '">Registrar cargo</button> ' : '<button type="button" class="fz-btn sm" data-fz-hbo="activacion" data-id="' + esc(f.cuentaId) + '">Registrar activación</button> ') +
@@ -258,8 +258,8 @@
     if (acc === 'activacion') { // R196z · ligada a ESTA cuenta y a su plan; Binance USDT, sin caducidad inventada
       var prodsHbo = (d.productosCatalogo || []).filter(function (p) { return p.activo !== false && (p.plataformaKey === 'hbomax' || /hbo/i.test(p.nombre)); });
       var pAct = prodsHbo.find(function (p) { return p.modelo === 'cuenta_madre' && (f.plan === 'standard' ? /standard/i.test(p.nombre) : /platinum/i.test(p.nombre)); }) || prod || prodsHbo[0] || {};
-      abrirCompra(pAct.id || '', { titulo: 'Registrar activación · HBO Max', cuentaId: id, correo: f.correo, plan: String(f.nombrePlan || '').replace(/^HBO Max /, '') + (f.capacidad ? ' · ' + f.capacidad + ' perfiles' : ''), plataforma: 'hbomax', plataformaNombre: 'HBO Max', pago: 'binance', moneda: 'USDT', frecuencia: 'puntual', productos: prodsHbo, monedas: ['USDT', 'USD', 'HNL'],
-        despues: async function (rr, compra) { if (rr.duplicado || compra.moneda !== 'USDT') return; await api('finp_hbo_guardar', { cuentaId: id, cargo: { fecha: compra.fecha, moneda: 'USDT', monto: compra.costoTotal, cargoHnl: rr.costoTotalHnl, loteId: rr.loteId, operationId: rr.loteId, activacion: true } }); },
+      abrirCompra(pAct.id || '', { titulo: 'Registrar activación · HBO Max', cuentaId: id, correo: f.correo, plan: String(f.nombrePlan || '').replace(/^HBO Max /, '') + (f.capacidad ? ' · ' + f.capacidad + ' perfiles' : ''), plataforma: 'hbomax', plataformaNombre: 'HBO Max', pago: 'binance_hist', moneda: 'USDT', frecuencia: 'puntual', productos: prodsHbo, monedas: ['USDT', 'USD', 'HNL'],
+        despues: async function (rr, compra) { if (rr.duplicado || compra.moneda !== 'USDT') return; await api('finp_hbo_guardar', { cuentaId: id, cargo: { fecha: compra.fecha, fechaActivacion: compra.fechaActivacion || '', moneda: 'USDT', monto: compra.costoTotal, cargoHnl: rr.costoTotalHnl, tasa: rr.tasa, loteId: rr.loteId, operationId: rr.loteId, activacion: true } }); },
         alGuardar: function () { st.hbo = null; } });
       return;
     }
@@ -342,7 +342,7 @@
       var prods = (r.productos || []).filter(function (p) { return p.plataforma === x.plataforma; });
       var pSel = (prods.find(function (p) { return p.modelo === 'cuenta_madre'; }) || prods[0] || {}).id || '';
       if (!prods.length) { toast('No hay producto de ' + (P.nombre || x.plataforma) + ' en el catálogo: créelo en Productos para que el costo cuente en Ganancias.', true); return; }
-      abrirCompra(pSel, { titulo: 'Registrar pago · ' + (P.nombre || ''), cuentaId: x.cuentaId, correo: x.correo, plan: x.plan, plataforma: x.plataforma, plataformaNombre: P.nombre, tarjeta: x.tarjeta, productos: prods, monedas: P.monedas, moneda: mon, frecuencia: fr, pago: mod === 'gift_card' && mon === 'USDT' ? 'binance' : 'banco', alGuardar: recargar });
+      abrirCompra(pSel, { titulo: 'Registrar pago · ' + (P.nombre || ''), cuentaId: x.cuentaId, correo: x.correo, plan: x.plan, plataforma: x.plataforma, plataformaNombre: P.nombre, tarjeta: x.tarjeta, productos: prods, monedas: P.monedas, moneda: mon, frecuencia: fr, pago: mod === 'gift_card' && mon === 'USDT' ? 'binance_hist' : 'banco', alGuardar: recargar });
       return;
     }
     if (acc === 'hist') {
@@ -635,23 +635,28 @@
     var html = '<div class="fz-form">' + cuenta +
       '<label class="w2">Producto<select name="productoId"><option value="">— elegir —</option>' + prods.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === prodId ? ' selected' : '') + '>' + esc(p.nombre) + ' · ' + esc((d.modelos[p.modelo] || {}).label || p.modelo) + '</option>'; }).join('') + '</select>' + fe('productoId') + '</label>' +
       '<label>Fecha de pago<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '">' + fe('fecha') + '</label>' +
+      '<label>Fecha de activación <small>(opcional)</small><input type="date" name="fechaActivacion" max="' + esc(hoy) + '">' + fe('fechaActivacion') + '</label>' +
       (ctx.cuentaId ? '<input type="hidden" name="cantidad" value="1">' : '<label>Cantidad<input type="number" name="cantidad" min="1" step="1" value="1" placeholder="Ej. 1">' + fe('cantidad') + '</label>') +
-      '<label>Pagado con<select name="pago">' + [['banco', 'Banco / tarjeta (Lempiras o divisa)'], ['binance', 'Binance (USDT)'], ['credito', 'A crédito (por pagar)'], ['inicial', 'Inventario inicial (ya lo tenía)']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === pagoSel ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+      '<label>Pagado con<select name="pago">' + [['banco', 'Banco / tarjeta (Lempiras o divisa)'], ['binance_hist', 'Binance USDT · ya pagado (histórico)'], ['binance', 'Binance USDT · descontar del saldo en Sublichat'], ['credito', 'A crédito (por pagar)'], ['inicial', 'Inventario inicial (ya lo tenía)']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === pagoSel ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
       '<label>Proveedor<select name="proveedorId"><option value="">— sin proveedor —</option>' + (d.proveedores || []).filter(function (p) { return p.activo; }).map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.alias) + '</option>'; }).join('') + '</select>' + fe('proveedorId') + '</label>' +
       '<label>Moneda<select name="moneda">' + monedas.map(function (x) { return '<option' + (x === monSel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' + fe('moneda') + '</label>' +
       '<label>Costo total<input type="number" name="costoTotal" min="0" step="any" inputmode="decimal">' + fe('costoTotal') + '</label>' +
       '<label data-si="banco">Banco del libro<select name="bancoId"><option value="">— elegir —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select>' + fe('bancoId') + '</label>' +
+      '<label data-si="hist">Tasa HNL por USDT<input type="number" name="tasa" min="0" step="any" inputmode="decimal" placeholder="Ej. 26.50">' + fe('tasa') + '</label>' +
+      '<div class="fz-cuenta-ro" data-si="hist"><small>Equivalente en Lempiras</small><b data-equiv>—</b><span>Gasto ya pagado: no descuenta saldo de Binance ni de bancos.</span></div>' +
       '<label data-si="divisa">Cargo real en Lempiras<input type="number" name="cargoHnl" min="0" step="any" inputmode="decimal" placeholder="Lo que cobró el banco">' + fe('cargoHnl') + '</label>' +
       (dur != null ? '<input type="hidden" name="duracionDias" value="' + dur + '">' : '') +
       '<label class="w2">Referencia<input name="referencia" maxlength="80" placeholder="Comprobante o nota (opcional)"></label></div>' +
       '<p class="fz-sub" data-nota></p>';
     function ajustar(m) { // muestra solo los campos compatibles
-      var pago = val(m, 'pago'), mon = val(m, 'moneda');
-      if (pago === 'binance' && monedas.indexOf('USDT') >= 0 && mon !== 'USDT') { m.querySelector('[name="moneda"]').value = 'USDT'; mon = 'USDT'; }
+      var pago = val(m, 'pago'), mon = val(m, 'moneda'), bin = pago === 'binance' || pago === 'binance_hist';
+      if (bin && monedas.indexOf('USDT') >= 0 && mon !== 'USDT') { m.querySelector('[name="moneda"]').value = 'USDT'; mon = 'USDT'; }
       m.querySelector('[data-si="banco"]').hidden = pago !== 'banco';
+      m.querySelectorAll('[data-si="hist"]').forEach(function (x) { x.hidden = pago !== 'binance_hist'; });
+      var eq = m.querySelector('[data-equiv]'), cu = Number(val(m, 'costoTotal')), ta = Number(val(m, 'tasa')); if (eq) eq.textContent = cu > 0 && ta > 0 ? L(Math.round(cu * ta * 100) / 100, true) + ' (' + cu + ' USDT × ' + ta + ')' : '—';
       m.querySelector('[data-si="divisa"]').hidden = !(pago === 'banco' && mon !== 'HNL' && mon !== 'USDT');
       var n = m.querySelector('[data-nota]');
-      n.textContent = (mon === 'HNL' ? 'Costo en Lempiras: no necesita conversión.' : mon === 'USDT' ? 'USDT: se descuenta de la billetera Binance a su tasa del día; la tasa queda guardada en esta compra y no cambia después.' : 'Divisa: escriba el cargo REAL en Lempiras que cobró el banco; esa tasa queda guardada en esta compra y no cambia después.') +
+      n.textContent = (pago === 'binance_hist' ? 'Compra ya pagada en Binance: se guarda USDT, fecha real, tasa y Lempiras una sola vez, sin tocar saldos.' : mon === 'HNL' ? 'Costo en Lempiras: no necesita conversión.' : mon === 'USDT' ? 'USDT: se descuenta de la billetera Binance a su tasa del día; la tasa queda guardada en esta compra y no cambia después.' : 'Divisa: escriba el cargo REAL en Lempiras que cobró el banco; esa tasa queda guardada en esta compra y no cambia después.') +
         (ctx.frecuencia ? ' Período: ' + ({ mensual: '1 mes', trimestral: '3 meses (se reparte en los 3 meses en reportes; el pago queda en su fecha)', anual: '12 meses (se reparte en reportes; el pago queda en su fecha)', puntual: 'por activación, sin cobro mensual' }[ctx.frecuencia] || '') + '.' : '');
     }
     function validar(m) {
@@ -661,7 +666,9 @@
       if (!ctx.cuentaId && !(Number(val(m, 'cantidad')) > 0)) e.cantidad = 'Cantidad mayor que 0.';
       if (!(costo > 0) && pago !== 'inicial') e.costoTotal = 'Escriba el costo (mayor que 0).';
       if (ctx.plataforma === 'primevideo' && mon === 'USDT') e.moneda = 'Prime Video se paga en USD (no USDT).';
-      if (pago === 'binance' && mon !== 'USDT') e.moneda = 'Binance se paga en USDT.';
+      if ((pago === 'binance' || pago === 'binance_hist') && mon !== 'USDT') e.moneda = 'Binance se paga en USDT.';
+      if (pago === 'binance_hist' && !(Number(val(m, 'tasa')) > 0)) e.tasa = 'Escriba la tasa HNL/USDT de ese pago.';
+      if (val(m, 'fechaActivacion') && val(m, 'fechaActivacion') > hoy) e.fechaActivacion = 'No puede ser futura.';
       if (pago === 'banco' && !val(m, 'bancoId')) e.bancoId = 'Elija de qué banco salió el pago.';
       if (pago === 'banco' && mon !== 'HNL' && mon !== 'USDT' && !(Number(val(m, 'cargoHnl')) > 0)) e.cargoHnl = 'Escriba el cargo real en Lempiras.';
       if (pago === 'credito' && !val(m, 'proveedorId')) e.proveedorId = 'A crédito: elija a qué proveedor se le debe.';
@@ -670,14 +677,15 @@
     var opid = opId();
     modal(ctx.titulo || 'Registrar compra', html, async function (m) {
       var pago = val(m, 'pago'), mon = val(m, 'moneda');
-      var compra = { productoId: val(m, 'productoId'), proveedorId: val(m, 'proveedorId'), fecha: val(m, 'fecha'), cantidad: Number(val(m, 'cantidad')) || 1, costoTotal: Number(val(m, 'costoTotal')), moneda: mon, pago: pago, bancoId: pago === 'banco' ? val(m, 'bancoId') : '', cargoHnl: pago === 'banco' && mon !== 'HNL' && mon !== 'USDT' ? Number(val(m, 'cargoHnl')) || 0 : 0, referencia: val(m, 'referencia') || (ctx.cuentaId ? (ctx.plataformaNombre || '') + ' · ' + (ctx.correo || '') : '') };
+      var hist = pago === 'binance_hist'; if (hist) pago = 'binance';
+      var compra = { productoId: val(m, 'productoId'), proveedorId: val(m, 'proveedorId'), fecha: val(m, 'fecha'), fechaActivacion: val(m, 'fechaActivacion'), cantidad: Number(val(m, 'cantidad')) || 1, costoTotal: Number(val(m, 'costoTotal')), moneda: mon, pago: pago, binanceHistorico: hist, tasa: hist ? Number(val(m, 'tasa')) : undefined, bancoId: pago === 'banco' ? val(m, 'bancoId') : '', cargoHnl: pago === 'banco' && mon !== 'HNL' && mon !== 'USDT' ? Number(val(m, 'cargoHnl')) || 0 : 0, referencia: val(m, 'referencia') || (ctx.cuentaId ? (ctx.plataformaNombre || '') + ' · ' + (ctx.correo || '') : '') };
       if (ctx.cuentaId) compra.cuentaInventarioId = ctx.cuentaId;
       if (val(m, 'duracionDias') !== '') compra.duracionDias = Number(val(m, 'duracionDias'));
       var r = await api('fin_compra_registrar', { operationId: opid, compra: compra });
       if (ctx.despues) await ctx.despues(r, compra);
       toast(r.duplicado ? 'Esa compra ya estaba registrada (no se duplicó).' : 'Compra guardada · folio ' + folio(r.loteId) + (r.costoTotalHnl != null ? ' · ' + L(r.costoTotalHnl, true) : '') + '.');
       if (ctx.alGuardar) ctx.alGuardar(r); cargar(true);
-    }, 'Guardar compra', { validar: validar, alAbrir: function (m) { ajustar(m); m.addEventListener('change', function () { ajustar(m); }); } });
+    }, 'Guardar compra', { validar: validar, alAbrir: function (m) { ajustar(m); m.addEventListener('change', function () { ajustar(m); }); m.addEventListener('input', function (e) { if (e.target.name === 'costoTotal' || e.target.name === 'tasa') ajustar(m); }); } });
   }
   function abrirProveedor(id) {
     var p = (st.data.proveedores || []).find(function (x) { return x.id === id; }) || { alias: '', pais: '', moneda: 'USDT', metodoPago: '', activo: true, notas: '' };

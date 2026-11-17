@@ -9063,21 +9063,25 @@ _No se puede usar en dos dispositivos al mismo tiempo._
         {k:"cantidad",label:"Cantidad comprada: créditos, links o unidades · en cuentas madre, paneles y gift cards: cuántas CUENTAS",type:"number",value:c0.cantidad||1},
         {k:"costoTotal",label:"Costo total de la compra",type:"number",value:c0.monto||""},
         {k:"moneda",label:"Moneda",type:"select",options:(E.monedas||["HNL","USDT","USD"]).map(v=>({v,t:v})),value:c0.moneda||"USDT"},
-        {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"credito",t:"A crédito (se le debe al proveedor)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance":"banco"},
+        {k:"pago",label:"Pagado con",type:"select",options:[{v:"binance_hist",t:"Binance USDT · ya pagado (histórico, no descuenta saldo)"},{v:"binance",t:`Binance (descontar saldo: ${Number(b.saldo||0)} USDT)`},{v:"banco",t:"Banco (Lempiras)"},{v:"credito",t:"A crédito (se le debe al proveedor)"},{v:"inicial",t:"Inventario inicial (ya lo tenía)"}],value:(c0.moneda||"USDT")==="USDT"?"binance_hist":"banco"},
+        {k:"tasa",label:"Tasa HNL por USDT (Binance histórico)",type:"number",ph:"Ej. 26.50"},
         {k:"bancoId",label:"Banco (si pagó con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},
         {k:"cargoHnl",label:"Cargo real en Lempiras (si pagó USD/USDT con banco o tarjeta)",type:"number",ph:"Lo que le cobró el banco"},
         {k:"vencePago",label:"A crédito: ¿cuándo hay que pagarle? (vacío = 15 días)",type:"date",value:""},
-        {k:"fecha",label:"Fecha de compra",type:"date",value:E.hoy},
+        {k:"fecha",label:"Fecha de pago",type:"date",value:E.hoy},
+        {k:"fechaActivacion",label:"Fecha de activación (opcional)",type:"date",value:""},
         {k:"vigenciaHasta",label:"Vence (vacío = según duración del producto)",type:"date",value:""},
         {k:"cuentaInventarioId",label:"Cuenta en Bodega (cuentas madre, opcional)",type:"select",options:[{v:"",t:"—"},...(E.cuentasBodega||[]).map(c=>({v:c.id,t:`${c.plataforma} · ${c.correo} (${c.capacidad} cupos)`}))],value:""},
         {k:"notas",label:"Notas",type:"textarea"},
       ],async(v)=>{
-        const r=await api("fin_compra_registrar",{operationId:opId,compra:{...v,cantidad:Number(v.cantidad),costoTotal:Number(v.costoTotal),cargoHnl:Number(v.cargoHnl||0)}});
+        const hist=v.pago==="binance_hist"; // R196z2 · compra ya pagada en Binance: sin saldo interno
+        const r=await api("fin_compra_registrar",{operationId:opId,compra:{...v,pago:hist?"binance":v.pago,binanceHistorico:hist,tasa:hist?Number(v.tasa||0):undefined,cantidad:Number(v.cantidad),costoTotal:Number(v.costoTotal),cargoHnl:Number(v.cargoHnl||0)}});
         toast(r.duplicado?"ℹ️ Esa compra ya estaba registrada.":`✅ Compra registrada: ${L(r.costoTotalHnl)} (${L(r.costoUnitarioHnl)} c/u)`);tab="compras";await cargar();
       },{nota:"No es gasto: baja la cuenta con que pagó y sube el inventario. El costo en Lempiras de este lote queda fijo.",textoBoton:"Registrar compra",alCambiar:(v)=>{
         const p=prods.find(x=>x.id===v.productoId)||{},n=Number(v.cantidad),t=Number(v.costoTotal);if(!(n>0&&t>0))return "";
         let hnl=0,como="";
-        if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L${Number(b.costoPromedio||0).toFixed(4)})`;}
+        if(v.pago==="binance_hist"&&v.moneda==="USDT"){hnl=t*(Number(v.tasa)||0);como=`a la tasa del pago (L${Number(v.tasa||0)}) · sin descontar saldo`;}
+        else if(v.pago==="binance"&&v.moneda==="USDT"){hnl=t*(Number(b.costoPromedio)||0);como=`al costo promedio de Binance (L${Number(b.costoPromedio||0).toFixed(4)})`;}
         else if(v.moneda==="HNL"){hnl=t;}
         else if(Number(v.cargoHnl)>0){hnl=Number(v.cargoHnl);como="con el cargo real";}
         else if((v.pago==="inicial"||v.pago==="credito")&&v.moneda==="USDT"&&(b.costoPromedio||b.ultimaTasa)){hnl=t*(b.costoPromedio||b.ultimaTasa);como="a la tasa de Binance";}
@@ -9150,8 +9154,8 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const x=((E.cxp||{}).cuentas||[]).find(c=>c.id===id);if(!x)return;
     let metodos=[];try{metodos=typeof pagoOpMetodos==="function"?await pagoOpMetodos():[];}catch(e){}
     const opId=nuevoId(),b=E.billetera||{};
-    formulario(`Pagar a ${x.proveedor}`,[{k:"monto",label:`Monto en ${x.moneda} (debe ${Number(x.saldo)})`,type:"number",value:x.saldo},{k:"pago",label:"Pagar con",type:"select",options:[...(x.moneda==="USDT"?[{v:"binance",t:`Binance (saldo ${Number(b.saldo||0)} USDT)`}]:[]),{v:"banco",t:"Banco"}],value:x.moneda==="USDT"?"binance":"banco"},{k:"bancoId",label:"Banco (si paga con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},{k:"montoHnl",label:"Lempiras que salieron del banco (si la deuda no es en Lempiras)",type:"number"},{k:"fecha",label:"Fecha",type:"date",value:E.hoy}],
-      async(v)=>{const r=await api("fin_cxp_pagar",{cxpId:id,monto:Number(v.monto),pago:v.pago,bancoId:v.bancoId,montoHnl:Number(v.montoHnl||0),fecha:v.fecha,operationId:opId});toast(r.duplicado?"ℹ️ Ese pago ya estaba.":`✅ Pagado ${L(r.pagadoHnl)}${r.diferencialHnl?` · diferencial cambiario ${L(r.diferencialHnl)}`:""} · ${r.estado==="pagado"?"cuenta saldada":"queda saldo"}`);await cargar();},
+    formulario(`Pagar a ${x.proveedor}`,[{k:"monto",label:`Monto en ${x.moneda} (debe ${Number(x.saldo)})`,type:"number",value:x.saldo},{k:"pago",label:"Pagar con",type:"select",options:[...(x.moneda==="USDT"?[{v:"binance_hist",t:"Binance USDT · ya pagado (histórico)"},{v:"binance",t:`Binance (descontar saldo: ${Number(b.saldo||0)} USDT)`}]:[]),{v:"banco",t:"Banco"}],value:x.moneda==="USDT"?"binance_hist":"banco"},{k:"tasa",label:"Tasa HNL por USDT (Binance histórico)",type:"number",ph:"Ej. 26.50"},{k:"bancoId",label:"Banco (si paga con banco)",type:"select",options:[{v:"",t:"—"},...metodos.map(m=>({v:m.id,t:m.nombre}))],value:""},{k:"montoHnl",label:"Lempiras que salieron del banco (si la deuda no es en Lempiras)",type:"number"},{k:"fecha",label:"Fecha",type:"date",value:E.hoy}],
+      async(v)=>{const hist=v.pago==="binance_hist";const r=await api("fin_cxp_pagar",{cxpId:id,monto:Number(v.monto),pago:hist?"binance":v.pago,historico:hist,tasa:hist?Number(v.tasa||0):undefined,bancoId:v.bancoId,montoHnl:Number(v.montoHnl||0),fecha:v.fecha,operationId:opId});toast(r.duplicado?"ℹ️ Ese pago ya estaba.":`✅ Pagado ${L(r.pagadoHnl)}${r.diferencialHnl?` · diferencial cambiario ${L(r.diferencialHnl)}`:""} · ${r.estado==="pagado"?"cuenta saldada":"queda saldo"}`);await cargar();},
       {nota:`${esc(x.concepto)} · vence ${dmy(x.vence)}. Si la tasa cambió desde la compra, la diferencia sale como diferencial cambiario.`,textoBoton:"Registrar pago"});
   }
   // ---------------- FASES 5–8 · Tablero de dirección, retiros, utilidad repartible, conciliación y respaldo
