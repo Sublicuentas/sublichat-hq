@@ -125,7 +125,8 @@ test('ago–nov 2026, renovación de octubre en su mes y bandeja de conciliació
   assert.equal(g.costeo.activo, true);
   // repetir no cambia nada (idempotente)
   const g2 = await call(db, 'finp_ganancias', { desde: '2026-11-01', hasta: '2026-11-30' });
-  assert.deepEqual(g2.resumen, g.resumen);
+  const sinHora = (x) => { const { calculadoAt, ...r } = x; return r; };
+  assert.deepEqual(sinHora(g2.resumen), sinHora(g.resumen));
   // período sin datos: no se presenta L0 como resultado comprobado
   const vacio = await call(db, 'finp_ganancias', { desde: '2026-06-01', hasta: '2026-06-30' });
   assert.equal(vacio.resumen.estado, 'sin_datos');
