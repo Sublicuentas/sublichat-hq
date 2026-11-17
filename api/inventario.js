@@ -600,8 +600,12 @@ export default async function handler(req, res) {
       try {
         if (accion === "hboResumen") return res.status(200).json({ ok: true, puedeEditar: adminHbo, planes: hboPlanes.PLANES, ...(await hboPlanes.resumenHbo(db)) });
         if (accion === "hboDiagnostico") { if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas ve el diagnóstico HBO." }); return res.status(200).json(await hboPlanes.diagnosticoHbo(db)); } // R196v · solo lectura
-        if (accion === "hboPlan") { if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el plan HBO." }); return res.status(200).json(await hboPlanes.cambiarPlan(db, { inventarioId: docId, plan: req.body.plan, usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) })); }
-      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 260), code: e?.code || "" }); }
+        if (accion === "hboPlan" || accion === "hboCapacidad") { // R196z3 · plan y/o capacidad por cuenta (excepción confirmada por el administrador)
+          if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el plan o la capacidad HBO." });
+          const args = { inventarioId: docId, capacidad: req.body.capacidad ?? null, autorizarExcepcion: req.body.autorizarExcepcion === true, motivo: String(req.body.motivo || "").slice(0, 160), usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) };
+          return res.status(200).json(accion === "hboCapacidad" ? await hboPlanes.editarCapacidad(db, args) : await hboPlanes.cambiarPlan(db, { ...args, plan: req.body.plan }));
+        }
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 300), code: e?.code || "", capacidadSugerida: e?.capacidadSugerida ?? null, plan: e?.plan || "" }); }
       return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
     }
 
@@ -722,8 +726,9 @@ export default async function handler(req, res) {
       if (capacidad != null) {
         const cap = Math.max(1, Math.round(Number(capacidad) || 0));
         if (cap < clients.length) return res.status(200).json({ error: `La capacidad no puede ser menor que los ${clients.length} clientes asignados.` });
-        { const pl = hboPlanes.planDeCuenta(current); if (pl && cap !== pl.capacidad) return res.status(200).json({ error: `Esta cuenta es ${pl.nombre} (${pl.capacidad} perfiles): cambie el plan en lugar de la capacidad.` }); } // R196u
+        { const pl = hboPlanes.planDeCuenta(current); if (pl && cap !== pl.capacidad && cap !== hboPlanes.capacidadEfectiva(current)) return res.status(200).json({ error: `Esta cuenta es ${pl.nombre} (${pl.capacidad} perfiles por defecto): use «Editar capacidad» del Plan HBO para una capacidad personalizada.` }); } // R196u · R196z3: guardar la capacidad que ya tiene no es un cambio
         update.capacidad = cap;
+        { const pl = hboPlanes.planDeCuenta(current); if (pl && cap === pl.capacidad) { update.capacidadPersonalizada = false; update.capacidadExcepcion = null; } } // R196z3 · vuelve al predeterminado
         update.ocupados = clients.length;
         update.disponibles = Math.max(0, cap - clients.length);
       }

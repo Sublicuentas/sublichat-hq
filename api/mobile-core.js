@@ -7,6 +7,7 @@ const planesTv = require('./_planes-tv.js'); // R187
 const vendedoresReg = require('./_vendedores.js'); // Oct-2026 · registro único de vendedores/socios
 const push = require('./_push.js'); // Fase 2 · notificaciones push
 const netflixHogar = require('./_netflix-hogar.js'); // R196v · Hogar: misma consulta que Web y Telegram
+const hboPlanes = require('./_hbo-planes.js'); // R196z3 · HBO plan y capacidad por cuenta (misma regla que Web y Telegram)
 
 const ALLOWED_ORIGINS = new Set([
   'https://localhost',
@@ -280,6 +281,24 @@ async function hogarAccion(req, res) {
   }
 }
 
+// R196z3 · HBO Standard/Platinum en la APK: ver plan y capacidad (quien ve inventario) y cambiarlos (solo Sublicuentas).
+async function hboPlanAccion(req, res) {
+  const user = await requireFirebaseUser(req, res);
+  if (!user) return;
+  if (!canRead('inventario', user)) return res.status(403).json({ ok:false, error:'No tiene permiso para consultar el inventario.' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const db = getApp().firestore(); const id = String(body.inventarioId || '').slice(0, 200);
+  try {
+    if (!body.modo || body.modo === 'ver') { const s = await db.collection('inventario').doc(id).get(); if (!s.exists) return res.status(404).json({ ok:false, error:'Esa cuenta ya no existe.' }); return res.status(200).json({ ok:true, puedeEditar: accessFor(user).sublicuentas, ...hboPlanes.resumenCuenta(s.data() || {}) }); }
+    if (!accessFor(user).sublicuentas) return res.status(403).json({ ok:false, error:'Solo Sublicuentas cambia el plan o la capacidad HBO.' });
+    const args = { inventarioId: id, capacidad: body.capacidad ?? null, autorizarExcepcion: body.autorizarExcepcion === true, motivo: String(body.motivo || '').slice(0, 160), usuario: String(user.usuario || user.uid || '').slice(0, 60), origen: 'apk' };
+    const r = body.modo === 'capacidad' ? await hboPlanes.editarCapacidad(db, args) : await hboPlanes.cambiarPlan(db, { ...args, plan: body.plan });
+    return res.status(200).json(r);
+  } catch (e) {
+    return res.status(200).json({ ok:false, error:String(e && e.message || e).slice(0, 300), code:e && e.code || '', capacidadSugerida: e && e.capacidadSugerida != null ? e.capacidadSugerida : null, plan: e && e.plan || '' });
+  }
+}
+
 // R69 · Paquete G — configuración remota NO sensible para la APK (sin secretos).
 // Fuente: documento Firestore `configuracion_app/android` (editable) sobre valores por defecto; MIN_ANDROID_BUILD por entorno.
 const CONFIG_DEFAULTS = Object.freeze({
@@ -400,6 +419,7 @@ module.exports = async function mobileCore(req, res) {
   if (action === 'vendedores') return vendedoresAccion(req, res);
   if (action === 'push') return pushAccion(req, res);
   if (action === 'hogar') return hogarAccion(req, res); // R196v
+  if (action === 'hboPlan') return hboPlanAccion(req, res); // R196z3
   return res.status(400).json({ ok:false, error:'Acción no válida.' });
 };
 module.exports.__pruebas = { refrescarFichaTextoMovil, prepareClientForMobile }; // R143
