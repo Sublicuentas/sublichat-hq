@@ -293,6 +293,7 @@ async function hboPlanAccion(req, res) {
     if (!accessFor(user).sublicuentas) return res.status(403).json({ ok:false, error:'Solo Sublicuentas cambia el plan o la capacidad HBO.' });
     const args = { inventarioId: id, capacidad: body.capacidad ?? null, autorizarExcepcion: body.autorizarExcepcion === true, motivo: String(body.motivo || '').slice(0, 160), usuario: String(user.usuario || user.uid || '').slice(0, 60), origen: 'apk' };
     const r = body.modo === 'capacidad' ? await hboPlanes.editarCapacidad(db, args) : await hboPlanes.cambiarPlan(db, { ...args, plan: body.plan });
+    if (body.modo !== 'capacidad' && r.ok && !r.yaEstaba) { try { r.ventasSincronizadas = (await hboPlanes.sincronizarPlanVentas(db, { inventarioId: id, usuario: args.usuario, origen: 'apk' })).ventas; } catch (_) { r.avisoVentas = 'El plan quedó guardado; las ventas ligadas se sincronizarán al reintentar.'; } } // R196z4
     return res.status(200).json(r);
   } catch (e) {
     return res.status(200).json({ ok:false, error:String(e && e.message || e).slice(0, 300), code:e && e.code || '', capacidadSugerida: e && e.capacidadSugerida != null ? e.capacidadSugerida : null, plan: e && e.plan || '' });

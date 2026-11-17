@@ -603,7 +603,10 @@ export default async function handler(req, res) {
         if (accion === "hboPlan" || accion === "hboCapacidad") { // R196z3 · plan y/o capacidad por cuenta (excepción confirmada por el administrador)
           if (!adminHbo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el plan o la capacidad HBO." });
           const args = { inventarioId: docId, capacidad: req.body.capacidad ?? null, autorizarExcepcion: req.body.autorizarExcepcion === true, motivo: String(req.body.motivo || "").slice(0, 160), usuario: usr, origen: String(req.body.origen || "web").slice(0, 10) };
-          return res.status(200).json(accion === "hboCapacidad" ? await hboPlanes.editarCapacidad(db, args) : await hboPlanes.cambiarPlan(db, { ...args, plan: req.body.plan }));
+          if (accion === "hboCapacidad") return res.status(200).json(await hboPlanes.editarCapacidad(db, args));
+          const rp = await hboPlanes.cambiarPlan(db, { ...args, plan: req.body.plan });
+          if (rp.ok && !rp.yaEstaba) { try { rp.ventasSincronizadas = (await hboPlanes.sincronizarPlanVentas(db, { inventarioId: docId, usuario: usr, origen: args.origen })).ventas; } catch (e) { rp.avisoVentas = "El plan quedó guardado en la cuenta; las ventas ligadas se sincronizarán al reintentar."; } } // R196z4
+          return res.status(200).json(rp);
         }
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 300), code: e?.code || "", capacidadSugerida: e?.capacidadSugerida ?? null, plan: e?.plan || "" }); }
       return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
