@@ -156,3 +156,7 @@ html body #screen-finanzas.fz-screen.fz-screen>.card>h2,html body #screen-finanz
 .fz-modal h4{margin:16px 0 6px;font-size:14px;color:#1F2430}
 .fz-modal details{margin-top:12px}.fz-modal summary{cursor:pointer;font-weight:600;font-size:13px;color:#4B5360}
 .fz-t td small.fz-pend{display:block}
+/* R197b · Cuentas por plataforma, definiciones y cobertura */
+.fz-defs summary{cursor:pointer;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px}
+.fz-chk{flex-direction:row!important;align-items:center;gap:6px;font-weight:600}
+.fz-t td small.fz-pend{display:block;font-size:11px}
