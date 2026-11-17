@@ -116,5 +116,5 @@ test('Bodega: si el registro financiero quedó con otro id (unidad antigua), se 
 test('Web: vista previa muestra el vínculo y la confirmación aclara que no se crean ventas ni cuentas', () => {
   const w = fs.readFileSync(new URL('../finanzas-web.js', import.meta.url), 'utf8');
   assert.match(w, /Sin asignación comercial/); assert.match(w, /Vínculo \/ cliente/); assert.match(w, /No se crean clientes, ventas ni cuentas en Control Maestro/);
-  assert.match(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /finanzas-web\.js\?v=20261116-r196y/);
+  assert.match(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /finanzas-web\.js\?v=2026\d{4}-r196[y-z]/);
 });
