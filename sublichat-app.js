@@ -1405,7 +1405,19 @@ function invAbrir(c){
   const cb=document.getElementById("invCapBtn");if(cb)cb.addEventListener("click",()=>invEditarCapacidad(c));
   const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
   try{window.SublichatHogar?.montar(document.getElementById("invHogarBox"));}catch(_){} // R196u · Hogar Netflix Premium
-  try{window.SublichatHbo?.montar(document.getElementById("invHboBox"),()=>{if(typeof invCargar==="function")invCargar();});}catch(_){} // R196u · plan HBO
+  try{window.SublichatHbo?.montar(document.getElementById("invHboBox"),(r)=>invHboGuardado(c,r));}catch(_){} // R196u · plan HBO · R196z4: antes llamaba a invCargar (no existe) y la tarjeta/Control Maestro quedaban con el plan viejo
+}
+// R196z4 · Plan/capacidad HBO guardados: la copia local (tarjeta de Inventario, Control Maestro, selector de venta y fichas)
+// toma el dato confirmado por el servidor y luego se relee todo desde Firebase (persistencia real, no solo visual).
+function invHboGuardado(c,r){
+  if(!c||!r||r.ok===false)return;
+  const it=(INVENTARIO||[]).find(x=>String(x.id)===String(c.id))||c;
+  [it,c].forEach(o=>{if(r.plan)o.planHbo=r.plan;if(r.capacidad){o.capacidad=r.capacidad;o.disponibles=Math.max(0,r.capacidad-invOcupados(o));if(o.disp!=null)o.disp=o.disponibles;}o.capacidadPersonalizada=!!r.personalizada;});
+  try{bumpControlDataVersion();window.sublichatControlSyncLoadedData?.("✅ Plan HBO actualizado en Control Maestro.");}catch(_){}
+  try{invFiltrar();}catch(_){}
+  const cap=document.querySelectorAll("#invView .iv-row .v");if(cap&&cap.length>4){cap[3].textContent=String(invCap(it));cap[5].textContent=String(invDisp(it));}
+  mostrarToast(`✅ ${r.etiqueta||"Plan HBO guardado"}${r.ventasSincronizadas?` · ${r.ventasSincronizadas} venta(s) con el mismo plan`:""}`);
+  setTimeout(()=>{try{load();}catch(_){}},900);
 }
 function invCerrar(){ document.getElementById("invModal").classList.remove("show"); }
 document.getElementById("invClose").addEventListener("click",invCerrar);
@@ -1435,6 +1447,11 @@ async function invPost(body){
 }
 // Capacidad editable: subir recalcula libres; bajar por debajo de los ocupados se bloquea (nunca se sacan clientes).
 async function invEditarCapacidad(c){
+  if(String(c.plataforma||"").toLowerCase()==="hbomax"&&c.planHbo&&window.SublichatHbo?.enviar){ // R196z4 · HBO: misma regla (excepción confirmada, sin sacar clientes)
+    const v=prompt(`Capacidad de esta cuenta HBO (ocupados: ${invOcupados(c)}). Standard trae 3 y Platinum 5; otro número queda como excepción de esta cuenta:`,String(invCap(c)));
+    if(v==null||!String(v).trim())return;
+    window.SublichatHbo.enviar(document.getElementById("invHboBox"),{accion:"hboCapacidad",capacidad:Number(v)},(r)=>invHboGuardado(c,r));return;
+  }
   const ocu=invOcupados(c);
   const raw=prompt(`Capacidad TOTAL de la cuenta (ocupados ahora: ${ocu}):`,String(invCap(c)));
   if(raw===null)return;

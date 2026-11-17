@@ -172,13 +172,13 @@
           var motivo = prompt('Motivo de la excepción (opcional):', 'Perfiles ya vendidos') || '';
           var c2 = { accion: cuerpo.accion, docId: cuerpo.docId, plan: cuerpo.plan || r.plan || undefined, capacidad: cap, autorizarExcepcion: true, motivo: motivo };
           if (cuerpo.accion === 'hboCapacidad') delete c2.plan;
-          return api(c2).then(function (r2) { if (!r2.ok) alert(r2.error || 'No se pudo guardar.'); montar(box, alCambiar); if (r2.ok && alCambiar) alCambiar(); });
+          return api(c2).then(function (r2) { if (!r2.ok) alert(r2.error || 'No se pudo guardar.'); var cb = alCambiar; montar(box, cb); if (r2.ok && cb) cb(r2); });
         }
         montar(box, alCambiar); return;
       }
       if (!r.ok) alert(r.error || 'No se pudo guardar.');
-      montar(box, alCambiar); if (r.ok && alCambiar) alCambiar();
+      var cb = alCambiar; montar(box, cb); if (r.ok && cb) cb(r); // R196z4 · la pantalla que abrió el detalle recibe el dato guardado
     });
   }
-  window.SublichatHbo = { montar: montar };
+  window.SublichatHbo = { montar: montar, enviar: function (box, cuerpo, cb) { if (!box) return; if (cb) alCambiar = cb; enviarHbo(box, cuerpo); } }; // R196z4 · «👥 Editar capacidad» del detalle usa la misma regla
 })();
