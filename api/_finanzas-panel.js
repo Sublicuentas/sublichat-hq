@@ -13,6 +13,8 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
+import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
+import { ventasACostear as ventasACostearG } from "./_finanzas-costeo.js";
 import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
 import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
 import spotifyFam from "./_spotify-familias.js"; // R196s · antes se cargaba con require dinámico + meta.url: Vercel compila api/ como CommonJS y esa
@@ -338,7 +340,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -767,6 +769,50 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const cfg = await col("fin_cuentas_costo").doc(cid).get();
       return ok({ cuentaId: cid, compras: lotes.map((l) => ({ loteId: l.id, fecha: l.fecha, producto: l.producto, moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: l.costoTotalHnl, duracionDias: l.duracionDias || 0, vigenciaHasta: l.vigenciaHasta || "", pago: l.cuentaPagoNombre || l.pago, referencia: l.referencia || "", estado: l.estado || "activo", por: l.createdBy || "" })),
         cambios: cfg.exists ? (cfg.data().historial || []).slice(-10).reverse() : [] });
+    }
+
+    // ---------------- R197 · GANANCIAS de todas las plataformas (motor único, SOLO LECTURA: no crea ni cambia nada)
+    if (accion === "finp_ganancias" || accion === "finp_ganancias_cuenta" || accion === "finp_ganancias_excel") {
+      if (!d.leerMovimientos || !d.R) throw errUsuario("El motor de ganancias no está disponible.");
+      const ymdOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+      const mesHoy = hoy.slice(0, 7);
+      const mesMenos = (mes, k) => { const n = Number(mes.slice(0, 4)) * 12 + Number(mes.slice(5, 7)) - 1 - k; return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`; };
+      const mesesIni = [3, 2, 1, 0].map((k) => mesMenos(mesHoy, k)); // mes actual y los 3 anteriores (p. ej. ago–nov 2026)
+      let desde = ymdOk(body.desde) ? body.desde : rangoMes(mesHoy).desde, hasta = ymdOk(body.hasta) ? body.hasta : rangoMes(mesHoy).hasta;
+      if (hasta < desde) [desde, hasta] = [hasta, desde];
+      if (Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) > 400) throw errUsuario("Elija un rango de hasta 13 meses.");
+      const leerDesde = accion === "finp_ganancias" ? [desde, rangoMes(mesesIni[0]).desde].sort()[0] : desde;
+      const mesesConsumo = mesesDe(leerDesde, hasta > hoy ? hasta : hoy);
+      const [movs, clientes, inventario, lotes, productos, vipExtras, spotify, premium, consumos, cfgCosteo] = await Promise.all([
+        d.leerMovimientos(leerDesde), todos("clientes"), todos("inventario"), todos("fin_lotes"), todos("fin_productos"), todos("fin_vip_extras"), todos("fin_spotify_cuentas"), todos("fin_premium_cuentas"),
+        Promise.all(mesesConsumo.map((m) => col("fin_consumos").where("mesKey", "==", m).get().then((sn) => sn.docs.map((x) => ({ id: x.id, ...(x.data() || {}) }))))).then((a) => a.flat()),
+        col("finanzas_config").doc("costeo").get()]);
+      const ctx = prepararContexto({ clientes, inventario, lotes, productos, consumos, vipExtras, spotify, premium });
+      const deps = { R: d.R, ventasACostear: ventasACostearG };
+      const calc = calcularGanancias(ctx, movs, { desde, hasta, hoy }, deps);
+      if (accion === "finp_ganancias_cuenta") {
+        const det = detalleCuenta(ctx, calc, txt(body.cuentaId, 160)); if (!det) throw errUsuario("Esa cuenta ya no está en Control Maestro.");
+        return ok({ desde, hasta, cuenta: det });
+      }
+      if (accion === "finp_ganancias_excel") { const filas = filasExcel(calc); return ok({ desde, hasta, filas: filas.slice(0, 20000), truncado: filas.length > 20000 }); }
+      // meses de comparación (mismo motor)
+      const meses = mesesIni.map((m) => { const r = rangoMes(m); return { mes: m, ...calcularGanancias(ctx, movs, { ...r, hoy }, deps).resumen }; });
+      const anteriorMes = mesMenos(desde.slice(0, 7), 1);
+      const ant = calcularGanancias(ctx, leerDesde <= rangoMes(anteriorMes).desde ? movs : await d.leerMovimientos(rangoMes(anteriorMes).desde), { ...rangoMes(anteriorMes), hoy }, deps).resumen;
+      // cuentas del período (resumen por cuenta madre)
+      const porCta = new Map(); const C = (id, fam, correo) => porCta.get(id) || porCta.set(id, { cuentaId: id, plataforma: fam, nombre: nombrePlataforma(fam), correo, clientes: new Set(), cobradoHnl: 0, pendienteHnl: 0, esperadoHnl: 0, costoHnl: 0, conCosto: false }).get(id);
+      for (const l of calc.lineas) if (l.cuentaId) { const x = C(l.cuentaId, l.plataforma, l.cuentaCorreo); x.cobradoHnl += l.cobrado; x.pendienteHnl += l.pendiente; if (l.beneficiario) x.clientes.add(l.beneficiario); }
+      for (const e of calc.esperados) if (e.cuentaId) C(e.cuentaId, e.plataforma, e.cuentaCorreo).esperadoHnl += e.precio;
+      for (const c of calc.costos) if (c.cuentaId) { const x = C(c.cuentaId, c.plataforma, c.correo || ""); x.costoHnl += c.costoHnl; x.conCosto = true; }
+      const r2x = (v) => Math.round(Number(v || 0) * 100) / 100;
+      const cuentas = [...porCta.values()].map((x) => { const cta = ctx.cuentasPorId.get(x.cuentaId) || {}; return { ...x, correo: x.correo || String(cta.correo || ""), clientes: x.clientes.size, cobradoHnl: r2x(x.cobradoHnl), pendienteHnl: r2x(x.pendienteHnl), esperadoHnl: r2x(x.esperadoHnl), costoHnl: r2x(x.costoHnl), resultadoHnl: x.conCosto ? r2x(x.cobradoHnl - x.costoHnl) : null }; })
+        .sort((a, b) => a.plataforma.localeCompare(b.plataforma) || (b.cobradoHnl - a.cobradoHnl));
+      const vend = new Map(); for (const l of calc.lineas) { const v = vend.get(l.vendedor) || vend.set(l.vendedor, { vendedor: l.vendedor, ventas: 0, cobradoHnl: 0 }).get(l.vendedor); v.ventas++; v.cobradoHnl = r2x(v.cobradoHnl + l.cobrado); }
+      const conteo = {}; for (const b of calc.bandeja) conteo[b.tipo] = (conteo[b.tipo] || 0) + 1;
+      const cc = cfgCosteo.exists ? cfgCosteo.data() || {} : {};
+      return ok({ hoy, desde, hasta, meses, anterior: { mes: anteriorMes, ...ant }, resumen: calc.resumen, porPlataforma: calc.porPlataforma, cuentas, vendedores: [...vend.values()].sort((a, b) => b.cobradoHnl - a.cobradoHnl),
+        costos: calc.costos.slice(0, 400), desembolsos: calc.desembolsos.slice(0, 400), bandeja: calc.bandeja.slice(0, 400), bandejaConteo: conteo,
+        costeo: { desde: cc.desde || "", activo: !!cc.desde && cc.activo !== false, ultimaCorrida: cc.ultimaCorrida || "" } });
     }
 
     if (accion === "finp_reporte") {
