@@ -1,7 +1,7 @@
 /* finanzas-web.css · R196 — FINANZAS (Sublichat Web). Claro: tarjetas blancas, rojo suave, sin degradados ni neón. */
 html body #screen-finanzas.fz-screen.fz-screen>.card,html.ui-v2:not(#a):not(#b):not(#c):not(#d):not(#e):not(#f) body #screen-finanzas>.card{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
 html body #screen-finanzas.fz-screen.fz-screen>.card>h2,html body #screen-finanzas.fz-screen.fz-screen>.card>.count,html.ui-v2:not(#a):not(#b):not(#c):not(#d):not(#e):not(#f) body #screen-finanzas>.card>h2,html.ui-v2:not(#a):not(#b):not(#c):not(#d):not(#e):not(#f) body #screen-finanzas>.card>.count{display:none!important}
-#rbac-finanzas{--r:#E2231A;--ra:#B91C1C;--rs:#FDECEA;--t:#1F2430;--m:#6B7380;--b:#E6EAF0;--f:#F5F7FA;--v:#16A34A;--vs:#E8F7EE;--a:#B45309;--as:#FEF3DC;--z:#2563EB;--zs:#EAF1FE;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--t)}
+#rbac-finanzas,.fz-modal{--r:#E2231A;--ra:#B91C1C;--rs:#FDECEA;--t:#1F2430;--m:#6B7380;--b:#E6EAF0;--f:#F5F7FA;--v:#16A34A;--vs:#E8F7EE;--a:#B45309;--as:#FEF3DC;--z:#2563EB;--zs:#EAF1FE;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--t)}
 #rbac-finanzas *{box-sizing:border-box}
 .fz{display:flex;flex-direction:column;gap:16px;padding:4px 0 24px}
 .fz-i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
@@ -129,3 +129,26 @@ html body #screen-finanzas.fz-screen.fz-screen>.card>h2,html body #screen-finanz
 .fz-toast.on{opacity:1;transform:translate(-50%,0)}.fz-toast.mal{background:#B91C1C}
 @media (max-width:1100px){.fz-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.fz-g2,.fz-g2.b,.fz-g2.c{grid-template-columns:minmax(0,1fr)}.fz-cont{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.fz-kpis,.fz-g3{grid-template-columns:minmax(0,1fr)}.fz-kpi strong{font-size:22px}.fz-tab{height:36px;padding:0 12px;font-size:13px}.fz-form,.fz-form.in{grid-template-columns:minmax(0,1fr)}.fz-cont,.fz-cont.lot{grid-template-columns:repeat(2,minmax(0,1fr))}.fz-mini{grid-template-columns:repeat(2,1fr)}.fz-top-f{grid-template-columns:26px 28px 1fr auto}.fz-top-f small{display:none}}
+
+/* R196z · Modal de compra: colores propios (vive en <body>, fuera de #rbac-finanzas), pie fijo con Cancelar + Guardar compra,
+   mensajes por campo y cuenta vinculada en solo lectura. Blanco liso, sin degradados. */
+.fz-modal *{box-sizing:border-box}
+.fz-modal-c{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.fz-modal-h{padding:16px 18px 0}
+.fz-modal-b{padding:4px 18px 12px;overflow:auto;flex:1 1 auto;min-height:0}
+.fz-modal-pie{flex:none;background:#fff;border-top:1px solid #EEF1F5;padding:12px 18px}
+.fz-modal-pie .fz-err{margin:0 0 10px}
+.fz-modal-pie .fz-acc{margin:0;justify-content:flex-end}
+.fz-modal-pie .fz-btn{min-width:120px}
+.fz-modal .fz-btn[disabled]{opacity:.5;pointer-events:none}
+.fz-modal .fz-btn .fz-spin{width:14px;height:14px;border-color:rgba(255,255,255,.45);border-top-color:#fff}
+.fz-form label[hidden],.fz-fe[hidden]{display:none}
+.fz-fe{color:var(--ra);font-size:11.5px;font-weight:600}
+.fz-modal .fz-form .fz-inv{border-color:var(--r);background:#FFFBFA}
+.fz-cuenta-ro{display:flex;flex-direction:column;gap:2px;background:var(--f);border:1px solid var(--b);border-radius:10px;padding:10px 12px}
+.fz-cuenta-ro small{color:var(--m);font-size:11.5px;font-weight:600}.fz-cuenta-ro b{font-size:14px;word-break:break-all}.fz-cuenta-ro span{color:#4B5360;font-size:12.5px}
+.fz-t td small{display:block;color:var(--m);font-size:11.5px;font-weight:500}
+.fz-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 0}
+.fz-filtros button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:#4B5360;background:#fff;border:1px solid var(--b)}
+.fz-filtros button.on{background:var(--rs);color:var(--ra);border-color:#F6C9C6}
+@media (max-width:640px){.fz-modal{padding:0;place-items:end stretch}.fz-modal-c{width:100%;max-height:94vh;border-radius:16px 16px 0 0}.fz-modal-pie .fz-acc{flex-wrap:nowrap}.fz-modal-pie .fz-btn{flex:1;min-width:0}}
