@@ -183,7 +183,7 @@
     return '<div class="fz-card"><div class="fz-cab">' + ico('trend') + '<h3>Período</h3><span class="fz-sub r">' + fecha(r.desde) + ' → ' + fecha(r.hasta) + '</span></div>' +
       '<div class="fz-filtros">' + (g && g.meses ? g.meses.map(function (m) { var on = r.desde === m.mes + '-01' && r.hasta.slice(0, 7) === m.mes; return '<button type="button" class="' + (on ? 'on' : '') + '" data-fz-ganmes="' + esc(m.mes) + '">' + esc(nombreMes(m.mes)) + '</button>'; }).join('') : '') +
       '<button type="button" data-fz-gantri="1">Últimos 3 meses</button></div>' +
-      '<div class="fz-form in" style="margin-top:10px"><label>Desde<input type="date" data-fz-ganr="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-ganr="hasta" value="' + esc(r.hasta) + '"></label><button type="button" class="fz-btn sec" data-fz="ganrango">Ver rango</button><button type="button" class="fz-btn sec" data-fz="ganexcel">' + ico('dl') + 'Excel del detalle</button></div>' +
+      '<div class="fz-form in" style="margin-top:10px"><label>Desde<input type="date" data-fz-ganr="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-ganr="hasta" value="' + esc(r.hasta) + '"></label><button type="button" class="fz-btn sec" data-fz="ganrango">Ver rango</button><button type="button" class="fz-btn sec" data-fz="ganexcel">' + ico('dl') + 'Excel del detalle</button><button type="button" class="fz-btn sec" data-fz="ganaud">' + ico('alert') + 'Auditoría de cartera</button></div>' +
       (g && g.meses ? '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Mes</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th><th class="n">Costos</th><th class="n">Pagos a proveedores</th><th class="n">Resultado</th><th class="c">Margen</th><th class="c">Cobertura</th></tr></thead><tbody>' +
         g.meses.map(function (m) { return '<tr><td><b>' + esc(nombreMes(m.mes)) + '</b><small>' + m.altas + ' altas · ' + m.renovaciones + ' renov.</small></td><td class="n">' + L(m.cobradoHnl) + '</td><td class="n">' + L(m.pendienteHnl) + '</td><td class="n">' + L(m.esperadoHnl) + '</td><td class="n">' + L(m.costoHnl) + '</td><td class="n">' + L(m.desembolsoHnl) + '</td><td class="n">' + (m.estado === 'sin_datos' ? '<span class="fz-pend">Sin datos</span>' : m.resultadoHnl == null ? '<span class="fz-pend">No calculable</span>' : '<b class="' + (m.resultadoHnl >= 0 ? 'vd' : 'rj') + '">' + L(m.resultadoHnl) + '</b>') + '</td><td class="c">' + P(m.margen) + (m.margenDefinitivo ? '' : '<small class="fz-pend">no definitivo</small>') + '</td><td class="c">' + P(m.coberturaCostos) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') + '</div>';
   }
@@ -235,6 +235,56 @@
         .catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.innerHTML = '<div class="fz-vacio-s"><b>No se pudo abrir</b> ' + esc(e.message) + '</div>'; });
     }
     cargarP();
+  }
+  // R197c · AUDITORÍA DE CARTERA (solo lectura): cada servicio vigente o con evento en el período, clasificado sin inferir.
+  // Vigente ≠ cobrado · fecha movida ≠ pago · precio de ficha ≠ ingreso. Descarga CSV enmascarado (sin teléfonos ni PIN).
+  var CLASE_AUD = { alta_cobrada: ['Alta cobrada', 'ok'], renovacion_cobrada: ['Renovación cobrada', 'ok'], cobro_socios: ['Cobro por Socios', 'ok'], ajuste_sin_pago: ['Ajuste sin pago', 'gris'], renovacion_sin_cobro: ['Renovada sin cobro (por conciliar)', 'warn'], sin_movimiento: ['Sin movimiento', 'gris'], datos_insuficientes: ['Datos insuficientes', 'pend'], cobro_sin_servicio: ['Cobro sin servicio', 'pend'] };
+  function abrirAuditoria() {
+    var r = ganRango(), f = { plataforma: '', vendedor: '', clase: '', pagina: 1 }, x = null;
+    var mm = modal('Auditoría de cartera', '<div class="fz-vacio-s"><span class="fz-spin"></span> Cruzando CRM, Control Maestro, libro y costos…</div>'); mm.classList.add('ancho');
+    function dibujar() {
+      var b = mm.querySelector('.fz-modal-b'); if (!b) return; var rs = x.resumen, cl = Object.keys(CLASE_AUD);
+      var mini = '<div class="fz-mini"><div><small>Servicios vigentes al ' + fecha(rs.corte) + '</small><b>' + rs.serviciosVigentes + '</b></div><div><small>Vigentes con cobro en el período</small><b>' + rs.vigentesConCobro + '</b></div><div><small>Vigentes solo vigentes</small><b>' + rs.vigentesSoloVigentes + '</b></div><div><small>Cobrado a servicios</small><b>' + L(rs.cobradoServiciosHnl) + '</b></div></div>';
+      var cu = rs.cuadre || {};
+      var cuadre = '<p class="fz-sub">Cuadre del libro: cobros originales ' + L(cu.cobrosOriginalesHnl || 0) + ' = asignado a servicios ' + L(cu.asignadoServiciosHnl || 0) + ' + abonos ' + L(cu.abonosVentasAnterioresHnl || 0) + ' + no asignado ' + L(cu.noAsignadoHnl || 0) + ' → diferencia <b>' + L(cu.diferenciaHnl || 0) + '</b>' +
+        (rs.sociosSinFicha ? ' · ' + rs.sociosSinFicha + ' pago(s) de Socios sin ficha (' + L(rs.sociosSinFichaHnl) + ')' : '') + (rs.sociosCompartidosHnl ? ' · Socios compartidos sin repartir ' + L(rs.sociosCompartidosHnl) : '') + '</p>';
+      var tabla = '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Plataforma</th><th class="n">Vigentes</th><th class="n">Cuentas</th><th class="n">Clientes</th><th class="n">Con cobro</th>' + cl.map(function (k) { return '<th class="n">' + esc(CLASE_AUD[k][0]) + '</th>'; }).join('') + '<th class="n">Cobrado</th><th class="n">Sin costo</th></tr></thead><tbody>' +
+        x.porPlataforma.map(function (p) { return '<tr><td><b>' + esc(p.nombre) + '</b></td><td class="n">' + p.vigentes + '</td><td class="n">' + p.cuentas + '</td><td class="n">' + p.clientes + '</td><td class="n">' + p.clientesConCobro + '</td>' + cl.map(function (k) { return '<td class="n">' + (p[k] || '') + '</td>'; }).join('') + '<td class="n">' + L(p.cobradoHnl) + '</td><td class="n">' + p.sinCosto + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      var filtros = '<div class="fz-form in" style="margin-top:10px"><label>Plataforma<select data-af="plataforma"><option value="">Todas</option>' + (x.plataformas || x.porPlataforma).map(function (p) { return '<option value="' + esc(p.plataforma) + '"' + (p.plataforma === f.plataforma ? ' selected' : '') + '>' + esc(p.nombre) + '</option>'; }).join('') + '</select></label>' +
+        '<label>Vendedor<select data-af="vendedor"><option value="">Todos</option>' + (x.vendedores || []).map(function (v) { return '<option' + (v === f.vendedor ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>' +
+        '<label>Clase<select data-af="clase"><option value="">Todas</option>' + cl.map(function (k) { return '<option value="' + k + '"' + (k === f.clase ? ' selected' : '') + '>' + esc(CLASE_AUD[k][0]) + ' (' + (rs.porClase[k] || 0) + ')</option>'; }).join('') + '</select></label>' +
+        '<button type="button" class="fz-btn sec" data-acsv>' + ico('dl') + 'CSV enmascarado</button></div>';
+      var filas = '<div class="fz-tw" style="margin-top:8px"><table class="fz-t"><thead><tr><th>Clase</th><th>Beneficiario</th><th>Titular</th><th>Vendedor</th><th>Cuenta</th><th class="n">Precio</th><th>Fecha anterior → nueva</th><th class="n">Cobrado</th><th>Movimientos</th><th>Último cobro</th><th>Faltantes</th></tr></thead><tbody>' +
+        x.filas.map(function (c) {
+          var k = CLASE_AUD[c.clase] || [c.clase, 'gris'];
+          return '<tr><td><span class="fz-pill ' + k[1] + '">' + esc(k[0]) + '</span><small>' + esc(String(c.compraId || 'sin ID').slice(-10)) + '</small></td><td><b>' + esc(c.beneficiario || '—') + '</b></td><td>' + esc(c.titular || '—') + '</td><td>' + esc(c.vendedor) + '</td><td>' + esc(c.cuentaCorreo || '—') + (c.perfil ? '<small>' + esc(c.perfil) + '</small>' : '') + '</td><td class="n">' + L(c.precioFicha || 0) + '</td>' +
+            '<td>' + (c.fechaNueva ? fecha(c.fechaAnterior) + ' → ' + fecha(c.fechaNueva) + '<small>' + esc(c.renovadoPor || '') + (c.origenRenovacion ? ' · ' + esc(c.origenRenovacion) : '') + (c.motivoAjuste ? ' · ' + esc(c.motivoAjuste) : '') + '</small>' : '—') + '</td><td class="n">' + L(c.cobradoHnl) + '</td>' +
+            '<td>' + (c.movimientos.length ? c.movimientos.map(function (m) { return '<small>' + fecha(m.fecha) + ' · ' + esc(m.tipo) + ' · ' + (m.cobrado == null ? 'compartido' : L(m.cobrado)) + (m.banco ? ' · ' + esc(m.banco) : '') + ' · ref ' + esc(String(m.movimientoId).slice(-10)) + '</small>'; }).join('') : '—') + '</td>' +
+            '<td>' + (c.ultimoCobro ? fecha(c.ultimoCobro.fecha) + '<small>' + esc(c.ultimoCobro.tipo) + '</small>' : '—') + '</td><td>' + c.ausencias.map(function (a) { return '<small class="fz-pend">' + esc(a) + '</small>'; }).join('') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      var pags = Math.max(1, Math.ceil(x.total / x.porPagina));
+      var pag = '<div class="fz-filtros" style="margin-top:8px">' + (x.pagina > 1 ? '<button type="button" data-apag="-1">← Anterior</button>' : '') + '<span class="fz-sub">Página ' + x.pagina + ' de ' + pags + ' · ' + x.total + ' servicio(s)</span>' + (x.pagina < pags ? '<button type="button" data-apag="1">Siguiente →</button>' : '') + '</div>';
+      b.innerHTML = '<p class="fz-sub">' + fecha(x.desde) + ' → ' + fecha(x.hasta) + ' · SOLO LECTURA: no crea cobros ni cambia fechas, cuentas o perfiles. «Renovada sin cobro» = por conciliar, no «impagada».</p>' + mini + cuadre + tabla + filtros + filas + pag +
+        '<details><summary>Limitaciones de esta consulta</summary>' + (x.limitaciones || []).map(function (t) { return '<p class="fz-sub">' + esc(t) + '</p>'; }).join('') + '</details>';
+    }
+    function cargarA() {
+      var b = mm.querySelector('.fz-modal-b'); if (b && x) b.style.opacity = '.55';
+      api('finp_auditoria_cartera', { desde: r.desde, hasta: r.hasta, plataforma: f.plataforma, vendedor: f.vendedor, clase: f.clase, pagina: f.pagina }).then(function (j) { if (!x || !f.plataforma) j.plataformas = j.porPlataforma; else j.plataformas = x.plataformas; x = j; if (b) b.style.opacity = ''; dibujar(); })
+        .catch(function (e) { var bb = mm.querySelector('.fz-modal-b'); if (bb) { bb.style.opacity = ''; bb.innerHTML = '<div class="fz-vacio-s"><b>No se pudo abrir la auditoría</b> ' + esc(e.message) + '</div>'; } });
+    }
+    mm.addEventListener('change', function (e) { var t = e.target; if (t.matches('[data-af]')) { f[t.dataset.af] = t.value; f.pagina = 1; cargarA(); } });
+    mm.addEventListener('click', function (e) {
+      var t;
+      if ((t = e.target.closest('[data-apag]'))) { f.pagina = Math.max(1, f.pagina + Number(t.dataset.apag)); cargarA(); }
+      else if ((t = e.target.closest('[data-acsv]'))) {
+        var btn = t; btn.disabled = true;
+        api('finp_auditoria_cartera', { desde: r.desde, hasta: r.hasta, plataforma: f.plataforma, vendedor: f.vendedor, clase: f.clase, formato: 'csv' }).then(function (j) {
+          var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + j.csv], { type: 'text/csv;charset=utf-8' })); a.download = 'Sublichat_Auditoria_' + r.desde + '_' + r.hasta + (f.plataforma ? '_' + f.plataforma : '') + '.csv'; a.click();
+          toast('CSV enmascarado: ' + j.filas + ' fila(s).');
+        }).catch(function (e2) { toast(e2.message, true); }).then(function () { btn.disabled = false; });
+      }
+    });
+    cargarA();
   }
   function ganCuentas(g) {
     var fp = st.ganF.plat, q = (st.ganF.cuentas || '').toLowerCase();
@@ -928,6 +978,7 @@
       if (a === 'reintentar') cargar(true);
       else if (a === 'ganrango') { var dd = (document.querySelector('[data-fz-ganr="desde"]') || {}).value, hh = (document.querySelector('[data-fz-ganr="hasta"]') || {}).value; if (/^\d{4}-\d{2}-\d{2}$/.test(dd) && /^\d{4}-\d{2}-\d{2}$/.test(hh)) { st.ganR = { desde: dd, hasta: hh }; pintar(); } }
       else if (a === 'ganexcel') ganExcel(t);
+      else if (a === 'ganaud') abrirAuditoria(); // R197c · auditoría solo lectura (vigente ≠ cobrado)
       else if (a === 'ganrecargar') { delete st.gan[ganClave()]; pintar(); }
       else if (a === 'costear') { t.disabled = true; t.textContent = 'Calculando…'; api('finp_costear', { limite: 40 }).then(function (r) { var c = r.costeo || {}; toast(c.activo === false ? (c.motivo || 'Costeo apagado.') : 'Costos al día: ' + (c.costeadas || 0) + ' venta(s) costeadas.'); cargar(true); }).catch(function (e) { toast(e.message, true); cargar(true); }); }
       else if (a === 'productos') abrirProductos();
