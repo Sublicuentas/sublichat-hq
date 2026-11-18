@@ -890,6 +890,8 @@ export default async function handler(req, res) {
     if (ACCIONES_PANEL.includes(accion)) { // R196 · FINANZAS: solo Sublicuentas o quien él autorice en Permisos (módulo «finanzas-panel»)
       const puede = await PERMISOS.decidir(db, authUser, "finanzas-panel", identity.role === "sublicuentas");
       if (!puede) return res.status(403).json({ ok: false, error: "Su usuario no tiene Finanzas. Sublicuentas lo activa en Permisos." });
+      // R197c · la auditoría de cartera (beneficiarios, cobros por servicio) es aparte: solo Sublicuentas o quien él active en «finanzas-auditoria».
+      if (accion === "finp_auditoria_cartera" && !(await PERMISOS.decidir(db, authUser, "finanzas-auditoria", identity.role === "sublicuentas"))) return res.status(403).json({ ok: false, error: "La auditoría de cartera es solo para Sublicuentas (o quien él active en Permisos)." });
       const cd = { R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(db, desde).get()) };
       const handled = await handlePanel(db, accion, body, identity, authUser, res, { hoyYmdHN, auditar, loadMethods, resumenInventario: resumenInvEmpresa, costosProveedor: costosProvPanel, rentabilidad: rentPanel, MODELOS: MODELOS_FIN, MONEDAS: MONEDAS_FIN,
         correrCosteo: (limite = 40) => correrCosteoPanel(db, { ...cd, hoy: hoyYmdHN(), actor: "sistema", limite }), R: cd.R, leerMovimientos: cd.leerMovimientos }); // R196i · con tope, aparte del panel · R197: motor de ganancias (solo lectura)

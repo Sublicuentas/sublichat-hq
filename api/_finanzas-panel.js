@@ -13,7 +13,7 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
-import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
+import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
 import { ventasACostear as ventasACostearG } from "./_finanzas-costeo.js";
 import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
 import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
@@ -340,7 +340,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_ganancias_plataforma"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_ganancias_plataforma", "finp_auditoria_cartera"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -772,7 +772,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
     }
 
     // ---------------- R197 · GANANCIAS de todas las plataformas (motor único, SOLO LECTURA: no crea ni cambia nada)
-    if (accion === "finp_ganancias" || accion === "finp_ganancias_cuenta" || accion === "finp_ganancias_excel" || accion === "finp_ganancias_plataforma") {
+    if (accion === "finp_ganancias" || accion === "finp_ganancias_cuenta" || accion === "finp_ganancias_excel" || accion === "finp_ganancias_plataforma" || accion === "finp_auditoria_cartera") {
       if (!d.leerMovimientos || !d.R) throw errUsuario("El motor de ganancias no está disponible.");
       const ymdOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
       const mesHoy = hoy.slice(0, 7);
@@ -781,7 +781,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       let desde = ymdOk(body.desde) ? body.desde : rangoMes(mesHoy).desde, hasta = ymdOk(body.hasta) ? body.hasta : rangoMes(mesHoy).hasta;
       if (hasta < desde) [desde, hasta] = [hasta, desde];
       if (Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) > 400) throw errUsuario("Elija un rango de hasta 13 meses.");
-      const leerDesde = accion === "finp_ganancias" ? [desde, rangoMes(mesesIni[0]).desde].sort()[0] : accion === "finp_ganancias_plataforma" ? new Date(Date.parse(`${desde}T12:00:00Z`) - 180 * 86400000).toISOString().slice(0, 10) : desde; // plataforma: 6 meses atrás para «último cobro»
+      const leerDesde = accion === "finp_ganancias" ? [desde, rangoMes(mesesIni[0]).desde].sort()[0] : accion === "finp_ganancias_plataforma" || accion === "finp_auditoria_cartera" ? new Date(Date.parse(`${desde}T12:00:00Z`) - 180 * 86400000).toISOString().slice(0, 10) : desde; // plataforma: 6 meses atrás para «último cobro»
       const mesesConsumo = mesesDe(leerDesde, hasta > hoy ? hasta : hoy);
       const [movs, clientes, inventario, lotes, productos, vipExtras, spotify, premium, consumos, cfgCosteo] = await Promise.all([
         d.leerMovimientos(leerDesde), todos("clientes"), todos("inventario"), todos("fin_lotes"), todos("fin_productos"), todos("fin_vip_extras"), todos("fin_spotify_cuentas"), todos("fin_premium_cuentas"),
@@ -799,6 +799,18 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         const cartera = conciliarCartera(ctx, calc, { plataforma: plat, vendedor: txt(body.vendedor, 60), desde, hasta, hoy }, deps);
         const vendedores = [...new Set(ctx.servicios.map((x) => String(x.vendedor || "Sin vendedor")))].sort();
         return ok({ desde, hasta, plataforma: plat, nombre: nombrePlataforma(plat), cuentas: cuentasDePlataforma(ctx, calc, plat), cartera: { resumen: cartera.resumen, filas: cartera.filas.slice(0, 1500), truncado: cartera.filas.length > 1500 }, vendedores, plataformaResumen: calc.porPlataforma.find((x) => x.plataforma === plat) || null, definiciones: DEFINICIONES });
+      }
+      if (accion === "finp_auditoria_cartera") { // R197c · auditoría SOLO LECTURA: no crea, no cambia, no borra; queda registro del acceso
+        const plat = txt(body.plataforma, 40), vend = txt(body.vendedor, 60), clase = txt(body.clase, 40);
+        const aud = auditarCartera(ctx, calc, { desde, hasta, hoy, plataforma: plat, vendedor: vend }, deps);
+        const filtradas = clase ? aud.filas.filter((f) => f.clase === clase) : aud.filas;
+        try { await col("auditoria_eventos").add({ tipo: "finanzas_auditoria_consulta", modulo: "finanzas_panel", accion: "finp_auditoria_cartera", actorUsuario: identity.usuario, rol: identity.role, origen: txt(body.origen, 20) || "web", detalle: `${desde}..${hasta} ${plat || "todas"} ${vend || ""} ${clase || ""} ${body.formato === "csv" ? "csv" : "json"}`.trim().slice(0, 160), filas: filtradas.length, resultado: "ok", createdAt: ahora }); } catch (e) { console.error("auditoria_cartera log", e); }
+        const meta = { desde, hasta, corte: aud.resumen.corte, version: "r197c", fuentes: ["clientes (CRM)", "inventario (Control Maestro, consulta)", "finanzas_movimientos (libro)", "fin_lotes / fin_vip_extras / fin_spotify_cuentas / fin_premium_cuentas (costos)"],
+          limitaciones: ["Solo la ÚLTIMA renovación y el último ajuste quedan guardados en cada servicio: renovaciones intermedias sin cobro no se reconstruyen aquí.", "Los cobros por Socios se enlazan por las fichas que el socio amarró; un pago de varios servicios se marca «compartido» y no se reparte.", "Correos enmascarados; no se devuelven teléfonos, PIN, claves ni tokens."] };
+        if (body.formato === "csv") return ok({ ...meta, csv: csvAuditoria(filtradas), filas: filtradas.length });
+        const porPagina = Math.min(500, Math.max(20, Number(body.porPagina) || 200)), pagina = Math.max(1, Math.floor(Number(body.pagina) || 1));
+        return ok({ ...meta, resumen: aud.resumen, porPlataforma: aud.porPlataforma, clases: aud.clases, sociosSinFicha: aud.sociosSinFicha.slice(0, 200), total: filtradas.length, pagina, porPagina, filas: filtradas.slice((pagina - 1) * porPagina, pagina * porPagina),
+          vendedores: [...new Set(ctx.servicios.map((x) => String(x.vendedor || "Sin vendedor")))].sort() });
       }
       if (accion === "finp_ganancias_excel") { const filas = filasExcel(calc); return ok({ desde, hasta, filas: filas.slice(0, 20000), truncado: filas.length > 20000 }); }
       // meses de comparación (mismo motor)

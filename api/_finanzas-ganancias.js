@@ -420,3 +420,122 @@ export function filasExcel(calc) {
   for (const c of calc.costos) f.push({ Fecha: c.fechaCompra || "", Tipo: `Costo · ${c.regla}`, Plataforma: nombrePlataforma(c.plataforma), "Cuenta madre": c.correo || "", Perfil: "", Beneficiario: "", "Titular de ficha": "", Vendedor: "", Proveedor: c.proveedor || "", "Ingreso cobrado": "", "Ingreso pendiente": "", "Costo imputado": c.costoHnl, Resultado: "", Moneda: c.moneda || "HNL", Tasa: c.tasa ?? "", Estado: c.aviso ? "Datos incompletos" : "Costo real", Fuente: "", Banco: "", "Registrado por": "", Combo: "", Referencia: c.loteId || c.familiaId || "" });
   return f;
 }
+
+// ---------------------------------------------------------------- 6) AUDITORÍA DE CARTERA (R197c · SOLO LECTURA)
+// PDF «Autorización limitada: auditoría real de cartera, cobros y ganancias» (18/11/2026).
+// Una fila por SERVICIO (compraId) vigente al corte o con evento en el período, clasificada SIN inferir:
+//   alta_cobrada · renovacion_cobrada · cobro_socios · ajuste_sin_pago · renovacion_sin_cobro («por conciliar», NO «impagada»)
+//   · sin_movimiento (vigente sin ingreso en el rango; se muestra el último cobro verificable) · datos_insuficientes (sin compraId).
+// Además: cobros del período sin servicio en ninguna ficha (cobro_sin_servicio). Nunca escribe, nunca crea IDs.
+export const CLASES_AUDITORIA = Object.freeze({
+  alta_cobrada: "Alta cobrada", renovacion_cobrada: "Renovación cobrada", cobro_socios: "Cobro por Panel de Socios",
+  ajuste_sin_pago: "Ajuste de fecha sin pago", renovacion_sin_cobro: "Renovación sin cobro identificado (por conciliar)",
+  sin_movimiento: "Sin movimiento del período", datos_insuficientes: "Datos insuficientes (sin ID de compra)", cobro_sin_servicio: "Cobro sin servicio en ficha",
+});
+const enRangoIso = (iso, desde, hasta) => { const f = String(iso || "").slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(f) && f >= desde && f <= hasta; };
+export function enmascararCorreo(c) { const t = s(c, 160).toLowerCase(); if (!t) return ""; const [u, d] = t.split("@"); if (!d) return t.length <= 4 ? "***" : `${t.slice(0, 2)}***${t.slice(-2)}`; return `${u.slice(0, 2)}***@${d}`; }
+
+export function auditarCartera(ctx, calc, { desde, hasta, hoy = "", plataforma = "", vendedor = "" }, deps) {
+  const corte = hoy && hasta > hoy ? hoy : hasta;
+  const famOk = (f) => !plataforma || f === plataforma || (plataforma === "hbomax" && String(f).startsWith("hbomax"));
+  const vendOk = (v) => !vendedor || String(v || "Sin vendedor").toLowerCase() === vendedor.toLowerCase();
+  const vigenteMov = (m) => !deps.R.anuladoOReversa(m);
+  // Cobros por Panel de Socios del período (no pasan por «ventas»: se enlazan por las fichas que el socio amarró)
+  const socioPorCompra = new Map(); const sociosSinFicha = [];
+  for (const m of calc._movs || []) {
+    if (!vigenteMov(m) || !["compra_socio", "renovacion_socio"].includes(String(m.subtipo || "")) || String(m.tipo) !== "ingreso") continue;
+    const f = deps.R.movementYmd(m); if (!f || f < desde || f > hasta) continue;
+    const cids = [...new Set([...(Array.isArray(m.fichasVinculadas) ? m.fichasVinculadas.map((v) => s(v && v.compraId)) : []), ...(Array.isArray(m.asignaciones) ? m.asignaciones.map((a) => s(a && a.compraId)) : []), m.subtipo === "renovacion_socio" ? s(m.compraId) : ""].filter(Boolean))];
+    const ref = { movimientoId: s(m.id, 160), fecha: f, monto: r2(m.monto), banco: s(m.banco, 40), pedidoId: s(m.pedidoId, 120), socio: s(m.socioNombre, 60), compartido: cids.length > 1 };
+    if (!cids.length) { sociosSinFicha.push(ref); continue; }
+    for (const cid of cids) (socioPorCompra.get(cid) || socioPorCompra.set(cid, []).get(cid)).push(ref);
+  }
+  const ultimo = new Map();
+  for (const v of deps.ventasACostear(calc._movs || [], "2000-01-01", deps.R, { paraIngresos: true })) { if (v.anulada) continue; for (const cid of [v.compraId, ...(v.compraIds || []), ...((v.asignaciones || []).map((a) => a.compraId))].filter(Boolean)) { const u = ultimo.get(cid); if (!u || v.fecha > u.fecha) ultimo.set(cid, { fecha: v.fecha, movimientoId: v.id, tipo: v.subtipo === "compra_nueva" ? "alta" : "renovación" }); } }
+  const lineasPor = new Map(); for (const l of calc.lineas) { if (!l.compraId) continue; (lineasPor.get(l.compraId) || lineasPor.set(l.compraId, []).get(l.compraId)).push(l); }
+  const costoCta = new Set(calc.costos.filter((c) => c.cuentaId).map((c) => c.cuentaId)), costoPlat = new Set(calc.costos.filter((c) => !c.cuentaId).map((c) => c.plataforma));
+  const filas = [], vistos = new Set();
+  for (const sv of ctx.servicios) {
+    const cid = s(sv.compraId, 160); const cta = cid ? ctx.cuentaPorCompra.get(cid) : null;
+    const fam = familia(sv.plataforma, sv.planHbo || (cta && cta.planHbo)); if (!famOk(fam) || !vendOk(sv.vendedor)) continue;
+    const venc = ymd(sv.fechaRenovacion); const vig = !!venc && venc >= corte;
+    const mis = cid ? lineasPor.get(cid) || [] : []; const soc = cid ? socioPorCompra.get(cid) || [] : [];
+    const ur = sv.ultimaRenovacion && typeof sv.ultimaRenovacion === "object" ? sv.ultimaRenovacion : null;
+    const aj = sv.ultimoAjusteAdministrativo && typeof sv.ultimoAjusteAdministrativo === "object" ? sv.ultimoAjusteAdministrativo : null;
+    const renovEnRango = ur && enRangoIso(ur.at, desde, hasta), ajusteEnRango = aj && enRangoIso(aj.at, desde, hasta);
+    if (!vig && !mis.length && !soc.length && !renovEnRango && !ajusteEnRango) continue;
+    if (cid) vistos.add(cid);
+    const cli = ctx.clientePorId.get(sv._clienteId) || {};
+    const cobrado = r2(mis.reduce((a, l) => a + l.cobrado, 0) + soc.reduce((a, x) => a + (x.compartido ? 0 : x.monto), 0));
+    const ausencias = [];
+    let clase;
+    if (!cid) { clase = "datos_insuficientes"; ausencias.push("sin compraId: no se puede enlazar con cobros"); }
+    else if (mis.some((l) => l.tipo === "venta")) clase = "alta_cobrada";
+    else if (mis.length) clase = "renovacion_cobrada";
+    else if (soc.length) clase = "cobro_socios";
+    else if (ajusteEnRango) clase = "ajuste_sin_pago";
+    else if (renovEnRango) { clase = "renovacion_sin_cobro"; if (s(ur.lote)) ausencias.push(`la renovación cita el pago ${s(ur.lote, 80)} pero no está en el libro del período`); }
+    else clase = "sin_movimiento";
+    if (!cta && PLAT_CUENTA.has(fam)) ausencias.push("sin cuenta madre enlazada");
+    if (cid && ctx.enlacePorCorreo.has(cid)) ausencias.push("cuenta enlazada solo por correo");
+    if (fam === "hbomax") ausencias.push("HBO sin plan clasificado");
+    const conCosto = !!((cta && costoCta.has(cta.id)) || costoPlat.has(fam));
+    if (!conCosto) ausencias.push("sin costo vinculado en el período");
+    const u = cid ? ultimo.get(cid) : null;
+    const ev = mis.length ? mis : [];
+    filas.push({
+      clase, compraId: cid, clienteId: s(sv._clienteId, 160), titular: s(cli.nombre || cli.nombrePerfil, 80),
+      beneficiario: s(sv.beneficiarioNombre || sv.beneficiario || (cta && cta._perfilPorCompra.get(cid)) || cli.nombre, 80),
+      plataforma: fam, vendedor: s(sv.vendedor, 60) || "Sin vendedor", cuentaMadreId: cta ? s(cta.id, 160) : "", cuentaCorreo: enmascararCorreo(cta ? cta.correo : sv.correo), acceso: cta ? (cta._pseudo ? "acceso_individual" : "cuenta_madre") : "",
+      perfil: cta ? s(cta._slotPorCompra.get(cid), 20) : "", precioFicha: r2(sv.precio), vigente: vig, proximaRenovacion: venc,
+      fechaAnterior: ymd((ajusteEnRango ? aj : ur || {}).fechaAnterior), fechaNueva: ymd((ajusteEnRango ? aj : ur || {}).fechaNueva),
+      renovadoPor: s((ajusteEnRango ? aj : ur || {}).por, 40), renovadoAt: s((ajusteEnRango ? aj : ur || {}).at, 25), origenRenovacion: s((ajusteEnRango ? aj : ur || {}).origen, 20), motivoAjuste: ajusteEnRango ? s(aj.motivo, 120) : "",
+      cobradoHnl: cobrado, pendienteHnl: r2(mis.reduce((a, l) => a + l.pendiente, 0)),
+      movimientos: [...ev.map((l) => ({ movimientoId: l.referencia, cobroIds: l.cobroIds || [], fecha: l.fecha, tipo: l.tipo === "venta" ? "alta" : l.tipo === "renovacion" ? "renovación" : "otro", cobrado: l.cobrado, banco: l.banco, origen: l.fuente, registradoPor: l.registradoPor, combo: !!l.combo })),
+        ...soc.map((x) => ({ movimientoId: x.movimientoId, cobroIds: [x.movimientoId], fecha: x.fecha, tipo: "socios", cobrado: x.compartido ? null : x.monto, banco: x.banco, origen: "socios", registradoPor: x.socio, combo: x.compartido, pedidoId: x.pedidoId }))],
+      ultimoCobro: u, costoVinculado: conCosto, ausencias,
+      estadoConciliacion: clase === "alta_cobrada" || clase === "renovacion_cobrada" || clase === "cobro_socios" ? (ausencias.length ? "cobrado_con_faltantes" : "conciliado") : clase === "sin_movimiento" ? "sin_movimiento" : "por_conciliar",
+    });
+  }
+  for (const l of calc.lineas) { // cobros del período cuyo servicio ya no está en ninguna ficha
+    if (!famOk(l.plataforma) || !vendOk(l.vendedor) || (l.compraId && vistos.has(l.compraId))) continue;
+    filas.push({ clase: "cobro_sin_servicio", compraId: l.compraId, clienteId: l.clienteId, titular: l.titular, beneficiario: l.beneficiario, plataforma: l.plataforma, vendedor: l.vendedor, cuentaMadreId: l.cuentaId, cuentaCorreo: enmascararCorreo(l.cuentaCorreo), acceso: "", perfil: l.perfil, precioFicha: l.precioFicha, vigente: false, proximaRenovacion: "", fechaAnterior: "", fechaNueva: "", renovadoPor: "", renovadoAt: "", origenRenovacion: "", motivoAjuste: "",
+      cobradoHnl: l.cobrado, pendienteHnl: l.pendiente, movimientos: [{ movimientoId: l.referencia, cobroIds: l.cobroIds || [], fecha: l.fecha, tipo: l.tipo === "venta" ? "alta" : l.tipo === "renovacion" ? "renovación" : "otro", cobrado: l.cobrado, banco: l.banco, origen: l.fuente, registradoPor: l.registradoPor, combo: !!l.combo }], ultimoCobro: null, costoVinculado: !!l.costoCubierto,
+      ausencias: [l.compraId ? "el compraId del cobro no está en ninguna ficha" : "cobro sin compraId"], estadoConciliacion: "por_conciliar" });
+  }
+  // Resumen por clase y por plataforma × clase (contar servicios, nunca sumar motivos como clientes)
+  const porClase = {}; for (const k of Object.keys(CLASES_AUDITORIA)) porClase[k] = 0;
+  const plat = new Map();
+  for (const f of filas) {
+    porClase[f.clase] = (porClase[f.clase] || 0) + 1;
+    const x = plat.get(f.plataforma) || plat.set(f.plataforma, { plataforma: f.plataforma, nombre: nombrePlataforma(f.plataforma), vigentes: 0, cuentas: new Set(), clientes: new Set(), clientesConCobro: new Set(), cobradoHnl: 0, sinCosto: 0, ...Object.fromEntries(Object.keys(CLASES_AUDITORIA).map((k) => [k, 0])) }).get(f.plataforma);
+    x[f.clase]++; if (f.vigente) x.vigentes++; if (f.cuentaMadreId) x.cuentas.add(f.cuentaMadreId); if (f.clienteId) x.clientes.add(f.clienteId); if (f.cobradoHnl > 0) x.clientesConCobro.add(f.clienteId); x.cobradoHnl = r2(x.cobradoHnl + f.cobradoHnl); if (!f.costoVinculado) x.sinCosto++;
+  }
+  const vig = filas.filter((f) => f.vigente);
+  const sociosHnl = r2(filas.flatMap((f) => f.movimientos.filter((m) => m.tipo === "socios")).reduce((a, m) => a + (Number(m.cobrado) || 0), 0));
+  const sociosCompartidosHnl = r2([...new Map([...socioPorCompra.values()].flat().filter((x) => x.compartido).map((x) => [x.movimientoId, x.monto])).values()].reduce((a, b) => a + b, 0));
+  const resumen = {
+    desde, hasta, corte, servicios: filas.length, serviciosVigentes: vig.length, clientesVigentes: new Set(vig.map((f) => f.clienteId)).size,
+    vigentesConCobro: vig.filter((f) => f.cobradoHnl > 0 || f.clase === "cobro_socios").length, vigentesSoloVigentes: vig.filter((f) => !(f.cobradoHnl > 0 || f.clase === "cobro_socios")).length,
+    porClase, cobradoServiciosHnl: r2(filas.reduce((a, f) => a + f.cobradoHnl, 0)), cobradoSociosHnl: sociosHnl, sociosCompartidosHnl, sociosSinFichaHnl: r2(sociosSinFicha.reduce((a, x) => a + x.monto, 0)), sociosSinFicha: sociosSinFicha.length,
+    cuadre: calc.resumen.cuadre, sinCostoVinculado: filas.filter((f) => !f.costoVinculado).length,
+  };
+  const porPlataforma = [...plat.values()].map((x) => ({ ...x, cuentas: x.cuentas.size, clientes: x.clientes.size, clientesConCobro: x.clientesConCobro.size })).sort((a, b) => b.vigentes - a.vigentes);
+  const orden = Object.keys(CLASES_AUDITORIA);
+  return { resumen, porPlataforma, filas: filas.sort((a, b) => orden.indexOf(a.clase) - orden.indexOf(b.clase) || a.plataforma.localeCompare(b.plataforma) || a.beneficiario.localeCompare(b.beneficiario)), sociosSinFicha, clases: CLASES_AUDITORIA };
+}
+
+// CSV ENMASCARADO (descarga de auditoría): sin teléfonos, PIN, claves ni tokens; correos enmascarados; IDs abreviados.
+export function csvAuditoria(filas = []) {
+  const corto = (v) => { const t = s(v, 200); return t.length > 10 ? `…${t.slice(-8)}` : t; };
+  const esc = (v) => { // anti-inyección de fórmulas en Excel + comillas CSV
+    let t = String(v ?? "").replace(/[\r\n]+/g, " ");
+    if (typeof v === "string" && /^[=+\-@]/.test(t)) t = `'${t}`;
+    return /[",;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const cab = ["Clase", "Estado conciliación", "Plataforma", "Beneficiario", "Titular", "Vendedor", "Cuenta (enmascarada)", "Perfil", "ID compra", "ID cliente", "ID cuenta madre", "Precio ficha", "Vigente", "Próx. renovación", "Fecha anterior", "Fecha nueva", "Renovado por", "Origen", "Cobrado L", "Pendiente L", "Movimientos", "Último cobro", "Costo vinculado", "Faltantes"];
+  const out = [cab.join(",")];
+  for (const f of filas) out.push([CLASES_AUDITORIA[f.clase] || f.clase, f.estadoConciliacion, nombrePlataforma(f.plataforma), f.beneficiario, f.titular, f.vendedor, f.cuentaCorreo, f.perfil, corto(f.compraId), corto(f.clienteId), corto(f.cuentaMadreId), f.precioFicha, f.vigente ? "Sí" : "No", f.proximaRenovacion, f.fechaAnterior, f.fechaNueva, f.renovadoPor, f.origenRenovacion, f.cobradoHnl, f.pendienteHnl,
+    f.movimientos.map((m) => `${m.fecha} ${m.tipo} ${m.cobrado ?? "compartido"} ${corto(m.movimientoId)}`).join(" | "), f.ultimoCobro ? `${f.ultimoCobro.fecha} ${f.ultimoCobro.tipo}` : "", f.costoVinculado ? "Sí" : "No", f.ausencias.join("; ")].map(esc).join(","));
+  return out.join("\n");
+}
