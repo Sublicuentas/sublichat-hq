@@ -312,6 +312,39 @@ function crmUserError(message) {
   error.crmUserMessage = error.message;
   return error;
 }
+// R198c · PDF «Sublichat APK: modo offline completo», fase 3. Conflictos de la COLA OFFLINE de la APK: solo cuando el
+// cuerpo trae colaOffline === true (Web, Telegram y APKs anteriores no lo mandan: su comportamiento no cambia).
+// Nada se escribe: la operación vuelve a la APK como «Requiere revisión» con el motivo.
+function conflictoCola(codigo, mensaje, extra = {}) { const e = crmUserError(mensaje); e.conflicto = { codigo, ...extra }; return e; }
+const enmascararCorreoCola = (c = "") => { const [u, d] = String(c || "").split("@"); return d ? `${u.slice(0, 2)}***@${d}` : "cuenta"; };
+function revisarFechaCola(body, s = {}, plataforma = "") {
+  if (body?.colaOffline !== true || !String(body.fechaEsperada || "").trim()) return;
+  const enServidor = parseFechaDMY(aFechaFB(s.fechaRenovacion || "")), vista = parseFechaDMY(aFechaFB(body.fechaEsperada));
+  if (enServidor && vista && enServidor.getTime() === vista.getTime()) return;
+  throw conflictoCola("fecha_cambio", `La fecha de ${s.plataforma || plataforma || "este servicio"} cambió mientras usted estaba sin conexión (el teléfono tenía ${body.fechaEsperada}; ahora es ${s.fechaRenovacion || "sin fecha"}). No se renovó para no duplicar: revise y vuelva a renovar si corresponde.`, { fechaEsperada: String(body.fechaEsperada), fechaServidor: String(s.fechaRenovacion || "") });
+}
+async function validarColaOffline(db, body, nuevo = null, anterior = null) {
+  if (body?.colaOffline !== true || !nuevo) return;
+  const esp = body.esperado && typeof body.esperado === "object" ? body.esperado : {};
+  // 1) Ficha editada desde Web/Telegram mientras el teléfono estaba sin señal: no se pisa en silencio.
+  if (anterior && esp.servicioUpdatedAt && String(anterior.updatedAt || "") && String(anterior.updatedAt) !== String(esp.servicioUpdatedAt)) {
+    throw conflictoCola("ficha_cambio", "Esta venta se modificó desde Web o Telegram mientras usted estaba sin conexión. No se pisó: abra la ficha actual y repita el cambio si sigue siendo válido.", { servidorUpdatedAt: String(anterior.updatedAt), esperado: String(esp.servicioUpdatedAt) });
+  }
+  // 2) Cupo: la cuenta que se eligió sin señal pudo llenarse desde Web/Telegram. No se vende doble.
+  const fam = canonPlat(nuevo.plataforma);
+  const antes = new Set((anterior ? perfilesOperativos(anterior, "") : []).map((p) => normCorreo(p.correo)));
+  for (const p of perfilesOperativos(nuevo, "")) {
+    const c = normCorreo(p.correo); if (!c || antes.has(c)) continue;
+    const cuenta = await buscarCuentaInventario(db, { plataforma: fam, correo: p.correo, inventarioId: p.inventarioId || "" });
+    if (!cuenta) continue;
+    const d = cuenta.data() || {}; const lista = Array.isArray(d.clientes) ? d.clientes : [];
+    if (nuevo.compraId && lista.some((x) => String(x?.compraId || "") === String(nuevo.compraId))) continue; // ya era suya (reintento)
+    const cap = Number(d.capacidad) || 0;
+    if (lista.some((x) => x && x.cuentaCompleta === true) || (cap > 0 && lista.length >= cap)) {
+      throw conflictoCola("sin_cupo", `La cuenta ${enmascararCorreoCola(c)} ya no tiene cupo: se ocupó desde Web o Telegram mientras usted estaba sin conexión. No se guardó la venta; elija otra cuenta.`, { cuenta: enmascararCorreoCola(c), ocupados: lista.length, capacidad: cap });
+    }
+  }
+}
 
 // R196u · Netflix VIP: el PIN de perfil NO es obligatorio, pero se GUARDA si el operador lo registró (cliente que lo pidió).
 function servicioPinOpcional(plataforma) { const p = normPlat(plataforma).replace(/\s+/g, ""); return p.includes("netflixvip") || p === "vipnetflix" || (p.includes("netflix") && p.includes("vip")); }
@@ -1624,6 +1657,7 @@ async function handlerCore(req, res) {
           vendedorTelefono: vendedorTelefono || servicioAnterior?.vendedorTelefono || ""
         }, body.fichaTexto || "", servicioAnterior || {}, nombreFinal);
         await validarHboServicio(db, nuevo, servicioAnterior); // R196v
+        await validarColaOffline(db, body, nuevo, servicioAnterior); // R198c · cola offline: ficha cambiada o cuenta sin cupo
         for (let i = 0; i < nuevo.perfiles.length; i++) {
           const p = nuevo.perfiles[i] || {};
           if (nuevo.tipoVenta !== "cuenta_completa" && servicioUsaSelectorDispositivo(nuevo.plataforma) && !["tv", "cel"].includes(String(p.dispositivo || ""))) /* R142: la cuenta completa no tiene perfiles ni TV/celular */ throw crmUserError(`Perfil ${i + 1}: seleccione si se instalará en TV o celular.`);
@@ -1911,6 +1945,8 @@ async function handlerCore(req, res) {
         const idx = resolveServicioIndex(servicios, { servicioIndex, plataforma, correo, compraId: compraIdBody });
         if (idx === -1) throw crmUserError("No encontré esa plataforma en el cliente.");
         const s = servicios[idx];
+        // R198c · cola offline: si la fecha del servidor ya no es la que vio el teléfono, NO se renueva (evita doble renovación).
+        revisarFechaCola(body, s, plataforma);
         fechaAnterior = s.fechaRenovacion || fechaActual || null;
         // Oct-2026: "duracion" = {unidad:"dias"|"meses", cantidad, base:"auto"|"vencimiento"|"hoy"}.
         // Clientes viejos siguen mandando dias/fechaExacta y conservan su comportamiento.
@@ -2317,7 +2353,7 @@ async function handlerCore(req, res) {
       serviciosResumen
     });
   } catch (e) {
-    if (e && e.crmUserMessage) return res.status(200).json({ ok: false, error: e.crmUserMessage });
+    if (e && e.crmUserMessage) return res.status(200).json({ ok: false, error: e.crmUserMessage, ...(e.conflicto ? { conflicto: e.conflicto } : {}) }); // R198c
     console.error("RENOVAR_ERROR", e);
     return res.status(500).json({ error: "No se pudo guardar el cambio. Intente nuevamente." });
   }
@@ -2545,4 +2581,4 @@ export default async function handler(req, res) {
 }
 export const __wrapperInternal = { camposModificados, OP_ID_RE };
 export const __r186 = { renovarLote, calcularRenovacionPorDuracion }; // pruebas R186
-export const __r188 = { buildServicio, validarHboServicio, sincronizarInventarioServicio }; // pruebas R188 (dispositivo por servicio, modalidad) · R196v (HBO)
+export const __r188 = { buildServicio, validarHboServicio, sincronizarInventarioServicio, validarColaOffline, revisarFechaCola }; // pruebas R188 (dispositivo por servicio, modalidad) · R196v (HBO)
