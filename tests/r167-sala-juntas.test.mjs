@@ -99,7 +99,7 @@ test('borrador: solo lo ve Naara y no genera avisos; abrir sala solo Naara; pane
 
 test('web: botón Sala de Juntas después de Catálogo y pantalla separada', () => {
   const js = fs.readFileSync(new URL('../ui-v2.js', import.meta.url), 'utf8');
-  assert.match(js, /\{ s: 'catalogo-relojes' \}, \{ s: 'sala-juntas' \}/);
+  assert.match(js, /\{ s: 'portal-cliente' \}, \{ s: 'sala-juntas' \}/); // R199c · Catálogo salió del menú (Anexo V2)
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /sala-juntas\.js\?v=/);
   const P = require('../api/_permisos.js');

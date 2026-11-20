@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 const R = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 const css = R('ui-lego.css'), html = R('index.html'), inicio = R('ui-v2-inicio.js'), app = R('sublichat-app.js');
-const fase3 = css.slice(css.indexOf('R199b · FASE 3'), css.indexOf('@media (max-width: 380px)'));
+const fase3 = css.slice(css.indexOf('R199b · FASE 3'), css.indexOf('R199c · FASES 4 y 5'));
 const P = 'html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body';
 
 test('Inicio: sin botón «Registrar renovación» (celular y web); la acción sigue en Clientes/Agenda', () => {
@@ -24,7 +24,7 @@ test('Fase 3 vive dentro del bloque móvil y cada regla lleva el prefijo Lego de
   const reglas = fase3.match(/^\s+html[^{]*\{/gm) || [];
   assert.ok(reglas.length > 40);
   for (const r of reglas) for (const sel of r.replace(/\{$/, '').split(/,\s*\n/)) assert.ok(sel.trim().startsWith(P), sel.trim().slice(0, 90));
-  assert.match(html, /ui-lego\.css\?v=20261120-r199b/);
+  assert.match(html, /ui-lego\.css\?v=20261120-r199[b-z]/);
 });
 
 test('Clientes: hero con ícono y Sublirobot, CRM rojo 3D, pestaña activa roja, filtros 3D, tarjeta con tetones y Renovar verde', () => {
