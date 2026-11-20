@@ -147,5 +147,5 @@ test('J · Excel: totales iguales a Finanzas, beneficiario real, cuenta, pago y 
   assert.equal(JSON.stringify([...db._data.entries()]), antes);
   const w = fs.readFileSync(new URL('../finanzas-web.js', import.meta.url), 'utf8');
   assert.match(w, /finp_ganancias_plataforma/); assert.match(w, /abrirPlataforma\(t\.dataset\.fzGanplat\)/, '«Cuentas» abre el detalle (antes solo filtraba)'); assert.match(w, /function repCuentas\(\)/, 'también desde Reportes');
-  assert.match(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /finanzas-web\.js\?v=2026111[7-9]-r197[b-z]/);
+  assert.match(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /finanzas-web\.js\?v=2026111[7-9]-r19(7[b-z]|8[a-z])/);
 });
