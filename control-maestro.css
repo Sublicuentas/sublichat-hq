@@ -612,3 +612,8 @@ body:not(.cm-control-no-scroll) #screen-control-cuentas.screen.active:not(:fulls
 .cm-sale-type.cuenta_completa{background:#eef2ff;border-color:#c7d2fe;color:#3730a3}
 .cm-sale-type.revisar{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
 .cm-detail-side .cm-sale-type{margin-top:0}
+
+/* R199d · Control Maestro en celular = consulta / resumen de avance (ambos temas). PC sin cambios. */
+@media (max-width: 767.98px) {
+  #screen-control-cuentas :is([data-cm-review-ok],[data-cm-review-issue],[data-cm-review-delete],[data-cm-delete-account],[data-cm-delete-service],[data-cm-delete-excel],[data-cm-delete-excel-account],[data-cm-delete-historical-excel],[data-cm-remove-assignment],[data-cm-edit-service],[data-cm-edit-inventory-client],[data-cm-note-toggle],[data-cm-note-save],[data-cm-restore],[data-cm-action="save-backup"],[data-cm-action="review"],[data-sp-revisada],[data-sp-incidencia],[data-sp-resync]) { display: none !important; }
+}

@@ -1771,6 +1771,9 @@
     render();
   }
 
+  const CM_ACCIONES_ESCRITURA='[data-cm-review-ok],[data-cm-review-issue],[data-cm-review-delete],[data-cm-delete-account],[data-cm-delete-service],[data-cm-delete-excel],[data-cm-delete-excel-account],[data-cm-delete-historical-excel],[data-cm-remove-assignment],[data-cm-edit-service],[data-cm-edit-inventory-client],[data-cm-note-toggle],[data-cm-note-save],[data-cm-restore],[data-cm-action="save-backup"],[data-cm-action="review"],[data-sp-revisada],[data-sp-incidencia],[data-sp-resync],.cm-excel-delete-ok';
+  function cmSoloLecturaMovil(){try{return window.matchMedia('(max-width: 767.98px)').matches;}catch(_){return false;}}
+  window.SublichatCMSoloLecturaMovil=cmSoloLecturaMovil;
   function controlDelegatedClick(event){
     const host=root();
     if(!host||!host.contains(event.target))return;
@@ -2927,6 +2930,15 @@
     // cambiar filtros, abrir/cerrar filas o volver a renderizar. Ninguna debe
     // cambiar el modo completo. Se reafirma después del evento sin interferir
     // con el onclick original.
+    // R199d · En celular Control Maestro queda en consulta / resumen de avance (decisión del dueño, ambos temas).
+    // Se bloquean solo las acciones que escriben; la PC conserva todas las funciones según permisos.
+    screen.addEventListener('click',(event)=>{
+      if(!cmSoloLecturaMovil())return;
+      const w=event.target.closest(CM_ACCIONES_ESCRITURA);
+      if(!w||!screen.contains(w))return;
+      event.preventDefault();event.stopImmediatePropagation();
+      try{if(typeof window.mostrarToast==='function')window.mostrarToast('Control Maestro en celular es solo consulta. Revise o edite desde la PC.');}catch(_){}
+    },true);
     screen.addEventListener('click',controlDelegatedClick,false);
     screen.addEventListener('click',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);
     screen.addEventListener('change',()=>{if(state.controlExpanded)setTimeout(persistControlExpanded,0);},true);

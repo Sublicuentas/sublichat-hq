@@ -1,11 +1,12 @@
 /* =====================================================================================================
-   R199 · TEMA LEGO 3D (opcional, por usuario) — SOLO CELULAR
-   Se activa con <html data-ui="lego"> (Mi perfil → Tema de interfaz). Sin ese atributo, o en pantallas de
-   escritorio, NADA de este archivo aplica: el tema Clásico / Ejecutivo queda idéntico.
+   R199 · TEMA LEGO 3D (opcional, por usuario) — CELULAR (R199) y PC (R199d)
+   Se activa con <html data-ui="lego"> (Mi perfil → Tema de interfaz). Sin ese atributo NADA de este archivo
+   aplica: el tema Clásico / Ejecutivo queda idéntico en PC y celular.
    Solo piel visual: no cambia rutas, formularios, datos, permisos ni cálculos.
    Imágenes: /assets/lego/*.webp (decorativas; si no cargan, la app funciona igual).
+   Orden: tokens (todos los anchos) → bloque celular (<768) → componentes comunes → bloque PC (≥768).
    ===================================================================================================== */
-@media (max-width: 767.98px) {
+/* ---------- Tokens del tema (PC y celular) ---------- */
   html[data-ui="lego"] {
     --lg-head: #0F1725; --lg-red: #E6211C; --lg-red-d: #B9140F; --lg-blue: #178EF1; --lg-blue-d: #0F6FC0;
     --lg-yellow: #FFCC2F; --lg-yellow-d: #E0A800; --lg-green: #13BD63; --lg-green-d: #0B9A4E; --lg-purple: #9252DA;
@@ -19,6 +20,7 @@
     --lg-stud2: radial-gradient(circle at 50% 40%, rgba(255,255,255,.9) 0 26%, rgba(255,255,255,.35) 28% 60%, transparent 62%);
   }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body { background: var(--lg-bg) !important; }
+@media (max-width: 767.98px) {
 
   /* ---------- LegoCard (tarjetas base) ---------- */
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card,
@@ -365,6 +367,129 @@
   }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn.good { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d), 0 7px 14px rgba(230, 33, 28, .22) !important; }
 
+  /* ---------- R199c (solo celular): indicadores en 2 columnas ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid, .fz-kpis) { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card:only-child, .rbac-grid > .rbac-card:nth-child(3):last-child) { grid-column: 1 / -1; }
+  /* ---------- Finanzas: hero con Sublirobot, mes + 2 acciones, pestañas y títulos de sección con bloque de color ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas > .card { padding: 0 12px 14px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head {
+    position: relative; display: block !important; margin: 0 -12px 12px !important; padding: 18px 12px 0 !important; border-radius: 20px 20px 0 0; isolation: isolate;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::before { /* bloque rojo diagonal */
+    content: ""; position: absolute; right: 0; top: 0; width: 42%; height: 124px; background: var(--lg-red); z-index: -1; pointer-events: none;
+    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::after { /* Sublirobot oficial */
+    content: ""; position: absolute; right: 8px; top: 6px; width: 96px; height: 120px; pointer-events: none; z-index: 0;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child { min-height: 106px; padding: 0 100px 0 56px; background: url("/assets/lego/cartera.webp") no-repeat 0 2px / 46px 46px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head h1 { font-size: clamp(25px, 7.4vw, 30px) !important; font-weight: 800 !important; color: var(--lg-txt) !important; margin: 0 0 4px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p { font-size: 12.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p::after { content: ""; display: block; width: 92px; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 12px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes { grid-column: 1 / -1; display: flex !important; align-items: center; gap: 8px; width: 100%; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes input { flex: 1; width: auto !important; min-width: 0; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-btn { width: 100%; justify-content: center; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab { display: flex !important; align-items: center; gap: 10px; flex-wrap: wrap; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab > svg { /* bloque de color con tetones para el ícono de la sección */
+    box-sizing: content-box; width: 20px !important; height: 20px !important; padding: 9px 8px 7px; border-radius: 10px; flex: none;
+    stroke: #fff !important; color: #fff !important; background: var(--lg-stud) 4px 1px / 8px 8px no-repeat, var(--lg-stud) calc(100% - 4px) 1px / 8px 8px no-repeat, var(--lg-red);
+    box-shadow: inset 0 -3px 0 var(--lg-red-d);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab h3 { font-size: 18px !important; font-weight: 800 !important; margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab .fz-sub { flex-basis: 100%; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi b,
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi strong { font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas details.fz-avz > summary { padding: 4px 0; }
+
+  /* ---------- Mi perfil (visual 05): hero con Sublirobot, portada compacta, tema arriba, cifras en 3 columnas ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card { position: relative; overflow: visible !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 { isolation: isolate; min-height: 50px; padding-right: 100px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::before {
+    content: ""; position: absolute; right: -12px; top: -16px; width: 42%; height: 116px; background: var(--lg-red); z-index: -1; pointer-events: none;
+    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::after {
+    content: ""; position: absolute; right: -2px; top: -10px; width: 90px; height: 112px; pointer-events: none;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 + .count { padding-right: 40% !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > * { margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover { order: 1; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > #profTemaUi { order: 2; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { order: 3; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-dashboard { order: 4; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .rbac-card:not(#profTemaUi) { order: 5; }
+  /* portada: la imagen sigue siendo el banner que eligió cada usuario; solo cambia el marco */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover {
+    position: relative !important; min-height: 168px !important; border-radius: 18px !important; border: 3px solid var(--lg-red) !important;
+    box-shadow: 0 4px 0 var(--lg-red-d), 0 10px 20px rgba(15, 23, 37, .12) !important; overflow: hidden !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions {
+    position: absolute !important; top: 8px !important; right: 8px !important; left: auto !important; display: flex !important; gap: 6px !important; z-index: 3;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions button {
+    min-height: 32px !important; padding: 4px 10px !important; font-size: 11.5px !important; font-weight: 800 !important; border-radius: 10px !important;
+    background: var(--lg-red) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.6) !important; box-shadow: 0 2px 0 var(--lg-red-d) !important; opacity: 1 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity {
+    position: absolute !important; left: 10px !important; right: 10px !important; bottom: 10px !important; top: auto !important; transform: none !important; margin: 0 !important;
+    display: grid !important; grid-template-columns: 88px minmax(0, 1fr) !important; grid-template-rows: auto auto auto; column-gap: 12px !important; row-gap: 2px !important;
+    align-items: center; text-align: left !important; padding: 8px 10px !important; background: rgba(255,255,255,.9) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-avatar {
+    grid-row: 1 / span 3; width: 84px !important; height: 84px !important; margin: 0 !important; border-radius: 22px !important; border: 3px solid var(--lg-red) !important;
+    box-shadow: 0 3px 0 var(--lg-red-d) !important; position: static !important; transform: none !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-name { font-size: 20px !important; font-weight: 800 !important; margin: 0 !important; text-align: left !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-cargo { font-size: 12px !important; text-align: left !important; color: var(--lg-txt2) !important; margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-role { justify-self: start; font-size: 11px !important; padding: 3px 8px !important; margin: 2px 0 0 !important; border-radius: 999px !important; }
+  /* cifras del asesor: 3 columnas compactas con franja de color */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div {
+    --lg-c: var(--lg-blue); min-height: 0 !important; padding: 10px 8px !important; text-align: left !important; background: #fff !important;
+    border: 1px solid var(--lg-line) !important; border-left: 6px solid var(--lg-c) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(2) { --lg-c: var(--lg-green); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(3) { --lg-c: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(4) { --lg-c: var(--lg-purple); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(5) { --lg-c: var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6) { --lg-c: var(--lg-cyan); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid b { display: block; font-size: clamp(17px, 5.2vw, 21px) !important; font-weight: 800 !important; line-height: 1.1 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid span { display: block; font-size: 11px !important; line-height: 1.2 !important; color: var(--lg-txt2) !important; margin-top: 3px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-opciones { grid-template-columns: 1fr !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-op { padding: 8px 10px !important; gap: 10px !important; min-height: 56px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-muestra { width: 34px; height: 30px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-txt small { font-size: 11px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; min-height: 44px !important; min-width: 0 !important; width: 100% !important; white-space: normal !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil #profGuardar { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+
+  @media (max-width: 380px) { /* 360 px: el título de la banda no se corta */
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 { font-size: 24px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em { font-size: 12.5px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #clientesTitleCount { font-size: 13px !important; margin-left: 2px; padding: 1px 8px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-left: 54px !important; background-size: 44px 44px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-right: 88px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2::after { width: 84px; height: 108px; }
+        html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-filters select { font-size: 12px !important; padding-left: 8px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header { padding-right: 12px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header::after { display: none !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2k { padding: 10px !important; gap: 8px !important; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) * { transition: none !important; }
+  }
+}
+
+/* =====================================================================================================
+   R199d · COMPONENTES LEGO COMUNES — PC Y CELULAR (misma biblioteca, el tema es por usuario y sirve en ambos).
+   Se movieron aquí desde el bloque móvil (R199c) sin cambiar su contenido; lo que es solo acomodo de celular
+   (rejillas de 2 columnas, encabezado de Finanzas, Mi perfil) sigue dentro del bloque móvil.
+   ===================================================================================================== */
   /* =====================================================================================================
      R199c · FASES 4 y 5 — BIBLIOTECA GLOBAL LEGO para el resto de pantallas móviles (Anexo V2).
      Una sola capa de componentes que hereda cada pantalla existente según su tipo de contenido:
@@ -389,6 +514,8 @@
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-partidos { --lg-ico-mod: url("/assets/lego/reloj.webp"); }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-perfil { --lg-ico-mod: url("/assets/lego/robot-saludando.webp"); }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-inventario { --lg-ico-mod: url("/assets/lego/cartera.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-control-cuentas { --lg-ico-mod: url("/assets/lego/clientes-panel.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-sala-juntas { --lg-ico-mod: url("/assets/lego/calendario.webp"); }
 
   /* ---------- LegoHero de módulo: ícono + título corto + subtítulo + trazo rojo (sin robot en subpáginas) ---------- */
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 {
@@ -463,8 +590,6 @@
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n+2) { --lg-c: var(--lg-red); }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n+3) { --lg-c: var(--lg-blue); }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n) { --lg-c: var(--lg-yellow); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid, .fz-kpis) { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card:only-child, .rbac-grid > .rbac-card:nth-child(3):last-child) { grid-column: 1 / -1; }
 
   /* ---------- LegoListRow: filas de lista en tarjetas con franja lateral (estado por color, con texto) ---------- */
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-row) {
@@ -492,39 +617,6 @@
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-clientes) table thead th { background: #F3F6FB !important; color: var(--lg-txt2) !important; }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(details) > summary { cursor: pointer; min-height: 44px; }
 
-  /* ---------- Finanzas: hero con Sublirobot, mes + 2 acciones, pestañas y títulos de sección con bloque de color ---------- */
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas > .card { padding: 0 12px 14px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head {
-    position: relative; display: block !important; margin: 0 -12px 12px !important; padding: 18px 12px 0 !important; border-radius: 20px 20px 0 0; isolation: isolate;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::before { /* bloque rojo diagonal */
-    content: ""; position: absolute; right: 0; top: 0; width: 42%; height: 124px; background: var(--lg-red); z-index: -1; pointer-events: none;
-    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::after { /* Sublirobot oficial */
-    content: ""; position: absolute; right: 8px; top: 6px; width: 96px; height: 120px; pointer-events: none; z-index: 0;
-    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child { min-height: 106px; padding: 0 100px 0 56px; background: url("/assets/lego/cartera.webp") no-repeat 0 2px / 46px 46px; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head h1 { font-size: clamp(25px, 7.4vw, 30px) !important; font-weight: 800 !important; color: var(--lg-txt) !important; margin: 0 0 4px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p { font-size: 12.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p::after { content: ""; display: block; width: 92px; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 12px; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes { grid-column: 1 / -1; display: flex !important; align-items: center; gap: 8px; width: 100%; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes input { flex: 1; width: auto !important; min-width: 0; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-btn { width: 100%; justify-content: center; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab { display: flex !important; align-items: center; gap: 10px; flex-wrap: wrap; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab > svg { /* bloque de color con tetones para el ícono de la sección */
-    box-sizing: content-box; width: 20px !important; height: 20px !important; padding: 9px 8px 7px; border-radius: 10px; flex: none;
-    stroke: #fff !important; color: #fff !important; background: var(--lg-stud) 4px 1px / 8px 8px no-repeat, var(--lg-stud) calc(100% - 4px) 1px / 8px 8px no-repeat, var(--lg-red);
-    box-shadow: inset 0 -3px 0 var(--lg-red-d);
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab h3 { font-size: 18px !important; font-weight: 800 !important; margin: 0 !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab .fz-sub { flex-basis: 100%; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi b,
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi strong { font-weight: 800 !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas details.fz-avz > summary { padding: 4px 0; }
-
   /* ---------- Sala de Juntas / Control Maestro / Portal: solo contenedores y encabezados (sin tocar su lógica) ---------- */
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-sala-juntas .sj-cab { border-radius: var(--lg-r) !important; }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-control-cuentas :where(.cm-shell) { border-radius: var(--lg-r) !important; }
@@ -533,70 +625,8 @@
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .chat-head { border-radius: var(--lg-r) !important; border: 1px solid var(--lg-line) !important; box-shadow: var(--lg-sh) !important; background: #fff !important; }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .chip { min-height: 36px; }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .input-row .send { background: var(--lg-red) !important; color: #fff !important; box-shadow: 0 3px 0 var(--lg-red-d) !important; border-radius: 12px !important; min-width: 44px; }
-
-  /* ---------- Mi perfil (visual 05): hero con Sublirobot, portada compacta, tema arriba, cifras en 3 columnas ---------- */
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card { position: relative; overflow: visible !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 { isolation: isolate; min-height: 50px; padding-right: 100px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::before {
-    content: ""; position: absolute; right: -12px; top: -16px; width: 42%; height: 116px; background: var(--lg-red); z-index: -1; pointer-events: none;
-    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::after {
-    content: ""; position: absolute; right: -2px; top: -10px; width: 90px; height: 112px; pointer-events: none;
-    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 + .count { padding-right: 40% !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil { display: flex !important; flex-direction: column !important; gap: 12px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > * { margin: 0 !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover { order: 1; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > #profTemaUi { order: 2; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { order: 3; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-dashboard { order: 4; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .rbac-card:not(#profTemaUi) { order: 5; }
-  /* portada: la imagen sigue siendo el banner que eligió cada usuario; solo cambia el marco */
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover {
-    position: relative !important; min-height: 168px !important; border-radius: 18px !important; border: 3px solid var(--lg-red) !important;
-    box-shadow: 0 4px 0 var(--lg-red-d), 0 10px 20px rgba(15, 23, 37, .12) !important; overflow: hidden !important;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions {
-    position: absolute !important; top: 8px !important; right: 8px !important; left: auto !important; display: flex !important; gap: 6px !important; z-index: 3;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions button {
-    min-height: 32px !important; padding: 4px 10px !important; font-size: 11.5px !important; font-weight: 800 !important; border-radius: 10px !important;
-    background: var(--lg-red) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.6) !important; box-shadow: 0 2px 0 var(--lg-red-d) !important; opacity: 1 !important;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity {
-    position: absolute !important; left: 10px !important; right: 10px !important; bottom: 10px !important; top: auto !important; transform: none !important; margin: 0 !important;
-    display: grid !important; grid-template-columns: 88px minmax(0, 1fr) !important; grid-template-rows: auto auto auto; column-gap: 12px !important; row-gap: 2px !important;
-    align-items: center; text-align: left !important; padding: 8px 10px !important; background: rgba(255,255,255,.9) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-avatar {
-    grid-row: 1 / span 3; width: 84px !important; height: 84px !important; margin: 0 !important; border-radius: 22px !important; border: 3px solid var(--lg-red) !important;
-    box-shadow: 0 3px 0 var(--lg-red-d) !important; position: static !important; transform: none !important;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-name { font-size: 20px !important; font-weight: 800 !important; margin: 0 !important; text-align: left !important; color: var(--lg-txt) !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-cargo { font-size: 12px !important; text-align: left !important; color: var(--lg-txt2) !important; margin: 0 !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-role { justify-self: start; font-size: 11px !important; padding: 3px 8px !important; margin: 2px 0 0 !important; border-radius: 999px !important; }
-  /* cifras del asesor: 3 columnas compactas con franja de color */
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div {
-    --lg-c: var(--lg-blue); min-height: 0 !important; padding: 10px 8px !important; text-align: left !important; background: #fff !important;
-    border: 1px solid var(--lg-line) !important; border-left: 6px solid var(--lg-c) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
-  }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(2) { --lg-c: var(--lg-green); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(3) { --lg-c: var(--lg-yellow); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(4) { --lg-c: var(--lg-purple); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(5) { --lg-c: var(--lg-red); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6) { --lg-c: var(--lg-cyan); }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid b { display: block; font-size: clamp(17px, 5.2vw, 21px) !important; font-weight: 800 !important; line-height: 1.1 !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid span { display: block; font-size: 11px !important; line-height: 1.2 !important; color: var(--lg-txt2) !important; margin-top: 3px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-opciones { grid-template-columns: 1fr !important; gap: 8px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-op { padding: 8px 10px !important; gap: 10px !important; min-height: 56px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-muestra { width: 34px; height: 30px; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-txt small { font-size: 11px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; min-height: 44px !important; }
-  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil #profGuardar { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .input-row input { min-width: 0 !important; flex: 1 1 auto !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .input-row :is(.send, .mic) { flex: 0 0 44px !important; width: 44px !important; padding: 0 !important; }
 
   /* ---------- LegoModal: hojas y ventanas móviles (están fuera de .screen) ---------- */
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body :where(.cobro-sheet, .ficha-sheet, .fz-modal-c, .pc-modal-card, .pc-modal > div, .sr-sheet, .cr-sheet) {
@@ -608,23 +638,6 @@
   }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body :where(.cobro-sheet, .ficha-sheet, .fz-modal-c, .sr-sheet, .cr-sheet) :where(input:not([type=checkbox]):not([type=radio]), select, textarea) { border-radius: 12px !important; min-height: 44px; }
 
-  @media (max-width: 380px) { /* 360 px: el título de la banda no se corta */
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 { font-size: 24px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em { font-size: 12.5px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #clientesTitleCount { font-size: 13px !important; margin-left: 2px; padding: 1px 8px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-left: 54px !important; background-size: 44px 44px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-right: 88px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2::after { width: 84px; height: 108px; }
-        html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-filters select { font-size: 12px !important; padding-left: 8px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header { padding-right: 12px !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header::after { display: none !important; }
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2k { padding: 10px !important; gap: 8px !important; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) * { transition: none !important; }
-  }
-}
 
 /* ---------- Selector «Tema de interfaz» en Mi perfil (ambos temas, todos los anchos) ---------- */
 #profTemaUi:not(#tA):not(#tB) .profile-tema-sub { display: block; color: #55647A !important; margin: 2px 0 10px; font-size: 12.5px; font-weight: 500; }
@@ -647,4 +660,194 @@
 #profTemaUi:not(#tA):not(#tB) .tema-ui-op:focus-visible { outline: 3px solid #178EF1; outline-offset: 2px; }
 @media (max-width: 767.98px) {
   html[data-ui="lego"] #profTemaUi:not(#tA):not(#tB) .tema-ui-op.tema-on { box-shadow: 0 3px 0 #B9140F, 0 6px 14px rgba(230, 33, 28, .18) !important; }
+}
+
+/* =====================================================================================================
+   R199d · TEMA LEGO EN PC (≥ 768 px) — barra superior + pestañas horizontales en relieve (sin barra lateral),
+   portadas con ícono 3D, Sublirobot solo en las principales, tablas legibles y densas. Mismo HTML y lógica.
+   ===================================================================================================== */
+@media (min-width: 768px) {
+  /* ---------- Barra 2: pestañas horizontales como piezas 3D (activa roja), con ícono en bloque de color ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) .v2-nav { background: var(--lg-bg) !important; border-bottom: 1px solid var(--lg-line) !important; box-shadow: 0 2px 0 #E3E8F0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila { gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab {
+    --lg-c: var(--lg-blue); --lg-cd: var(--lg-blue-d);
+    min-height: 42px !important; padding: 5px 12px 5px 6px !important; gap: 8px !important; border-radius: 12px !important;
+    background: #fff !important; color: var(--lg-txt) !important; border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7 !important;
+    font-weight: 700 !important; transition: transform .12s ease, box-shadow .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:hover { transform: translateY(-1px); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:active { transform: translateY(2px); box-shadow: 0 1px 0 #D5DCE7 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab > svg:first-child {
+    box-sizing: content-box; width: 16px !important; height: 16px !important; padding: 7px 6px 5px; border-radius: 8px; flex: none;
+    stroke: #fff !important; color: #fff !important; background: var(--lg-stud) 3px 1px / 6px 6px no-repeat, var(--lg-stud) calc(100% - 3px) 1px / 6px 6px no-repeat, var(--lg-c);
+    box-shadow: inset 0 -3px 0 var(--lg-cd);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab .v2-chev { width: 14px; height: 14px; stroke: currentColor !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab[data-s="agenda"] { --lg-c: var(--lg-yellow); --lg-cd: var(--lg-yellow-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab[data-s="control-cuentas"] { --lg-c: var(--lg-purple); --lg-cd: var(--lg-purple-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab[data-s="portal-cliente"] { --lg-c: var(--lg-cyan); --lg-cd: var(--lg-cyan-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab[data-s="sala-juntas"] { --lg-c: var(--lg-indigo); --lg-cd: var(--lg-indigo-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:is([data-s="finanzas"], [data-s="inicio"]) { --lg-c: var(--lg-red); --lg-cd: var(--lg-red-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-grupo[data-grupo="Operación"] .v2-tab-g { --lg-c: var(--lg-green); --lg-cd: var(--lg-green-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-grupo[data-grupo="Supervisión"] .v2-tab-g { --lg-c: var(--lg-gray); --lg-cd: var(--lg-gray-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-grupo:is([data-grupo="Más"], .v2-desborde) .v2-tab-g { --lg-c: var(--lg-head); --lg-cd: #000; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:is(.on, [aria-expanded="true"]) {
+    background: var(--lg-red) !important; color: #fff !important; border-color: var(--lg-red) !important; box-shadow: 0 3px 0 var(--lg-red-d), 0 6px 14px rgba(230, 33, 28, .22) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:is(.on, [aria-expanded="true"]) > svg:first-child { --lg-c: rgba(255,255,255,.2); --lg-cd: rgba(0,0,0,.14); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab:is(.on, [aria-expanded="true"]) span { color: #fff !important; }
+  /* submenús de Operación / Supervisión / Más */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) .v2-pop { background: var(--lg-bg) !important; border: 1px solid var(--lg-line) !important; border-radius: 16px !important; box-shadow: 0 3px 0 #D5DCE7, 0 18px 40px rgba(15, 23, 37, .16) !important; padding: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) .v2-pop .v2-mi {
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 12px !important; box-shadow: 0 2px 0 #D9DFE9 !important; margin: 0 0 6px !important; min-height: 48px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) .v2-pop .v2-mi:is(:hover, :focus-visible, .on) { border-color: #F6C9C7 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) .v2-pop .v2-mi.on { box-shadow: inset 4px 0 0 var(--lg-red), 0 2px 0 #D9DFE9 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) :is(.v2-buscar, .v2-user-box) { border-radius: 12px !important; }
+
+  /* ---------- Inicio PC: portada con Sublirobot, KPIs con bloque de color, bandas de sección con tetones ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-cab {
+    position: relative; overflow: hidden; isolation: isolate; min-height: 150px; padding: 26px 270px 26px 100px !important; margin-bottom: 16px !important;
+    background: #fff url("/assets/lego/casa.webp") no-repeat 24px 50% / 56px 56px !important; border: 1px solid var(--lg-line); border-radius: 20px; box-shadow: var(--lg-sh);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-cab::before {
+    content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 240px; background: var(--lg-red); z-index: -1;
+    clip-path: polygon(30% 0, 100% 0, 100% 100%, 0 100%);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-cab::after {
+    content: ""; position: absolute; right: 40px; top: 6px; bottom: 0; width: 150px; pointer-events: none;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-cab h2 { font-size: 32px !important; font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-cab p::after { content: ""; display: block; width: 130px; height: 5px; margin-top: 10px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) :is(#v2Inicio .v2k, #v2Inicio .v2-card, #quoteCard) { background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 18px !important; box-shadow: var(--lg-sh) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k-ico {
+    position: relative; width: 50px !important; height: 50px !important; min-width: 50px; border-radius: 14px !important; display: grid !important; place-items: center !important;
+    background: var(--lg-blue) !important; box-shadow: inset 0 -4px 0 rgba(0,0,0,.18), 0 3px 0 var(--lg-blue-d) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k-ico svg { width: 28px !important; height: 28px !important; stroke: #fff !important; color: #fff !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k-ambar .v2k-ico { background: var(--lg-yellow) !important; box-shadow: inset 0 -4px 0 rgba(0,0,0,.14), 0 3px 0 var(--lg-yellow-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k-rojo .v2k-ico { background: var(--lg-red) !important; box-shadow: inset 0 -4px 0 rgba(0,0,0,.18), 0 3px 0 var(--lg-red-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k-verde .v2k-ico { background: var(--lg-green) !important; box-shadow: inset 0 -4px 0 rgba(0,0,0,.16), 0 3px 0 var(--lg-green-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k b { font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2k small { font-weight: 700 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card { padding: 0 16px 16px !important; overflow: hidden; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header {
+    position: relative; margin: 0 -16px 12px !important; padding: 12px 80px 12px 50px !important; min-height: 46px; display: flex; align-items: center; gap: 8px;
+    background: var(--lg-red); border-radius: 18px 18px 0 0; box-shadow: inset 0 -4px 0 rgba(0,0,0,.14);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header::before {
+    content: ""; position: absolute; left: 14px; top: 50%; width: 26px; height: 12px; transform: translateY(-50%);
+    background: var(--lg-stud) left / 12px 12px no-repeat, var(--lg-stud) right / 12px 12px no-repeat;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header :is(h3, span) { color: #fff !important; margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header h3 { font-size: 16px !important; font-weight: 800 !important; flex: 1 1 auto; display: flex; align-items: center; gap: 6px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header h3 svg { display: none !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-card > header .v2-btn-sec { margin-left: auto; background: #fff !important; color: var(--lg-txt) !important; border-radius: 10px !important; box-shadow: 0 2px 0 rgba(0,0,0,.18) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-graficas > .v2-card:nth-child(2) > header { background: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-graficas > .v2-card:nth-child(2) > header :is(h3, span) { color: #2A2000 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-proximos > header { background: var(--lg-green); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-btn { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; border-radius: 12px !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .v2-btn-sec { border-radius: 10px !important; box-shadow: 0 3px 0 #D5DCE7 !important; border: 1px solid var(--lg-line) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .home-tools .focus-action-card { border-radius: 16px !important; border: 1px solid var(--lg-line) !important; box-shadow: var(--lg-sh) !important; border-top: 6px solid var(--lg-red) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .home-tools .focus-action-card:nth-child(5n+2) { border-top-color: var(--lg-yellow) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .home-tools .focus-action-card:nth-child(5n+3) { border-top-color: var(--lg-purple) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .home-tools .focus-action-card:nth-child(5n+4) { border-top-color: var(--lg-blue) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Inicio .home-tools .focus-action-card:nth-child(5n) { border-top-color: var(--lg-green) !important; }
+
+  /* ---------- Portadas principales en PC: Sublirobot a la derecha (Clientes, Renovaciones, Mi perfil) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda, #screen-perfil) > .card { position: relative !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 { background-image: url("/assets/lego/clientes.webp") !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 { background-image: url("/assets/lego/calendario.webp") !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #clientesTitleCount { background: #FFE3E2 !important; color: var(--lg-red) !important; border-radius: 999px !important; font-weight: 800 !important; padding: 2px 10px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > #clientesNuevaFicha {
+    background-color: var(--lg-red) !important; background-image: var(--lg-stud2), var(--lg-stud2) !important; background-size: 12px 12px !important; background-repeat: no-repeat !important;
+    background-position: 12px 50%, calc(100% - 12px) 50% !important; padding: 10px 34px !important; border: 0 !important; border-radius: 14px !important; color: #fff !important; font-weight: 800 !important;
+    box-shadow: 0 4px 0 var(--lg-red-d), 0 8px 16px rgba(230, 33, 28, .22) !important;
+  }
+
+  /* ---------- Clientes PC: buscador, segmentos, filtros y tabla con acciones en relieve ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs { background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important; padding: 5px !important; gap: 4px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs button { border-radius: 10px !important; font-weight: 700 !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs button.active { background: var(--lg-red) !important; color: #fff !important; box-shadow: 0 3px 0 var(--lg-red-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes :is(.clientes-controlbar .search, .clientes-filters select) { background-color: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 12px !important; box-shadow: var(--lg-sh-sm) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes :is(.clientes-filters, .clientes-controlbar) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-table-wrap { border: 1px solid var(--lg-line) !important; border-radius: 16px !important; box-shadow: var(--lg-sh) !important; overflow: auto; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr > td:first-child { box-shadow: inset 5px 0 0 var(--lg-blue); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n+2) > td:first-child { box-shadow: inset 5px 0 0 var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n+3) > td:first-child { box-shadow: inset 5px 0 0 var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n) > td:first-child { box-shadow: inset 5px 0 0 var(--lg-green); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody .client-avatar { background: #FFE9E8 !important; color: var(--lg-red) !important; border: 2px solid #FFD2D0 !important; font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody .client-platform { border: 1px solid var(--lg-line) !important; border-radius: 10px !important; box-shadow: 0 2px 0 #DCE2EB !important; background: #fff !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody .client-renew-btn {
+    background: var(--lg-green) !important; color: #fff !important; border: 0 !important; border-radius: 10px !important; font-weight: 800 !important; box-shadow: 0 3px 0 var(--lg-green-d) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody .client-renew-btn svg { stroke: #fff !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody :is(.client-wa-btn, .client-actions-btn) { background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 10px !important; box-shadow: 0 3px 0 #D5DCE7 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody .client-actions-menu { border-radius: 14px !important; border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7, 0 16px 36px rgba(15, 23, 37, .16) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #carteraAuditBox { background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 16px !important; box-shadow: var(--lg-sh) !important; }
+
+  /* ---------- Renovaciones PC: 3 KPIs con ícono y filas horizontales compactas con franja por estado ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card {
+    --lg-c: var(--lg-red); --lg-cd: var(--lg-red-d); --lg-ico: url("/assets/lego/alerta.webp");
+    position: relative; padding: 16px 16px 16px 80px !important; min-height: 84px; border: 1px solid var(--lg-line) !important; border-radius: 18px !important; box-shadow: var(--lg-sh) !important; background: #fff !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card.hoy { --lg-c: var(--lg-yellow); --lg-cd: var(--lg-yellow-d); --lg-ico: url("/assets/lego/calendario.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card.prox { --lg-c: var(--lg-blue); --lg-cd: var(--lg-blue-d); --lg-ico: url("/assets/lego/reloj.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card::before {
+    content: ""; position: absolute; left: 16px; top: 50%; width: 48px; height: 48px; transform: translateY(-50%); border-radius: 12px;
+    background-color: var(--lg-c) !important; background-image: var(--lg-ico) !important; background-repeat: no-repeat !important; background-position: center !important; background-size: 36px 36px !important;
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.16), 0 3px 0 var(--lg-cd) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card b { font-size: 26px !important; font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row {
+    --lg-c: var(--lg-blue); background: #fff !important; border: 1px solid var(--lg-line) !important; border-left: 8px solid var(--lg-c) !important; border-radius: 16px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row.venc { --lg-c: var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row.hoy { --lg-c: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row h3 { font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn { min-height: 40px; border-radius: 10px !important; background: #fff !important; color: var(--lg-txt) !important; border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7 !important; font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn.good { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 3px 0 var(--lg-red-d) !important; }
+
+  /* ---------- Finanzas PC: portada con Sublirobot; pestañas, KPIs y tablas legibles (mismos cálculos) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-head {
+    position: relative; isolation: isolate; overflow: hidden; align-items: center !important; min-height: 120px; padding: 20px 300px 20px 92px !important; margin-bottom: 16px !important;
+    background: #fff url("/assets/lego/cartera.webp") no-repeat 22px 50% / 56px 56px !important; border: 1px solid var(--lg-line); border-radius: 20px; box-shadow: var(--lg-sh);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-head::before { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 200px; background: var(--lg-red); z-index: -1; clip-path: polygon(30% 0, 100% 0, 100% 100%, 0 100%); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-head::after { content: ""; position: absolute; right: 30px; top: 6px; bottom: 0; width: 104px; pointer-events: none; background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-head h1 { font-size: 30px !important; font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-head > div:first-child > p::after { content: ""; display: block; width: 110px; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-cab > svg {
+    box-sizing: content-box; width: 20px !important; height: 20px !important; padding: 9px 8px 7px; border-radius: 10px; flex: none; stroke: #fff !important; color: #fff !important;
+    background: var(--lg-stud) 4px 1px / 8px 8px no-repeat, var(--lg-stud) calc(100% - 4px) 1px / 8px 8px no-repeat, var(--lg-red); box-shadow: inset 0 -3px 0 var(--lg-red-d);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-finanzas .fz-cab h3 { font-weight: 800 !important; }
+
+  /* ---------- Mi perfil PC: portada con marco rojo en relieve, cifras con franja de color ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover { border: 3px solid var(--lg-red) !important; border-radius: 22px !important; box-shadow: 0 4px 0 var(--lg-red-d), 0 12px 24px rgba(15, 23, 37, .12) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-avatar { border: 4px solid var(--lg-red) !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div { background: #fff !important; border: 1px solid var(--lg-line) !important; border-top: 5px solid var(--lg-blue) !important; border-radius: 16px !important; box-shadow: var(--lg-sh) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6n+2) { border-top-color: var(--lg-green) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6n+3) { border-top-color: var(--lg-yellow) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6n+4) { border-top-color: var(--lg-purple) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6n+5) { border-top-color: var(--lg-red) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6n) { border-top-color: var(--lg-cyan) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil #profGuardar { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+
+  /* ---------- KPIs genéricos en PC: varias por fila con franja de color (sin forzar 2 columnas) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.rbac-grid, .fz-kpis) { gap: 14px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card { padding: 22px 24px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 { font-size: 28px !important; min-height: 52px; padding-left: 64px !important; background-size: 52px 52px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 + .count { padding-left: 64px !important; font-size: 13.5px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) table tbody tr:hover td { background: #F7F9FC !important; }
+}
+@media (min-width: 768px) and (max-width: 1279.98px) { /* portátil / tablet: pestañas compactas para que Finanzas y los grupos sigan a la vista */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila { gap: 5px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab { padding: 4px 8px 4px 4px !important; gap: 5px !important; font-size: 12.5px !important; min-height: 38px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) #v2Fila .v2-tab > svg:first-child { width: 13px !important; height: 13px !important; padding: 6px 5px 4px; }
+}
+@media (min-width: 768px) and (prefers-reduced-motion: reduce) {
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) * { transition: none !important; }
 }
