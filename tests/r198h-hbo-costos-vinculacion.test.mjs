@@ -62,10 +62,11 @@ const compra = (x, id) => x.compras.filas.find((c) => c.loteId === id);
 test('Prueba imprescindible · 3 cuentas con compra histórica: por ID se separa atribuida, cobertura desconocida y sin compra', async () => {
   const x = await plat(fakeFirestore(semilla()), 'hbomax_standard');
   assert.equal(x.ok, true, JSON.stringify(x).slice(0, 300));
-  assert.equal(cta(x, 's1').estadoCosto, 'cobertura_desconocida');
-  assert.match(cta(x, 's1').motivoCosto, /Última compra 2026-10-07: L98 \(3\.5 USDT a 28\)\. Su duración no está documentada/);
+  // R198i · regla del dueño: la activación del 07/10 cubre la cuenta hasta la próxima activación
+  assert.equal(cta(x, 's1').estadoCosto, 'ciclo_vigente');
+  assert.match(cta(x, 's1').motivoCosto, /Activada el 2026-10-07 por L98 \(3\.5 USDT a 28\)\. Ese es el costo de la cuenta hasta la próxima activación/);
   assert.equal(cta(x, 's2').estadoCosto, 'atribuido'); assert.equal(cta(x, 's3').estadoCosto, 'atribuido');
-  assert.deepEqual(Object.keys(x.estadosCosto), ['atribuido', 'cobertura_desconocida', 'fuera_periodo', 'sin_compra']);
+  assert.deepEqual(Object.keys(x.estadosCosto), ['atribuido', 'ciclo_vigente', 'cobertura_desconocida', 'fuera_periodo', 'sin_compra']);
 });
 
 test('A · compra de octubre con cobertura DOCUMENTADA que sigue en noviembre: costo atribuible por días, sin duplicar el gasto', async () => {
@@ -78,13 +79,13 @@ test('A · compra de octubre con cobertura DOCUMENTADA que sigue en noviembre: c
   assert.match(cta(nov, 's2').motivoCosto, /14 de 31 días de la cobertura documentada \(2026-10-15 → 2026-11-14\)/);
 });
 
-test('B · compra anterior sin cobertura documentada: costo histórico visible, NO imputado a noviembre, margen no definitivo', async () => {
+test('B (R198i) · activación anterior: NO se vuelve a cobrar en noviembre (L0) pero la cuenta queda cubierta hasta la próxima activación', async () => {
   const x = await plat(fakeFirestore(semilla()), 'hbomax_standard');
   const c = compra(x, 'act119');
-  assert.equal(c.relacion, 'cobertura_desconocida'); assert.equal(c.imputadoHnl, 0); assert.equal(c.costoHnl, 98);
-  assert.equal(cta(x, 's1').historicoNoImputadoHnl, 98);
-  assert.equal(cta(x, 's1').costoHnl, 0); assert.equal(cta(x, 's1').resultadoHnl, null, 'sin costo atribuido no hay resultado');
-  assert.equal(x.plataformaResumen.margenDefinitivo, false);
+  assert.equal(c.relacion, 'ciclo_vigente'); assert.equal(c.imputadoHnl, 0); assert.equal(c.costoHnl, 98, 'la compra original no cambia');
+  assert.equal(cta(x, 's1').historicoNoImputadoHnl, 0);
+  assert.equal(cta(x, 's1').costoHnl, 0); assert.equal(cta(x, 's1').resultadoHnl, 90, 'todo lo cobrado en noviembre es ganancia del ciclo');
+  assert.equal(x.plataformaResumen.margenDefinitivo, true, 'las 3 cuentas con cobro tienen costo cubierto');
 });
 
 test('C · «HBO links» sin cuenta: queda pendiente de vínculo; no se reparte entre cuentas; propuesta solo con evidencia', async () => {
@@ -122,7 +123,7 @@ test('F · cliente con alta en octubre y renovación en noviembre: cada cobro un
   assert.deepEqual([nov.resumen.altas, nov.resumen.renovaciones], [0, 4]);
   const det = (await call(db, 'finp_ganancias_cuenta', { cuentaId: 's1', ...NOV })).cuenta;
   assert.equal(det.perfiles.find((p) => p.compraId === 'k1').recibos.length, 1, 'solo el cobro de noviembre en noviembre');
-  assert.equal(det.estadoCosto, 'cobertura_desconocida');
+  assert.equal(det.estadoCosto, 'ciclo_vigente');
 });
 
 test('G + H · consultar y conciliar NO cambia Control Maestro, planes, ventas ni compras (monto, fecha, tasa); solo fin_costo_ciclos', async () => {
@@ -149,5 +150,5 @@ test('Conciliar: solo Sublicuentas, con evidencia, sin cambiar el vínculo origi
   assert.match((await call(db, 'finp_costo_conciliar', { loteId: 'act119', coberturaDesde: '2026-10-07', evidencia: 'falta hasta' })).error, /las dos fechas/);
   assert.equal((await call(db, 'finp_costo_conciliar_quitar', { loteId: 'actDos', motivo: 'Revisión' })).ok, true);
   const c = db._data.get('fin_costo_ciclos/actDos').data; assert.equal(c.estado, 'anulado'); assert.equal(c.historial.at(-1).accion, 'quitar');
-  const x = await plat(db, 'hbomax_standard'); assert.equal(compra(x, 'actDos').relacion, 'cobertura_desconocida', 'sin la cobertura documentada vuelve a «desconocida»');
+  const x = await plat(db, 'hbomax_standard'); assert.equal(compra(x, 'actDos').relacion, 'ciclo_vigente', 'sin la cobertura documentada vuelve a la regla de activación (cubre hasta la próxima)');
 });
