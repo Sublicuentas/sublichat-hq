@@ -4348,6 +4348,7 @@ lUser.addEventListener("keydown",e=>{if(e.key==="Enter")lPass.focus();});
 
 // salir
 document.getElementById("logoutBtn").addEventListener("click",async()=>{
+  document.documentElement.dataset.ui='ejecutivo'; // R199 · el login siempre se ve Ejecutivo
   detenerClientesEnVivo();
   try{
     const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
@@ -7725,7 +7726,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   function profileServerPayload(p,usuario,options){
     const payload={
       accion:'guardar',usuario,avatar:p.avatar||'',nombre:p.nombre||'',cargo:p.cargo||'',
-      telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',banner:p.banner||'',
+      telefono:p.telefono||'',area:p.area||'',funcionesExtra:p.funcionesExtra||'',color:p.color||'',emoji:p.emoji||'',tema:p.tema||'',temaUi:p.temaUi||'',banner:p.banner||'', /* R199 · tema de interfaz por usuario */
       bannerCropMode:p.bannerCropMode||'auto',bannerPosX:Number(p.bannerPosX??50),bannerPosY:Number(p.bannerPosY??50),
       heroBannerPosX:Number(p.heroBannerPosX??50),heroBannerPosY:Number(p.heroBannerPosY??50),
       bannerZoom:Number(p.bannerZoom??100),heroBannerZoom:Number(p.heroBannerZoom??100),bannerCropUpdatedAt:p.bannerCropUpdatedAt||''
@@ -7861,7 +7862,16 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="${bg}"/><stop offset="1" stop-color="#0F2D52"/></linearGradient></defs><rect width="220" height="220" rx="56" fill="url(#g)"/><circle cx="168" cy="48" r="34" fill="rgba(255,255,255,.20)"/><text x="110" y="94" text-anchor="middle" font-size="52" font-family="Arial, sans-serif">${em}</text><text x="110" y="153" text-anchor="middle" font-size="48" font-weight="900" fill="white" font-family="Arial, sans-serif">${ini}</text></svg>`;
     return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
   }
+  // R199 · TEMA DE INTERFAZ por usuario: «ejecutivo» (predeterminado, sin cambios) u opcional «lego» (solo celular).
+  // Es solo presentación: un atributo en <html> que activa ui-lego.css. No toca datos, rutas, permisos ni cálculos.
+  function temaUiActual(){ return String(readProfile().temaUi||'')==='lego'?'lego':'ejecutivo'; }
+  function aplicarTemaUi(){ const t=currentUser()?temaUiActual():'ejecutivo'; if(document.documentElement.dataset.ui!==t)document.documentElement.dataset.ui=t; }
+  function elegirTemaUi(t){ const cur=readProfile(); cur.temaUi=t==='lego'?'lego':'ejecutivo'; saveProfile(cur); aplicarTemaUi(); }
+  window.sublichatAplicarTemaUi=aplicarTemaUi; window.sublichatTemaUi=temaUiActual;
+  window.addEventListener('sublichat:profile-changed',aplicarTemaUi);
+  try{aplicarTemaUi();}catch(_){}
   function updateTopAdvisor(){
+    aplicarTemaUi(); // R199
     const p=profileBase();
     const h=new Date().getHours();
     const saludo=(h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches');
@@ -8056,10 +8066,15 @@ _No se puede usar en dos dispositivos al mismo tiempo._
       <div class="profile-summary-grid"><div><b>${propios.length}</b><span>Servicios asignados</span></div><div><b>${fmt(totalPropios)}</b><span>Cartera asignada</span></div><div><b>${stats.games}</b><span>Juegos practicados</span></div><div><b>${stats.aula}%</b><span>Avance en aula</span></div><div><b>${stats.sent}</b><span>Tickets enviados</span></div><div><b>${stats.resolved}</b><span>Tickets resueltos</span></div></div>
       <div class="profile-dashboard"><div class="profile-main-column"><div class="rbac-card profile-activity"><b>Actividad del perfil</b>${activity.map(a=>`<div class="profile-activity-row"><span>${a.ico}</span><div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div></div>`).join('')}</div><div class="rbac-card"><b>Funciones dentro de la empresa</b><div class="profile-funciones">${todas.map(f=>`<div class="profile-funcion">${esc(f)}</div>`).join('')}</div></div></div>
       <div class="profile-side-column"><div class="rbac-card profile-progress"><b>Resumen de avance</b><div class="profile-progress-row"><span>Aula de clases</span><em>${stats.aula}%</em></div><i><u style="width:${stats.aula}%"></u></i><div class="profile-progress-row"><span>Tickets resueltos</span><em>${stats.resolved}/${Math.max(stats.sent,stats.resolved)}</em></div><i><u style="width:${Math.max(stats.sent,stats.resolved)?Math.round(stats.resolved/Math.max(stats.sent,stats.resolved)*100):0}%"></u></i><div class="profile-progress-row"><span>Materia cerebral</span><em>${stats.games} juegos</em></div></div></div></div>
-      <!-- R184 · sin selector de tema: un solo tema Sublicuentas gestionado centralmente -->
+      <!-- R199 · Tema de interfaz por usuario (Ejecutivo predeterminado · Lego opcional en celular) -->
+      <div class="rbac-card profile-tema-ui" id="profTemaUi"><b>🎨 Tema de interfaz</b><small class="profile-tema-sub">Personalice la apariencia de Sublichat en su celular. Solo cambia para usted.</small><div class="tema-ui-opciones" role="radiogroup" aria-label="Tema de interfaz">
+        <button type="button" class="tema-ui-op${temaUiActual()==='ejecutivo'?' tema-on':''}" role="radio" aria-checked="${temaUiActual()==='ejecutivo'}" data-tema-ui="ejecutivo"><span class="tema-ui-muestra ejecutivo" aria-hidden="true"></span><span class="tema-ui-txt"><b>Clásico / Ejecutivo</b><small>Diseño limpio y profesional (tema actual).</small></span><i class="tema-ui-check" aria-hidden="true"></i></button>
+        <button type="button" class="tema-ui-op${temaUiActual()==='lego'?' tema-on':''}" role="radio" aria-checked="${temaUiActual()==='lego'}" data-tema-ui="lego"><span class="tema-ui-muestra lego" aria-hidden="true"></span><span class="tema-ui-txt"><b>Tema Lego</b><small>Estilo divertido y moderno con bloques Lego (celular).</small></span><i class="tema-ui-check" aria-hidden="true"></i></button>
+      </div></div>
       <div class="rbac-card"><b>Editar perfil visible</b><div class="profile-form"><label class="rbac-field"><span>Nombre mostrado</span><input class="rbac-input" id="profNombre" value="${esc(p.nombre||'')}"></label><label class="rbac-field"><span>Cargo</span><input class="rbac-input" id="profCargo" value="${esc(p.cargo||'')}"></label><label class="rbac-field"><span>Teléfono interno</span><input class="rbac-input" id="profTelefono" value="${esc(p.telefono||'')}" placeholder="Opcional"></label><label class="rbac-field"><span>Área</span><input class="rbac-input" id="profArea" value="${esc(p.area||'')}" placeholder="Ventas, Finanzas, Auditoría…"></label><label class="rbac-field wide"><span>Foto / avatar</span><input class="profile-file" id="profFoto" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Banner de portada y mensaje diario</span><input class="profile-file" id="profBanner" type="file" accept="image/*"></label><label class="rbac-field wide"><span>Funciones extra, una por línea</span><textarea class="rbac-input" id="profFunciones" rows="3">${esc(p.funcionesExtra||'')}</textarea></label></div><div class="profile-actions"><button class="rbac-btn good" id="profGuardar">💾 Guardar perfil</button><button class="rbac-btn" id="profReset">↩️ Restaurar perfil base</button><button class="rbac-btn red" id="profSalir">🚪 Cerrar sesión</button></div></div>`;
     const saveImage=async(input,key,max,quality,msg)=>{const file=input?.files?.[0];if(!file)return;try{const dataUrl=await resizeProfilePhoto(file,max,quality),cur=readProfile();cur[key]=dataUrl;saveProfile(cur);renderPerfil();updateTopAdvisor();mostrarToast(msg);}catch(e){mostrarToast('⚠️ No se pudo procesar la imagen. Use JPG o PNG más liviano.');}};
     const foto=document.getElementById('profFoto'),banner=document.getElementById('profBanner');if(foto)foto.onchange=()=>saveImage(foto,'avatar',520,.82,'✅ Foto actualizada.');if(banner)banner.onchange=()=>saveImage(banner,'banner',1400,.72,'✅ Banner actualizado en Perfil e Inicio. Ahora puede ajustar el encuadre.');
+    document.querySelectorAll('#profTemaUi [data-tema-ui]').forEach((b)=>{b.onclick=()=>{const t=b.dataset.temaUi;elegirTemaUi(t);renderPerfil();mostrarToast(t==='lego'?'🧱 Tema Lego activado en su celular.':'✅ Tema Clásico / Ejecutivo activado.');};}); // R199
     const bannerBtn=document.getElementById('profBannerBtn');if(bannerBtn)bannerBtn.onclick=()=>document.getElementById('profBanner')?.click();
     const guardar=document.getElementById('profGuardar');if(guardar)guardar.onclick=()=>{let cur=readProfile();cur.nombre=document.getElementById('profNombre').value.trim()||p.nombre;cur.cargo=document.getElementById('profCargo').value.trim()||p.cargo;cur.telefono=document.getElementById('profTelefono').value.trim();cur.area=document.getElementById('profArea').value.trim()||p.area;cur.funcionesExtra=document.getElementById('profFunciones').value.trim();const crop=typeof window.sublichatCaptureBannerCrop==='function'?window.sublichatCaptureBannerCrop(cur):null;if(crop){cur=crop;if(typeof window.sublichatWriteBannerCropLocal==='function')window.sublichatWriteBannerCropLocal(cur);}saveProfile(cur);updateTopAdvisor();renderPerfil();mostrarToast('✅ Perfil y encuadre guardados.');};
     const reset=document.getElementById('profReset');if(reset)reset.onclick=()=>{localStorage.removeItem(profileKey());updateTopAdvisor();renderPerfil();mostrarToast('Perfil restaurado.');};const salir=document.getElementById('profSalir');if(salir)salir.onclick=()=>document.getElementById('logoutBtn')?.click();
