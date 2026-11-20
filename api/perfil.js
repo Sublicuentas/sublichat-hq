@@ -104,6 +104,7 @@ async function guardarPerfil(db, body) {
   if (typeof body.color === 'string') update.color = clean(body.color, 20);
   if (typeof body.emoji === 'string') update.emoji = clean(body.emoji, 10);
   if (typeof body.tema === 'string') update.tema = clean(body.tema, 30);
+  if (body.temaUi === 'lego' || body.temaUi === 'ejecutivo') update.temaUi = body.temaUi; // R199 · tema de interfaz por usuario (solo presentación)
   if (typeof body.bannerCropMode === 'string') update.bannerCropMode = body.bannerCropMode === 'custom' ? 'custom' : 'auto';
   update.bannerPosX = percent(body.bannerPosX);
   update.bannerPosY = percent(body.bannerPosY);
