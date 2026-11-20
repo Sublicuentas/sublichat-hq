@@ -196,8 +196,184 @@
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) #v2PanelIn .v2-panel-lista[hidden] { display: none !important; }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) #v2PanelIn .v2-mi { background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 10px !important; box-shadow: var(--lg-sh-sm) !important; min-height: 44px; }
 
+  /* =====================================================================================================
+     R199b · FASE 3 — Clientes y Renovaciones (Agenda diaria de cobros). Solo piel: mismo HTML, mismos botones.
+     Prefijo con 6 IDs para ganarle a ui-v2 (#screen-clientes #tbody>tr usa 5 IDs + clase).
+     ===================================================================================================== */
+  /* ---------- Hero de pantalla (Clientes / Agenda) con ícono Lego, bloque rojo y Sublirobot ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card {
+    position: relative !important; overflow: visible !important; background: #fff !important; border: 1px solid var(--lg-line) !important;
+    border-radius: 20px !important; box-shadow: var(--lg-sh) !important; padding: 16px 12px 14px !important;
+  }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 {
+    position: relative; z-index: 1; display: block !important; min-height: 96px; margin: 0 0 12px !important; padding: 2px 104px 0 58px !important; isolation: isolate;
+    background: url("/assets/lego/clientes.webp") no-repeat 0 0 / 50px 50px !important;
+    font-size: clamp(25px, 7.4vw, 30px) !important; font-weight: 800 !important; color: var(--lg-txt) !important; letter-spacing: -.01em; line-height: 1.1 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2::before { /* bloque rojo diagonal, pegado a la esquina de la tarjeta */
+    content: ""; position: absolute; right: -12px; top: -16px; width: 42%; height: 124px; background: var(--lg-red); z-index: -1; pointer-events: none;
+    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 { background-image: url("/assets/lego/calendario.webp") !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2::after { /* Sublirobot oficial */
+    content: ""; position: absolute; right: -4px; top: -10px; width: 98px; height: 124px; pointer-events: none;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 .ico { display: none !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 > span:not(.ico) { display: block !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #clientesTitleCount {
+    display: inline-block !important; vertical-align: middle; margin-left: 6px; padding: 2px 10px !important; border-radius: 999px !important;
+    background: #FFE3E2 !important; color: var(--lg-red) !important; font-size: 15px !important; font-weight: 800 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em {
+    display: block !important; white-space: normal !important; font-style: normal !important; font-size: 13.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; margin-top: 4px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em::after,
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 + .count::before { /* trazo rojo */
+    content: ""; display: block; width: 110px; height: 5px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 { min-height: 112px; padding-bottom: 0 !important; margin-bottom: 4px !important; font-size: clamp(22px, 6.4vw, 26px) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 + .count {
+    position: relative; z-index: 1; padding: 0 !important; margin: 0 0 14px !important;
+    font-size: 12.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; line-height: 1.35 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-agenda > .card > h2 + .count::before { position: absolute; left: 58px; top: -22px; margin: 0; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > :not(h2) { position: relative; z-index: 1; }
+
+  /* ---------- Clientes · botón «Crear / actualizar CRM + ficha WhatsApp» (rojo 3D con tetones) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > #clientesNuevaFicha {
+    position: relative !important; left: auto !important; right: auto !important; top: auto !important; max-width: none !important; flex: none !important;
+    width: 100% !important; min-height: 50px !important; margin: 0 0 12px !important; padding: 10px 40px !important; border: 0 !important; border-radius: 16px !important;
+    color: #fff !important; font-weight: 800 !important; font-size: 14px !important; line-height: 1.2 !important;
+    background-color: var(--lg-red) !important;
+    background-image: var(--lg-stud2), var(--lg-stud2) !important; background-size: 14px 14px !important; background-repeat: no-repeat !important;
+    background-position: 14px 50%, calc(100% - 14px) 50% !important;
+    box-shadow: 0 4px 0 var(--lg-red-d), 0 9px 18px rgba(230, 33, 28, .24) !important; transition: transform .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > #clientesNuevaFicha:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--lg-red-d) !important; }
+
+  /* ---------- Buscador, pestañas y filtros ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-controlbar { display: grid !important; gap: 10px !important; background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-controlbar .search {
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important; min-height: 48px; padding: 4px 12px !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-controlbar .search input { border: 0 !important; background: transparent !important; box-shadow: none !important; font-size: 15px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs {
+    display: flex !important; gap: 4px !important; overflow-x: auto; scrollbar-width: none; padding: 5px !important;
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs::-webkit-scrollbar { display: none; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs button {
+    flex: 0 0 auto !important; min-height: 38px !important; padding: 6px 12px !important; border: 0 !important; border-radius: 10px !important;
+    background: transparent !important; color: var(--lg-txt2) !important; font-weight: 700 !important; font-size: 13.5px !important; box-shadow: none !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-tabs button.active {
+    background: var(--lg-red) !important; color: #fff !important; box-shadow: 0 3px 0 var(--lg-red-d) !important; font-weight: 800 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-filters {
+    display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; margin: 10px 0 !important;
+    padding: 0 !important; background: transparent !important; border: 0 !important; box-shadow: none !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-filters select {
+    width: 100% !important; min-width: 0 !important; min-height: 44px !important; margin: 0 !important; padding: 6px 26px 6px 10px !important;
+    font-size: 13px !important; font-weight: 700 !important; color: var(--lg-txt) !important; text-overflow: ellipsis;
+    background-color: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 12px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #count { color: var(--lg-txt2) !important; font-weight: 700 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #carteraAuditBox {
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: var(--lg-r) !important; box-shadow: var(--lg-sh) !important;
+  }
+
+  /* ---------- Clientes · tarjeta de cliente con tira de tetones a la izquierda ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr {
+    --lg-c: var(--lg-blue); --lg-cd: var(--lg-blue-d);
+    position: relative !important; overflow: hidden; padding: 12px 12px 12px 38px !important; margin: 0 0 12px !important;
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: var(--lg-r) !important; box-shadow: var(--lg-sh) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 26px; box-shadow: inset -3px 0 0 var(--lg-cd);
+    background-color: var(--lg-c); background-image: var(--lg-stud2), var(--lg-stud2), var(--lg-stud2);
+    background-size: 13px 13px; background-repeat: no-repeat; background-position: 6px 14px, 6px 34px, 6px 54px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n+2) { --lg-c: var(--lg-yellow); --lg-cd: var(--lg-yellow-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n+3) { --lg-c: var(--lg-red); --lg-cd: var(--lg-red-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:nth-child(4n) { --lg-c: var(--lg-green); --lg-cd: var(--lg-green-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-avatar {
+    width: 40px !important; height: 40px !important; min-width: 40px; border-radius: 50% !important; background: #FFE9E8 !important; color: var(--lg-red) !important;
+    border: 2px solid #FFD2D0 !important; font-weight: 800 !important; font-size: 14px !important; box-shadow: 0 2px 0 #F3C4C1 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-person b { font-size: 16px !important; font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .money { font-size: 16px !important; font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-platform {
+    background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: 10px !important; box-shadow: 0 2px 0 #DCE2EB !important; font-weight: 700 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .pill { font-weight: 800 !important; border-radius: 999px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-renew-btn {
+    min-height: 42px !important; border: 0 !important; border-radius: 12px !important; color: #fff !important; font-weight: 800 !important; font-size: 14px !important;
+    background: var(--lg-green) !important; box-shadow: 0 4px 0 var(--lg-green-d), 0 7px 14px rgba(19, 189, 99, .22) !important; transition: transform .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr { grid-template-columns: minmax(0, 1fr) minmax(0, auto) 48px minmax(48px, auto) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr > td:is(.client-renew-cell, .client-wa-cell, .client-actions-cell) { min-width: 0 !important; width: auto !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr > td:is(.client-wa-cell, .client-actions-cell) { justify-self: end; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-renew-btn { min-width: 0 !important; max-width: 100% !important; padding: 0 8px !important; overflow: hidden; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-renew-btn svg { stroke: #fff !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr :is(.client-wa-btn, .client-actions-btn) {
+    width: 46px !important; min-width: 46px !important; min-height: 42px !important; padding: 0 !important; border-radius: 12px !important; background: #fff !important; color: var(--lg-txt) !important;
+    border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7 !important; transition: transform .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-wa-btn svg { stroke: var(--lg-green-d) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr .client-actions-cell { overflow: visible !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #tbody > tr:has(.client-actions-menu.show) { overflow: visible; z-index: 5; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) :is(.client-renew-btn, .client-wa-btn, .client-actions-btn, .rbac-btn):active { transform: translateY(3px); }
+
+  /* ---------- Renovaciones · 3 KPIs (vencidos rojo, hoy amarillo, próximos azul) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; margin: 0 0 14px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card {
+    --lg-c: var(--lg-red); --lg-cd: var(--lg-red-d); --lg-ico: url("/assets/lego/alerta.webp");
+    position: relative; padding: 50px 8px 10px !important; min-height: 0 !important; text-align: left; border-left: 1px solid var(--lg-line) !important; overflow: hidden;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card.hoy { --lg-c: var(--lg-yellow); --lg-cd: var(--lg-yellow-d); --lg-ico: url("/assets/lego/calendario.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card.prox { --lg-c: var(--lg-blue); --lg-cd: var(--lg-blue-d); --lg-ico: url("/assets/lego/reloj.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card::before { /* bloque de color con ícono */
+    content: ""; position: absolute; left: 8px; top: 8px; width: 36px; height: 36px; border-radius: 10px;
+    background-color: var(--lg-c) !important; background-image: var(--lg-ico) !important; background-repeat: no-repeat !important; background-position: center !important; background-size: 28px 28px !important; box-shadow: inset 0 -3px 0 rgba(0,0,0,.16), 0 2px 0 var(--lg-cd) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card b { font-size: clamp(20px, 6.2vw, 26px) !important; font-weight: 800 !important; color: var(--lg-txt) !important; white-space: nowrap; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-card span { font-size: 11.5px !important; font-weight: 700 !important; color: var(--lg-txt2) !important; line-height: 1.25; margin-top: 4px !important; }
+
+  /* ---------- Renovaciones · fila de cobro con tira de tetones por estado ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-list { gap: 12px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row {
+    --lg-c: var(--lg-blue); --lg-cd: var(--lg-blue-d);
+    position: relative; overflow: hidden; display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important;
+    padding: 12px 12px 12px 38px !important; background: #fff !important; border: 1px solid var(--lg-line) !important; border-radius: var(--lg-r) !important; box-shadow: var(--lg-sh) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row.venc { --lg-c: var(--lg-red); --lg-cd: var(--lg-red-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row.hoy { --lg-c: var(--lg-yellow); --lg-cd: var(--lg-yellow-d); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 26px; box-shadow: inset -3px 0 0 var(--lg-cd);
+    background-color: var(--lg-c); background-image: var(--lg-stud2), var(--lg-stud2), var(--lg-stud2);
+    background-size: 13px 13px; background-repeat: no-repeat; background-position: 6px 14px, 6px 34px, 6px 54px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row h3 { font-size: 16px !important; font-weight: 800 !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row p { font-size: 12.5px !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-row small { font-size: 12px !important; font-weight: 700 !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-actions { display: grid !important; grid-template-columns: 1fr 1fr 1.35fr !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn {
+    min-height: 42px !important; padding: 6px 8px !important; border-radius: 12px !important; font-size: 13px !important; font-weight: 800 !important; line-height: 1.15 !important;
+    background: #fff !important; color: var(--lg-txt) !important; border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7 !important; transition: transform .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn.good { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d), 0 7px 14px rgba(230, 33, 28, .22) !important; }
 
   @media (max-width: 380px) { /* 360 px: el título de la banda no se corta */
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 { font-size: 24px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em { font-size: 12.5px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes #clientesTitleCount { font-size: 13px !important; margin-left: 2px; padding: 1px 8px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-left: 54px !important; background-size: 44px 44px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2 { padding-right: 88px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body :is(#screen-clientes, #screen-agenda) > .card > h2::after { width: 84px; height: 108px; }
+        html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes .clientes-filters select { font-size: 12px !important; padding-left: 8px !important; }
+    html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; }
     html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header { padding-right: 12px !important; }
     html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2-card > header::after { display: none !important; }
     html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) .v2k { padding: 10px !important; gap: 8px !important; }

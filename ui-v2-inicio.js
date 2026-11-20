@@ -145,7 +145,7 @@
     var h = new Date().getHours(); var saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     host.innerHTML =
       '<div class="v2-cab"><div><h2>Panel general</h2><p>' + saludo + (nombre ? ', <span class="v2-cap">' + esc(nombre) + '</span>' : '') + ' · control de suscripciones y renovaciones</p></div>' +
-      (puede('clientes') ? '<button type="button" class="v2-btn" data-v2go="agenda">' + ico('mas') + 'Registrar renovación</button>' : '') + '</div>' +
+      '</div>' + // R199b · sin botón «Registrar renovación» en Inicio (celular y web), a pedido del dueño
       '<div class="v2-kpis">' +
         tarjeta('neutro', 'clientes', 'Clientes activos', c.activos.toLocaleString('es-HN'), c.servicios.toLocaleString('es-HN') + ' servicios vigentes') +
         tarjeta('ambar', 'vencer', 'Por vencer · 7 días', c.porVencer.toLocaleString('es-HN'), (c.hoyN ? '<strong>' + c.hoyN + ' hoy</strong> · ' : '') + L(c.porVencerMonto)) +
