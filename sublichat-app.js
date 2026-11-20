@@ -1294,7 +1294,9 @@ invNuevoInit();
 // Los contadores guardados (ocupados/disponibles/disp) pueden quedar viejos; ya no mandan.
 function invOcupados(c){ return Array.isArray(c.clientes)?c.clientes.length:(Number(c.ocupados)||0); }
 function invCap(c){ return Number(c.capacidad)||Number(c.total)||invOcupados(c)||0; }
-function invDisp(c){ return Math.max(0,invCap(c)-invOcupados(c)); }
+// R198j · cuenta vendida como CUENTA COMPLETA (exclusiva de un cliente) = 0 perfiles para vender, aunque su capacidad sea 3 o 5.
+function invCuentaCompleta(c){ const cl=Array.isArray(c&&c.clientes)?c.clientes:[]; if(cl.some(x=>x&&(x.cuentaCompleta===true||x.tipoVenta==='cuenta_completa')))return true; return invOcupados(c)>0&&(String(c&&c.modalidadVenta||'')==='cuenta_completa'||!!String(c&&c.exclusivaCompraId||'').trim()); }
+function invDisp(c){ return invCuentaCompleta(c)?0:Math.max(0,invCap(c)-invOcupados(c)); }
 function invSobreasignada(c){ const cap=Number(c.capacidad)||0; return cap>0&&invOcupados(c)>cap; }
 // Familia de plataforma (Disney Premium y sin ESPN comparten Bodega; TV Digital por proveedor).
 function invFamilia(p){
