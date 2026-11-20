@@ -23,5 +23,5 @@ test('Control Maestro: la cuenta dada de baja deja de mostrarse como activa (sin
   const app = R('sublichat-app.js');
   assert.match(app, /body:JSON\.stringify\(\{accion:'cuentasBaja'\}\)/);
   assert.match(app, /cuentasBaja:CUENTAS_BAJA\.map/);
-  assert.match(R('index.html'), /control-maestro\.js\?v=2026111[2-9]-r196[n-z]/); // R196q subió la versión
+  assert.match(R('index.html'), /control-maestro\.js\?v=202611(1[2-9]|2\d)-r19(6[n-z]|[7-9][a-z])/); // R196q subió la versión
 });

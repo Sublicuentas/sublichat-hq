@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 const R = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 const css = R('ui-lego.css'), html = R('index.html'), inicio = R('ui-v2-inicio.js'), app = R('sublichat-app.js');
-const fase3 = css.slice(css.indexOf('R199b · FASE 3'), css.indexOf('R199c · FASES 4 y 5'));
+const fase3 = css.slice(css.indexOf('R199b · FASE 3'), css.indexOf('R199c (solo celular): indicadores en 2 columnas'));
 const P = 'html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body';
 
 test('Inicio: sin botón «Registrar renovación» (celular y web); la acción sigue en Clientes/Agenda', () => {

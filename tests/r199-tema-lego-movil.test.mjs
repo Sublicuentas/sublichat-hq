@@ -28,13 +28,14 @@ test('Mi perfil: selector de dos opciones (Clásico / Ejecutivo y Tema Lego) con
   assert.match(app, /elegirTemaUi\(t\);renderPerfil\(\);/);
 });
 
-test('D · todo el tema vive dentro de @media (max-width: 767.98px) y bajo html[data-ui="lego"]: escritorio y Ejecutivo intactos', () => {
+test('D · todo el tema vive bajo html[data-ui="lego"]: sin el atributo (Ejecutivo) nada cambia, en PC ni en celular', () => {
   const sinSelector = css.slice(0, css.indexOf('/* ---------- Selector «Tema de interfaz»'));
-  const cuerpo = sinSelector.slice(sinSelector.indexOf('@media (max-width: 767.98px) {'));
-  assert.ok(cuerpo.length > 1000);
-  const reglas = cuerpo.match(/^\s+[^@\s/}][^{]*\{/gm) || [];
+  assert.ok(sinSelector.length > 1000);
+  const reglas = sinSelector.match(/^\s*[^@\s/}][^{;]*\{/gm) || [];
   const fuera = reglas.filter((r) => !/html\[data-ui="lego"\]/.test(r) && !/^\s+(to|from|\d+%)/.test(r));
   assert.deepEqual(fuera, [], 'ninguna regla del tema fuera del atributo lego');
+  assert.match(css, /@media \(max-width: 767\.98px\) \{/, 'bloque celular');
+  assert.match(css, /@media \(min-width: 768px\) \{/, 'bloque PC (R199d)');
   assert.match(html, /<link rel="stylesheet" href="\.\/ui-lego\.css\?v=20261120-r199[a-z]">/);
 });
 
