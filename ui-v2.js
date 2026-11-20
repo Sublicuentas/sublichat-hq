@@ -18,7 +18,7 @@
 
   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
   var NAV = [
-    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'catalogo-relojes' }, { s: 'sala-juntas' }, { s: 'finanzas' },
+    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'sala-juntas' }, { s: 'finanzas' }, // R199c · Catálogo (proyecto Relojes) fuera del menú por decisión del dueño; su pantalla y datos siguen intactos
     { g: 'Operación', items: ['importar', 'inventario', 'egresos', 'cierre'] },
     { g: 'Supervisión', items: ['actividad', 'auditoria', 'crm-master', 'estadisticas', 'permisos'] },
     { g: 'Más', items: ['sorteos', 'tickets', 'revendedores', 'chat', 'objetivos', 'pelis', 'partidos'] }
@@ -191,6 +191,7 @@
   function estructura() {
     var vis = pantallas(), set = {}; vis.forEach(function (s) { set[s] = 1; });
     var conocidos = {}; NAV.forEach(function (n) { if (n.s) conocidos[n.s] = 1; else n.items.forEach(function (s) { conocidos[s] = 1; }); }); conocidos.perfil = 1;
+    conocidos['catalogo-relojes'] = 1; // R199c · conocido pero fuera del menú: no cae en «Más»
     var out = [];
     NAV.forEach(function (n) {
       if (n.s) { if (set[n.s]) out.push({ s: n.s }); return; }

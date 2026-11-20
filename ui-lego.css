@@ -365,6 +365,249 @@
   }
   html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-agenda .rbac-btn.good { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d), 0 7px 14px rgba(230, 33, 28, .22) !important; }
 
+  /* =====================================================================================================
+     R199c · FASES 4 y 5 — BIBLIOTECA GLOBAL LEGO para el resto de pantallas móviles (Anexo V2).
+     Una sola capa de componentes que hereda cada pantalla existente según su tipo de contenido:
+     LegoHero (título de módulo), LegoCard, LegoButton, LegoTabs, LegoFilterBar, LegoKPI, LegoListRow,
+     LegoFormSection, LegoModal, LegoStatusBadge, LegoEmptyState. Mismo HTML, mismos datos, mismas acciones.
+     Prefijo de 4 IDs + «.screen:not(#screen-inicio)»: Inicio conserva su diseño aprobado; Clientes y
+     Agenda (6 IDs) conservan el suyo. Las listas de selectores van en :where() para no subir especificidad.
+     ===================================================================================================== */
+  /* ---------- Ícono 3D por módulo (decorativo; si no carga, queda el título) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen { --lg-ico-mod: url("/assets/lego/mas.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-portal-cliente { --lg-ico-mod: url("/assets/lego/casa.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-sorteos { --lg-ico-mod: url("/assets/lego/ticket.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-tickets { --lg-ico-mod: url("/assets/lego/mensajes.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-revendedores { --lg-ico-mod: url("/assets/lego/clientes.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-importar { --lg-ico-mod: url("/assets/lego/clientes-panel.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap :is(#screen-egresos, #screen-cierre) { --lg-ico-mod: url("/assets/lego/cartera.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-actividad { --lg-ico-mod: url("/assets/lego/reloj.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap :is(#screen-auditoria, #screen-permisos) { --lg-ico-mod: url("/assets/lego/alerta.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-crm-master { --lg-ico-mod: url("/assets/lego/clientes-panel.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap :is(#screen-estadisticas, #screen-objetivos) { --lg-ico-mod: url("/assets/lego/grafica.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-pelis { --lg-ico-mod: url("/assets/lego/popcorn.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-partidos { --lg-ico-mod: url("/assets/lego/reloj.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-perfil { --lg-ico-mod: url("/assets/lego/robot-saludando.webp"); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-inventario { --lg-ico-mod: url("/assets/lego/cartera.webp"); }
+
+  /* ---------- LegoHero de módulo: ícono + título corto + subtítulo + trazo rojo (sin robot en subpáginas) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 {
+    position: relative; min-height: 46px; padding: 4px 0 0 56px !important; margin: 0 0 6px !important; font-size: clamp(22px, 6.6vw, 26px) !important;
+    font-weight: 800 !important; line-height: 1.12 !important; color: var(--lg-txt) !important;
+    background-image: var(--lg-ico-mod) !important; background-repeat: no-repeat !important; background-position: 0 0 !important; background-size: 46px 46px !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 > .ico { display: none !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 + .count {
+    position: relative; padding: 0 0 0 56px !important; margin: 0 0 16px !important; font-size: 12.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; line-height: 1.35 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card > h2 + .count::after {
+    content: ""; display: block; width: 92px; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg);
+  }
+
+  /* ---------- LegoCard: tarjeta contenedora de pantalla + tarjetas internas ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card {
+    border-radius: 20px !important; border: 1px solid var(--lg-line) !important; box-shadow: var(--lg-sh) !important; padding: 16px 12px !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where([class*="card"]:not(.quote-card):not([class*="cards"]):not(.v2k):not(.v2-card), .cr-card, .cm-panel, .ci, .tk-card, .tk-form, .inv-card, .obj-card, .sj-card, .fz-card, .match, .movie, .renew-item) {
+    border-radius: var(--lg-r) !important; border: 1px solid var(--lg-line) !important; box-shadow: var(--lg-sh) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) > .card :where([class*="card"]:not([class*="cards"]) [class*="card"]:not([class*="cards"])) { box-shadow: var(--lg-sh-sm) !important; } /* tarjeta dentro de tarjeta: relieve menor */
+
+  /* ---------- LegoButton: principal rojo 3D · secundario blanco 3D · peligro blanco con texto rojo ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(button, .btn, [class*="-btn"]):where(:not(.tema-ui-op):not(.lchip):not([class*="tab"]):not([class*="chip"]):not(.v2-btn):not(.web-home-back)) {
+    border-radius: 12px !important; min-height: 40px; transition: transform .12s ease, box-shadow .12s ease;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.primary, .cr-btn.primary, .rbac-btn.primary, .btn-primary, .renew, .gbtn, .cobro-btn.primary, .ficha-btn.primary, .fz-btn:not(.sec), button.good:not(.tk-btn):not(.rbac-btn)) {
+    background: var(--lg-red) !important; color: #fff !important; border: 0 !important; font-weight: 800 !important;
+    box-shadow: 0 4px 0 var(--lg-red-d), 0 8px 16px rgba(230, 33, 28, .2) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.ghost, .sec, .fz-btn.sec, .cr-btn:not(.primary):not(.red):not(.danger):not(.good), .rbac-btn:not(.primary):not(.good):not(.red), .docs-btn, .sr-btn:not(.primary), .cm-btn:not(.primary), .pc-btn:not(.primary), .cobro-btn:not(.primary):not(.renew)) {
+    background: #fff !important; color: var(--lg-txt) !important; border: 1px solid var(--lg-line) !important; font-weight: 700 !important; box-shadow: 0 3px 0 #D5DCE7 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.danger, .red, .cr-btn.red, .rbac-btn.red) {
+    background: #fff !important; color: var(--lg-red-d) !important; border: 1px solid #F6C9C7 !important; box-shadow: 0 3px 0 #F1C3C0 !important; font-weight: 800 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(button, .btn, [class*="-btn"]):where(:not([disabled])):active { transform: translateY(2px); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(button, .btn, [class*="-btn"])[disabled] { opacity: .55 !important; box-shadow: none !important; transform: none !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid var(--lg-blue) !important; outline-offset: 2px !important; }
+
+  /* ---------- LegoFormSection: campos de 44 px, relieve hundido, foco azul ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not(.perm-sw), select, textarea) {
+    border-radius: 12px !important; border: 1px solid #D9DFE9 !important; box-shadow: inset 0 2px 0 #EEF1F6 !important; font-size: 15px !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not(.perm-sw), select) { min-height: 44px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(input, select, textarea):focus { border-color: var(--lg-blue) !important; outline: 3px solid rgba(23, 142, 241, .18) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.search) { border-radius: 14px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(label, .rbac-field > span) { font-weight: 700; color: var(--lg-txt); }
+
+  /* ---------- LegoTabs / chips: pastillas con scroll interno, activa en rojo 3D ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.cr-tabs, .sr-tabs, .sj-tabs, .pc-admin-tabs, .ligas-chips, .vip-chips, .fz-tabs) {
+    display: flex !important; flex-wrap: nowrap !important; gap: 6px !important; overflow-x: auto !important; overflow-y: hidden; scrollbar-width: none;
+    padding: 4px 2px 8px !important; margin-bottom: 10px; background: transparent !important; border: 0 !important; box-shadow: none !important; -webkit-overflow-scrolling: touch;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.cr-tabs, .sr-tabs, .sj-tabs, .pc-admin-tabs, .ligas-chips, .vip-chips, .fz-tabs)::-webkit-scrollbar { display: none; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.cr-tab, .sr-tab, .sj-tab, .pc-admin-tab, .lchip, .vip-chip, .fz-tab, .chip) {
+    flex: 0 0 auto !important; min-height: 40px; padding: 7px 13px !important; border-radius: 12px !important; white-space: nowrap;
+    background: #fff !important; color: var(--lg-txt) !important; border: 1px solid var(--lg-line) !important; box-shadow: 0 3px 0 #D5DCE7 !important; font-weight: 700 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.cr-tab.on, .cr-tab.active, .sr-tab.on, .sj-tab.on, .pc-admin-tab.active, .lchip.on, .vip-chip.on, .fz-tab.on) {
+    background: var(--lg-red) !important; color: #fff !important; border-color: var(--lg-red) !important; box-shadow: 0 3px 0 var(--lg-red-d), 0 6px 12px rgba(230, 33, 28, .2) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.fz-tab.on, .cr-tab.on, .sj-tab.on) svg { stroke: #fff !important; color: #fff !important; }
+
+  /* ---------- LegoKPI: cifra grande + etiqueta + franja superior de color (verde, rojo, azul, amarillo) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat) {
+    --lg-c: var(--lg-green); position: relative; overflow: hidden; border-top: 5px solid var(--lg-c) !important; border-radius: var(--lg-r) !important;
+    background: #fff !important; box-shadow: var(--lg-sh) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n+2) { --lg-c: var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n+3) { --lg-c: var(--lg-blue); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card, .inv-stats > .is, .fz-kpis > .fz-kpi, .activity-stat):nth-child(4n) { --lg-c: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid, .fz-kpis) { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-grid > .rbac-card:only-child, .rbac-grid > .rbac-card:nth-child(3):last-child) { grid-column: 1 / -1; }
+
+  /* ---------- LegoListRow: filas de lista en tarjetas con franja lateral (estado por color, con texto) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-row) {
+    --lg-c: var(--lg-blue); background: #fff !important; border: 1px solid var(--lg-line) !important; border-left: 6px solid var(--lg-c) !important;
+    border-radius: var(--lg-r) !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-row.venc) { --lg-c: var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-agenda) :where(.rbac-row.hoy) { --lg-c: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.inv-card, .obj-card, .match, .movie) { border-left: 6px solid var(--lg-blue) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.inv-card:nth-child(4n+2), .obj-card:nth-child(3n+2), .match:nth-child(4n+2), .movie:nth-child(4n+2)) { border-left-color: var(--lg-yellow) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.inv-card:nth-child(4n+3), .obj-card:nth-child(3n), .match:nth-child(4n+3), .movie:nth-child(4n+3)) { border-left-color: var(--lg-red) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.inv-card:nth-child(4n), .match:nth-child(4n), .movie:nth-child(4n)) { border-left-color: var(--lg-green) !important; }
+
+  /* ---------- LegoStatusBadge y LegoEmptyState ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.pill, .badge, .rbac-badge, [class*="-badge"], [class*="-pill"]) { border-radius: 999px !important; font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(.empty, .perm-empty, .fz-vacio, .sj-vacio, [class*="-empty"]) {
+    background: #fff !important; border: 2px dashed #D9DFE9 !important; border-radius: var(--lg-r) !important; box-shadow: none !important; color: var(--lg-txt2) !important; font-weight: 600;
+  }
+
+  /* ---------- Tablas: nunca scroll horizontal de la página; desplazamiento interno señalado ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-clientes) :where(.tbl-wrap, .fz-tw, .cm-table-wrap, .rbac-table-wrap) {
+    max-width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch; border: 1px solid var(--lg-line) !important; border-radius: var(--lg-r-sm) !important;
+    box-shadow: inset -12px 0 10px -10px rgba(15, 23, 37, .18), var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio):not(#screen-clientes) table thead th { background: #F3F6FB !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap .screen:not(#screen-inicio) :where(details) > summary { cursor: pointer; min-height: 44px; }
+
+  /* ---------- Finanzas: hero con Sublirobot, mes + 2 acciones, pestañas y títulos de sección con bloque de color ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas > .card { padding: 0 12px 14px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head {
+    position: relative; display: block !important; margin: 0 -12px 12px !important; padding: 18px 12px 0 !important; border-radius: 20px 20px 0 0; isolation: isolate;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::before { /* bloque rojo diagonal */
+    content: ""; position: absolute; right: 0; top: 0; width: 42%; height: 124px; background: var(--lg-red); z-index: -1; pointer-events: none;
+    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head::after { /* Sublirobot oficial */
+    content: ""; position: absolute; right: 8px; top: 6px; width: 96px; height: 120px; pointer-events: none; z-index: 0;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child { min-height: 106px; padding: 0 100px 0 56px; background: url("/assets/lego/cartera.webp") no-repeat 0 2px / 46px 46px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head h1 { font-size: clamp(25px, 7.4vw, 30px) !important; font-weight: 800 !important; color: var(--lg-txt) !important; margin: 0 0 4px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p { font-size: 12.5px !important; font-weight: 600 !important; color: var(--lg-txt2) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head > div:first-child > p::after { content: ""; display: block; width: 92px; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--lg-red); transform: rotate(-2deg); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 12px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes { grid-column: 1 / -1; display: flex !important; align-items: center; gap: 8px; width: 100%; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-mes input { flex: 1; width: auto !important; min-width: 0; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-head-acc .fz-btn { width: 100%; justify-content: center; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab { display: flex !important; align-items: center; gap: 10px; flex-wrap: wrap; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab > svg { /* bloque de color con tetones para el ícono de la sección */
+    box-sizing: content-box; width: 20px !important; height: 20px !important; padding: 9px 8px 7px; border-radius: 10px; flex: none;
+    stroke: #fff !important; color: #fff !important; background: var(--lg-stud) 4px 1px / 8px 8px no-repeat, var(--lg-stud) calc(100% - 4px) 1px / 8px 8px no-repeat, var(--lg-red);
+    box-shadow: inset 0 -3px 0 var(--lg-red-d);
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab h3 { font-size: 18px !important; font-weight: 800 !important; margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-cab .fz-sub { flex-basis: 100%; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi b,
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas .fz-kpi strong { font-weight: 800 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-finanzas details.fz-avz > summary { padding: 4px 0; }
+
+  /* ---------- Sala de Juntas / Control Maestro / Portal: solo contenedores y encabezados (sin tocar su lógica) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-sala-juntas .sj-cab { border-radius: var(--lg-r) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-control-cuentas :where(.cm-shell) { border-radius: var(--lg-r) !important; }
+
+  /* ---------- Chat Subli: burbuja y barra de envío en relieve ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .chat-head { border-radius: var(--lg-r) !important; border: 1px solid var(--lg-line) !important; box-shadow: var(--lg-sh) !important; background: #fff !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .chip { min-height: 36px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body .wrap #screen-chat .input-row .send { background: var(--lg-red) !important; color: #fff !important; box-shadow: 0 3px 0 var(--lg-red-d) !important; border-radius: 12px !important; min-width: 44px; }
+
+  /* ---------- Mi perfil (visual 05): hero con Sublirobot, portada compacta, tema arriba, cifras en 3 columnas ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card { position: relative; overflow: visible !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 { isolation: isolate; min-height: 50px; padding-right: 100px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::before {
+    content: ""; position: absolute; right: -12px; top: -16px; width: 42%; height: 116px; background: var(--lg-red); z-index: -1; pointer-events: none;
+    clip-path: polygon(34% 0, 100% 0, 100% 100%, 0 100%); border-top-right-radius: 19px; border-bottom-left-radius: 26px;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2::after {
+    content: ""; position: absolute; right: -2px; top: -10px; width: 90px; height: 112px; pointer-events: none;
+    background: var(--lgi-robot, url("/assets/lego/sublirobot.webp")) no-repeat center top / contain;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-perfil > .card > h2 + .count { padding-right: 40% !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > * { margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover { order: 1; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > #profTemaUi { order: 2; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { order: 3; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-dashboard { order: 4; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .rbac-card:not(#profTemaUi) { order: 5; }
+  /* portada: la imagen sigue siendo el banner que eligió cada usuario; solo cambia el marco */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-cover {
+    position: relative !important; min-height: 168px !important; border-radius: 18px !important; border: 3px solid var(--lg-red) !important;
+    box-shadow: 0 4px 0 var(--lg-red-d), 0 10px 20px rgba(15, 23, 37, .12) !important; overflow: hidden !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions {
+    position: absolute !important; top: 8px !important; right: 8px !important; left: auto !important; display: flex !important; gap: 6px !important; z-index: 3;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-cover-actions button {
+    min-height: 32px !important; padding: 4px 10px !important; font-size: 11.5px !important; font-weight: 800 !important; border-radius: 10px !important;
+    background: var(--lg-red) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.6) !important; box-shadow: 0 2px 0 var(--lg-red-d) !important; opacity: 1 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity {
+    position: absolute !important; left: 10px !important; right: 10px !important; bottom: 10px !important; top: auto !important; transform: none !important; margin: 0 !important;
+    display: grid !important; grid-template-columns: 88px minmax(0, 1fr) !important; grid-template-rows: auto auto auto; column-gap: 12px !important; row-gap: 2px !important;
+    align-items: center; text-align: left !important; padding: 8px 10px !important; background: rgba(255,255,255,.9) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-avatar {
+    grid-row: 1 / span 3; width: 84px !important; height: 84px !important; margin: 0 !important; border-radius: 22px !important; border: 3px solid var(--lg-red) !important;
+    box-shadow: 0 3px 0 var(--lg-red-d) !important; position: static !important; transform: none !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-name { font-size: 20px !important; font-weight: 800 !important; margin: 0 !important; text-align: left !important; color: var(--lg-txt) !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-cargo { font-size: 12px !important; text-align: left !important; color: var(--lg-txt2) !important; margin: 0 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-identity .profile-role { justify-self: start; font-size: 11px !important; padding: 3px 8px !important; margin: 2px 0 0 !important; border-radius: 999px !important; }
+  /* cifras del asesor: 3 columnas compactas con franja de color */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div {
+    --lg-c: var(--lg-blue); min-height: 0 !important; padding: 10px 8px !important; text-align: left !important; background: #fff !important;
+    border: 1px solid var(--lg-line) !important; border-left: 6px solid var(--lg-c) !important; border-radius: 14px !important; box-shadow: var(--lg-sh-sm) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(2) { --lg-c: var(--lg-green); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(3) { --lg-c: var(--lg-yellow); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(4) { --lg-c: var(--lg-purple); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(5) { --lg-c: var(--lg-red); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid > div:nth-child(6) { --lg-c: var(--lg-cyan); }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid b { display: block; font-size: clamp(17px, 5.2vw, 21px) !important; font-weight: 800 !important; line-height: 1.1 !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil > .profile-summary-grid span { display: block; font-size: 11px !important; line-height: 1.2 !important; color: var(--lg-txt2) !important; margin-top: 3px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-opciones { grid-template-columns: 1fr !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-op { padding: 8px 10px !important; gap: 10px !important; min-height: 56px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-muestra { width: 34px; height: 30px; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #profTemaUi .tema-ui-txt small { font-size: 11px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil .profile-actions .rbac-btn { font-size: 12px !important; padding: 6px 4px !important; min-height: 44px !important; }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #rbac-perfil #profGuardar { background: var(--lg-red) !important; color: #fff !important; border: 0 !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; }
+
+  /* ---------- LegoModal: hojas y ventanas móviles (están fuera de .screen) ---------- */
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body :where(.cobro-sheet, .ficha-sheet, .fz-modal-c, .pc-modal-card, .pc-modal > div, .sr-sheet, .cr-sheet) {
+    border-radius: 22px !important; border: 1px solid var(--lg-line) !important; border-top: 6px solid var(--lg-red) !important; background: #fff !important;
+    box-shadow: 0 -2px 0 #D5DCE7, 0 18px 48px rgba(15, 23, 37, .22) !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body :where(.cobro-sheet, .ficha-sheet, .fz-modal-c, .sr-sheet, .cr-sheet) :where(.primary, .renew, .btn-primary, .fz-btn:not(.sec), .cobro-btn.primary, .ficha-btn.primary) {
+    background: var(--lg-red) !important; color: #fff !important; border: 0 !important; border-radius: 12px !important; box-shadow: 0 4px 0 var(--lg-red-d) !important; font-weight: 800 !important;
+  }
+  html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD) body :where(.cobro-sheet, .ficha-sheet, .fz-modal-c, .sr-sheet, .cr-sheet) :where(input:not([type=checkbox]):not([type=radio]), select, textarea) { border-radius: 12px !important; min-height: 44px; }
+
   @media (max-width: 380px) { /* 360 px: el título de la banda no se corta */
     html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 { font-size: 24px !important; }
     html[data-ui="lego"]:not(#lgA):not(#lgB):not(#lgC):not(#lgD):not(#lgE):not(#lgF) body #screen-clientes > .card > h2 em { font-size: 12.5px !important; }
