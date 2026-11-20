@@ -126,6 +126,7 @@ function costosRango(ctx, desde, hasta) {
     if (c.estado === "revertido" || !c.fecha || c.fecha < desde || c.fecha > hasta) continue;
     for (const l of c.lineas || []) { if (!l.productoId) continue; (consumoEnRango.get(l.productoId) || consumoEnRango.set(l.productoId, []).get(l.productoId)).push({ costo: r2(l.costoHnl), ventaId: c.ventaId, fecha: c.fecha }); }
   }
+  const actPorCuenta = new Map(); // R198i · cuentaId → activaciones (todas las fechas)
   const lotesCubiertos = new Set(); // cuentas con lote real (el Excel Premium no se suma encima)
   for (const l of lotes) {
     if (l.estado === "anulado") continue;
@@ -154,10 +155,20 @@ function costosRango(ctx, desde, hasta) {
       if (consumoEnRango.has(l.productoId)) continue; // se reconoce abajo por lo usado
       if (fecha < desde || fecha > hasta) continue;
       piezas.push({ ...ref, plataforma: fam, regla: "lote_sin_consumo", costoHnl: costo, criterio: "Lote reconocido en su mes: todavía no hay consumo calculado por venta", costoCiclo: costo, aviso: true });
-    } else { // activación ocasional
+    } else { // activación (R198i · regla del dueño): el costo se reconoce UNA vez en su fecha y cubre la cuenta hasta la próxima activación
+      if (ctaId) (actPorCuenta.get(ctaId) || actPorCuenta.set(ctaId, []).get(ctaId)).push({ ...ref, plataforma: fam, fecha, costoHnl: costo });
       if (fecha < desde || fecha > hasta) continue;
-      piezas.push({ ...ref, plataforma: fam, regla, costoHnl: costo, criterio: "Activación: un desembolso real en su fecha (sin vigencia conocida; no se inventan meses)", costoCiclo: costo });
+      piezas.push({ ...ref, plataforma: fam, regla, costoHnl: costo, criterio: "Activación: el costo de la cuenta se reconoce en su fecha y la cubre hasta la próxima activación (los meses siguientes no suman costo)", costoCiclo: costo });
     }
+  }
+  // R198i · ciclo de activación vigente en el período: última activación ≤ hasta (la cuenta sigue cubierta, costo ya pagado)
+  const ciclosAct = new Map();
+  for (const [cid, arr] of actPorCuenta) {
+    arr.sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const prev = arr.filter((a) => a.fecha <= hasta); if (!prev.length) continue;
+    const u = prev[prev.length - 1], sig = arr.find((a) => a.fecha > u.fecha) || null;
+    ciclosAct.set(cid, { cuentaId: cid, loteId: u.loteId, plataforma: u.plataforma, correo: u.correo, fechaActivacion: u.fecha, costoHnl: u.costoHnl, moneda: u.moneda, montoMoneda: u.montoMoneda, tasa: u.tasa, proveedor: u.proveedor,
+      siguienteActivacion: sig ? sig.fecha : "", activacionEnPeriodo: u.fecha >= desde, activaciones: arr.length });
   }
   for (const [pid, arr] of consumoEnRango) { // créditos / licencias / unidades: lo realmente usado
     const p = productosPorId.get(pid) || {}; if (reglaCosto({}, p) !== "consumo") continue;
@@ -182,7 +193,7 @@ function costosRango(ctx, desde, hasta) {
     const d = diasDentro(f, 30, desde, hasta); if (!d) continue;
     piezas.push({ loteId: "", producto: "Netflix Premium (tarjeta)", proveedor: s(pr.banco, 40), plataforma: "netflix", regla: "cobertura", costoHnl: r2(hnl * d / 30), moneda: "USD", montoMoneda: pr.pagoUsd, tasa: pr.tipoCambio, cuentaId: pr.inventarioId, criterio: `Cargo de tarjeta ${pr.pagoUsd} USD (${f}) · ${d} de 30 días`, fechaCompra: f });
   }
-  return { piezas, caja };
+  return { piezas, caja, ciclosAct };
 }
 
 // ---------------------------------------------------------------- 3) CONTEXTO (una sola lectura de datos)
@@ -237,9 +248,25 @@ export const DEFINICIONES = Object.freeze({
   pendiente: "Saldo por cobrar de ventas o renovaciones del período (pago parcial o a crédito).",
   esperado: "Renovaciones que vencen en el período sin cobro registrado. NO es dinero cobrado.",
   costo: "Costo directo atribuible al período, con la tasa y el costo históricos de cada compra.",
-  cobertura: "Cobrado de cuentas con costo ATRIBUIDO al período ÷ cobrado total del período. Una compra anterior sin duración documentada no cuenta (se muestra como «cobertura desconocida»). Si es menor a 100 %, el margen no es definitivo.",
+  cobertura: "Cobrado de cuentas con costo ATRIBUIDO al período o con su ACTIVACIÓN vigente ÷ cobrado total del período. Una cuenta activada (p. ej. HBO por link) queda cubierta desde su activación hasta la próxima: el costo se cuenta una sola vez en la fecha de activación y los meses siguientes suman L0. Una compra sin vínculo a cuenta no cubre nada. Si es menor a 100 %, el margen no es definitivo.",
+  ciclo: "Resultado del ciclo: todo lo cobrado de la cuenta desde su activación hasta hoy (o hasta la próxima activación) − lo que costó activarla.",
+  cartera: "Cartera = cuentas y perfiles ocupados hoy en Control Maestro, paguen o no en el período. «Pagaron» = clientes con cobro registrado en el período.",
   resultado: "Cobrado con costo − costo directo. Lo cobrado sin costo se muestra aparte («costo incompleto»), nunca como ganancia.",
 });
+
+// R198i · cartera actual de Control Maestro por familia: cuentas madre (sin accesos sueltos), perfiles ocupados y clientes únicos.
+export function carteraPorFamilia(ctx) {
+  const m = new Map();
+  for (const a of ctx.cuentasPorId.values()) {
+    if (a._pseudo) continue;
+    const x = m.get(a._familia) || m.set(a._familia, { cuentas: 0, perfiles: 0, clientes: 0, servicios: 0, _cli: new Set() }).get(a._familia);
+    const cls = Array.isArray(a.clientes) ? a.clientes.filter(Boolean) : [];
+    x.cuentas++; x.perfiles += cls.length || Number(a.ocupados) || 0;
+    for (const cl of cls) { const sv = ctx.servPorCompra.get(String(cl.compraId || "")); const cid = (sv && sv._clienteId) || s(cl.clienteId) || s(cl.nombre, 80).toLowerCase(); if (cid) x._cli.add(cid); if (cl.compraId) x.servicios++; }
+  }
+  for (const x of m.values()) { x.clientes = x._cli.size; delete x._cli; }
+  return m;
+}
 
 // ---------------------------------------------------------------- 4) MOTOR por rango
 // deps: { R: { movementYmd, movementKind, anuladoOReversa }, ventasACostear }
@@ -271,22 +298,32 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
     return { compraId: s(sv.compraId), fecha: ymd(sv.fechaRenovacion), plataforma: familia(sv.plataforma, sv.planHbo || (cta && cta.planHbo)), cuentaId: cta ? cta.id : "", cuentaCorreo: cta ? s(cta.correo) : s(sv.correo),
       clienteId: sv._clienteId, titular: s(cli.nombre, 80), beneficiario: s(sv.beneficiarioNombre || sv.beneficiario || (cta && cta._perfilPorCompra.get(String(sv.compraId))) || cli.nombre, 80), vendedor: s(sv.vendedor, 60) || "Sin vendedor", precio: r2(sv.precio), estado: hoy && ymd(sv.fechaRenovacion) < hoy ? "vencido_sin_cobro" : "por_cobrar" };
   });
-  const { piezas, caja } = costosRango(ctx, desde, hasta);
+  const { piezas, caja, ciclosAct } = costosRango(ctx, desde, hasta);
 
-  // ---- cobertura de costos: una línea está cubierta si su cuenta tiene costo en el período o su plataforma tiene costo general
+  // ---- cobertura de costos: una línea está cubierta si su cuenta tiene costo en el período, su plataforma tiene costo general
+  // o (R198i) su cuenta tiene un ciclo de activación vigente: el costo ya se pagó en la activación y aquí aporta L0.
   const ctaConCosto = new Set(piezas.filter((c) => c.cuentaId).map((c) => c.cuentaId)), platPool = new Set(piezas.filter((c) => !c.cuentaId).map((c) => c.plataforma));
   const cubierta = (l) => (l.cuentaId && ctaConCosto.has(l.cuentaId)) || platPool.has(l.plataforma);
-  for (const l of lineas) l.costoCubierto = !!cubierta(l);
+  for (const l of lineas) {
+    const ci = l.cuentaId ? ciclosAct.get(l.cuentaId) : null;
+    const porCiclo = !!ci && ci.fechaActivacion <= l.fecha && !cubierta(l);
+    l.costoCubierto = !!cubierta(l) || porCiclo; l.cubiertaPorCiclo = porCiclo;
+    if (ci && ci.fechaActivacion <= l.fecha) l.cicloActivacion = ci.fechaActivacion;
+  }
 
   // ---- por plataforma
   const plats = new Map();
-  const P = (k) => plats.get(k) || plats.set(k, { plataforma: k, nombre: nombrePlataforma(k), altas: 0, renovaciones: 0, otros: 0, ingresoHnl: 0, cobradoHnl: 0, cobradoCubiertoHnl: 0, pendienteHnl: 0, esperadoHnl: 0, costoHnl: 0, desembolsoHnl: 0, cuentas: new Set(), clientes: new Set(), servicios: new Set(), sinCuenta: 0, planSinClasificar: 0 }).get(k);
+  const P = (k) => plats.get(k) || plats.set(k, { plataforma: k, nombre: nombrePlataforma(k), altas: 0, renovaciones: 0, otros: 0, ingresoHnl: 0, cobradoHnl: 0, cobradoCubiertoHnl: 0, pendienteHnl: 0, esperadoHnl: 0, costoHnl: 0, desembolsoHnl: 0, cuentas: new Set(), clientes: new Set(), servicios: new Set(), sinCuenta: 0, planSinClasificar: 0, cobradoCicloHnl: 0, cuentasCiclo: new Set() }).get(k);
   for (const l of lineas) {
     const x = P(l.plataforma); if (l.tipo === "venta") x.altas++; else if (l.tipo === "renovacion") x.renovaciones++; else x.otros++;
     x.ingresoHnl += l.monto; x.cobradoHnl += l.cobrado; if (l.costoCubierto) x.cobradoCubiertoHnl += l.cobrado; x.pendienteHnl += l.pendiente;
     if (l.cuentaId) x.cuentas.add(l.cuentaId); if (l.clienteId) x.clientes.add(l.clienteId); if (l.compraId) x.servicios.add(l.compraId);
     if (l.enlace === "sin_cuenta") x.sinCuenta++; if (l.planSinClasificar) x.planSinClasificar++;
+    if (l.cubiertaPorCiclo) { x.cobradoCicloHnl += l.cobrado; x.cuentasCiclo.add(l.cuentaId); }
   }
+  // R198i · CARTERA de Control Maestro (todas las cuentas y perfiles ocupados, paguen o no en el período): no es lo mismo que «pagaron»
+  const cartera = carteraPorFamilia(ctx);
+  for (const [k, c] of cartera) if (plats.has(k) || c.cuentas > 0) Object.assign(P(k), { _cartera: c });
   for (const e of esperados) P(e.plataforma).esperadoHnl += e.precio;
   for (const c of piezas) P(c.plataforma).costoHnl += c.costoHnl;
   for (const c of caja) P(c.plataforma).desembolsoHnl += c.costoHnl;
@@ -295,7 +332,8 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
     const cobertura = cobrado > 0 ? pct(cub, cobrado) : null;
     const resultado = cub > 0 || costo > 0 ? r2(cub - costo) : null;
     const estado = cobrado === 0 && costo === 0 ? "sin_movimiento" : cobrado > 0 && cub === 0 ? "costo_pendiente" : cobrado === 0 ? "sin_ingreso" : cobertura < 99.5 ? "cobertura_parcial" : "ok";
-    return { ...x, cuentas: x.cuentas.size, clientes: x.clientes.size, servicios: x.servicios.size, ventas: x.altas + x.renovaciones + x.otros, ingresoHnl: r2(x.ingresoHnl), cobradoHnl: cobrado, cobradoCubiertoHnl: cub, cobradoSinCostoHnl: r2(cobrado - cub), pendienteHnl: r2(x.pendienteHnl), esperadoHnl: r2(x.esperadoHnl), costoHnl: costo, desembolsoHnl: r2(x.desembolsoHnl),
+    const ct = x._cartera || { cuentas: 0, perfiles: 0, clientes: 0, servicios: 0 }; delete x._cartera;
+    return { ...x, cuentas: x.cuentas.size, clientes: x.clientes.size, servicios: x.servicios.size, cobradoCicloHnl: r2(x.cobradoCicloHnl), cuentasCiclo: x.cuentasCiclo.size, carteraCuentas: ct.cuentas, carteraPerfiles: ct.perfiles, carteraClientes: ct.clientes, carteraServicios: ct.servicios, ventas: x.altas + x.renovaciones + x.otros, ingresoHnl: r2(x.ingresoHnl), cobradoHnl: cobrado, cobradoCubiertoHnl: cub, cobradoSinCostoHnl: r2(cobrado - cub), pendienteHnl: r2(x.pendienteHnl), esperadoHnl: r2(x.esperadoHnl), costoHnl: costo, desembolsoHnl: r2(x.desembolsoHnl),
       coberturaCostos: cobertura, resultadoHnl: estado === "costo_pendiente" ? null : resultado, margen: resultado != null && cub > 0 && estado !== "costo_pendiente" ? pct(resultado, cub) : null, margenDefinitivo: estado === "ok", estado };
   }).sort((a, b) => b.cobradoHnl - a.cobradoHnl || b.esperadoHnl - a.esperadoHnl);
 
@@ -314,6 +352,7 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
     descuentosHnl: r2(lineas.reduce((a, l) => a + (l.descuento > 0 ? l.descuento : 0), 0)),
     costoHnl: costo, desembolsoHnl: r2(caja.reduce((a, c) => a + c.costoHnl, 0)),
     costoActivacionesHnl: r2(piezas.filter((c) => c.regla === "activacion").reduce((a, c) => a + c.costoHnl, 0)),
+    cobradoCicloVigenteHnl: r2(lineas.filter((l) => l.cubiertaPorCiclo).reduce((a, l) => a + l.cobrado, 0)), cuentasCicloVigente: ciclosAct.size, // R198i
     costoSinConsumoHnl: r2(piezas.filter((c) => c.regla === "lote_sin_consumo").reduce((a, c) => a + c.costoHnl, 0)),
     coberturaCostos: cobertura, resultadoHnl: resultado, margen: resultado != null && cobradoCub > 0 ? pct(resultado, cobradoCub) : null, margenDefinitivo: cobertura != null && cobertura >= 99.5,
     flujoCajaHnl: r2(cobradoCaja - caja.reduce((a, c) => a + c.costoHnl, 0)),
@@ -335,7 +374,7 @@ export function calcularGanancias(ctx, movimientos = [], { desde, hasta, hoy = "
   for (const c of piezas) if (c.aviso) bandeja.push({ tipo: "datos_incompletos", texto: `Lote sin consumo calculado: ${c.producto}`, plataforma: c.plataforma, fecha: c.fechaCompra, monto: c.costoHnl, referencia: c.loteId });
   for (const e of esperados) bandeja.push({ tipo: "ingreso_sin_confirmar", texto: e.estado === "vencido_sin_cobro" ? "Renovación vencida sin cobro registrado" : "Renovación por cobrar", plataforma: e.plataforma, fecha: e.fecha, beneficiario: e.beneficiario, monto: e.precio, compraId: e.compraId });
 
-  return { resumen, porPlataforma, lineas, esperados, costos: piezas, desembolsos: caja, bandeja, _movs: movimientos };
+  return { resumen, porPlataforma, lineas, esperados, costos: piezas, desembolsos: caja, bandeja, ciclosActivacion: [...ciclosAct.values()], _movs: movimientos };
 }
 
 // ---------------------------------------------------------------- 5) CONCILIACIÓN DE CARTERA (CRM ↔ movimientos)
@@ -388,13 +427,13 @@ export function conciliarCartera(ctx, calc, { plataforma = "", vendedor = "", de
 // Todas las cuentas de una plataforma (con o sin movimiento): estado de vinculación y costo — botón «Cuentas».
 // ---------------------------------------------------------------- R198h · POR QUÉ una cuenta sí o no tiene costo en el período
 export const ESTADOS_COSTO = Object.freeze({
-  atribuido: "Vinculada y atribuida", cobertura_desconocida: "Costo histórico · cobertura desconocida",
+  atribuido: "Vinculada y atribuida", ciclo_vigente: "Cubierta por su activación", cobertura_desconocida: "Costo histórico · cobertura desconocida",
   fuera_periodo: "Compra fuera del período", sin_compra: "Sin compra identificada",
 });
-const RELACION_TXT = Object.freeze({ imputado: "Imputada a este período", cobertura_desconocida: "Anterior · sin duración documentada", cobertura_terminada: "Cobertura documentada terminó antes", cobertura_posterior: "Cobertura documentada empieza después", posterior: "Compra posterior al período" });
-function compraFila(l, desde, hasta, imputado) {
+const RELACION_TXT = Object.freeze({ imputado: "Imputada a este período", ciclo_vigente: "Activación vigente · cubre la cuenta hasta la próxima", ciclo_cerrado: "Activación anterior · su ciclo ya cerró", cobertura_desconocida: "Anterior · sin duración documentada", cobertura_terminada: "Cobertura documentada terminó antes", cobertura_posterior: "Cobertura documentada empieza después", posterior: "Compra posterior al período" });
+function compraFila(l, desde, hasta, imputado, cicloLoteId = "", esActivacion = false) {
   const f = ymd(l.fecha);
-  const relacion = imputado > 0 ? "imputado" : l._ciclo ? (ymd(l._ciclo.coberturaHasta) < desde ? "cobertura_terminada" : "cobertura_posterior") : f > hasta ? "posterior" : "cobertura_desconocida";
+  const relacion = imputado > 0 ? "imputado" : cicloLoteId && l.id === cicloLoteId ? "ciclo_vigente" : esActivacion && !l._ciclo && f <= hasta ? "ciclo_cerrado" : l._ciclo ? (ymd(l._ciclo.coberturaHasta) < desde ? "cobertura_terminada" : "cobertura_posterior") : f > hasta ? "posterior" : "cobertura_desconocida";
   return { loteId: l.id, fecha: f, fechaActivacion: ymd(l.fechaActivacion), producto: s(l.producto, 60), proveedor: s(l.proveedor, 60), modelo: s(l.modelo, 20), unidad: s(l.unidad, 20), cantidad: Number(l.cantidad) || 0, moneda: l.moneda || "HNL", montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: r2(l.costoTotalHnl),
     pago: s(l.cuentaPagoNombre || l.pago, 60), referencia: s(l.referencia, 80), cuentaId: s(l._cuentaId), vinculo: l._vinculo || (l.cuentaInventarioId ? "por_id" : "sin_vinculo"),
     ciclo: l._ciclo ? { desde: ymd(l._ciclo.coberturaDesde), hasta: ymd(l._ciclo.coberturaHasta), evidencia: s(l._ciclo.evidencia, 200), por: s(l._ciclo.actualizadoPor || l._ciclo.creadoPor, 40) } : null,
@@ -404,27 +443,31 @@ export function estadoCostoCuenta(ctx, calc, cuentaId) {
   const { desde, hasta } = calc.resumen;
   const piezas = calc.costos.filter((c) => c.cuentaId === cuentaId);
   const imp = new Map(); for (const c of piezas) if (c.loteId) imp.set(c.loteId, (imp.get(c.loteId) || 0) + c.costoHnl);
-  const compras = ctx.lotes.filter((l) => l._cuentaId === cuentaId && l.estado !== "anulado").map((l) => compraFila(l, desde, hasta, imp.get(l.id) || 0)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const ci = (calc.ciclosActivacion || []).find((c) => c.cuentaId === cuentaId) || null; // R198i
+  const esAct = (l) => reglaCosto(l, ctx.productosPorId.get(l.productoId) || {}) === "activacion";
+  const compras = ctx.lotes.filter((l) => l._cuentaId === cuentaId && l.estado !== "anulado").map((l) => compraFila(l, desde, hasta, imp.get(l.id) || 0, ci ? ci.loteId : "", esAct(l))).sort((a, b) => b.fecha.localeCompare(a.fecha));
   const previas = compras.filter((c) => c.relacion === "cobertura_desconocida");
   let estado, motivo;
   if (piezas.length) { estado = "atribuido"; motivo = piezas.map((c) => c.criterio).filter(Boolean).join(" · "); }
+  else if (ci) { estado = "ciclo_vigente"; motivo = `Activada el ${ci.fechaActivacion} por L${ci.costoHnl}${ci.moneda === "USDT" ? ` (${ci.montoMoneda} USDT a ${ci.tasa})` : ""}. Ese es el costo de la cuenta hasta la próxima activación: en este período suma L0 de costo y todo lo cobrado es ganancia del ciclo.`; }
   else if (!compras.length) { estado = "sin_compra"; motivo = "No hay compra registrada ni conciliada para esta cuenta (no se pone L0 como costo)."; }
   else if (previas.length) { const u = previas[0]; estado = "cobertura_desconocida"; motivo = `Última compra ${u.fecha}: L${u.costoHnl}${u.moneda === "USDT" ? ` (${u.montoMoneda} USDT a ${u.tasa})` : ""}. Su duración no está documentada: no se imputa a este período ni se inventan meses.`; }
   else { estado = "fuera_periodo"; motivo = "Sus compras están identificadas, pero su cobertura no toca este período."; }
-  return { estado, etiqueta: ESTADOS_COSTO[estado], motivo, costoPeriodoHnl: r2(piezas.reduce((a, c) => a + c.costoHnl, 0)), historicoNoImputadoHnl: r2(previas.reduce((a, c) => a + c.costoHnl, 0)), ultima: compras[0] || null, compras };
+  return { estado, etiqueta: ESTADOS_COSTO[estado], motivo, costoPeriodoHnl: r2(piezas.reduce((a, c) => a + c.costoHnl, 0)), historicoNoImputadoHnl: r2(previas.reduce((a, c) => a + c.costoHnl, 0)), ultima: compras[0] || null, compras, ciclo: ci };
 }
 // Conciliación de compras de una plataforma (vista previa SOLO LECTURA): enlazadas, conciliadas, sin cuenta, fuera del período,
 // cantidades «perfil-mes» no acreditadas y producto que no coincide con el plan real. No reparte nada por suposición.
 export function conciliacionCompras(ctx, calc, plataforma) {
   const { desde, hasta } = calc.resumen; const b = base(plataforma);
   const imp = new Map(); for (const c of calc.costos) if (c.loteId) imp.set(c.loteId, (imp.get(c.loteId) || 0) + c.costoHnl);
+  const cicloLotes = new Set((calc.ciclosActivacion || []).map((c) => c.loteId));
   const correos = [...ctx.cuentasPorId.values()].filter((a) => base(a._familia) === b && s(a.correo)).map((a) => ({ id: a.id, correo: s(a.correo).toLowerCase() }));
   const filas = [];
   for (const l of ctx.lotes) {
     if (l.estado === "anulado") continue;
     const p = ctx.productosPorId.get(l.productoId) || {}; const cta = ctx.cuentasPorId.get(s(l._cuentaId)) || null;
     const fam = familia(p.plataformaKey || l.plataformaKey || l.producto, cta && cta.planHbo); if (base(fam) !== b || (fam !== plataforma && plataforma !== b && fam !== b)) continue; // su plan + las compras sin cuenta (sin plan)
-    const f = compraFila(l, desde, hasta, imp.get(l.id) || 0);
+    const f = compraFila(l, desde, hasta, imp.get(l.id) || 0, cicloLotes.has(l.id) ? l.id : "", reglaCosto(l, p) === "activacion" && !!s(l._cuentaId)); // R198i
     const plan = s(cta && cta.planHbo, 20).toLowerCase();
     const productoPlanDistinto = b === "hbomax" && !!plan && ((/platinum/i.test(f.producto) && plan === "standard") || (/standard/i.test(f.producto) && plan === "platinum"));
     let propuesta = null;
@@ -433,10 +476,24 @@ export function conciliacionCompras(ctx, calc, plataforma) {
   }
   filas.sort((x, y) => y.fecha.localeCompare(x.fecha));
   const n = (fn) => filas.filter(fn).length;
-  return { filas, resumen: { compras: filas.length, porId: n((x) => x.vinculo === "por_id"), conciliadas: n((x) => x.vinculo === "conciliado"), sinVinculo: n((x) => x.vinculo === "sin_vinculo"), imputadas: n((x) => x.relacion === "imputado"), coberturaDesconocida: n((x) => x.relacion === "cobertura_desconocida"), fueraPeriodo: n((x) => ["cobertura_terminada", "cobertura_posterior", "posterior"].includes(x.relacion)), cantidadNoAcreditada: n((x) => x.cantidadNoAcreditada), productoPlanDistinto: n((x) => x.productoPlanDistinto), costoImputadoHnl: r2(filas.reduce((a, x) => a + x.imputadoHnl, 0)), costoHistoricoHnl: r2(filas.reduce((a, x) => a + x.costoHnl, 0)) } };
+  return { filas, resumen: { compras: filas.length, porId: n((x) => x.vinculo === "por_id"), conciliadas: n((x) => x.vinculo === "conciliado"), sinVinculo: n((x) => x.vinculo === "sin_vinculo"), imputadas: n((x) => x.relacion === "imputado"), ciclosVigentes: n((x) => x.relacion === "ciclo_vigente"), ciclosCerrados: n((x) => x.relacion === "ciclo_cerrado"), coberturaDesconocida: n((x) => x.relacion === "cobertura_desconocida"), fueraPeriodo: n((x) => ["cobertura_terminada", "cobertura_posterior", "posterior"].includes(x.relacion)), cantidadNoAcreditada: n((x) => x.cantidadNoAcreditada), productoPlanDistinto: n((x) => x.productoPlanDistinto), costoImputadoHnl: r2(filas.reduce((a, x) => a + x.imputadoHnl, 0)), costoHistoricoHnl: r2(filas.reduce((a, x) => a + x.costoHnl, 0)) } };
 }
 
-export function cuentasDePlataforma(ctx, calc, plataforma) {
+// R198i · RESULTADO DEL CICLO de activación (regla del dueño): lo que costó activar la cuenta vs. TODO lo cobrado desde esa
+// activación hasta hoy (o hasta la próxima). calcAmplio = calcularGanancias desde la activación más antigua hasta hoy.
+export function resultadoCiclos(calcAmplio, { leidoDesde = "" } = {}) {
+  const out = new Map(); if (!calcAmplio) return out;
+  const porCta = new Map(); for (const l of calcAmplio.lineas) if (l.cuentaId) (porCta.get(l.cuentaId) || porCta.set(l.cuentaId, []).get(l.cuentaId)).push(l);
+  for (const c of calcAmplio.ciclosActivacion || []) {
+    const lin = (porCta.get(c.cuentaId) || []).filter((l) => l.fecha >= c.fechaActivacion);
+    const cobrado = r2(lin.reduce((a, l) => a + l.cobrado, 0));
+    out.set(c.cuentaId, { ...c, hastaFecha: calcAmplio.resumen.hasta, cobradoHnl: cobrado, pendienteHnl: r2(lin.reduce((a, l) => a + l.pendiente, 0)), resultadoHnl: r2(cobrado - c.costoHnl), recuperado: cobrado >= c.costoHnl,
+      cobros: lin.length, clientes: new Set(lin.map((l) => l.clienteId).filter(Boolean)).size, completo: !leidoDesde || c.fechaActivacion >= leidoDesde });
+  }
+  return out;
+}
+
+export function cuentasDePlataforma(ctx, calc, plataforma, ciclos = null) {
   const famOk = (f) => f === plataforma || (plataforma === "hbomax" && String(f).startsWith("hbomax"));
   const out = [];
   for (const a of ctx.cuentasPorId.values()) {
@@ -447,13 +504,13 @@ export function cuentasDePlataforma(ctx, calc, plataforma) {
     out.push({ cuentaId: a.id, correo: s(a.correo), plataforma: a._familia, nombre: nombrePlataforma(a._familia), plan: s(a.planHbo || a.plan, 20), capacidad: Number(a.capacidad) || ocupados, ocupados, acceso: a._pseudo ? "acceso_individual" : "cuenta_madre", proveedor: s(a.proveedor, 40),
       clientes: new Set(lin.map((l) => l.clienteId).filter(Boolean)).size, altas: lin.filter((l) => l.tipo === "venta").length, renovaciones: lin.filter((l) => l.tipo === "renovacion").length,
       cobradoHnl: cobrado, pendienteHnl: r2(lin.reduce((x, l) => x + l.pendiente, 0)), esperadoHnl: r2(esp.reduce((x, e) => x + e.precio, 0)), costoHnl: costo, conCosto: cos.length > 0 || lin.some((l) => l.costoCubierto),
-      resultadoHnl: cos.length ? r2(cobrado - costo) : null, sinMovimiento: !lin.length && !esp.length, planSinClasificar: a._familia === "hbomax", ...(() => { const ec = estadoCostoCuenta(ctx, calc, a.id); return { estadoCosto: ec.estado, estadoCostoTxt: ec.etiqueta, motivoCosto: ec.motivo, historicoNoImputadoHnl: ec.historicoNoImputadoHnl, ultimaCompra: ec.ultima ? { fecha: ec.ultima.fecha, costoHnl: ec.ultima.costoHnl, moneda: ec.ultima.moneda, montoMoneda: ec.ultima.montoMoneda } : null }; })() });
+      resultadoHnl: cos.length || lin.some((l) => l.cubiertaPorCiclo) ? r2(cobrado - costo) : null, sinMovimiento: !lin.length && !esp.length, planSinClasificar: a._familia === "hbomax", ...(() => { const ec = estadoCostoCuenta(ctx, calc, a.id); return { estadoCosto: ec.estado, estadoCostoTxt: ec.etiqueta, motivoCosto: ec.motivo, historicoNoImputadoHnl: ec.historicoNoImputadoHnl, ultimaCompra: ec.ultima ? { fecha: ec.ultima.fecha, costoHnl: ec.ultima.costoHnl, moneda: ec.ultima.moneda, montoMoneda: ec.ultima.montoMoneda } : null }; })(), cicloActual: ciclos ? ciclos.get(a.id) || null : null });
   }
   return out.sort((a, b) => b.cobradoHnl - a.cobradoHnl || a.correo.localeCompare(b.correo));
 }
 
 // Detalle de UNA cuenta madre (Fase 3): perfiles, clientes y beneficiarios, precios, cobros, esperados, compras y resultado.
-export function detalleCuenta(ctx, calc, cuentaId) {
+export function detalleCuenta(ctx, calc, cuentaId, ciclos = null) {
   const a = ctx.cuentasPorId.get(cuentaId); if (!a) return null;
   const lineas = calc.lineas.filter((l) => l.cuentaId === cuentaId), esperados = calc.esperados.filter((e) => e.cuentaId === cuentaId);
   const ec = estadoCostoCuenta(ctx, calc, cuentaId); // R198h · compras por cuenta efectiva (ID o conciliada) + relación con el período
@@ -469,14 +526,16 @@ export function detalleCuenta(ctx, calc, cuentaId) {
   });
   const cobrado = r2(lineas.reduce((x, l) => x + l.cobrado, 0)), costo = r2(costos.reduce((x, c) => x + c.costoHnl, 0));
   const ciclo = compras[0] ? r2(compras[0].costoHnl) : null;
+  const cic = ciclos ? ciclos.get(cuentaId) || null : null, conCosto = costos.length > 0 || lineas.some((l) => l.cubiertaPorCiclo); // R198i
   return {
     cuentaId, correo: s(a.correo), plataforma: familia(a.plataforma, a.planHbo), nombre: nombrePlataforma(familia(a.plataforma, a.planHbo)), plan: s(a.planHbo || a.plan, 30), capacidad, ocupados, disponibles: Math.max(0, capacidad - ocupados),
     perfiles, lineas, esperados, costos, compras,
     cobradoHnl: cobrado, pendienteHnl: r2(lineas.reduce((x, l) => x + l.pendiente, 0)), esperadoHnl: r2(esperados.reduce((x, e) => x + e.precio, 0)),
-    costoPeriodoHnl: costo, resultadoPeriodoHnl: costos.length ? r2(cobrado - costo) : null, margen: costos.length && cobrado > 0 ? pct(r2(cobrado - costo), cobrado) : null,
-    costoCicloHnl: ciclo, resultadoCicloHnl: ciclo != null ? r2(cobrado - ciclo) : null,
-    estado: !costos.length && cobrado > 0 ? "costo_pendiente" : !lineas.length ? "sin_ingresos" : "ok",
+    costoPeriodoHnl: costo, resultadoPeriodoHnl: conCosto ? r2(cobrado - costo) : null, margen: conCosto && cobrado > 0 ? pct(r2(cobrado - costo), cobrado) : null,
+    costoCicloHnl: cic ? cic.costoHnl : ciclo, resultadoCicloHnl: cic ? cic.resultadoHnl : ciclo != null ? r2(cobrado - ciclo) : null,
+    estado: !conCosto && cobrado > 0 ? "costo_pendiente" : !lineas.length ? "sin_ingresos" : "ok",
     estadoCosto: ec.estado, estadoCostoTxt: ec.etiqueta, motivoCosto: ec.motivo, historicoNoImputadoHnl: ec.historicoNoImputadoHnl,
+    cicloActual: cic, // R198i
   };
 }
 

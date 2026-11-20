@@ -13,7 +13,7 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
-import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria, conciliacionCompras, ESTADOS_COSTO } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
+import { prepararContexto, calcularGanancias, resultadoCiclos, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria, conciliacionCompras, ESTADOS_COSTO } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
 import { ventasACostear as ventasACostearG } from "./_finanzas-costeo.js";
 import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
 import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
@@ -835,15 +835,25 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const ctx = prepararContexto({ clientes, inventario, lotes, productos, consumos, vipExtras, spotify, premium, ciclos }); // R198h · + conciliaciones
       const deps = { R: d.R, ventasACostear: ventasACostearG };
       const calc = calcularGanancias(ctx, movs, { desde, hasta, hoy }, deps);
+      // R198i · resultado del CICLO de activación: se lee desde la activación más antigua de las cuentas pedidas (máx. 400 días) hasta hoy
+      const ciclosDe = async (filtro) => {
+        const acts = ctx.lotes.length ? calcularGanancias(ctx, [], { desde: hoy, hasta: hoy, hoy }, deps).ciclosActivacion.filter(filtro) : [];
+        if (!acts.length) return null;
+        const tope = new Date(Date.parse(`${hoy}T12:00:00Z`) - 400 * 86400000).toISOString().slice(0, 10);
+        const ini = [acts.map((c) => c.fechaActivacion).sort()[0], tope].sort()[1];
+        const mv = ini < leerDesde ? await d.leerMovimientos(ini) : movs;
+        return resultadoCiclos(calcularGanancias(ctx, mv, { desde: ini, hasta: hoy, hoy }, deps), { leidoDesde: ini });
+      };
       if (accion === "finp_ganancias_cuenta") {
-        const det = detalleCuenta(ctx, calc, txt(body.cuentaId, 160)); if (!det) throw errUsuario("Esa cuenta ya no está en Control Maestro.");
+        const cid = txt(body.cuentaId, 160);
+        const det = detalleCuenta(ctx, calc, cid, await ciclosDe((c) => c.cuentaId === cid)); if (!det) throw errUsuario("Esa cuenta ya no está en Control Maestro.");
         return ok({ desde, hasta, cuenta: det });
       }
       if (accion === "finp_ganancias_plataforma") { // R197b · botón «Cuentas»: todas las cuentas/accesos + conciliación de cartera (solo lectura)
         const plat = txt(body.plataforma, 40); if (!plat) throw errUsuario("Elija la plataforma.");
         const cartera = conciliarCartera(ctx, calc, { plataforma: plat, vendedor: txt(body.vendedor, 60), desde, hasta, hoy }, deps);
         const vendedores = [...new Set(ctx.servicios.map((x) => String(x.vendedor || "Sin vendedor")))].sort();
-        return ok({ desde, hasta, plataforma: plat, nombre: nombrePlataforma(plat), cuentas: cuentasDePlataforma(ctx, calc, plat), compras: conciliacionCompras(ctx, calc, plat), estadosCosto: ESTADOS_COSTO, puedeConciliar: identity.role === "sublicuentas", /* R198h */ cartera: { resumen: cartera.resumen, filas: cartera.filas.slice(0, 1500), truncado: cartera.filas.length > 1500 }, vendedores, plataformaResumen: calc.porPlataforma.find((x) => x.plataforma === plat) || null, definiciones: DEFINICIONES });
+        return ok({ desde, hasta, plataforma: plat, nombre: nombrePlataforma(plat), cuentas: cuentasDePlataforma(ctx, calc, plat, await ciclosDe((c) => String(c.plataforma).replace(/^hbomax.*/, "hbomax") === String(plat).replace(/^hbomax.*/, "hbomax"))), compras: conciliacionCompras(ctx, calc, plat), estadosCosto: ESTADOS_COSTO, puedeConciliar: identity.role === "sublicuentas", /* R198h */ cartera: { resumen: cartera.resumen, filas: cartera.filas.slice(0, 1500), truncado: cartera.filas.length > 1500 }, vendedores, plataformaResumen: calc.porPlataforma.find((x) => x.plataforma === plat) || null, definiciones: DEFINICIONES });
       }
       if (accion === "finp_auditoria_cartera") { // R197c · auditoría SOLO LECTURA: no crea, no cambia, no borra; queda registro del acceso
         const plat = txt(body.plataforma, 40), vend = txt(body.vendedor, 60), clase = txt(body.clase, 40);
