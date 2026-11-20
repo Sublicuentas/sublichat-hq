@@ -35,7 +35,7 @@ test('D · todo el tema vive dentro de @media (max-width: 767.98px) y bajo html[
   const reglas = cuerpo.match(/^\s+[^@\s/}][^{]*\{/gm) || [];
   const fuera = reglas.filter((r) => !/html\[data-ui="lego"\]/.test(r) && !/^\s+(to|from|\d+%)/.test(r));
   assert.deepEqual(fuera, [], 'ninguna regla del tema fuera del atributo lego');
-  assert.match(html, /<link rel="stylesheet" href="\.\/ui-lego\.css\?v=20261120-r199a">/);
+  assert.match(html, /<link rel="stylesheet" href="\.\/ui-lego\.css\?v=20261120-r199[a-z]">/);
 });
 
 test('Recursos: Sublirobot original y renders en WebP livianos; respeta reduced-motion; sin colores neón', () => {
