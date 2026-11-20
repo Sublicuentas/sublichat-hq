@@ -666,3 +666,75 @@ export function csvAuditoria(filas = []) {
     f.movimientos.map((m) => `${m.fecha} ${m.tipo} ${m.cobrado ?? "compartido"} ${corto(m.movimientoId)}`).join(" | "), f.ultimoCobro ? `${f.ultimoCobro.fecha} ${f.ultimoCobro.tipo}` : "", f.costoVinculado ? "Sí" : "No", f.ausencias.join("; ")].map(esc).join(","));
   return out.join("\n");
 }
+
+// ---------------------------------------------------------------- R198j · GANANCIA POR CUENTA (regla del dueño, 20/11/2026)
+// «Lo que yo pago de la cuenta y lo que paga cada cliente: el restante es la ganancia.»
+// · Cuenta por ACTIVACIÓN (link, HBO, etc.): se paga UNA vez y cubre la cuenta hasta la próxima activación.
+//   Ganancia neta al mes = lo que pagan los clientes al mes (ya no hay costo mensual: la activación ya se pagó).
+//   Ganancia desde la activación (estimada) = Σ cuota mensual de cada perfil × meses pagados desde la activación (o desde
+//   su alta, si entró después) − lo que costó activarla.
+// · Cuenta con vigencia (p. ej. 30 días) o mensual (Spotify familiar): costo mensual = costo × 30.44 / días de vigencia.
+// · Sin compra registrada: NO se inventa costo: «Registre cuánto pagó». Nada se escribe.
+const mesesEntre = (ini, fin) => { // meses calendario pagados entre dos fechas (tolerancia de 3 días)
+  if (!ini || !fin || fin <= ini) return 0;
+  const [y1, m1, d1] = ini.split("-").map(Number), [y2, m2, d2] = fin.split("-").map(Number);
+  return Math.max(0, (y2 - y1) * 12 + (m2 - m1) - (d2 + 3 < d1 ? 1 : 0));
+};
+export function rentabilidadCuentas(ctx, { hoy, plataforma = "", altas = new Map(), cobradoCiclo = null } = {}) {
+  const b = plataforma ? base(plataforma) : "";
+  const lotesPorCuenta = new Map();
+  for (const l of ctx.lotes) { if (l.estado === "anulado" || !l._cuentaId || !(r2(l.costoTotalHnl) > 0) || !ymd(l.fecha) || ymd(l.fecha) > hoy) continue; (lotesPorCuenta.get(l._cuentaId) || lotesPorCuenta.set(l._cuentaId, []).get(l._cuentaId)).push(l); }
+  const spfPorCorreo = new Map((ctx.spotify || []).filter((x) => r2(x.costoMensualHnl) > 0).map((x) => [s(x.madreCorreo || x.correo).toLowerCase(), x]));
+  const filas = [];
+  for (const a of ctx.cuentasPorId.values()) {
+    if (a._pseudo) continue;
+    if (b && base(a._familia) !== b) continue;
+    const cls = (Array.isArray(a.clientes) ? a.clientes : []).filter(Boolean);
+    // ---- lo que pagué (la última compra de esa cuenta; la de activación manda)
+    const ls = (lotesPorCuenta.get(a.id) || []).sort((x, y) => ymd(y.fecha).localeCompare(ymd(x.fecha)));
+    const ult = ls[0] || null; let compra = null;
+    if (ult) {
+      const p = ctx.productosPorId.get(ult.productoId) || {}; const regla = ult._ciclo ? "cobertura" : reglaCosto(ult, p);
+      const dur = ult._ciclo ? diasRango(ymd(ult._ciclo.coberturaDesde), ymd(ult._ciclo.coberturaHasta)) : Number(ult.duracionDias) || Number(p.duracionDias) || 0;
+      const costo = r2(ult.costoTotalHnl);
+      compra = { fecha: ymd(ult.fecha), costoHnl: costo, moneda: ult.moneda || "HNL", montoMoneda: ult.costoTotalMoneda, tasa: ult.tasa, tipo: regla === "cobertura" && dur > 0 ? "vigencia" : "activacion", dias: dur || null,
+        costoMensualHnl: regla === "cobertura" && dur > 0 ? r2(costo * 30.4375 / dur) : 0, compras: ls.length };
+    } else { const sp = spfPorCorreo.get(s(a.correo).toLowerCase()); if (sp) compra = { fecha: ymd(sp.creadoAt) || "", costoHnl: r2(sp.costoMensualHnl), moneda: "HNL", tipo: "mensual", dias: 30, costoMensualHnl: r2(sp.costoMensualHnl), compras: 1 }; }
+    // ---- lo que pagan los clientes (cuota mensual de cada perfil, según su ficha)
+    const inicioCuenta = compra && compra.tipo === "activacion" ? compra.fecha : "";
+    const perfiles = cls.map((cl, i) => {
+      const sv = ctx.servPorCompra.get(String(cl.compraId || "")) || null; const cli = sv ? ctx.clientePorId.get(sv._clienteId) || {} : {};
+      const meses = Math.max(1, Number(sv && sv.mesesContratados) || 1);
+      const cuota = sv ? r2(Number(sv.precio || 0) / meses) : 0;
+      const alta = altas.get(String(cl.compraId || "")) || "";
+      const inicio = [inicioCuenta, alta].filter(Boolean).sort().pop() || ""; // desde la activación, o desde que entró si fue después
+      const vence = sv ? ymd(sv.fechaRenovacion) : "";
+      const mesesPagados = inicio && vence ? mesesEntre(inicio, vence > hoy ? vence : vence) : 0;
+      return { perfil: cl.slot != null ? `Perfil ${cl.slot}` : `Perfil ${i + 1}`, cliente: s((sv && (sv.beneficiarioNombre || sv.beneficiario)) || cl.nombre || cli.nombre, 80), cuotaMesHnl: cuota, vence, inicio, mesesPagados, estimadoHnl: r2(cuota * mesesPagados), sinFicha: !sv };
+    });
+    const mensual = r2(perfiles.reduce((x, p) => x + p.cuotaMesHnl, 0));
+    const estimado = r2(perfiles.reduce((x, p) => x + p.estimadoHnl, 0));
+    const mesesCuenta = compra && compra.fecha ? mesesEntre(compra.fecha, hoy) : 0;
+    const costoAcum = !compra ? null : compra.tipo === "activacion" ? compra.costoHnl : r2(compra.costoMensualHnl * Math.max(1, mesesCuenta));
+    const cap = Number(a.capacidad) || cls.length;
+    const completa = cls.some((c) => c.cuentaCompleta === true || c.tipoVenta === "cuenta_completa") || (cls.length > 0 && (s(a.modalidadVenta) === "cuenta_completa" || !!s(a.exclusivaCompraId)));
+    const reg = cobradoCiclo ? cobradoCiclo.get(a.id) || null : null;
+    const estado = !compra ? "sin_compra" : !cls.length ? "vacia" : estimado - costoAcum < 0 ? "por_recuperar" : "ganando";
+    filas.push({ cuentaId: a.id, correo: s(a.correo), plataforma: a._familia, base: base(a._familia), nombre: nombrePlataforma(base(a._familia)), plan: s(a.planHbo || a.plan, 20), capacidad: cap, ocupados: cls.length, libres: completa ? 0 : Math.max(0, cap - cls.length), completa,
+      compra, meMensualHnl: mensual, gananciaMesHnl: compra ? r2(mensual - compra.costoMensualHnl) : null,
+      estimadoDesdeCompraHnl: estimado, gananciaDesdeCompraHnl: costoAcum == null ? null : r2(estimado - costoAcum), mesesDesdeCompra: mesesCuenta,
+      registradoCajaHnl: reg ? reg.cobradoHnl : null, perfiles, estado });
+  }
+  filas.sort((x, y) => x.nombre.localeCompare(y.nombre) || (y.gananciaMesHnl ?? -1e9) - (x.gananciaMesHnl ?? -1e9) || x.correo.localeCompare(y.correo));
+  const grupos = new Map();
+  for (const f of filas) {
+    const g = grupos.get(f.base) || grupos.set(f.base, { plataforma: f.base, nombre: f.nombre, cuentas: 0, perfiles: 0, libres: 0, meMensualHnl: 0, pagueHnl: 0, gananciaMesHnl: 0, gananciaDesdeCompraHnl: 0, sinCompra: 0, sinCompraMensualHnl: 0, vacias: 0, porRecuperar: 0 }).get(f.base);
+    g.cuentas++; g.perfiles += f.ocupados; g.libres += f.libres; g.meMensualHnl += f.meMensualHnl;
+    if (f.compra) { g.pagueHnl += f.compra.costoHnl; g.gananciaMesHnl += f.gananciaMesHnl; g.gananciaDesdeCompraHnl += f.gananciaDesdeCompraHnl; } else { g.sinCompra++; g.sinCompraMensualHnl += f.meMensualHnl; }
+    if (f.estado === "vacia") g.vacias++; if (f.estado === "por_recuperar") g.porRecuperar++;
+  }
+  const plataformas = [...grupos.values()].map((g) => ({ ...g, meMensualHnl: r2(g.meMensualHnl), pagueHnl: r2(g.pagueHnl), gananciaMesHnl: r2(g.gananciaMesHnl), gananciaDesdeCompraHnl: r2(g.gananciaDesdeCompraHnl), sinCompraMensualHnl: r2(g.sinCompraMensualHnl) }))
+    .filter((g) => g.perfiles > 0 || g.pagueHnl > 0).sort((x, y) => y.meMensualHnl - x.meMensualHnl);
+  const tot = (k) => r2(plataformas.reduce((x, g) => x + g[k], 0));
+  return { hoy, plataformas, filas, total: { cuentas: plataformas.reduce((x, g) => x + g.cuentas, 0), perfiles: plataformas.reduce((x, g) => x + g.perfiles, 0), meMensualHnl: tot("meMensualHnl"), pagueHnl: tot("pagueHnl"), gananciaMesHnl: tot("gananciaMesHnl"), gananciaDesdeCompraHnl: tot("gananciaDesdeCompraHnl"), sinCompra: plataformas.reduce((x, g) => x + g.sinCompra, 0), sinCompraMensualHnl: tot("sinCompraMensualHnl") } };
+}
