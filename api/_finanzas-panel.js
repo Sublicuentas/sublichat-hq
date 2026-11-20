@@ -13,7 +13,7 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
-import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
+import { prepararContexto, calcularGanancias, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria, conciliacionCompras, ESTADOS_COSTO } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
 import { ventasACostear as ventasACostearG } from "./_finanzas-costeo.js";
 import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
 import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
@@ -340,7 +340,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_ganancias_plataforma", "finp_auditoria_cartera"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -771,6 +771,51 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         cambios: cfg.exists ? (cfg.data().historial || []).slice(-10).reverse() : [] });
     }
 
+    // ---------------- R198h · CONCILIACIÓN compra → cuenta → período (fin_costo_ciclos). Solo Sublicuentas. NUNCA toca la compra
+    // (monto, fecha, tasa, referencia y cuenta original quedan iguales), ni Control Maestro, ni ventas. Cada cambio queda auditado.
+    if (accion === "finp_costo_conciliar" || accion === "finp_costo_conciliar_quitar") {
+      if (identity.role !== "sublicuentas") throw errUsuario("Solo Sublicuentas concilia compras con cuentas.");
+      const loteId = txt(body.loteId, 160); if (!loteId) throw errUsuario("Falta la compra.");
+      const ymdOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+      const r = await db.runTransaction(async (tx) => {
+        const lref = col("fin_lotes").doc(loteId), cref = col("fin_costo_ciclos").doc(loteId);
+        const [sl, sc] = [await tx.get(lref), await tx.get(cref)];
+        if (!sl.exists || (sl.data() || {}).estado === "anulado") throw errUsuario("Esa compra no existe o está anulada.");
+        const l = sl.data() || {}, a = sc.exists ? sc.data() || {} : {};
+        if (accion === "finp_costo_conciliar_quitar") {
+          if (!sc.exists || a.estado === "anulado") return { sinCambios: true };
+          tx.set(cref, { ...a, estado: "anulado", actualizadoAt: ahora, actualizadoPor: actor, historial: [...(a.historial || []), { at: ahora, por: actor, accion: "quitar", antes: { cuentaInventarioId: a.cuentaInventarioId || "", coberturaDesde: a.coberturaDesde || "", coberturaHasta: a.coberturaHasta || "" }, motivo: txt(body.motivo, 200) }].slice(-30) });
+          audit(tx, { accion: "costo_conciliacion_quitar", targetType: "fin_lote", targetId: loteId, before: { cuentaInventarioId: a.cuentaInventarioId || "", coberturaDesde: a.coberturaDesde || "", coberturaHasta: a.coberturaHasta || "" }, after: { estado: "anulado" } });
+          return { loteId, quitado: true };
+        }
+        const evidencia = txt(body.evidencia, 300);
+        if (evidencia.length < 5) throw errUsuario("Escriba la evidencia (de dónde sale el vínculo o la cobertura).");
+        let cuentaId = txt(body.cuentaInventarioId, 160);
+        if (l.cuentaInventarioId) { // la compra ya trae su cuenta: no se cambia el vínculo original
+          if (cuentaId && cuentaId !== l.cuentaInventarioId) throw errUsuario("Esa compra ya está registrada para otra cuenta. No se cambia el vínculo original.");
+          cuentaId = "";
+        } else if (cuentaId) {
+          const ci = await tx.get(col("inventario").doc(cuentaId));
+          if (!ci.exists) throw errUsuario("Esa cuenta no está en Control Maestro.");
+        }
+        const cd = txt(body.coberturaDesde, 10), ch = txt(body.coberturaHasta, 10);
+        if ((cd || ch) && !(ymdOk(cd) && ymdOk(ch))) throw errUsuario("Escriba las dos fechas de la cobertura (desde y hasta) o ninguna.");
+        if (cd && ch) {
+          if (ch < cd) throw errUsuario("La cobertura termina antes de empezar.");
+          const base = String(l.fechaActivacion || l.fecha || "");
+          if (base && cd < base) throw errUsuario(`La cobertura no puede empezar antes de la compra/activación (${base}).`);
+          if ((Date.parse(ch) - Date.parse(cd)) / 86400000 > 400) throw errUsuario("Una cobertura de más de 13 meses necesita revisión: no se guarda.");
+        }
+        if (!cuentaId && !l.cuentaInventarioId && !(cd && ch)) throw errUsuario("Elija la cuenta madre o la cobertura documentada.");
+        const n = { loteId, cuentaInventarioId: cuentaId || a.cuentaInventarioId || "", coberturaDesde: cd || "", coberturaHasta: ch || "", evidencia, estado: "confirmado" };
+        tx.set(cref, { ...a, ...n, loteFecha: l.fecha || "", loteCostoHnl: l.costoTotalHnl || 0, loteMoneda: l.moneda || "", loteMonto: l.costoTotalMoneda || 0, loteTasa: l.tasa || 0, ...(sc.exists ? {} : { creadoAt: ahora, creadoPor: actor }), actualizadoAt: ahora, actualizadoPor: actor,
+          historial: [...(a.historial || []), { at: ahora, por: actor, accion: "conciliar", antes: { cuentaInventarioId: a.cuentaInventarioId || "", coberturaDesde: a.coberturaDesde || "", coberturaHasta: a.coberturaHasta || "" }, despues: { cuentaInventarioId: n.cuentaInventarioId, coberturaDesde: n.coberturaDesde, coberturaHasta: n.coberturaHasta }, evidencia }].slice(-30) });
+        audit(tx, { accion: "costo_conciliacion", targetType: "fin_lote", targetId: loteId, before: { cuentaInventarioId: a.cuentaInventarioId || "", coberturaDesde: a.coberturaDesde || "", coberturaHasta: a.coberturaHasta || "" }, after: { cuentaInventarioId: n.cuentaInventarioId, coberturaDesde: n.coberturaDesde, coberturaHasta: n.coberturaHasta }, detalle: evidencia });
+        return { loteId, ...n };
+      });
+      return ok(r);
+    }
+
     // ---------------- R197 · GANANCIAS de todas las plataformas (motor único, SOLO LECTURA: no crea ni cambia nada)
     if (accion === "finp_ganancias" || accion === "finp_ganancias_cuenta" || accion === "finp_ganancias_excel" || accion === "finp_ganancias_plataforma" || accion === "finp_auditoria_cartera") {
       if (!d.leerMovimientos || !d.R) throw errUsuario("El motor de ganancias no está disponible.");
@@ -783,11 +828,11 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       if (Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) > 400) throw errUsuario("Elija un rango de hasta 13 meses.");
       const leerDesde = accion === "finp_ganancias" ? [desde, rangoMes(mesesIni[0]).desde].sort()[0] : accion === "finp_ganancias_plataforma" || accion === "finp_auditoria_cartera" ? new Date(Date.parse(`${desde}T12:00:00Z`) - 180 * 86400000).toISOString().slice(0, 10) : desde; // plataforma: 6 meses atrás para «último cobro»
       const mesesConsumo = mesesDe(leerDesde, hasta > hoy ? hasta : hoy);
-      const [movs, clientes, inventario, lotes, productos, vipExtras, spotify, premium, consumos, cfgCosteo] = await Promise.all([
+      const [movs, clientes, inventario, lotes, productos, vipExtras, spotify, premium, consumos, cfgCosteo, ciclos] = await Promise.all([
         d.leerMovimientos(leerDesde), todos("clientes"), todos("inventario"), todos("fin_lotes"), todos("fin_productos"), todos("fin_vip_extras"), todos("fin_spotify_cuentas"), todos("fin_premium_cuentas"),
         Promise.all(mesesConsumo.map((m) => col("fin_consumos").where("mesKey", "==", m).get().then((sn) => sn.docs.map((x) => ({ id: x.id, ...(x.data() || {}) }))))).then((a) => a.flat()),
-        col("finanzas_config").doc("costeo").get()]);
-      const ctx = prepararContexto({ clientes, inventario, lotes, productos, consumos, vipExtras, spotify, premium });
+        col("finanzas_config").doc("costeo").get(), todos("fin_costo_ciclos")]);
+      const ctx = prepararContexto({ clientes, inventario, lotes, productos, consumos, vipExtras, spotify, premium, ciclos }); // R198h · + conciliaciones
       const deps = { R: d.R, ventasACostear: ventasACostearG };
       const calc = calcularGanancias(ctx, movs, { desde, hasta, hoy }, deps);
       if (accion === "finp_ganancias_cuenta") {
@@ -798,7 +843,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         const plat = txt(body.plataforma, 40); if (!plat) throw errUsuario("Elija la plataforma.");
         const cartera = conciliarCartera(ctx, calc, { plataforma: plat, vendedor: txt(body.vendedor, 60), desde, hasta, hoy }, deps);
         const vendedores = [...new Set(ctx.servicios.map((x) => String(x.vendedor || "Sin vendedor")))].sort();
-        return ok({ desde, hasta, plataforma: plat, nombre: nombrePlataforma(plat), cuentas: cuentasDePlataforma(ctx, calc, plat), cartera: { resumen: cartera.resumen, filas: cartera.filas.slice(0, 1500), truncado: cartera.filas.length > 1500 }, vendedores, plataformaResumen: calc.porPlataforma.find((x) => x.plataforma === plat) || null, definiciones: DEFINICIONES });
+        return ok({ desde, hasta, plataforma: plat, nombre: nombrePlataforma(plat), cuentas: cuentasDePlataforma(ctx, calc, plat), compras: conciliacionCompras(ctx, calc, plat), estadosCosto: ESTADOS_COSTO, puedeConciliar: identity.role === "sublicuentas", /* R198h */ cartera: { resumen: cartera.resumen, filas: cartera.filas.slice(0, 1500), truncado: cartera.filas.length > 1500 }, vendedores, plataformaResumen: calc.porPlataforma.find((x) => x.plataforma === plat) || null, definiciones: DEFINICIONES });
       }
       if (accion === "finp_auditoria_cartera") { // R197c · auditoría SOLO LECTURA: no crea, no cambia, no borra; queda registro del acceso
         const plat = txt(body.plataforma, 40), vend = txt(body.vendedor, 60), clase = txt(body.clase, 40);

@@ -129,18 +129,26 @@ function costosRango(ctx, desde, hasta) {
   const lotesCubiertos = new Set(); // cuentas con lote real (el Excel Premium no se suma encima)
   for (const l of lotes) {
     if (l.estado === "anulado") continue;
-    const p = productosPorId.get(l.productoId) || {}; const fam = familia(p.plataformaKey || l.plataformaKey || l.producto, (cuentasPorId.get(l.cuentaInventarioId) || {}).planHbo);
+    const ctaId = s(l._cuentaId || l.cuentaInventarioId); // R198h · cuenta efectiva (por ID o conciliada)
+    const p = productosPorId.get(l.productoId) || {}; const fam = familia(p.plataformaKey || l.plataformaKey || l.producto, (cuentasPorId.get(ctaId) || {}).planHbo);
     const costo = r2(l.costoTotalHnl), fecha = ymd(l.fecha), inicio = ymd(l.fechaActivacion) || fecha;
     if (!fecha || !(costo > 0)) continue;
-    const ref = { loteId: l.id, producto: s(l.producto || p.nombre, 60), proveedor: s(l.proveedor, 60), moneda: l.moneda || "HNL", montoMoneda: l.costoTotalMoneda, tasa: l.tasa, fechaCompra: fecha, cuentaId: s(l.cuentaInventarioId), correo: s((cuentasPorId.get(l.cuentaInventarioId) || {}).correo) };
+    const ref = { loteId: l.id, producto: s(l.producto || p.nombre, 60), proveedor: s(l.proveedor, 60), moneda: l.moneda || "HNL", montoMoneda: l.costoTotalMoneda, tasa: l.tasa, fechaCompra: fecha, cuentaId: ctaId, correo: s((cuentasPorId.get(ctaId) || {}).correo) };
     if (fecha >= desde && fecha <= hasta) caja.push({ ...ref, plataforma: fam, costoHnl: costo, pago: l.cuentaPagoNombre || l.pago || "" });
     // Netflix VIP y Spotify Familiar se reconocen por su costo mensual por acceso/familia: su compra es solo caja.
-    if ((base(fam) === "vipnetflix" && vipConCosto) || (base(fam) === "spotify" && spfConCosto && !l.cuentaInventarioId)) continue;
+    if ((base(fam) === "vipnetflix" && vipConCosto) || (base(fam) === "spotify" && spfConCosto && !ctaId)) continue;
+    if (l._ciclo) { // R198h · cobertura DOCUMENTADA en la conciliación: el costo del ciclo se reparte por días, en cualquier mes
+      const cd = ymd(l._ciclo.coberturaDesde), ch = ymd(l._ciclo.coberturaHasta), dur = diasRango(cd, ch);
+      const d = dur > 0 ? diasDentro(cd, dur, desde, hasta) : 0; if (!d) continue;
+      if (ctaId) lotesCubiertos.add(`${ctaId}|${desde}`);
+      piezas.push({ ...ref, plataforma: fam, regla: "cobertura_documentada", costoHnl: r2(costo * d / dur), criterio: `${d} de ${dur} días de la cobertura documentada (${cd} → ${ch}) · ${s(l._ciclo.evidencia, 120)}`, costoCiclo: costo });
+      continue;
+    }
     const regla = reglaCosto(l, p);
     if (regla === "cobertura") {
       const dur = Number(l.duracionDias) || Number(p.duracionDias) || 30;
       const d = diasDentro(inicio, dur, desde, hasta); if (!d) continue;
-      if (l.cuentaInventarioId) lotesCubiertos.add(`${l.cuentaInventarioId}|${desde}`);
+      if (ctaId) lotesCubiertos.add(`${ctaId}|${desde}`);
       piezas.push({ ...ref, plataforma: fam, regla, costoHnl: r2(costo * d / dur), criterio: `${d} de ${dur} días de vigencia (${inicio} → ${sumarDias(inicio, dur - 1)})`, costoCiclo: costo });
     } else if (regla === "consumo") {
       if (consumoEnRango.has(l.productoId)) continue; // se reconoce abajo por lo usado
@@ -180,7 +188,15 @@ function costosRango(ctx, desde, hasta) {
 // ---------------------------------------------------------------- 3) CONTEXTO (una sola lectura de datos)
 // Cuentas = cuentas madre de Control Maestro / Bodega (`inventario`) + accesos Netflix VIP registrados en Finanzas
 // (`fin_vip_extras`) que no tienen documento local: un Extra VIP es un ACCESO INDIVIDUAL, no «0 cuentas».
-export function prepararContexto({ clientes = [], inventario = [], lotes = [], productos = [], consumos = [], vipExtras = [], spotify = [], premium = [] } = {}) {
+// R198h · PDF «HBO: compras registradas pendientes de vinculación» (19/11/2026). Conciliación PERSISTENTE compra → cuenta → período
+// en `fin_costo_ciclos/{loteId}` (la compra original NO se toca: monto, fecha, tasa y referencia quedan inmutables):
+//   · cuentaInventarioId → vincula una compra que no traía cuenta (confirmación administrativa, con evidencia);
+//   · coberturaDesde/coberturaHasta → cobertura DOCUMENTADA del ciclo: solo entonces el costo se reparte por días del período.
+// Sin cobertura documentada, una activación se reconoce en su fecha y los meses siguientes quedan «cobertura desconocida».
+export const cantidadNoAcreditada = (l = {}) => String(l.unidad || "") === "perfil-mes" && !(Number(l.duracionDias) > 0) && !String(l.vigenciaHasta || ""); // «60 perfil-mes» salió del catálogo (365 d × 5), no de la compra
+export function prepararContexto({ clientes = [], inventario = [], lotes = [], productos = [], consumos = [], vipExtras = [], spotify = [], premium = [], ciclos = [] } = {}) {
+  const cicloPorLote = new Map(ciclos.filter((c) => c && c.estado !== "anulado" && c.loteId).map((c) => [String(c.loteId), c]));
+  lotes = lotes.map((l) => { const c = cicloPorLote.get(String(l.id)) || null; return { ...l, _cuentaId: s(l.cuentaInventarioId) || s(c && c.cuentaInventarioId), _vinculo: s(l.cuentaInventarioId) ? "por_id" : c && c.cuentaInventarioId ? "conciliado" : "sin_vinculo", _ciclo: c && /^\d{4}-\d{2}-\d{2}$/.test(String(c.coberturaDesde || "")) && /^\d{4}-\d{2}-\d{2}$/.test(String(c.coberturaHasta || "")) ? c : null, _conciliacion: c }; });
   const servPorCompra = new Map(), clientePorId = new Map(), servicios = [];
   for (const c of clientes) {
     if (!c || String(c.consolidadoEn || "").trim()) continue;
@@ -210,7 +226,7 @@ export function prepararContexto({ clientes = [], inventario = [], lotes = [], p
     const c = cuentasPorCorreo.get(`${base(familia(sv.plataforma))}|${s(sv.correo).toLowerCase()}`);
     if (c) { cuentaPorCompra.set(cid, c); enlacePorCorreo.add(cid); }
   }
-  return { servPorCompra, clientePorId, servicios, cuentaPorCompra, enlacePorCorreo, cuentasPorId, cuentasPorCorreo, lotes, productosPorId: new Map(productos.map((p) => [p.id, p])), consumos, vipExtras, spotify, premium };
+  return { servPorCompra, clientePorId, servicios, cuentaPorCompra, enlacePorCorreo, cuentasPorId, cuentasPorCorreo, lotes, productosPorId: new Map(productos.map((p) => [p.id, p])), consumos, vipExtras, spotify, premium, cicloPorLote };
 }
 
 const PLAT_CUENTA = new Set(["netflix", "vipnetflix", "disneyp", "disneys", "hbomax", "hbomax_standard", "hbomax_platinum", "primevideo", "paramount", "crunchyroll", "spotify", "youtube", "appletv", "vix", "universal", "viki", "deezer", "canva"]);
@@ -221,7 +237,7 @@ export const DEFINICIONES = Object.freeze({
   pendiente: "Saldo por cobrar de ventas o renovaciones del período (pago parcial o a crédito).",
   esperado: "Renovaciones que vencen en el período sin cobro registrado. NO es dinero cobrado.",
   costo: "Costo directo atribuible al período, con la tasa y el costo históricos de cada compra.",
-  cobertura: "Parte de lo cobrado cuya cuenta/plataforma tiene costo registrado. Si es menor a 100 %, el margen no es definitivo.",
+  cobertura: "Cobrado de cuentas con costo ATRIBUIDO al período ÷ cobrado total del período. Una compra anterior sin duración documentada no cuenta (se muestra como «cobertura desconocida»). Si es menor a 100 %, el margen no es definitivo.",
   resultado: "Cobrado con costo − costo directo. Lo cobrado sin costo se muestra aparte («costo incompleto»), nunca como ganancia.",
 });
 
@@ -370,6 +386,56 @@ export function conciliarCartera(ctx, calc, { plataforma = "", vendedor = "", de
 }
 
 // Todas las cuentas de una plataforma (con o sin movimiento): estado de vinculación y costo — botón «Cuentas».
+// ---------------------------------------------------------------- R198h · POR QUÉ una cuenta sí o no tiene costo en el período
+export const ESTADOS_COSTO = Object.freeze({
+  atribuido: "Vinculada y atribuida", cobertura_desconocida: "Costo histórico · cobertura desconocida",
+  fuera_periodo: "Compra fuera del período", sin_compra: "Sin compra identificada",
+});
+const RELACION_TXT = Object.freeze({ imputado: "Imputada a este período", cobertura_desconocida: "Anterior · sin duración documentada", cobertura_terminada: "Cobertura documentada terminó antes", cobertura_posterior: "Cobertura documentada empieza después", posterior: "Compra posterior al período" });
+function compraFila(l, desde, hasta, imputado) {
+  const f = ymd(l.fecha);
+  const relacion = imputado > 0 ? "imputado" : l._ciclo ? (ymd(l._ciclo.coberturaHasta) < desde ? "cobertura_terminada" : "cobertura_posterior") : f > hasta ? "posterior" : "cobertura_desconocida";
+  return { loteId: l.id, fecha: f, fechaActivacion: ymd(l.fechaActivacion), producto: s(l.producto, 60), proveedor: s(l.proveedor, 60), modelo: s(l.modelo, 20), unidad: s(l.unidad, 20), cantidad: Number(l.cantidad) || 0, moneda: l.moneda || "HNL", montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: r2(l.costoTotalHnl),
+    pago: s(l.cuentaPagoNombre || l.pago, 60), referencia: s(l.referencia, 80), cuentaId: s(l._cuentaId), vinculo: l._vinculo || (l.cuentaInventarioId ? "por_id" : "sin_vinculo"),
+    ciclo: l._ciclo ? { desde: ymd(l._ciclo.coberturaDesde), hasta: ymd(l._ciclo.coberturaHasta), evidencia: s(l._ciclo.evidencia, 200), por: s(l._ciclo.actualizadoPor || l._ciclo.creadoPor, 40) } : null,
+    imputadoHnl: r2(imputado), relacion, relacionTxt: RELACION_TXT[relacion], cantidadNoAcreditada: cantidadNoAcreditada(l) };
+}
+export function estadoCostoCuenta(ctx, calc, cuentaId) {
+  const { desde, hasta } = calc.resumen;
+  const piezas = calc.costos.filter((c) => c.cuentaId === cuentaId);
+  const imp = new Map(); for (const c of piezas) if (c.loteId) imp.set(c.loteId, (imp.get(c.loteId) || 0) + c.costoHnl);
+  const compras = ctx.lotes.filter((l) => l._cuentaId === cuentaId && l.estado !== "anulado").map((l) => compraFila(l, desde, hasta, imp.get(l.id) || 0)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const previas = compras.filter((c) => c.relacion === "cobertura_desconocida");
+  let estado, motivo;
+  if (piezas.length) { estado = "atribuido"; motivo = piezas.map((c) => c.criterio).filter(Boolean).join(" · "); }
+  else if (!compras.length) { estado = "sin_compra"; motivo = "No hay compra registrada ni conciliada para esta cuenta (no se pone L0 como costo)."; }
+  else if (previas.length) { const u = previas[0]; estado = "cobertura_desconocida"; motivo = `Última compra ${u.fecha}: L${u.costoHnl}${u.moneda === "USDT" ? ` (${u.montoMoneda} USDT a ${u.tasa})` : ""}. Su duración no está documentada: no se imputa a este período ni se inventan meses.`; }
+  else { estado = "fuera_periodo"; motivo = "Sus compras están identificadas, pero su cobertura no toca este período."; }
+  return { estado, etiqueta: ESTADOS_COSTO[estado], motivo, costoPeriodoHnl: r2(piezas.reduce((a, c) => a + c.costoHnl, 0)), historicoNoImputadoHnl: r2(previas.reduce((a, c) => a + c.costoHnl, 0)), ultima: compras[0] || null, compras };
+}
+// Conciliación de compras de una plataforma (vista previa SOLO LECTURA): enlazadas, conciliadas, sin cuenta, fuera del período,
+// cantidades «perfil-mes» no acreditadas y producto que no coincide con el plan real. No reparte nada por suposición.
+export function conciliacionCompras(ctx, calc, plataforma) {
+  const { desde, hasta } = calc.resumen; const b = base(plataforma);
+  const imp = new Map(); for (const c of calc.costos) if (c.loteId) imp.set(c.loteId, (imp.get(c.loteId) || 0) + c.costoHnl);
+  const correos = [...ctx.cuentasPorId.values()].filter((a) => base(a._familia) === b && s(a.correo)).map((a) => ({ id: a.id, correo: s(a.correo).toLowerCase() }));
+  const filas = [];
+  for (const l of ctx.lotes) {
+    if (l.estado === "anulado") continue;
+    const p = ctx.productosPorId.get(l.productoId) || {}; const cta = ctx.cuentasPorId.get(s(l._cuentaId)) || null;
+    const fam = familia(p.plataformaKey || l.plataformaKey || l.producto, cta && cta.planHbo); if (base(fam) !== b || (fam !== plataforma && plataforma !== b && fam !== b)) continue; // su plan + las compras sin cuenta (sin plan)
+    const f = compraFila(l, desde, hasta, imp.get(l.id) || 0);
+    const plan = s(cta && cta.planHbo, 20).toLowerCase();
+    const productoPlanDistinto = b === "hbomax" && !!plan && ((/platinum/i.test(f.producto) && plan === "standard") || (/standard/i.test(f.producto) && plan === "platinum"));
+    let propuesta = null;
+    if (f.vinculo === "sin_vinculo") { const txt = `${l.referencia || ""} ${l.notas || ""} ${l.producto || ""}`.toLowerCase(); const m = correos.filter((c) => txt.includes(c.correo)); propuesta = m.length === 1 ? { cuentaId: m[0].id, correo: m[0].correo, evidencia: "El correo de la cuenta aparece en la referencia/notas de la compra" } : m.length > 1 ? { ambigua: true, candidatos: m.slice(0, 5) } : null; }
+    filas.push({ ...f, plataforma: fam, correo: cta ? s(cta.correo) : "", plan: plan || "", productoPlanDistinto, propuesta, enPeriodo: f.fecha >= desde && f.fecha <= hasta });
+  }
+  filas.sort((x, y) => y.fecha.localeCompare(x.fecha));
+  const n = (fn) => filas.filter(fn).length;
+  return { filas, resumen: { compras: filas.length, porId: n((x) => x.vinculo === "por_id"), conciliadas: n((x) => x.vinculo === "conciliado"), sinVinculo: n((x) => x.vinculo === "sin_vinculo"), imputadas: n((x) => x.relacion === "imputado"), coberturaDesconocida: n((x) => x.relacion === "cobertura_desconocida"), fueraPeriodo: n((x) => ["cobertura_terminada", "cobertura_posterior", "posterior"].includes(x.relacion)), cantidadNoAcreditada: n((x) => x.cantidadNoAcreditada), productoPlanDistinto: n((x) => x.productoPlanDistinto), costoImputadoHnl: r2(filas.reduce((a, x) => a + x.imputadoHnl, 0)), costoHistoricoHnl: r2(filas.reduce((a, x) => a + x.costoHnl, 0)) } };
+}
+
 export function cuentasDePlataforma(ctx, calc, plataforma) {
   const famOk = (f) => f === plataforma || (plataforma === "hbomax" && String(f).startsWith("hbomax"));
   const out = [];
@@ -381,7 +447,7 @@ export function cuentasDePlataforma(ctx, calc, plataforma) {
     out.push({ cuentaId: a.id, correo: s(a.correo), plataforma: a._familia, nombre: nombrePlataforma(a._familia), plan: s(a.planHbo || a.plan, 20), capacidad: Number(a.capacidad) || ocupados, ocupados, acceso: a._pseudo ? "acceso_individual" : "cuenta_madre", proveedor: s(a.proveedor, 40),
       clientes: new Set(lin.map((l) => l.clienteId).filter(Boolean)).size, altas: lin.filter((l) => l.tipo === "venta").length, renovaciones: lin.filter((l) => l.tipo === "renovacion").length,
       cobradoHnl: cobrado, pendienteHnl: r2(lin.reduce((x, l) => x + l.pendiente, 0)), esperadoHnl: r2(esp.reduce((x, e) => x + e.precio, 0)), costoHnl: costo, conCosto: cos.length > 0 || lin.some((l) => l.costoCubierto),
-      resultadoHnl: cos.length ? r2(cobrado - costo) : null, sinMovimiento: !lin.length && !esp.length, planSinClasificar: a._familia === "hbomax" });
+      resultadoHnl: cos.length ? r2(cobrado - costo) : null, sinMovimiento: !lin.length && !esp.length, planSinClasificar: a._familia === "hbomax", ...(() => { const ec = estadoCostoCuenta(ctx, calc, a.id); return { estadoCosto: ec.estado, estadoCostoTxt: ec.etiqueta, motivoCosto: ec.motivo, historicoNoImputadoHnl: ec.historicoNoImputadoHnl, ultimaCompra: ec.ultima ? { fecha: ec.ultima.fecha, costoHnl: ec.ultima.costoHnl, moneda: ec.ultima.moneda, montoMoneda: ec.ultima.montoMoneda } : null }; })() });
   }
   return out.sort((a, b) => b.cobradoHnl - a.cobradoHnl || a.correo.localeCompare(b.correo));
 }
@@ -390,7 +456,8 @@ export function cuentasDePlataforma(ctx, calc, plataforma) {
 export function detalleCuenta(ctx, calc, cuentaId) {
   const a = ctx.cuentasPorId.get(cuentaId); if (!a) return null;
   const lineas = calc.lineas.filter((l) => l.cuentaId === cuentaId), esperados = calc.esperados.filter((e) => e.cuentaId === cuentaId);
-  const costos = calc.costos.filter((c) => c.cuentaId === cuentaId), compras = ctx.lotes.filter((l) => l.cuentaInventarioId === cuentaId && l.estado !== "anulado").map((l) => ({ loteId: l.id, fecha: ymd(l.fecha), fechaActivacion: ymd(l.fechaActivacion), producto: l.producto, proveedor: l.proveedor || "", moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: r2(l.costoTotalHnl), duracionDias: Number(l.duracionDias) || 0, pago: l.cuentaPagoNombre || l.pago || "" })).sort((x, y) => y.fecha.localeCompare(x.fecha));
+  const ec = estadoCostoCuenta(ctx, calc, cuentaId); // R198h · compras por cuenta efectiva (ID o conciliada) + relación con el período
+  const costos = calc.costos.filter((c) => c.cuentaId === cuentaId), compras = ec.compras;
   const ocupados = Array.isArray(a.clientes) ? a.clientes.length : Number(a.ocupados) || 0, capacidad = Number(a.capacidad) || ocupados;
   const perfiles = (Array.isArray(a.clientes) ? a.clientes : []).map((cl, i) => {
     const cid = String(cl.compraId || ""); const sv = ctx.servPorCompra.get(cid) || null; const fic = sv ? ctx.clientePorId.get(sv._clienteId) || {} : ctx.clientePorId.get(String(cl.clienteId || "")) || {};
@@ -409,6 +476,7 @@ export function detalleCuenta(ctx, calc, cuentaId) {
     costoPeriodoHnl: costo, resultadoPeriodoHnl: costos.length ? r2(cobrado - costo) : null, margen: costos.length && cobrado > 0 ? pct(r2(cobrado - costo), cobrado) : null,
     costoCicloHnl: ciclo, resultadoCicloHnl: ciclo != null ? r2(cobrado - ciclo) : null,
     estado: !costos.length && cobrado > 0 ? "costo_pendiente" : !lineas.length ? "sin_ingresos" : "ok",
+    estadoCosto: ec.estado, estadoCostoTxt: ec.etiqueta, motivoCosto: ec.motivo, historicoNoImputadoHnl: ec.historicoNoImputadoHnl,
   };
 }
 
