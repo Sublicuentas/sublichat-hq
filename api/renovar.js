@@ -1095,7 +1095,7 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
       }
 
       const ocupados = clientes.length;
-      const disponibles = familiaBuscada === "hbomax" && clientes.some(c => c && c.cuentaCompleta === true) ? 0 : Math.max(0, cap - ocupados); // R196v · completa = 0 para terceros
+      const disponibles = hboPlanes.vendidaCompleta({ ...data, clientes }) ? 0 : Math.max(0, cap - ocupados); // R198j · cuenta completa de cualquier plataforma // R196v · completa = 0 para terceros
       const update = { clientes, ocupados, disponibles, accountId: ref.id, sobreasignada: cap > 0 && ocupados > cap, updatedAt: isoNow() };
       if (data.disp != null) update.disp = disponibles;
       transaction.set(ref, update, { merge: true });

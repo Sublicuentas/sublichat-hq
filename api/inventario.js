@@ -233,7 +233,7 @@ export async function reconciliarInventario(db, accounts = [], opciones = {}) {
       }
     }
     const capacidad = Number(account.capacidad) || 0;
-    const disponibles = canonPlatform(account.plataforma) === "hbomax" && clients.some(c => c && c.cuentaCompleta === true) ? 0 : Math.max(0, capacidad - clients.length); // R196v
+    const disponibles = hboPlanes.vendidaCompleta({ ...account, clientes: clients }) ? 0 : Math.max(0, capacidad - clients.length); // R198j · cuenta completa (marca de cliente o de cuenta, cualquier plataforma) // R196v
     return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}),
       ...(account.id ? { accountId:String(account.id) } : {}), sobreasignada: capacidad > 0 && clients.length > capacidad };
   };
@@ -733,7 +733,7 @@ export default async function handler(req, res) {
         update.capacidad = cap;
         { const pl = hboPlanes.planDeCuenta(current); if (pl && cap === pl.capacidad) { update.capacidadPersonalizada = false; update.capacidadExcepcion = null; } } // R196z3 · vuelve al predeterminado
         update.ocupados = clients.length;
-        update.disponibles = Math.max(0, cap - clients.length);
+        update.disponibles = hboPlanes.vendidaCompleta({ ...current, clientes: clients }) ? 0 : Math.max(0, cap - clients.length); // R198j
       }
       const sync = await inspectOrUpdateAccountServices(db, {
         platform: current.plataforma,
@@ -787,9 +787,10 @@ export default async function handler(req, res) {
       const cap = Math.max(next.length, Number(current.capacidad) || clients.length || 1);
       const exclusions = Array.isArray(linked.exclusionesSincronizacion) ? linked.exclusionesSincronizacion : [];
       if (removed.vinculoInventario && !exclusions.includes(removed.vinculoInventario)) exclusions.push(removed.vinculoInventario);
-      await ref.update({clientes:next,exclusionesSincronizacion:exclusions,ocupados:next.length,disponibles:Math.max(0,cap-next.length),updatedAt:new Date().toISOString()});
+      const dispNext=hboPlanes.vendidaCompleta({...current,clientes:next})?0:Math.max(0,cap-next.length); // R198j
+      await ref.update({clientes:next,exclusionesSincronizacion:exclusions,ocupados:next.length,disponibles:dispNext,updatedAt:new Date().toISOString()});
       await db.collection("auditoria_eventos").add({tipo:"inventario_cliente_retirado",inventarioId:docId,plataforma:current.plataforma||"",correo:current.correo||"",cliente:String(removed.nombre||nombreCliente||""),slot:plainClientValue(removed.slot),usuario:String(authUser.usuario||authUser.uid||"sublicuentas"),createdAt:new Date().toISOString()});
-      return res.status(200).json({ok:true,retirado:{nombre:String(removed.nombre||""),slot:plainClientValue(removed.slot)},ocupados:next.length,disponibles:Math.max(0,cap-next.length)});
+      return res.status(200).json({ok:true,retirado:{nombre:String(removed.nombre||""),slot:plainClientValue(removed.slot)},ocupados:next.length,disponibles:dispNext});
     }
 
     if (accion === "editarCliente") {
