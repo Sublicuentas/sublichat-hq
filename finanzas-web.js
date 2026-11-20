@@ -371,7 +371,51 @@
       (b.length ? b.slice(0, 60).map(function (x) { return '<div class="fz-alerta warn"><div><b>' + esc(BAND[x.tipo] || x.tipo) + '</b><span>' + [esc(x.texto), esc(x.beneficiario || ''), x.fecha ? fecha(x.fecha) : '', L(x.monto)].filter(Boolean).join(' · ') + '</span></div></div>'; }).join('') : '<div class="fz-ok">Todo conciliado en este período.</div>') +
       '<p class="fz-sub">Nada se inventa ni se corrige solo: aquí se ve lo que falta para que el resultado sea completo.</p></div>';
   }
+  // R198j · GANANCIA POR CUENTA (regla del dueño): lo que pagué por la cuenta vs. lo que me pagan sus clientes.
+  // Activación: se paga una vez y cubre la cuenta hasta la próxima → todo lo que pagan los clientes cada mes es ganancia.
+  async function cargarRent(forzar) {
+    if (st.rent && !forzar) return; st.rent = { cargando: true };
+    try { st.rent = await api('finp_rentabilidad', {}); } catch (e) { st.rent = { error: e.message }; }
+    if (st.tab === 'ganancias') pintar();
+  }
+  function compraTxt(k) {
+    if (!k) return '<span class="fz-pend">Sin pago registrado</span>';
+    return '<b>' + L(k.costoHnl) + '</b><small>' + (k.tipo === 'activacion' ? '' : k.tipo === 'mensual' ? 'Mensual · desde ' : 'Pagada ') + fecha(k.fecha) + (k.moneda === 'USDT' ? ' · ' + esc(k.montoMoneda) + ' USDT' : '') + (k.tipo === 'activacion' ? ' · activación' : '') + (k.tipo === 'vigencia' ? ' · ' + k.dias + ' días (L' + Math.round(k.costoMensualHnl) + '/mes)' : '') + '</small>';
+  }
+  function ganPorCuenta() {
+    var x = st.rent;
+    if (!x || x.cargando) { cargarRent(); return '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando la ganancia de cada cuenta…</b></div>'; }
+    if (x.error) return '<div class="fz-card fz-vacio"><b>No se pudo calcular la ganancia por cuenta</b><span>' + esc(x.error) + '</span><button type="button" class="fz-btn" data-fz-rentre="1">Reintentar</button></div>';
+    var t = x.total || {};
+    function k(tit, val, nota) { return '<div class="fz-card fz-kpi"><div><small>' + tit + '</small><strong>' + val + '</strong>' + (nota ? '<em class="fz-nota">' + nota + '</em>' : '') + '</div></div>'; }
+    return '<div class="fz-kpis">' +
+      k('Me pagan los clientes al mes', L(t.meMensualHnl), t.perfiles + ' perfil(es) en ' + t.cuentas + ' cuenta(s)') +
+      k('Ganancia neta al mes', '<span class="vd">' + L(t.gananciaMesHnl) + '</span>', 'Lo que pagan los clientes menos lo que cuesta la cuenta cada mes (la activación se paga una sola vez)') +
+      k('Ganancia desde que pagué cada cuenta', '<span class="' + (t.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(t.gananciaDesdeCompraHnl) + '</span>', 'Estimado: cuota de cada cliente × meses pagados − lo que pagué') +
+      k('Cuentas sin pago registrado', t.sinCompra ? '<span class="rj">' + t.sinCompra + '</span>' : '0', t.sinCompra ? 'Cobran ' + L(t.sinCompraMensualHnl) + ' al mes: registre cuánto pagó para ver su ganancia' : 'Todas tienen su pago') + '</div>' +
+      '<div class="fz-card"><div class="fz-cab">' + ico('layers') + '<h3>Ganancia por cuenta</h3><span class="fz-sub r">Lo que pagué por la cuenta vs. lo que pagan sus clientes</span></div>' +
+      '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Plataforma</th><th class="n">Cuentas</th><th class="n">Perfiles</th><th class="n">Me pagan al mes</th><th class="n">Pagué (última compra)</th><th class="n">Ganancia neta al mes</th><th class="n">Ganancia desde que pagué</th><th></th></tr></thead><tbody>' +
+      (x.plataformas || []).map(function (p) { return '<tr><td><div class="fz-prod">' + logo(p.nombre) + '<b>' + esc(p.nombre) + '</b></div>' + (p.sinCompra ? '<small class="fz-pend">' + p.sinCompra + ' cuenta(s) sin pago registrado</small>' : '') + (p.vacias ? '<small class="fz-pend">' + p.vacias + ' cuenta(s) sin clientes</small>' : '') + '</td><td class="n">' + p.cuentas + '</td><td class="n">' + p.perfiles + (p.libres ? '<small>' + p.libres + ' libre(s)</small>' : '') + '</td><td class="n"><b>' + L(p.meMensualHnl) + '</b></td><td class="n">' + L(p.pagueHnl) + '</td><td class="n"><b class="' + (p.gananciaMesHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaMesHnl) + '</b></td><td class="n"><b class="' + (p.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaDesdeCompraHnl) + '</b></td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-rentplat="' + esc(p.plataforma) + '">Ver cuentas</button></td></tr>'; }).join('') +
+      '</tbody></table></div><p class="fz-sub">Cuenta por activación (link): se paga una vez y la cuenta sigue hasta la próxima activación; todo lo que pagan los clientes después es ganancia. Cuenta con vigencia (30 días, mensual): su costo se resta cada mes. Una cuenta sin pago registrado no se calcula: no se inventan costos.</p></div>';
+  }
+  var EST_RENT = { ganando: ['Ganando', 'ok'], por_recuperar: ['Por recuperar', 'warn'], vacia: ['Sin clientes', 'warn'], sin_compra: ['Sin pago registrado', 'pend'] };
+  function abrirRentPlat(plat) {
+    var mm = modal('Ganancia por cuenta', '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div>'); mm.classList.add('ancho');
+    api('finp_rentabilidad', { plataforma: plat }).then(function (x) {
+      var b = mm.querySelector('.fz-modal-b'); if (!b) return; var h = mm.querySelector('.fz-modal-h h3, .fz-modal-h b'); if (h) h.textContent = 'Ganancia por cuenta · ' + x.nombre;
+      var p = (x.plataformas || [])[0] || {};
+      b.innerHTML = '<div class="fz-mini"><div><small>Me pagan al mes</small><b>' + L(p.meMensualHnl) + '</b></div><div><small>Pagué (últimas compras)</small><b>' + L(p.pagueHnl) + '</b></div><div><small>Ganancia neta al mes</small><b class="vd">' + L(p.gananciaMesHnl) + '</b></div><div><small>Ganancia desde que pagué</small><b class="' + (p.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaDesdeCompraHnl) + '</b></div></div>' +
+        '<div class="fz-tw" style="margin-top:10px"><table class="fz-t"><thead><tr><th>Cuenta</th><th class="c">Perfiles</th><th class="n">Pagué</th><th class="n">Me pagan /mes</th><th class="n">Ganancia /mes</th><th class="n">Desde que pagué</th></tr></thead><tbody>' +
+        x.cuentas.map(function (c) {
+          var det = c.perfiles.length ? '<tr class="fz-rent-det"><td colspan="6"><details><summary>Ver ' + c.perfiles.length + ' cliente(s) de ' + esc(c.correo) + (c.registradoCajaHnl != null ? ' · registrado en caja desde la activación: ' + L(c.registradoCajaHnl) : '') + '</summary><table class="fz-t"><thead><tr><th>Perfil</th><th>Cliente</th><th class="n">Paga al mes</th><th>Desde</th><th class="c">Meses pagados</th><th>Pagado hasta</th><th class="n">Estimado</th></tr></thead><tbody>' + c.perfiles.map(function (q) { return '<tr><td>' + esc(q.perfil) + '</td><td><b>' + esc(q.cliente || '—') + '</b></td><td class="n">' + L(q.cuotaMesHnl) + '</td><td>' + fecha(q.inicio) + '</td><td class="c">' + q.mesesPagados + '</td><td>' + fecha(q.vence) + '</td><td class="n">' + L(q.estimadoHnl) + '</td></tr>'; }).join('') + '</tbody></table></details></td></tr>' : '';
+          return '<tr><td><b>' + esc(c.correo) + '</b><small>' + (c.plan ? esc(c.plan) + ' · ' : '') + (c.completa ? 'CUENTA COMPLETA' : 'Perfiles') + '</small>' + (c.estado === 'vacia' || c.estado === 'por_recuperar' ? pill(EST_RENT, c.estado) : '') + '</td><td class="c">' + c.ocupados + '/' + c.capacidad + (c.libres ? '<small>' + c.libres + ' libre(s)</small>' : '') + '</td><td class="n">' + compraTxt(c.compra) + '</td><td class="n"><b>' + L(c.meMensualHnl) + '</b></td><td class="n">' + (c.gananciaMesHnl == null ? '<span class="fz-pend">Registre el pago</span>' : '<b class="' + (c.gananciaMesHnl >= 0 ? 'vd' : 'rj') + '">' + L(c.gananciaMesHnl) + '</b>') + '</td><td class="n">' + (c.gananciaDesdeCompraHnl == null ? '—' : '<b class="' + (c.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(c.gananciaDesdeCompraHnl) + '</b>') + '</td></tr>' + det;
+        }).join('') + '</tbody></table></div><p class="fz-sub">«Ganancia desde que pagué» es un estimado con la cuota de cada cliente y los meses que ya pagó (según su fecha de vencimiento). «Registrado en caja» es lo que de verdad quedó anotado como cobrado; si es menor, faltan cobros por registrar.</p>';
+    }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
+  }
   function vGanancias(d) {
+    return ganPorCuenta() + '<details class="fz-card fz-avz"><summary><b>Detalle contable por mes (avanzado)</b> <small>cobros, costos del período, cartera y conciliación</small></summary>' + vGananciasDetalle(d) + '</details>';
+  }
+  function vGananciasDetalle(d) {
     var g = st.gan[ganClave()];
     if (!g || g.cargando) { cargarGan(); return ganPeriodo(null) + '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando ganancias con ventas, cobros y compras…</b></div>'; }
     if (g.error) return ganPeriodo(null) + '<div class="fz-card fz-vacio"><b>No se pudo calcular</b><span>' + esc(g.error) + '</span><button type="button" class="fz-btn" data-fz="ganrecargar">Reintentar</button></div>';
@@ -1038,6 +1082,8 @@
       if ((t = e.target.closest('[data-fz-hbo]'))) { abrirHbo(t.dataset.fzHbo, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ganmes]'))) { var mg = t.dataset.fzGanmes, pg = mg.split('-'); st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); return; }
       if ((t = e.target.closest('[data-fz-gantri]'))) { var gm = (st.gan[ganClave()] || {}).meses || []; if (gm.length >= 3) { var u = gm[gm.length - 1].mes, pu = u.split('-'); st.ganR = { desde: gm[gm.length - 3].mes + '-01', hasta: u + '-' + String(new Date(Date.UTC(+pu[0], +pu[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); } return; }
+      if ((t = e.target.closest('[data-fz-rentplat]'))) { abrirRentPlat(t.dataset.fzRentplat); return; } // R198j
+      if ((t = e.target.closest('[data-fz-rentre]'))) { cargarRent(true); return; }
       if ((t = e.target.closest('[data-fz-ganplat]'))) { abrirPlataforma(t.dataset.fzGanplat); return; } // R197b · antes solo filtraba la tabla de abajo (parecía no abrir)
       if ((t = e.target.closest('[data-fz-gancta]'))) { abrirGanCuenta(t.dataset.fzGancta); return; }
       if ((t = e.target.closest('[data-fz-cta]'))) { abrirCuenta(t.dataset.fzCta, t.dataset.plat, t.dataset.id); return; }
