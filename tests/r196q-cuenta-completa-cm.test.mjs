@@ -37,5 +37,5 @@ test('T04/T12 · CRM web lee la misma compra: «Cuenta completa» en vez de «1 
   assert.match(app, /tipoVenta:c\.tipoVenta\|\|'',cuentaInventarioId:c\.cuentaInventarioId\|\|'', \/\/ R196q/);
   assert.match(app, /modalidadVenta:c\.modalidadVenta\|\|'',exclusivaCompraId:c\.exclusivaCompraId\|\|''/);
   assert.match(app, /\$\{s\.tipoVenta==="cuenta_completa"\?"<b>Cuenta completa<\/b>":`\$\{Number\(s\.cantidadPerfiles\)\|\|1\} perfil/);
-  assert.match(R('index.html'), /control-maestro\.js\?v=202611(1[4-9]|2\d)-r19(6[q-z]|[7-9][a-z])/); assert.match(R('index.html'), /sublichat-app\.js\?v=202611(1[4-9]|2\d)-r19(6[q-z]|[7-9][a-z])/);
+  assert.match(R('index.html'), /control-maestro\.js\?v=202611(1[4-9]|2\d)-r19(6[q-z]|[7-9][a-z])/); assert.match(R('index.html'), /sublichat-app\.js\?v=202611(1[4-9]|2\d)-r(19(6[q-z]|[7-9][a-z])|2\d\d[a-z])/);
 });

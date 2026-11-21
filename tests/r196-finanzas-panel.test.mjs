@@ -169,7 +169,7 @@ test('Web: pestaña Finanzas con 5 pestañas, Productos en contexto y permiso pr
   const ui = fs.readFileSync(new URL('../ui-v2.js', import.meta.url), 'utf8');
   assert.match(ui, /\{ s: 'sala-juntas' \}, \{ s: 'finanzas' \}/);
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /finanzas-web\.js\?v=2026\d{4}-r19[6-9]/);
+  assert.match(html, /finanzas-web\.js\?v=2026\d{4}-r(19[6-9]|2\d\d)/);
 });
 
 test('R196f · Spotify Familiar en Finanzas: lista sola desde las cuentas; solo se anota pago mensual y renovación; Bodega lo refleja', async () => {
