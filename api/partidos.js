@@ -20,6 +20,7 @@
 // Es una API no oficial: si algún día ESPN cambia el formato, esta función
 // puede empezar a fallar; no depende de ningún env var para funcionar.
 
+import { cargarFutbolDia } from "./_futbol-dia.js"; // R200d · fútbol del día completo
 export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST" && req.method !== "GET")
-    return res.status(200).json({ ok: true, version: 14, msg: "partidos v14 activo (Copa Centroamericana + canales + fútbol ampliado)." });
+    return res.status(200).json({ ok: true, version: 15, msg: "partidos v15 activo (fútbol del día completo: modo futbol_dia)." });
 
   const src = (req.method === "GET") ? (req.query || {}) : (req.body || {});
   const { modo, q, liga } = src;
@@ -82,7 +83,7 @@ export default async function handler(req, res) {
     const tries = opt.tries || 2;
     const usaCache = !opt.headers && !opt.allowNotOk;
     const hit = usaCache ? CACHE.get(url) : null;
-    if (hit && Date.now() - hit.t < CACHE_FRESCO_MS) return hit.d;
+    if (hit && Date.now() - hit.t < (opt.fresco || CACHE_FRESCO_MS)) return hit.d;
     for (let n = 1; n <= tries; n++) {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), ms);
@@ -107,7 +108,7 @@ export default async function handler(req, res) {
       }
     }
     // Falló: se usa lo último bueno (si es de las últimas 6 h) y se avisa que es caché.
-    if (hit && Date.now() - hit.t < CACHE_VIEJO_MS) { enCache.push(fuenteCorta(url)); return hit.d; }
+    if (hit && Date.now() - hit.t < CACHE_VIEJO_MS) { enCache.push(fuenteCorta(url)); if (opt.enCache) opt.enCache(); return hit.d; }
     return null;
   }
 
@@ -336,6 +337,17 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ===== R200d · FÚTBOL DEL DÍA — todas las competiciones (~80), hora de Honduras, canal sin inventar =====
+    if (modo === "futbol_dia") {
+      const hoyHN = diaHN(new Date());
+      const f = /^\d{4}-\d{2}-\d{2}$/.test(String(src.fecha || "")) ? String(src.fecha) : hoyHN;
+      const dif = Math.round((Date.parse(f + "T12:00:00Z") - Date.parse(hoyHN + "T12:00:00Z")) / 86400000);
+      if (Math.abs(dif) > 7) return res.status(200).json({ error: "Elija una fecha entre 7 días atrás y 7 días adelante." });
+      const r = await cargarFutbolDia({ fecha: f, jget, hoy: hoyHN, topeMs: 20000 });
+      if (r.cobertura.fallidas.length) console.error("PARTIDOS_FUTBOL_DIA_FALLAS", r.cobertura.fallidas.length, r.cobertura.fallidas.slice(0, 6).map((x) => x.nombre + ": " + x.motivo).join(" | "));
+      return res.status(200).json({ ...r, hoy: hoyHN });
+    }
+
     // ===== FÚTBOL — liga específica (chips dentro de la carpeta "Fútbol") =====
     if (modo === "futliga" && liga) {
       const entry = LIGAS_FUTBOL.find(l => l.slug === liga) || { slug: liga, nombre: "Fútbol" };

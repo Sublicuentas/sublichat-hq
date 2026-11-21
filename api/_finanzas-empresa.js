@@ -259,7 +259,51 @@ export function resumenInventario(productos = [], lotes = [], hoy = "") {
 }
 
 // ---------------------------------------------------------------- manejador /api/finanzas
-export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_lote_ajustar", "fin_costeo_config", "fin_costear", "fin_cxp_pagar", "fin_tablero", "fin_retiro_registrar", "fin_finance_os_config", "fin_respaldo"]);
+export const ACCIONES_EMPRESA = Object.freeze(["fin_empresa_estado", "fin_sembrar_catalogo", "fin_producto_guardar", "fin_variante_guardar", "fin_precio_nuevo", "fin_proveedor_guardar", "fin_proveedor_termino", "fin_binance_recargar", "fin_binance_ajustar", "fin_compra_registrar", "fin_compra_dependencias", "fin_compra_anular", "fin_lote_ajustar", "fin_costeo_config", "fin_costear", "fin_cxp_pagar", "fin_tablero", "fin_retiro_registrar", "fin_finance_os_config", "fin_respaldo"]);
+
+
+// ------------------------------------------------------------------------------------------------------------
+// R200a · ELIMINAR / ANULAR COMPRA (Finanzas → Compras registradas). Nunca se borra en silencio:
+//  · Sin pago contabilizado ni dependencias → «Eliminar borrador» (la copia completa queda en fin_anulaciones).
+//  · Con pago registrado → ANULACIÓN: la compra queda «anulada» con motivo, usuario y fecha; el pago se anula con su
+//    REVERSA (mismo criterio del libro: bancos exactos y traza), Binance recupera los USDT al mismo valor en Lempiras.
+//  · Con ventas ya costeadas con esa compra → solo con confirmación explícita: ese costo se reversa EN EL MES DE CADA
+//    VENTA y la venta queda «pendiente de costo» para que el costeo la complete con otra compra real (nunca ganancia
+//    artificial por un costo que desaparece).
+//  · Bloqueos: compra a crédito con pagos al proveedor; venta costeada contra una compra ya vencida.
+//  · La tasa, la moneda, la fecha y el monto originales NO se tocan. Control Maestro, clientes y perfiles: intactos.
+// ------------------------------------------------------------------------------------------------------------
+export function lineasSinLote(lineas = [], loteId = "") { // pura: quita el consumo de ese lote y lo deja como faltante
+  let quitadoHnl = 0, quitadoUnidades = 0;
+  const out = (Array.isArray(lineas) ? lineas : []).map((ln) => {
+    const propios = (ln.consumos || []).filter((c) => String(c.loteId) === String(loteId));
+    if (!propios.length) return ln;
+    const u = r6(propios.reduce((a, c) => a + Number(c.cantidad || 0), 0)), h = r2(propios.reduce((a, c) => a + Number(c.costoHnl || 0), 0));
+    quitadoHnl = r2(quitadoHnl + h); quitadoUnidades = r6(quitadoUnidades + u);
+    return { ...ln, consumos: (ln.consumos || []).filter((c) => String(c.loteId) !== String(loteId)), costoHnl: r2((ln.costoHnl || 0) - h), faltante: r6((ln.faltante || 0) + u), pendiente: true };
+  });
+  return { lineas: out, quitadoHnl, quitadoUnidades };
+}
+export function revertirSalidaBinance(est = estadoBilleteraVacio(), usdt = 0, hnl = 0) { // pura: deshace una salida exacta
+  const saldo = r6(Number(est.saldo || 0) + r6(usdt)), valorHnl = r2(Number(est.valorHnl || 0) + r2(hnl));
+  return { ...est, saldo, valorHnl, costoPromedio: saldo > 0 ? r6(valorHnl / saldo) : 0 };
+}
+async function dependenciasCompra(col, loteId) {
+  const ls = await col("fin_lotes").doc(String(loteId || "")).get();
+  if (!ls.exists) return null;
+  const l = { id: ls.id, ...(ls.data() || {}) };
+  const consumos = (await col("fin_consumos").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }))
+    .filter((c) => c.estado !== "revertido" && (c.lineas || []).some((ln) => (ln.consumos || []).some((k) => String(k.loteId) === l.id)))
+    .map((c) => { const q = lineasSinLote(c.lineas, l.id); return { consumoId: c.id, ventaId: c.ventaId || c.id, fecha: c.fecha || "", cliente: c.clienteNombre || "", plataforma: c.plataforma || "", unidades: q.quitadoUnidades, costoHnl: q.quitadoHnl, movimientos: c.movimientos || [] }; });
+  const ciclo = await col("fin_costo_ciclos").doc(l.id).get().then((s) => (s.exists && (s.data() || {}).estado !== "anulado" ? s.data() : null)).catch(() => null);
+  const cxp = l.cxpId ? await col("fin_cxp").doc(String(l.cxpId)).get().then((s) => (s.exists ? s.data() : null)).catch(() => null) : null;
+  const mov = l.movimientoId ? await col("finanzas_movimientos").doc(String(l.movimientoId)).get().then((s) => (s.exists ? s.data() : null)).catch(() => null) : null;
+  const bloqueos = [];
+  if (cxp && ((cxp.pagos || []).length || r2(cxp.saldo) < r2(cxp.total))) bloqueos.push("Esta compra a crédito ya tiene pagos al proveedor. Anule primero esos pagos en Cuentas por pagar.");
+  const pagoContabilizado = !!(mov && !mov.estadoFinanciero && r2(mov.monto) !== 0);
+  const modo = l.estado === "anulado" ? "ya_anulada" : (!pagoContabilizado && !consumos.length && !ciclo && !cxp && !(r6(l.consumido) > 0)) ? "eliminar" : "anular";
+  return { lote: l, consumos, ciclo, cxp, mov, bloqueos, modo, pagoContabilizado };
+}
 
 export async function handleEmpresa(db, accion, body, identity, authUser, res, d) {
   if (!d.canUseLibro(identity)) return res.status(403).json({ ok: false, error: "Finanzas empresarial es exclusivo de Sublicuentas y Relojes." });
@@ -517,6 +561,94 @@ export async function handleEmpresa(db, accion, body, identity, authUser, res, d
     return reply(r);
   }
 
+  if (accion === "fin_compra_dependencias" || accion === "fin_compra_anular") { // R200a
+    if (!(identity.role === "sublicuentas" || identity.admin)) return res.status(403).json({ ok: false, error: "Eliminar o anular compras es solo para Sublicuentas (permiso financiero)." });
+    const loteId = txt(body.loteId, 160);
+    const dep = await dependenciasCompra(col, loteId);
+    if (!dep) return res.status(200).json({ ok: false, error: "Esa compra no existe." });
+    const l = dep.lote;
+    const resumen = { loteId: l.id, folio: l.id.slice(-8).toUpperCase(), fecha: l.fecha, producto: l.producto, proveedor: l.proveedor || "", cantidad: l.cantidad, unidad: l.unidad || "", consumido: r6(l.consumido), disponible: r6(l.disponible),
+      moneda: l.moneda, costoTotalMoneda: l.costoTotalMoneda, tasa: l.tasa, costoTotalHnl: l.costoTotalHnl, pago: l.cuentaPagoNombre || l.pago || "", cuentaInventarioId: l.cuentaInventarioId || "", estado: l.estado || "activo" };
+    const deps = { ventasCosteadas: dep.consumos.map(({ movimientos, ...c }) => c), costoVentasHnl: r2(dep.consumos.reduce((a, c) => a + c.costoHnl, 0)),
+      ciclo: dep.ciclo ? { cuentaInventarioId: dep.ciclo.cuentaInventarioId || "", coberturaDesde: dep.ciclo.coberturaDesde || "", coberturaHasta: dep.ciclo.coberturaHasta || "" } : null,
+      cxp: dep.cxp ? { saldo: dep.cxp.saldo, total: dep.cxp.total, pagos: (dep.cxp.pagos || []).length } : null, pagoContabilizado: dep.pagoContabilizado };
+    if (accion === "fin_compra_dependencias") return res.status(200).json({ ok: true, accion, compra: resumen, dependencias: deps, modo: dep.modo, bloqueos: dep.bloqueos });
+
+    const motivo = txt(body.motivo, 300);
+    if (motivo.length < 8) return res.status(200).json({ ok: false, error: "Escriba el motivo (mínimo 8 letras): por qué se elimina o anula esta compra." });
+    if (dep.modo === "ya_anulada") return res.status(200).json({ ok: true, accion, yaAnulada: true, loteId: l.id });
+    if (dep.bloqueos.length) return res.status(200).json({ ok: false, error: dep.bloqueos.join(" ") });
+    if (dep.consumos.length && body.confirmarDependencias !== true) return res.status(200).json({ ok: false, requiereConfirmacion: true, error: `Esta compra ya costeó ${dep.consumos.length} venta(s) por L${deps.costoVentasHnl}. Confirme que ese costo se reverse y esas ventas queden pendientes de costo.` });
+    const opId = d.libroOpDocId("anulcompra", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const marcaRef = col("fin_anulaciones").doc(opId), lRef = col("fin_lotes").doc(l.id);
+    const r = await run(async (tx) => {
+      // Firestore: todas las lecturas antes de cualquier escritura.
+      if ((await tx.get(marcaRef)).exists) return { duplicado: true, loteId: l.id };
+      const ls = await tx.get(lRef); if (!ls.exists) throw errUsuario("Esa compra ya no existe.");
+      const lote = ls.data() || {};
+      if (lote.estado === "anulado") return { yaAnulada: true, loteId: l.id };
+      const movRef = lote.movimientoId ? col("finanzas_movimientos").doc(String(lote.movimientoId)) : null;
+      const ms = movRef ? await tx.get(movRef) : null;
+      const mov = ms && ms.exists ? ms.data() || {} : null;
+      const bSnap = mov && String(mov.tipo) === "billetera" && !mov.estadoFinanciero ? await tx.get(billeteraRef) : null;
+      const cxpRef = lote.cxpId ? col("fin_cxp").doc(String(lote.cxpId)) : null;
+      const cxs = cxpRef ? await tx.get(cxpRef) : null;
+      if (cxs && cxs.exists && (((cxs.data() || {}).pagos || []).length)) throw errUsuario("Esta compra a crédito ya tiene pagos al proveedor. Anule primero esos pagos.");
+      const ciRef = col("fin_costo_ciclos").doc(l.id); const cis = await tx.get(ciRef);
+      const cRefs = dep.consumos.map((c) => col("fin_consumos").doc(c.consumoId));
+      const cSnaps = await Promise.all(cRefs.map((ref) => tx.get(ref)));
+      const consumido = r6(lote.consumido);
+      if (dep.modo === "eliminar" && !consumido && !cSnaps.some((x) => x.exists) && !(cis.exists && (cis.data() || {}).estado !== "anulado")) {
+        tx.set(marcaRef, { tipo: "eliminar_borrador", loteId: l.id, motivo, por: actor, at: ahora, copia: lote, operationId: String(body.operationId) });
+        tx.delete(lRef);
+        if (movRef && ms.exists) tx.set(movRef, { estadoFinanciero: "anulado", anuladoPor: actor, anuladoAt: ahora, motivoAnulacion: `Compra eliminada (borrador): ${motivo}`, updatedAt: ahora }, { merge: true });
+        audit(tx, { accion: "compra_eliminada_borrador", targetType: "lote", targetId: l.id, motivo, monto: r2(lote.costoTotalHnl), before: { producto: lote.producto, fecha: lote.fecha, costoTotalHnl: lote.costoTotalHnl, moneda: lote.moneda, tasa: lote.tasa }, after: { eliminado: true }, detalle: `Borrador eliminado · ${lote.producto} · ${lote.costoTotalMoneda} ${lote.moneda} · L${lote.costoTotalHnl}` });
+        return { modo: "eliminar", loteId: l.id };
+      }
+      // ---- ANULACIÓN auditable
+      let reversaId = "";
+      if (mov && !mov.estadoFinanciero && r2(mov.monto) !== 0) {
+        const revRef = col("finanzas_movimientos").doc(`${movRef.id}_rev`);
+        const { createdAt, updatedAt, movimientoId, saldoAntes, saldoDespues, saldoUsdtAntes, saldoUsdtDespues, estadoFinanciero, reversaId: _r, ...resto } = mov;
+        tx.set(revRef, { ...resto, ...d.baseMov(identity, authUser, body), movimientoId: revRef.id, monto: -r2(mov.monto), ...(mov.montoUsdt != null ? { montoUsdt: -r6(mov.montoUsdt) } : {}), ...(mov.montoMoneda != null ? { montoMoneda: -r6(mov.montoMoneda) } : {}), reversaDe: movRef.id, motivo: `Reversa de compra anulada: ${motivo}`, ...d.canonicalFinanceDate(hoy, hoy) });
+        tx.set(movRef, { estadoFinanciero: "anulado", reversaId: revRef.id, anuladoPor: actor, anuladoAt: ahora, motivoAnulacion: motivo, updatedAt: ahora }, { merge: true });
+        reversaId = revRef.id;
+        if (bSnap) { // Binance: vuelven los USDT al mismo valor en Lempiras con que salieron
+          const est = bSnap.exists ? { ...estadoBilleteraVacio(), ...bSnap.data() } : estadoBilleteraVacio();
+          tx.set(billeteraRef, { ...revertirSalidaBinance(est, mov.montoUsdt, mov.monto), updatedAt: ahora });
+        }
+      }
+      if (cxs && cxs.exists) tx.set(cxpRef, { estado: "anulado", saldo: 0, saldoHnl: 0, anuladoPor: actor, anuladoAt: ahora, motivoAnulacion: motivo, updatedAt: ahora }, { merge: true });
+      if (cis.exists && (cis.data() || {}).estado !== "anulado") {
+        const a = cis.data() || {};
+        tx.set(ciRef, { ...a, estado: "anulado", actualizadoAt: ahora, actualizadoPor: actor, historial: [...(a.historial || []), { at: ahora, por: actor, accion: "compra_anulada", motivo }] });
+      }
+      const afectadas = [];
+      cSnaps.forEach((cs, i) => {
+        if (!cs.exists) return;
+        const c = cs.data() || {}; const q = lineasSinLote(c.lineas, l.id);
+        if (!(q.quitadoUnidades > 0)) return;
+        const f = ymdOk(c.fecha) ? c.fecha : hoy; const [y, mo, dd] = f.split("-");
+        const aid = `anulcompra_${l.id}_${cs.id}`.slice(0, 200);
+        // costo reversado EN EL MES DE LA VENTA (así el resultado de ese período queda correcto)
+        tx.set(col("finanzas_movimientos").doc(aid), { movimientoId: aid, tipo: "costo_venta", subtipo: "reversa_compra_anulada", monto: -q.quitadoHnl, ventaId: c.ventaId || cs.id, loteId: l.id, clienteNombre: c.clienteNombre || "", plataforma: c.plataforma || "", banco: "Inventario",
+          motivo: `Compra anulada (${lote.producto}): costo reversado · ${motivo}`, fecha: `${dd}/${mo}/${y}`, fechaPago: f, mesKey: `${y}-${mo}`, monthKey: `${y}-${mo}`, fechaTS: new Date(Date.UTC(+y, +mo - 1, +dd, 12)), registradoPor: actor, origenCanal: "web", createdAt: ahora, updatedAt: ahora });
+        tx.set(cRefs[i], { lineas: q.lineas, costoHnl: r2((c.costoHnl || 0) - q.quitadoHnl), utilidadBrutaHnl: r2(Number(c.ventaHnl || 0) - r2((c.costoHnl || 0) - q.quitadoHnl)), estado: "pendiente", movimientos: [...(c.movimientos || []), aid], actualizadoAt: ahora, anulacionesCompra: [...(c.anulacionesCompra || []), { loteId: l.id, unidades: q.quitadoUnidades, costoHnl: q.quitadoHnl, at: ahora, por: actor }] }, { merge: true });
+        afectadas.push({ consumoId: cs.id, costoHnl: q.quitadoHnl, fecha: f });
+      });
+      const antes = { estado: lote.estado || "activo", disponible: r6(lote.disponible), consumido, costoTotalHnl: r2(lote.costoTotalHnl), moneda: lote.moneda, tasa: lote.tasa, fecha: lote.fecha };
+      tx.set(lRef, { estado: "anulado", estadoAntes: lote.estado || "activo", disponibleAntes: r6(lote.disponible), disponible: 0, consumido: 0, anuladoPor: actor, anuladoAt: ahora, motivoAnulacion: motivo, reversaId, operationIdAnulacion: String(body.operationId), updatedAt: ahora }, { merge: true });
+      tx.set(marcaRef, { tipo: "anular", loteId: l.id, motivo, por: actor, at: ahora, reversaId, ventasAfectadas: afectadas, antes, operationId: String(body.operationId) });
+      audit(tx, { accion: "compra_anulada", targetType: "lote", targetId: l.id, movimientoId: movRef ? movRef.id : "", operationId: String(body.operationId), motivo, monto: r2(lote.costoTotalHnl), before: antes, after: { estado: "anulado", reversaId, ventasPendientesDeCosto: afectadas.length },
+        detalle: `Compra anulada · ${lote.producto} · ${lote.costoTotalMoneda} ${lote.moneda} (tasa ${lote.tasa}) = L${lote.costoTotalHnl}${afectadas.length ? ` · ${afectadas.length} venta(s) vuelven a «pendiente de costo»` : ""}` });
+      return { modo: "anular", loteId: l.id, reversaId, ventasPendientes: afectadas.length, costoReversadoHnl: r2(afectadas.reduce((a, x) => a + x.costoHnl, 0)) };
+    });
+    if (r && !r.error && r.modo === "anular" && r.ventasPendientes && d.costeoDeps) { // se completan con otra compra real, si la hay
+      try { r.costeo = await correrCosteo(db, { ...d.costeoDeps(db), hoy, actor: "sistema", limite: 150 }); } catch (_) {}
+    }
+    return reply(r);
+  }
   if (accion === "fin_lote_ajustar") { // merma, vencido o conteo físico: con motivo, nunca se borra el lote
     const motivo = txt(body.motivo, 200);
     if (motivo.length < 4) return res.status(200).json({ ok: false, error: "Escriba el motivo del ajuste (vencido, se cayó la cuenta, conteo…)." });
