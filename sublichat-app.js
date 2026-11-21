@@ -3073,6 +3073,7 @@ function cargarChip(b){
   if(b.dataset.hoy){ pedir({modo:"hoy"}); }
   else if(b.dataset.modo){ pedir({modo:b.dataset.modo}); }
   else if(b.dataset.liga){ pedir({modo:"futliga", liga:b.dataset.liga}); }
+  else if(b.dataset.futdia){ cargarFutDia(); } // R200d
 }
 document.querySelectorAll(".lchip:not(.lfolder)").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll(".lchip").forEach(x=>x.classList.remove("on"));
@@ -3086,6 +3087,8 @@ if(futbolFolderBtn&&futbolChips){
     const abierto=futbolChips.style.display!=="none";
     futbolChips.style.display=abierto?"none":"flex";
     futbolFolderBtn.classList.toggle("on",!abierto);
+    // R200d · al abrir Fútbol, por defecto «Todas las competiciones» del día
+    if(!abierto&&!futbolChips.querySelector(".lchip.on")){const t=futbolChips.querySelector("[data-futdia]");if(t)t.click();}
   });
 }
 tq.addEventListener("input",()=>{clearTimeout(tqTimer);const t=tq.value.trim();
@@ -3146,6 +3149,93 @@ async function pedir(body){
   finally{clearTimeout(timer);clearInterval(tick);}
 }
 function buscarEquipo(text){ pedir({modo:"equipo", q:text}); }
+
+/* ===== R200d · FÚTBOL DEL DÍA — todas las competiciones, hora de Honduras =====
+   Fecha navegable (±7 días), filtros por competición, país, estado y equipo, conteo, agrupado por competición y
+   «Mostrar más». El canal solo se muestra si está confirmado; si no: «Canal sin confirmar». Nunca se dice
+   «no hay partidos» si una fuente no respondió (lo decide el servidor en `aviso`). */
+function escP(v){return String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function urlP(v){const u=String(v||"");return /^https:\/\//.test(u)?escP(u):"";}
+const fd={fecha:"",hoy:"",data:null,f:{comp:"",pais:"",estado:"",equipo:""},ver:40,timer:null,pidiendo:0};
+const FD_EST={NS:"Por jugar",LIVE:"En vivo",FT:"Finalizado",POSP:"Aplazado",SUSP:"Suspendido",CANC:"Cancelado"};
+function fdHoyHN(){return new Date().toLocaleDateString("en-CA",{timeZone:"America/Tegucigalpa"});}
+function fdMover(ymd,n){return new Date(Date.parse(ymd+"T12:00:00Z")+n*864e5).toISOString().slice(0,10);}
+function fdFechaLarga(ymd){const d=new Date(ymd+"T12:00:00Z");return d.toLocaleDateString("es-HN",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long"});}
+async function cargarFutDia(fecha){
+  clearTimeout(fd.timer);
+  fd.hoy=fdHoyHN(); fd.fecha=fecha||fd.fecha||fd.hoy; fd.ver=40;
+  const mio=++fd.pidiendo;
+  matchResults.innerHTML=`<div class="empty"><span class="typing"><i></i><i></i><i></i></span><div id="matchWait" style="margin-top:8px;font-size:12px;opacity:.7">Consultando todas las competiciones de ${escP(fdFechaLarga(fd.fecha))}…</div></div>`;
+  const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),28000);
+  const red=typeof sublichatNativeFetch==="function"?sublichatNativeFetch:fetch;
+  try{
+    const r=await red(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({modo:"futbol_dia",fecha:fd.fecha}),signal:ctrl.signal});
+    const j=await r.json();
+    if(mio!==fd.pidiendo)return;
+    if(j.error){matchResults.innerHTML=`<div class="empty">⚠️ ${escP(j.error)}</div>`;return;}
+    fd.data=j; if(j.hoy)fd.hoy=j.hoy;
+    pintarFutDia(true);
+    // marcadores en vivo: se refresca solo mientras la pantalla siga en «Todas las competiciones» de hoy
+    if(fd.fecha===fd.hoy&&j.conteo&&(j.conteo.LIVE||j.conteo.NS))fd.timer=setTimeout(()=>{const on=document.querySelector('#futbolChips [data-futdia].on');const vis=document.getElementById("screen-partidos");if(on&&vis&&vis.classList.contains("active")&&!document.hidden)cargarFutDiaSilencioso();},90000);
+  }catch(e){if(mio!==fd.pidiendo)return;matchResults.innerHTML=`<div class="empty">⚠️ ${e&&e.name==="AbortError"?"Tardó demasiado en responder. Toque «Todas las competiciones» para reintentar.":"No pude cargar el fútbol del día."} No se pudo verificar si hay partidos.</div>`;}
+  finally{clearTimeout(to);}
+}
+async function cargarFutDiaSilencioso(){
+  const red=typeof sublichatNativeFetch==="function"?sublichatNativeFetch:fetch;
+  try{const r=await red(CONFIG.partidosEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({modo:"futbol_dia",fecha:fd.fecha})});const j=await r.json();if(!j.error){fd.data=j;pintarFutDia(false);}}catch(_){}
+  if(fd.data&&fd.data.conteo&&(fd.data.conteo.LIVE||fd.data.conteo.NS))fd.timer=setTimeout(()=>{const on=document.querySelector('#futbolChips [data-futdia].on');const vis=document.getElementById("screen-partidos");if(on&&vis&&vis.classList.contains("active")&&!document.hidden)cargarFutDiaSilencioso();},90000);
+}
+function fdFiltrados(){
+  const f=fd.f, q=(f.equipo||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const nq=v=>String(v||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  return (fd.data.partidos||[]).filter(p=>(!f.comp||p.ligaSlug===f.comp)&&(!f.pais||p.pais===f.pais)&&(!f.estado||(f.estado==="OTROS"?["POSP","SUSP","CANC"].includes(p.estado):p.estado===f.estado))&&(!q||nq(p.local).includes(q)||nq(p.visita).includes(q)));
+}
+function pintarFutDia(conBarra){
+  const d=fd.data; if(!d)return;
+  const comps=d.competiciones||[], paises=[...new Set(comps.map(c=>c.pais))].sort();
+  if(fd.f.comp&&!comps.some(c=>c.slug===fd.f.comp))fd.f.comp=""; if(fd.f.pais&&!paises.includes(fd.f.pais))fd.f.pais="";
+  const c=d.conteo||{};
+  const opt=(v,t,sel)=>`<option value="${escP(v)}"${sel===v?" selected":""}>${escP(t)}</option>`;
+  if(conBarra||!document.getElementById("fdLista")){
+    matchResults.innerHTML=`<div class="fd-bar">
+      <div class="fd-nav"><button type="button" data-fdmov="-1" aria-label="Día anterior">◀</button><input type="date" id="fdFecha" value="${escP(fd.fecha)}" min="${escP(fdMover(fd.hoy,-7))}" max="${escP(fdMover(fd.hoy,7))}"><button type="button" data-fdmov="1" aria-label="Día siguiente">▶</button>${fd.fecha!==fd.hoy?'<button type="button" data-fdhoy="1">Hoy</button>':""}</div>
+      <select id="fdComp" aria-label="Competición">${opt("","Todas las competiciones ("+comps.length+")",fd.f.comp)}${comps.map(x=>opt(x.slug,x.nombre+" · "+x.n,fd.f.comp)).join("")}</select>
+      <select id="fdPais" aria-label="País o región">${opt("","Todos los países",fd.f.pais)}${paises.map(x=>opt(x,x,fd.f.pais)).join("")}</select>
+      <select id="fdEstado" aria-label="Estado">${opt("","Todos los estados",fd.f.estado)}${opt("LIVE","En vivo ("+(c.LIVE||0)+")",fd.f.estado)}${opt("NS","Por jugar ("+(c.NS||0)+")",fd.f.estado)}${opt("FT","Finalizados ("+(c.FT||0)+")",fd.f.estado)}${opt("OTROS","Aplazados / suspendidos / cancelados ("+((c.POSP||0)+(c.SUSP||0)+(c.CANC||0))+")",fd.f.estado)}</select>
+      <input type="search" id="fdEquipo" placeholder="Equipo…" value="${escP(fd.f.equipo)}" aria-label="Buscar equipo">
+    </div><div id="fdInfo"></div><div id="fdLista"></div>`;
+    const re=()=>{fd.ver=40;pintarFutDia(false);};
+    document.getElementById("fdComp").onchange=e=>{fd.f.comp=e.target.value;re();};
+    document.getElementById("fdPais").onchange=e=>{fd.f.pais=e.target.value;re();};
+    document.getElementById("fdEstado").onchange=e=>{fd.f.estado=e.target.value;re();};
+    let tt; document.getElementById("fdEquipo").oninput=e=>{clearTimeout(tt);const v=e.target.value;tt=setTimeout(()=>{fd.f.equipo=v;re();},250);};
+    document.getElementById("fdFecha").onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value))cargarFutDia(e.target.value);};
+    matchResults.querySelectorAll("[data-fdmov]").forEach(b=>b.onclick=()=>{const n=fdMover(fd.fecha,+b.dataset.fdmov);if(Math.abs((Date.parse(n)-Date.parse(fd.hoy))/864e5)<=7)cargarFutDia(n);});
+    const bh=matchResults.querySelector("[data-fdhoy]"); if(bh)bh.onclick=()=>cargarFutDia(fd.hoy);
+  }
+  const lista=fdFiltrados(), cob=d.cobertura||{};
+  const filtrado=fd.f.comp||fd.f.pais||fd.f.estado||fd.f.equipo;
+  document.getElementById("fdInfo").innerHTML=
+    (d.aviso?`<div class="fd-aviso">${d.verificado?"ℹ️":"⚠️"} ${escP(d.aviso)}${cob.fallidas&&cob.fallidas.length?` <small>(sin respuesta: ${escP(cob.fallidas.slice(0,4).map(x=>x.nombre).join(", "))}${cob.fallidas.length>4?"…":""})</small>`:""}</div>`:"")+
+    `<div class="fd-resumen"><b>${escP(fdFechaLarga(fd.fecha))}</b> · hora de Honduras · <b>${filtrado?lista.length+" de "+(d.total||0):(d.total||0)}</b> partido(s) en <b>${comps.length}</b> competición(es)${c.LIVE?` · <b>${c.LIVE}</b> en vivo`:""} · ${cob.respondieron||0}/${cob.consultadas||0} competiciones consultadas respondieron${cob.desdeCache&&cob.desdeCache.length?` · ${cob.desdeCache.length} con datos guardados`:""}.</div>`;
+  const cont=document.getElementById("fdLista");
+  if(!lista.length){cont.innerHTML=`<div class="empty">${(d.total||0)?"Ningún partido coincide con los filtros.":escP(d.aviso||"Sin partidos.")}</div>`;return;}
+  const vis=lista.slice(0,fd.ver);
+  // agrupado por competición (en el orden de la primera hora de cada una)
+  const grupos=new Map(); for(const p of vis){if(!grupos.has(p.ligaSlug))grupos.set(p.ligaSlug,[]);grupos.get(p.ligaSlug).push(p);}
+  const total=new Map(); for(const p of lista)total.set(p.ligaSlug,(total.get(p.ligaSlug)||0)+1);
+  cont.innerHTML=[...grupos.entries()].map(([slug,ps])=>`<div class="fd-grupo">${escP(ps[0].liga)} <small>${escP(ps[0].pais)} · ${total.get(slug)} partido(s)</small></div>`+ps.map(p=>{
+    const jugado=p.estado==="LIVE"||p.estado==="FT"||p.estado==="SUSP";
+    const cls=p.estado==="LIVE"?"live":p.estado==="FT"?"ft":(p.estado==="NS"?"":"alerta");
+    const est=p.estado==="NS"?escP(p.horaHN):escP(p.estado==="LIVE"?"EN VIVO · "+(p.estadoTxt||""):p.estadoTxt||FD_EST[p.estado]||p.estado);
+    const g=v=>jugado&&v!=null?escP(v):"";
+    return `<div class="match"><div class="liga"><span class="lname">${escP(p.horaHN)}${p.sede?" · "+escP(p.sede):""}</span><span class="est ${cls}">${est}</span></div>
+      <div class="row">${urlP(p.logoLocal)?`<img src="${urlP(p.logoLocal)}" alt="" loading="lazy">`:`<span style="width:26px"></span>`}<span class="tn">${escP(p.local)}</span><span class="gs ${jugado?"":"dim"}">${g(p.golesLocal)}</span></div>
+      <div class="row">${urlP(p.logoVisita)?`<img src="${urlP(p.logoVisita)}" alt="" loading="lazy">`:`<span style="width:26px"></span>`}<span class="tn">${escP(p.visita)}</span><span class="gs ${jugado?"":"dim"}">${g(p.golesVisita)}</span></div>
+      <div class="foot"><span class="ch${p.canalConfirmado?"":" sc"}">📺 ${escP(p.canal||"Canal sin confirmar")}</span></div></div>`;
+  }).join("")).join("")+(lista.length>fd.ver?`<button type="button" class="fd-mas" id="fdMas">Mostrar más (${lista.length-fd.ver} restantes)</button>`:"");
+  const m=document.getElementById("fdMas"); if(m)m.onclick=()=>{fd.ver+=40;pintarFutDia(false);};
+}
 
 /* ===== MENSAJE DE COBRO ===== */
 let cobroActual=null;

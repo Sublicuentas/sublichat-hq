@@ -164,3 +164,19 @@ html body #screen-finanzas.fz-screen.fz-screen>.card>h2,html body #screen-finanz
 .fz-avz{padding:14px 18px}.fz-avz>summary{cursor:pointer;color:var(--m);font-size:13.5px}.fz-avz>summary b{color:inherit}.fz-avz[open]>summary{margin-bottom:14px}
 .fz-t td details{margin-top:4px}.fz-t td details summary{cursor:pointer;color:var(--m);font-size:12px}.fz-t td details small{display:block;margin-top:2px}
 .fz-rent-det>td{padding-top:0!important;border-top:0!important}.fz-rent-det details table{margin-top:6px;background:var(--f);border-radius:10px}
+
+/* R200a · Compras registradas: filtros, fila anulada, menú y botón de peligro */
+.fz-comp-f{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 10px}
+.fz-comp-f input,.fz-comp-f select{min-height:36px;border:1px solid var(--b);border-radius:10px;padding:6px 10px;font:inherit;font-size:13px;background:#fff}
+.fz-comp-f label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--m,#6B7280)}
+.fz-t tr.fz-anulada td{color:#9AA3AF}.fz-t tr.fz-anulada td b{text-decoration:line-through}
+.fz-menu-l .fz-danger-t{color:#C62828;font-weight:700}
+.fz-btn.fz-btn-peligro{background:#C62828!important;border-color:#C62828!important;color:#fff!important}
+.fz-detalle-compra{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 14px;margin-bottom:6px}
+
+/* R200b · gráficos conciliados */
+.fz-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.fz-gsel{width:auto!important;flex:none;max-width:180px;min-height:32px;border:1px solid var(--b);border-radius:9px;padding:4px 8px;font:inherit;font-size:12.5px;background:#fff;margin-left:auto}
+.fz-acc-graf{display:flex;justify-content:flex-end;margin:10px 0 14px}
+.fz-link{all:unset;cursor:pointer;color:#178EF1;font-weight:600;text-decoration:underline}
+@media (max-width:1100px){.fz-g3{grid-template-columns:minmax(0,1fr)}}

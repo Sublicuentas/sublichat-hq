@@ -73,6 +73,7 @@
     var h = host(); if (!h) return;
     var scr = document.getElementById('screen-finanzas'); if (scr) scr.classList.add('fz-screen');
     if (st.chart) { try { st.chart.destroy(); } catch (_) {} st.chart = null; }
+    (st.charts || []).forEach(function (c) { try { c.destroy(); } catch (_) {} }); st.charts = []; // R200b
     var d = st.data;
     var mesSel = '<label class="fz-mes"><span>Mes</span><input type="month" data-fz-mes value="' + esc(st.mes || '') + '"></label>';
     var cab = '<div class="fz-head"><div><h1>Finanzas</h1><p>Ganancias, margen y rendimiento por producto</p></div><div class="fz-head-acc">' + mesSel +
@@ -86,6 +87,7 @@
     var fallas = d && d.fallas && d.fallas.length ? '<div class="fz-err">Algunas partes no cargaron: ' + d.fallas.map(function (f) { return esc(f.seccion.replace(/_/g, ' ')); }).join(', ') + '. El resto está al día. <button type="button" class="fz-link" data-fz="reintentar">Reintentar</button></div>' : '';
     h.innerHTML = '<div class="fz">' + cab + (st.cargando && d ? '<div class="fz-cargando">Actualizando…</div>' : '') + fallas + cuerpo + '</div>';
     if (d && (st.tab === 'ganancias' || st.tab === 'resumen')) dibujarChart(d);
+    if (d && st.tab === 'resumen') { var gg = st.gan[ganClave()]; if (gg && gg.graficos) dibujarGraficos(gg); } // R200b
     if (d && st.tab === 'compras' && st.sub === 'vip' && !st.vip.res) cargarVip();
     if (d && st.tab === 'compras' && st.sub === 'importar' && !st.jobs) cargarJobs();
     if (d && st.tab === 'compras' && st.sub === 'spotify' && !st.spf) cargarSpf();
@@ -125,6 +127,95 @@
       options: { responsive: true, maintainAspectRatio: false, animation: false, layout: { padding: { top: 24 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return 'Ganancia ' + L(c.raw); } } } },
         scales: { x: { grid: { display: false }, ticks: { color: '#5B6472', font: { size: 12 } } }, y: { grid: { color: '#EEF1F5' }, border: { display: false }, ticks: { color: '#8A93A0', callback: function (v) { return L(v); } } } } },
       plugins: [{ id: 'fzEtiquetas', afterDatasetsDraw: function (ch) { var ctx = ch.ctx; ctx.save(); ctx.font = '700 13px Inter,system-ui,sans-serif'; ctx.fillStyle = '#1F2430'; ctx.textAlign = 'center'; ch.getDatasetMeta(0).data.forEach(function (b, i) { ctx.fillText(L(ch.data.datasets[0].data[i]), b.x, b.y - 8); }); ctx.restore(); } }] });
+  }
+
+  // ---------------------------------------------------------------------------------------------- R200b · GRÁFICOS CONCILIADOS
+  // Salen de la MISMA respuesta que las tarjetas (finp_ganancias): mismos filtros, mismos totales. Nada de cifras decorativas.
+  // «Ganancia por categoría» quedaba vacío porque leía otra fuente (fin_consumos/PEPS) mientras las tarjetas usan el motor único.
+  st.graf = st.graf || { tend: 'mes', orden: 'ganancia', inv: 'proveedor' };
+  var COL = { cobrado: '#178EF1', costo: '#E6211C', resultado: '#13BD63', pend: '#C7CDD6', amarillo: '#F5B800', morado: '#8B5CF6' };
+  function graficosHtml(g) {
+    var G = st.graf, gr = g.graficos, r = g.resumen || {};
+    var sel = function (k, opts) { return '<select class="fz-gsel" data-fz-graf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (G[k] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
+    var caja = function (id, titulo, extra, alto, pie) { return '<div class="fz-card fz-chart"><div class="fz-cab"><h3>' + titulo + '</h3>' + (extra || '') + '</div><div class="fz-chart-box" style="height:' + (alto || 250) + 'px"><canvas id="' + id + '" role="img" aria-label="' + esc(titulo) + '"></canvas></div>' + (pie || '') + '</div>'; };
+    var cob = gr.cobertura || {}, totCob = (cob.cubiertoHnl || 0) + (cob.sinCostoHnl || 0);
+    return '<div class="fz-g2">' +
+        caja('fzGTend', 'Tendencia: cobros, costos y ganancia', sel('tend', [['mes', 'Por mes'], ['dia', 'Por día']]), 260, '<p class="fz-sub">Toque un punto para ver sus transacciones' + (G.tend === 'mes' ? ' (abre ese mes)' : '') + '. «Pendiente» = mes con costo incompleto: no se grafica como ganancia.</p>') +
+        caja('fzGPlat', 'Rentabilidad por plataforma', sel('orden', [['ganancia', 'Mayor ganancia'], ['ingreso', 'Mayor ingreso'], ['margen', 'Peor margen']]), Math.max(220, Math.min(520, 34 * ((g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).length + 1))), '<p class="fz-sub">Gris = resultado pendiente (faltan costos por vincular). Toque una barra para abrir sus cuentas.</p>') +
+      '</div><div class="fz-g3">' +
+        caja('fzGComp', 'Altas nuevas vs. renovaciones cobradas', '', 220, '<p class="fz-sub">' + (gr.composicion.venta.n) + ' alta(s) · ' + gr.composicion.renovacion.n + ' renovación(es) · ' + gr.composicion.ingreso_manual.n + ' otro(s) cobro(s).</p>') +
+        caja('fzGCob', 'Cobertura de costos', '<button type="button" class="fz-btn sec sm" data-fz-graf-pend>Ver pendientes</button>', 220, '<p class="fz-sub">' + (totCob ? P(Math.round((cob.cubiertoHnl || 0) / totCob * 1000) / 10) + ' del ingreso cobrado tiene costo vinculado.' : 'Sin cobros en el período.') + '</p>') +
+        caja('fzGInv', 'Inversión y compras (caja)', sel('inv', [['proveedor', 'Por proveedor'], ['pago', 'Por método de pago'], ['moneda', 'Por moneda']]), 220, '<p class="fz-sub">Pagos a proveedores del período (' + L(r.desembolsoHnl) + '). No es lo mismo que el costo atribuido a las ventas (' + L(r.costoHnl) + ').</p>') +
+      '</div><div class="fz-acc-graf"><button type="button" class="fz-btn sec sm" data-fz-trans="">' + ico('doc') + 'Ver transacciones (' + (gr.transaccionesTotal || 0) + ')</button></div>';
+  }
+  function dibujarGraficos(g) {
+    if (!window.Chart) return;
+    var gr = g.graficos, G = st.graf, nuevo = function (id, cfg) { var cv = document.getElementById(id); if (!cv) return; var ch = new window.Chart(cv, cfg); st.charts.push(ch); return ch; };
+    var base = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 12 } } }, tooltip: { callbacks: { label: function (c) { return (c.dataset.label ? c.dataset.label + ': ' : '') + (c.raw == null ? 'Pendiente' : L(c.raw)); } } } } };
+    var ejeL = { grid: { color: '#EEF1F5' }, border: { display: false }, ticks: { color: '#8A93A0', callback: function (v) { return L(v); } } };
+    // Tendencia
+    if (G.tend === 'dia') {
+      var dd = gr.porDia || [];
+      nuevo('fzGTend', { type: 'bar', data: { labels: dd.map(function (x) { return x.fecha.slice(8) + '/' + x.fecha.slice(5, 7); }), datasets: [{ label: 'Cobrado', data: dd.map(function (x) { return x.cobradoHnl; }), backgroundColor: COL.cobrado, borderRadius: 3 }, { label: 'Pagos a proveedores', data: dd.map(function (x) { return x.desembolsoHnl || 0; }), backgroundColor: COL.costo, borderRadius: 3 }] },
+        options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (el.length) abrirTransacciones({ fecha: dd[el[0].index].fecha }); } }) });
+    } else {
+      var ms = g.meses || [];
+      nuevo('fzGTend', { type: 'line', data: { labels: ms.map(function (m) { return nombreMes(m.mes); }), datasets: [
+        { label: 'Cobrado', data: ms.map(function (m) { return m.cobradoHnl; }), borderColor: COL.cobrado, backgroundColor: COL.cobrado, tension: .25 },
+        { label: 'Costo atribuido', data: ms.map(function (m) { return m.costoHnl; }), borderColor: COL.costo, backgroundColor: COL.costo, tension: .25 },
+        { label: 'Ganancia calculable', data: ms.map(function (m) { return m.resultadoHnl == null ? null : m.resultadoHnl; }), borderColor: COL.resultado, backgroundColor: COL.resultado, tension: .25, spanGaps: false }] },
+        options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (!el.length) return; var mg = ms[el[0].index].mes, pg = mg.split('-'); st.mes = mg; st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; cargar(true); } }) });
+    }
+    // Rentabilidad por plataforma (resultado null = pendiente, barra gris con el ingreso cubierto 0)
+    var pl = (g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).slice();
+    pl.sort(G.orden === 'ingreso' ? function (a, b) { return b.cobradoHnl - a.cobradoHnl; } : G.orden === 'margen' ? function (a, b) { return (a.margen == null ? 1e9 : a.margen) - (b.margen == null ? 1e9 : b.margen); } : function (a, b) { return (b.resultadoHnl == null ? -1e12 : b.resultadoHnl) - (a.resultadoHnl == null ? -1e12 : a.resultadoHnl); });
+    nuevo('fzGPlat', { type: 'bar', data: { labels: pl.map(function (p) { return p.nombre + (p.resultadoHnl == null ? ' · pendiente' : ''); }), datasets: [
+      { label: 'Ganancia calculable', data: pl.map(function (p) { return p.resultadoHnl == null ? 0 : p.resultadoHnl; }), backgroundColor: pl.map(function (p) { return p.resultadoHnl == null ? COL.pend : p.resultadoHnl >= 0 ? COL.resultado : COL.costo; }), borderRadius: 4 },
+      { label: 'Cobrado', data: pl.map(function (p) { return p.cobradoHnl; }), backgroundColor: 'rgba(23,142,241,.25)', borderRadius: 4 }] },
+      options: Object.assign({}, base, { indexAxis: 'y', scales: { x: ejeL, y: { grid: { display: false } } },
+        plugins: Object.assign({}, base.plugins, { tooltip: { callbacks: { label: function (c) { var p = pl[c.dataIndex]; if (c.datasetIndex === 0) return p.resultadoHnl == null ? 'Resultado pendiente · cobertura ' + (p.coberturaCostos == null ? '—' : p.coberturaCostos + '%') : 'Ganancia ' + L(p.resultadoHnl) + (p.margen == null ? '' : ' · margen ' + p.margen + '%') + (p.margenDefinitivo ? '' : ' (parcial)'); return 'Cobrado ' + L(p.cobradoHnl); } } } }),
+        onClick: function (e, el) { if (el.length) abrirPlataforma(pl[el[0].index].plataforma); } }) });
+    // Composición
+    var cp = gr.composicion;
+    nuevo('fzGComp', { type: 'doughnut', data: { labels: ['Altas nuevas', 'Renovaciones', 'Otros cobros'], datasets: [{ data: [cp.venta.cobradoHnl, cp.renovacion.cobradoHnl, cp.ingreso_manual.cobradoHnl], backgroundColor: [COL.cobrado, COL.resultado, COL.amarillo] }] },
+      options: Object.assign({}, base, { cutout: '58%', onClick: function (e, el) { if (el.length) abrirTransacciones({ tipo: ['venta', 'renovacion', 'ingreso_manual'][el[0].index] }); } }) });
+    // Cobertura
+    var cb = gr.cobertura;
+    nuevo('fzGCob', { type: 'doughnut', data: { labels: ['Con costo vinculado', 'Sin costo (pendiente)'], datasets: [{ data: [cb.cubiertoHnl, cb.sinCostoHnl], backgroundColor: [COL.resultado, COL.pend] }] },
+      options: Object.assign({}, base, { cutout: '58%', onClick: function (e, el) { if (el.length) abrirTransacciones({ cubierto: el[0].index === 0 }); } }) });
+    // Inversión
+    var inv = (G.inv === 'pago' ? gr.inversionPago : G.inv === 'moneda' ? gr.inversionMoneda : gr.inversionProveedor) || [];
+    nuevo('fzGInv', { type: 'bar', data: { labels: inv.slice(0, 8).map(function (x) { return x.clave; }), datasets: [{ label: 'Pagado', data: inv.slice(0, 8).map(function (x) { return x.costoHnl; }), backgroundColor: COL.morado, borderRadius: 4 }] },
+      options: Object.assign({}, base, { plugins: Object.assign({}, base.plugins, { legend: { display: false } }), scales: { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: ejeL } }) });
+  }
+  // Transacciones (drill-down): mismas líneas del cálculo; filtros por plataforma, tipo, vendedor y texto.
+  function abrirTransacciones(filtro) {
+    var g = st.gan[ganClave()]; if (!g || !g.graficos) return;
+    filtro = filtro || {};
+    var TIPO = { venta: 'Alta nueva', renovacion: 'Renovación cobrada', ingreso_manual: 'Otro cobro' };
+    var todas = g.graficos.transacciones || [];
+    var plats = []; todas.forEach(function (t) { if (plats.indexOf(t.nombre) < 0) plats.push(t.nombre); }); plats.sort();
+    var vends = []; todas.forEach(function (t) { if (vends.indexOf(t.vendedor) < 0) vends.push(t.vendedor); }); vends.sort();
+    var html = '<div class="fz-filtros fz-comp-f"><input type="search" data-tf="q" placeholder="Cliente, cuenta o referencia"><select data-tf="plat"><option value="">Todas las plataformas</option>' + plats.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select>' +
+      '<select data-tf="tipo"><option value="">Todos los tipos</option>' + Object.keys(TIPO).map(function (k) { return '<option value="' + k + '"' + (filtro.tipo === k ? ' selected' : '') + '>' + TIPO[k] + '</option>'; }).join('') + '</select>' +
+      '<select data-tf="vend"><option value="">Todos los vendedores</option>' + vends.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join('') + '</select>' +
+      '<input type="date" data-tf="fecha" value="' + esc(filtro.fecha || '') + '" aria-label="Fecha"><select data-tf="cub"><option value="">Con y sin costo</option><option value="1"' + (filtro.cubierto === true ? ' selected' : '') + '>Con costo vinculado</option><option value="0"' + (filtro.cubierto === false ? ' selected' : '') + '>Sin costo (pendiente)</option></select></div><div data-tlista></div>';
+    var m = modal('Transacciones · ' + nombreMes(st.mes), html); var mc = m.querySelector('.fz-modal-c'); if (mc) mc.style.maxWidth = 'min(1180px, 96vw)';
+    function pintarT() {
+      var v = function (k) { var x = m.querySelector('[data-tf="' + k + '"]'); return x ? x.value : ''; };
+      var q = v('q').toLowerCase(), lst = todas.filter(function (t) {
+        return (!v('plat') || t.nombre === v('plat')) && (!v('tipo') || t.tipo === v('tipo')) && (!v('vend') || t.vendedor === v('vend')) && (!v('fecha') || t.fecha === v('fecha')) && (v('cub') === '' || String(t.costoCubierto ? 1 : 0) === v('cub')) &&
+          (!q || (t.beneficiario + ' ' + t.titular + ' ' + t.cuenta + ' ' + t.referencia).toLowerCase().indexOf(q) >= 0);
+      });
+      var tot = lst.reduce(function (a, t) { return a + t.cobrado; }, 0);
+      m.querySelector('[data-tlista]').innerHTML = '<p class="fz-sub"><b>' + lst.length + '</b> transacción(es) · cobrado <b>' + L(Math.round(tot * 100) / 100, true) + '</b>' + (g.graficos.transaccionesTotal > todas.length ? ' · se muestran las ' + todas.length + ' más recientes' : '') + '</p>' +
+        '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Fecha</th><th>Tipo</th><th>Plataforma</th><th>Beneficiario</th><th>Titular</th><th>Cuenta</th><th>Vendedor</th><th class="n">Valor</th><th class="n">Cobrado</th><th class="c">Costo</th><th>Referencia</th></tr></thead><tbody>' +
+        lst.slice(0, 400).map(function (t) { return '<tr><td>' + fecha(t.fecha) + '</td><td>' + TIPO[t.tipo] + '</td><td>' + esc(t.nombre) + '</td><td>' + esc(t.beneficiario) + '</td><td>' + esc(t.titular) + '</td><td>' + (t.cuentaId ? '<button type="button" class="fz-link" data-fz-gancta="' + esc(t.cuentaId) + '">' + esc(t.cuenta || 'Cuenta') + '</button>' : '—') + '</td><td>' + esc(t.vendedor) + '</td><td class="n">' + L(t.monto, true) + (t.descuento > 0 ? '<small class="fz-pend"> −' + L(t.descuento, true) + '</small>' : '') + '</td><td class="n">' + L(t.cobrado, true) + '</td><td class="c">' + (t.costoCubierto ? '<span class="fz-pill ok">Vinculado</span>' : '<span class="fz-pill warn">Pendiente</span>') + '</td><td><small>' + esc(String(t.referencia).slice(-10)) + '</small></td></tr>'; }).join('') +
+        '</tbody></table></div>' + (lst.length > 400 ? '<p class="fz-sub">Se muestran 400; use los filtros o el Excel para el resto.</p>' : '');
+    }
+    m.addEventListener('input', pintarT); m.addEventListener('change', pintarT);
+    m.addEventListener('click', function (e) { var b = e.target.closest('[data-fz-gancta]'); if (b) { m.remove(); abrirGanCuenta(b.dataset.fzGancta); } });
+    pintarT();
   }
   function tablaRent(d) {
     var f = d.productos || [];
@@ -183,7 +274,7 @@
     return '<div class="fz-card"><div class="fz-cab">' + ico('trend') + '<h3>Período</h3><span class="fz-sub r">' + fecha(r.desde) + ' → ' + fecha(r.hasta) + '</span></div>' +
       '<div class="fz-filtros">' + (g && g.meses ? g.meses.map(function (m) { var on = r.desde === m.mes + '-01' && r.hasta.slice(0, 7) === m.mes; return '<button type="button" class="' + (on ? 'on' : '') + '" data-fz-ganmes="' + esc(m.mes) + '">' + esc(nombreMes(m.mes)) + '</button>'; }).join('') : '') +
       '<button type="button" data-fz-gantri="1">Últimos 3 meses</button></div>' +
-      '<div class="fz-form in" style="margin-top:10px"><label>Desde<input type="date" data-fz-ganr="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-ganr="hasta" value="' + esc(r.hasta) + '"></label><button type="button" class="fz-btn sec" data-fz="ganrango">Ver rango</button><button type="button" class="fz-btn sec" data-fz="ganexcel">' + ico('dl') + 'Excel del detalle</button><button type="button" class="fz-btn sec" data-fz="ganaud">' + ico('alert') + 'Auditoría de cartera</button></div>' +
+      '<div class="fz-form in" style="margin-top:10px"><label>Desde<input type="date" data-fz-ganr="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-ganr="hasta" value="' + esc(r.hasta) + '"></label><button type="button" class="fz-btn sec" data-fz="ganrango">Ver rango</button><button type="button" class="fz-btn" data-fz="excelfin">' + ico('dl') + 'Excel financiero (9 hojas)</button><button type="button" class="fz-btn sec" data-fz="ganexcel">' + ico('dl') + 'Detalle plano</button><button type="button" class="fz-btn sec" data-fz="ganaud">' + ico('alert') + 'Auditoría de cartera</button></div>' +
       (g && g.meses ? '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Mes</th><th class="n">Cobrado</th><th class="n">Pendiente</th><th class="n">Esperado</th><th class="n">Costos</th><th class="n">Pagos a proveedores</th><th class="n">Resultado</th><th class="c">Margen</th><th class="c">Cobertura</th></tr></thead><tbody>' +
         g.meses.map(function (m) { return '<tr><td><b>' + esc(nombreMes(m.mes)) + '</b><small>' + m.altas + ' altas · ' + m.renovaciones + ' renov.</small></td><td class="n">' + L(m.cobradoHnl) + '</td><td class="n">' + L(m.pendienteHnl) + '</td><td class="n">' + L(m.esperadoHnl) + '</td><td class="n">' + L(m.costoHnl) + '</td><td class="n">' + L(m.desembolsoHnl) + '</td><td class="n">' + (m.estado === 'sin_datos' ? '<span class="fz-pend">Sin datos</span>' : m.resultadoHnl == null ? '<span class="fz-pend">No calculable</span>' : '<b class="' + (m.resultadoHnl >= 0 ? 'vd' : 'rj') + '">' + L(m.resultadoHnl) + '</b>') + '</td><td class="c">' + P(m.margen) + (m.margenDefinitivo ? '' : '<small class="fz-pend">no definitivo</small>') + '</td><td class="c">' + P(m.coberturaCostos) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') + '</div>';
   }
@@ -441,6 +532,24 @@
       b.innerHTML = cab + mini + '<h4>Clientes y beneficiarios</h4>' + per + '<h4>Costos asignados</h4>' + cos + '<h4>Compras de proveedor vinculadas</h4>' + compras + '<details><summary>Movimientos que explican el ingreso</summary>' + movs + '</details>';
     }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
   }
+  // R200c · Libro Excel financiero (9 hojas): mismo motor que esta pantalla, mes por mes. Tablas con filtros, Panel con
+  // selectores de Mes y Plataforma (fórmulas), vínculos internos y gráficos nativos. Sin teléfonos, PIN ni claves.
+  async function excelFinanciero(btn) {
+    if (!window.ExcelJS || !window.SublichatExcelFinanciero) { toast('No cargó el generador de Excel. Recargue la página.', true); return; }
+    var r = ganRango(); var desde = String(r.desde).slice(0, 7) + '-01', hasta = r.hasta;
+    var n = (Number(hasta.slice(0, 4)) - Number(desde.slice(0, 4))) * 12 + Number(hasta.slice(5, 7)) - Number(desde.slice(5, 7)) + 1;
+    if (n === 1) { var d0 = new Date(Date.UTC(+desde.slice(0, 4), +desde.slice(5, 7) - 12, 1)); desde = d0.toISOString().slice(0, 10); n = 12; } // un solo mes elegido → los 12 meses que terminan en él (hoja de evolución)
+    if (n > 13) { toast('El libro admite hasta 13 meses. Elija un rango más corto.', true); return; }
+    btn.disabled = true; var t0 = btn.innerHTML; btn.textContent = 'Generando libro…';
+    try {
+      var x = await api('finp_excel_financiero', { desde: desde, hasta: hasta });
+      var buf = await window.SublichatExcelFinanciero.generar(x, { ExcelJS: window.ExcelJS, JSZip: window.JSZip, avisar: function (m) { toast(m, true); } }, { mes: (st.mes || '').slice(0, 7) });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = 'Sublichat_Finanzas_' + desde.slice(0, 7) + '_a_' + hasta.slice(0, 7) + '.xlsx'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      toast('Libro listo: 9 hojas' + (x.truncado ? ' (detalle recortado a 20 000 filas por hoja)' : '') + '.');
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false; btn.innerHTML = t0;
+  }
   async function ganExcel(btn) {
     if (!window.ExcelJS) { toast('No cargó el generador de Excel. Recargue la página.', true); return; }
     btn.disabled = true; var t0 = btn.innerHTML; btn.textContent = 'Generando…';
@@ -466,10 +575,10 @@
     var vip = '<div class="fz-card"><div class="fz-cab">' + logo('Netflix') + '<h3>Netflix VIP alquilado</h3><button type="button" class="fz-btn sec sm" data-fz-tab="compras" data-sub="vip">Abrir lista</button></div><div class="fz-mini">' +
       [['Trap', pv.trap], ['Deku', pv.deku], ['Propios', pv.propio], ['Sin proveedor', pv.sin]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + (x[1] || 0) + '</b></div>'; }).join('') + '</div><p class="fz-sub">' + (v.proximos7 || 0) + ' con cobro del proveedor en 7 días · ' + (v.lotes || 0) + ' lotes pagados registrados</p></div>';
     var compras = '<div class="fz-card"><div class="fz-cab">' + ico('cart') + '<h3>Últimas compras</h3><button type="button" class="fz-btn sm" data-fz="compra">' + ico('plus') + 'Registrar compra</button></div>' +
-      ((d.lotes || []).slice(0, 6).map(function (l) { return '<div class="fz-lin">' + logo(l.producto) + '<div><b>' + esc(l.producto) + '</b><small>' + fecha(l.fecha) + ' · ' + esc(l.proveedor || 'Sin proveedor') + ' · ' + esc(l.cuentaPagoNombre || l.pago || '') + '</small></div><strong>' + L(l.costoTotalHnl) + '</strong></div>'; }).join('') || '<div class="fz-vacio-s">Sin compras registradas.</div>') + '</div>';
+      ((d.lotes || []).filter(function (l) { return l.estado !== 'anulado'; }).slice(0, 6).map(function (l) { return '<div class="fz-lin">' + logo(l.producto) + '<div><b>' + esc(l.producto) + '</b><small>' + fecha(l.fecha) + ' · ' + esc(l.proveedor || 'Sin proveedor') + ' · ' + esc(l.cuentaPagoNombre || l.pago || '') + '</small></div><strong>' + L(l.costoTotalHnl) + '</strong></div>'; }).join('') || '<div class="fz-vacio-s">Sin compras registradas.</div>') + '</div>';
     var g = st.gan[ganClave()]; if (!g) cargarGan(); // R197 · mismas cifras que Ganancias
     var cab = g && g.resumen ? ganKpis(g) : '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando…</b></div>';
-    return cab + '<div class="fz-g2">' + chartHtml('Ganancia por categoría') + alertasHtml(d, 4) + '</div><div class="fz-g2 c">' + compras + vip + '</div>' + notaCosteo(d);
+    return cab + (g && g.graficos ? graficosHtml(g) : '') + '<div class="fz-g2">' + alertasHtml(d, 4) + compras + '</div><div class="fz-g2 c">' + vip + '</div>' + notaCosteo(d);
   }
   function vProveedores(d) {
     var cp = d.costosProveedor || [], rp = d.rentProveedores || [];
@@ -496,13 +605,35 @@
     if (st.sub === 'spotify') return nav + vSpotify();
     if (st.sub === 'hbo') return nav + vHbo();
     if (CUENTAS_SUB[st.sub]) return nav + vCuentas(st.sub);
-    var rows = (d.lotes || []).map(function (l) {
-      return '<tr><td>' + fecha(l.fecha) + '</td><td><div class="fz-prod">' + logo(l.producto) + '<b>' + esc(l.producto) + '</b></div></td><td>' + esc(l.proveedor || '—') + '</td><td class="n">' + esc(l.cantidad) + ' ' + esc(l.unidad || '') + '</td>' +
-        '<td class="n">' + (l.moneda === 'HNL' ? L(l.costoTotalMoneda, true) : esc(l.costoTotalMoneda) + ' ' + esc(l.moneda)) + '</td><td class="n">' + (l.moneda === 'HNL' ? '—' : esc(l.tasa)) + '</td><td class="n"><b>' + L(l.costoTotalHnl, true) + '</b></td><td>' + esc(l.cuentaPagoNombre || l.pago) + '</td><td class="n">' + esc(l.disponible) + '</td></tr>';
+    // R200a · filtros por fecha, proveedor, producto y estado + menú por fila (Ver detalle / Eliminar compra)
+    var F = st.compF = st.compF || { q: '', prov: '', estado: 'vigentes', desde: '', hasta: '' };
+    var todas = d.lotes || [];
+    var anuladas = todas.filter(function (l) { return l.estado === 'anulado'; }).length;
+    var provsL = []; todas.forEach(function (l) { if (l.proveedor && provsL.indexOf(l.proveedor) < 0) provsL.push(l.proveedor); }); provsL.sort();
+    var lista = todas.filter(function (l) {
+      if (F.estado === 'vigentes' && l.estado === 'anulado') return false;
+      if (F.estado === 'anuladas' && l.estado !== 'anulado') return false;
+      if (F.prov && l.proveedor !== F.prov) return false;
+      if (F.desde && String(l.fecha) < F.desde) return false;
+      if (F.hasta && String(l.fecha) > F.hasta) return false;
+      if (F.q && String(l.producto || '').toLowerCase().indexOf(F.q.toLowerCase()) < 0) return false;
+      return true;
+    });
+    var rows = lista.map(function (l) {
+      var an = l.estado === 'anulado';
+      var menu = '<div class="fz-menu"><button type="button" class="fz-ib" data-fz-menu aria-label="Acciones de la compra">' + ico('dots') + '</button><div class="fz-menu-l">' +
+        '<button type="button" data-fz-compra="ver" data-id="' + esc(l.id) + '">Ver detalle</button>' +
+        (an ? '' : '<button type="button" class="fz-danger-t" data-fz-compra="eliminar" data-id="' + esc(l.id) + '">Eliminar compra</button>') + '</div></div>';
+      return '<tr class="' + (an ? 'fz-anulada' : '') + '"><td>' + fecha(l.fecha) + '</td><td><div class="fz-prod">' + logo(l.producto) + '<b>' + esc(l.producto) + '</b>' + (an ? ' <span class="fz-pill mal" title="' + esc(l.motivoAnulacion || '') + '">Anulada</span>' : '') + '</div></td><td>' + esc(l.proveedor || '—') + '</td><td class="n">' + esc(l.cantidad) + ' ' + esc(l.unidad || '') + '</td>' +
+        '<td class="n">' + (l.moneda === 'HNL' ? L(l.costoTotalMoneda, true) : esc(l.costoTotalMoneda) + ' ' + esc(l.moneda)) + '</td><td class="n">' + (l.moneda === 'HNL' ? '—' : esc(l.tasa)) + '</td><td class="n"><b>' + L(l.costoTotalHnl, true) + '</b></td><td>' + esc(l.cuentaPagoNombre || l.pago) + '</td><td class="n">' + (an ? '—' : esc(l.disponible)) + '</td><td class="c">' + menu + '</td></tr>';
     }).join('');
+    var filtros = '<div class="fz-filtros fz-comp-f"><input type="search" data-fz-compf="q" placeholder="Buscar producto" value="' + esc(F.q) + '" aria-label="Buscar producto">' +
+      '<select data-fz-compf="prov" aria-label="Proveedor"><option value="">Todos los proveedores</option>' + provsL.map(function (p) { return '<option' + (p === F.prov ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select>' +
+      '<label>Desde<input type="date" data-fz-compf="desde" value="' + esc(F.desde) + '"></label><label>Hasta<input type="date" data-fz-compf="hasta" value="' + esc(F.hasta) + '"></label>' +
+      '<select data-fz-compf="estado" aria-label="Estado"><option value="vigentes"' + (F.estado === 'vigentes' ? ' selected' : '') + '>Vigentes</option><option value="anuladas"' + (F.estado === 'anuladas' ? ' selected' : '') + '>Anuladas (' + anuladas + ')</option><option value="todas"' + (F.estado === 'todas' ? ' selected' : '') + '>Todas</option></select></div>';
     return nav + '<div class="fz-card"><div class="fz-cab">' + ico('cart') + '<h3>Compras registradas</h3><button type="button" class="fz-btn sm" data-fz="compra">' + ico('plus') + 'Registrar compra</button></div>' +
-      '<p class="fz-sub">Cada compra crea un lote con su tasa guardada (no cambia después). Spotify Familiar: UNA compra por familia y mes, aunque tenga 5 invitaciones.</p>' +
-      '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Fecha</th><th>Producto</th><th>Proveedor</th><th class="n">Cantidad</th><th class="n">Monto</th><th class="n">Tasa</th><th class="n">Costo HNL</th><th>Pago</th><th class="n">Disponible</th></tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="fz-vacio-s">Sin compras registradas.</td></tr>') + '</tbody></table></div></div>';
+      '<p class="fz-sub">Cada compra crea un lote con su tasa guardada (no cambia después). Spotify Familiar: UNA compra por familia y mes, aunque tenga 5 invitaciones. Una compra anulada queda aquí con su motivo (nunca se borra en silencio).</p>' + filtros +
+      '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Fecha</th><th>Producto</th><th>Proveedor</th><th class="n">Cantidad</th><th class="n">Monto</th><th class="n">Tasa</th><th class="n">Costo HNL</th><th>Pago</th><th class="n">Disponible</th><th class="c">Acciones</th></tr></thead><tbody>' + (rows || '<tr><td colspan="10" class="fz-vacio-s">' + (todas.length ? 'Ninguna compra coincide con los filtros.' : 'Sin compras registradas.') + '</td></tr>') + '</tbody></table></div></div>';
   }
 
   // ---------------------------------------------------------------------------------------------------- R196f · Spotify Familiar
@@ -860,7 +991,7 @@
     var g = st.gan[ganClave()]; if (!g) { cargarGan(); return '<div class="fz-card fz-vacio-s"><span class="fz-spin"></span> Cargando plataformas…</div>'; }
     if (g.error || !g.porPlataforma) return '';
     var f = g.porPlataforma.filter(function (p) { return p.estado !== 'sin_movimiento' || p.esperadoHnl > 0; });
-    return '<div class="fz-card"><div class="fz-cab">' + ico('users') + '<h3>Detalle por plataforma</h3><span class="fz-sub r">' + fecha(g.desde) + ' → ' + fecha(g.hasta) + '</span><button type="button" class="fz-btn sec sm" data-fz="ganexcel">' + ico('dl') + 'Excel del detalle</button></div>' +
+    return '<div class="fz-card"><div class="fz-cab">' + ico('users') + '<h3>Detalle por plataforma</h3><span class="fz-sub r">' + fecha(g.desde) + ' → ' + fecha(g.hasta) + '</span><button type="button" class="fz-btn sec sm" data-fz="excelfin">' + ico('dl') + 'Excel financiero</button></div>' +
       f.map(function (p) { return '<div class="fz-lin">' + logo(p.nombre) + '<div><b>' + esc(p.nombre) + '</b><small>' + p.altas + ' altas · ' + p.renovaciones + ' renov. · cobrado ' + L(p.cobradoHnl) + ' · cobertura ' + P(p.coberturaCostos) + '</small></div><button type="button" class="fz-btn sec sm" data-fz-ganplat="' + esc(p.plataforma) + '">Cuentas</button></div>'; }).join('') + '</div>';
   }
   async function descargarExcel(btn) {
@@ -1068,6 +1199,44 @@
     });
   }
 
+  // ---------------------------------------------------------------------------------------------------- R200a · Eliminar / anular compra
+  // Muestra producto, fecha, importe original, moneda, tasa, proveedor, cuenta, pago y DEPENDENCIAS (ventas ya costeadas,
+  // conciliación, cuenta por pagar). Motivo obligatorio. Con ventas costeadas pide una segunda confirmación explícita.
+  // Un solo operationId por apertura: dos clics o un reintento de red no anulan dos veces.
+  async function abrirAnularCompra(id, modo) {
+    var cargando = modal(modo === 'ver' ? 'Detalle de la compra' : 'Eliminar compra', '<div class="fz-vacio-s"><span class="fz-spin"></span> Revisando dependencias…</div>');
+    var r;
+    try { r = await api('fin_compra_dependencias', { loteId: id }); } catch (e) { cargando.remove(); toast(e.message, true); return; }
+    cargando.remove();
+    var c = r.compra, dp = r.dependencias, ventas = dp.ventasCosteadas || [];
+    var fila = function (k, v) { return '<div class="fz-lin"><div><b>' + k + '</b></div><strong>' + v + '</strong></div>'; };
+    var det = '<div class="fz-detalle-compra">' + fila('Folio', esc(c.folio)) + fila('Producto', esc(c.producto)) + fila('Fecha de la compra', fecha(c.fecha)) +
+      fila('Importe original', (c.moneda === 'HNL' ? L(c.costoTotalMoneda, true) : esc(c.costoTotalMoneda) + ' ' + esc(c.moneda))) + fila('Tasa guardada', c.moneda === 'HNL' ? '—' : esc(c.tasa)) +
+      fila('Costo en Lempiras', L(c.costoTotalHnl, true)) + fila('Proveedor', esc(c.proveedor || '—')) + fila('Pagado con', esc(c.pago || '—')) + fila('Cuenta madre', esc(c.cuentaInventarioId || 'Sin cuenta madre')) + fila('Cantidad', esc(c.cantidad) + ' ' + esc(c.unidad || '')) +
+      fila('Usado / disponible', esc(c.consumido) + ' / ' + esc(c.disponible)) + fila('Estado', c.estado === 'anulado' ? '<span class="fz-pill mal">Anulada</span>' : '<span class="fz-pill ok">Vigente</span>') + '</div>';
+    var depHtml = '<h4 class="fz-h4">Dependencias</h4>' +
+      (ventas.length ? '<p class="fz-sub"><b>' + ventas.length + ' venta(s) ya tomaron su costo de esta compra (' + L(dp.costoVentasHnl, true) + ').</b> Al anular, ese costo se reversa en el mes de cada venta y quedan «pendientes de costo» hasta registrarse otra compra real.</p><div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Fecha</th><th>Cliente</th><th>Plataforma</th><th class="n">Unidades</th><th class="n">Costo</th></tr></thead><tbody>' +
+        ventas.slice(0, 50).map(function (v) { return '<tr><td>' + fecha(v.fecha) + '</td><td>' + esc(v.cliente || '—') + '</td><td>' + esc(v.plataforma || '') + '</td><td class="n">' + esc(v.unidades) + '</td><td class="n">' + L(v.costoHnl, true) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="fz-sub">Ninguna venta ha usado esta compra.</p>') +
+      (dp.ciclo ? '<p class="fz-sub">Conciliada con la cuenta ' + esc(dp.ciclo.cuentaInventarioId) + (dp.ciclo.coberturaDesde ? ' (cobertura ' + fecha(dp.ciclo.coberturaDesde) + ' – ' + fecha(dp.ciclo.coberturaHasta) + ')' : '') + ': la conciliación quedará anulada.</p>' : '') +
+      (dp.cxp ? '<p class="fz-sub">Compra a crédito: saldo ' + esc(dp.cxp.saldo) + ' de ' + esc(dp.cxp.total) + (dp.cxp.pagos ? ' · ' + dp.cxp.pagos + ' pago(s) hechos' : '') + '.</p>' : '') +
+      (dp.pagoContabilizado ? '<p class="fz-sub">El pago se anula con su <b>reversa</b> en el libro (el banco o Binance vuelven exactos y queda el rastro). La tasa y el costo originales no cambian.</p>' : '');
+    var bloq = (r.bloqueos || []).length ? '<div class="fz-alerta alta"><div><b>No se puede anular todavía</b><span>' + esc(r.bloqueos.join(' ')) + '</span></div></div>' : '';
+    if (modo === 'ver' || c.estado === 'anulado') { modal('Detalle de la compra', det + depHtml); return; }
+    var accion = r.modo === 'eliminar' ? 'Eliminar borrador' : 'Anular compra';
+    var form = '<div class="fz-form"><label class="w2">Motivo (obligatorio)<input name="motivo" maxlength="300" placeholder="Ej. registrada dos veces; monto equivocado"><span class="fz-fe" data-fe="motivo" hidden></span></label>' +
+      (ventas.length ? '<label class="fz-check w2"><input type="checkbox" name="confirmarDep"> Entiendo: el costo de ' + ventas.length + ' venta(s) se reversa y quedan pendientes de costo.</label>' : '') + '</div>';
+    var opid = opId();
+    var m = modal(accion + ' · ' + c.producto, bloq + det + depHtml + (r.bloqueos && r.bloqueos.length ? '' : form), (r.bloqueos && r.bloqueos.length) ? null : async function (mm) {
+      var x = await api('fin_compra_anular', { loteId: id, motivo: val(mm, 'motivo'), confirmarDependencias: !!(mm.querySelector('[name="confirmarDep"]') || {}).checked, operationId: opid });
+      toast(x.duplicado || x.yaAnulada ? 'Esa compra ya estaba anulada (no se repitió).' : x.modo === 'eliminar' ? 'Borrador eliminado. Quedó copia en la auditoría.' : 'Compra anulada' + (x.ventasPendientes ? ' · ' + x.ventasPendientes + ' venta(s) quedan pendientes de costo' : '') + '.');
+      delete st.gan[ganClave()]; cargar(true);
+    }, accion, { validar: function (mm) {
+      var e = {}; if (String(val(mm, 'motivo') || '').trim().length < 8) e.motivo = 'Escriba el motivo (mínimo 8 letras).';
+      if (ventas.length && !(mm.querySelector('[name="confirmarDep"]') || {}).checked) e.motivo = e.motivo || 'Marque la confirmación de las ventas afectadas.';
+      return e; } });
+    var okb = m && m.querySelector('[data-ok]'); if (okb) okb.classList.add('fz-btn-peligro');
+  }
+
   // ---------------------------------------------------------------------------------------------------- eventos
   function enlazar(h) {
     if (h.dataset.fzOn) return; h.dataset.fzOn = '1';
@@ -1078,6 +1247,9 @@
       if ((t = e.target.closest('[data-fz-viptab]'))) { st.vip.tab = t.dataset.fzViptab; st.vip.pagina = 1; st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-pag]'))) { st.vip.pagina += Number(t.dataset.fzPag); st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-menu]'))) { var mm = t.parentNode; var abierto = mm.classList.contains('on'); h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); if (!abierto) mm.classList.add('on'); e.stopPropagation(); return; }
+      if ((t = e.target.closest('[data-fz-trans]'))) { abrirTransacciones({}); return; } // R200b
+      if ((t = e.target.closest('[data-fz-graf-pend]'))) { abrirTransacciones({ cubierto: false }); return; }
+      if ((t = e.target.closest('[data-fz-compra]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirAnularCompra(t.dataset.id, t.dataset.fzCompra); return; } // R200a
       if ((t = e.target.closest('[data-fz-spf]'))) { abrirSpf(t.dataset.fzSpf, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-hbo]'))) { abrirHbo(t.dataset.fzHbo, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ganmes]'))) { var mg = t.dataset.fzGanmes, pg = mg.split('-'); st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); return; }
@@ -1095,6 +1267,7 @@
       if (a === 'reintentar') cargar(true);
       else if (a === 'ganrango') { var dd = (document.querySelector('[data-fz-ganr="desde"]') || {}).value, hh = (document.querySelector('[data-fz-ganr="hasta"]') || {}).value; if (/^\d{4}-\d{2}-\d{2}$/.test(dd) && /^\d{4}-\d{2}-\d{2}$/.test(hh)) { st.ganR = { desde: dd, hasta: hh }; pintar(); } }
       else if (a === 'ganexcel') ganExcel(t);
+      else if (a === 'excelfin') excelFinanciero(t); // R200c
       else if (a === 'ganaud') abrirAuditoria(); // R197c · auditoría solo lectura (vigente ≠ cobrado)
       else if (a === 'ganrecargar') { delete st.gan[ganClave()]; pintar(); }
       else if (a === 'costear') { t.disabled = true; t.textContent = 'Calculando…'; api('finp_costear', { limite: 40 }).then(function (r) { var c = r.costeo || {}; toast(c.activo === false ? (c.motivo || 'Costeo apagado.') : 'Costos al día: ' + (c.costeadas || 0) + ' venta(s) costeadas.'); cargar(true); }).catch(function (e) { toast(e.message, true); cargar(true); }); }
@@ -1115,12 +1288,15 @@
       var t = e.target;
       if (t.matches('[data-fz-mes]')) { if (/^\d{4}-\d{2}$/.test(t.value)) { st.mes = t.value; st.ganR = null; st.rep.desde = st.rep.hasta = ''; cargar(true); } }
       if (t.matches('[data-fz-ganf]')) { st.ganF[t.dataset.fzGanf] = t.value; pintar(); }
+      if (t.matches('[data-fz-graf]')) { st.graf[t.dataset.fzGraf] = t.value; pintar(); return; } // R200b
+      if (t.matches('[data-fz-compf]') && t.dataset.fzCompf !== 'q') { st.compF[t.dataset.fzCompf] = t.value; pintar(); } // R200a
       else if (t.matches('[data-fz-file]') && t.files[0]) leerArchivo(t.files[0]);
       else if (t.matches('[data-fz-res]')) { st.imp.res[t.dataset.fzRes] = t.value; }
       else if (t.matches('[data-fz-confirmo]')) { st.imp.confirmo = t.checked; }
       else if (t.matches('[data-fz-tasa]')) { st.imp.tasa = t.value; }
       else if (t.matches('[data-fz-rep]')) { st.rep[t.dataset.fzRep] = t.value; }
     });
+    var tcq; h.addEventListener('input', function (e) { if (e.target.matches('[data-fz-compf="q"]')) { clearTimeout(tcq); var v = e.target.value; tcq = setTimeout(function () { st.compF.q = v; pintar(); var i = h.querySelector('[data-fz-compf="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 300); } }); // R200a
     var tq; h.addEventListener('input', function (e) { if (e.target.matches('[data-fz-vipq]')) { clearTimeout(tq); var v = e.target.value; tq = setTimeout(function () { st.vip.q = v; st.vip.pagina = 1; st.vip.res = null; cargarVip().then(function () { var i = h.querySelector('[data-fz-vipq]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }); }, 350); } });
     h.addEventListener('dragover', function (e) { var z = e.target.closest('[data-fz-drop]'); if (z) { e.preventDefault(); z.classList.add('on'); } });
     h.addEventListener('dragleave', function (e) { var z = e.target.closest('[data-fz-drop]'); if (z) z.classList.remove('on'); });
