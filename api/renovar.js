@@ -13,6 +13,7 @@ import { prepararPago, leerPago, escribirPago, esUsuarioLibro } from "./_finanza
 import { sumarPeriodo, sigueVencida, aCentavos, deCentavos } from "./_renovacion-motor.js"; // R186 · motor único de fechas
 import entrega from "./_entrega-plataforma.js";
 import hboPlanes from "./_hbo-planes.js"; // R196v · HBO Standard 3 / Platinum 5 en la venta
+import perfilesInv from "./_perfiles-inventario.js"; // R199e · un perfil = una fila en Bodega (misma regla que el bot)
 import spotifyFam from "./_spotify-familias.js"; // R188 · ficha Spotify → familia del correo invitado // R188 · avisos, modalidad de acceso y dispositivo por servicio
 import { clasificarServicio, normalizarServicioVenta } from "./_catalogo-categorias.js"; // R112 // R107: pago en la misma transacción
 
@@ -838,6 +839,8 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
     }
   }
   const enlaces = [];
+  // R199e · todos los perfiles vigentes de la compra: sirven para no pisar a un perfil hermano y para quitar copias repetidas
+  const perfilesCompraNuevo = despues.map(p => ({ perfilId: p.perfilId || "", nombre: nombrePerfilRealInventario(nuevo, p, nombreTitular, despues.length), pin: p.pinPerfil || "", correo: p.correo || "" }));
   for (const p of despues) {
     const r = await ajustarInventario(db, {
       modo: "ocupar", plataforma: plataformaNueva, correo: p.correo,
@@ -845,7 +848,8 @@ async function sincronizarInventarioServicio(db, { anterior = null, nuevo = null
       pagadoPor: nombreTitular, pin: p.pinPerfil || "",
       perfilId: p.perfilId || "", compraId: nuevo?.compraId || "",
       clienteId, inventarioId: p.inventarioId || "",
-      cuentaCompleta: familiaInventario(plataformaNueva) === "hbomax" && nuevo?.tipoVenta === "cuenta_completa" // R196v
+      cuentaCompleta: familiaInventario(plataformaNueva) === "hbomax" && nuevo?.tipoVenta === "cuenta_completa", // R196v
+      perfilesCompra: perfilesCompraNuevo // R199e
     });
     resultados.push(r);
     if (r?.accountId && p.perfilId && r.accountId !== p.inventarioId) enlaces.push({ perfilId: p.perfilId, inventarioId: r.accountId });
@@ -1020,7 +1024,7 @@ async function buscarCuentaInventario(db, { plataforma, correo, inventarioId = "
 //   la sobreasignación queda visible (sobreasignada:true, 0 libres) en vez de esconder al cliente.
 //   Antes se devolvía "cuenta llena" sin registrarlo y la cuenta mostraba menos clientes de los reales.
 // - "liberar" nunca quita a otro cliente: antes, si no encontraba el perfil, sacaba el último de la lista.
-async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "", clienteId = "", inventarioId = "", cuentaCompleta = false }) {
+async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, pagadoPor = "", pin, perfilId = "", compraId = "", clienteId = "", inventarioId = "", cuentaCompleta = false, perfilesCompra = [] }) {
   if (!correo && !inventarioId) return { tocado: false, motivo: "sin correo" };
   try {
     const familiaBuscada = familiaInventario(plataforma);
@@ -1041,17 +1045,13 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
 
       if (modo === "ocupar") {
         const pagadorNorm = normName(pagadoPor || "");
-        let idxExiste = perfilKey ? clientes.findIndex(c => String(c?.perfilId || "").trim() === perfilKey) : -1;
-        // Nombre real + PIN es más seguro que compraId en compras multiperfil:
-        // varios perfiles pueden compartir el mismo compraId.
-        if (idxExiste === -1) {
-          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && normName(c.nombre) === normName(nombreCliente) && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
-        }
-        // Adopta registros legacy donde quedó guardado el pagador como si fuera
-        // el titular del perfil. El PIN evita cambiar otra persona por accidente.
-        if (idxExiste === -1 && pagadorNorm) {
-          idxExiste = clientes.findIndex(c => (!perfilKey || !c?.perfilId) && (!clienteKey || !c?.clienteId || String(c.clienteId) === clienteKey) && normName(c.nombre) === pagadorNorm && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
-        }
+        // R199e · misma regla que el bot: por perfilId; si no, mismo cliente/compra + NOMBRE + PIN (nunca solo PIN),
+        // también cuando la fila trae un perfilId viejo/ajeno (antes se agregaba una fila nueva en cada guardado),
+        // sin pisar la fila de un perfil hermano vigente de la misma compra. El pagador vale como nombre alterno.
+        const perfilIdsCompra = (Array.isArray(perfilesCompra) ? perfilesCompra : []).map(p => String(p?.perfilId || "").trim()).filter(Boolean);
+        let idxExiste = perfilesInv.buscarFilaDePerfil(clientes,
+          { perfilId: perfilKey, compraId: compraKey, clienteId: clienteKey, nombre: nombreCliente, pin: pinNorm },
+          { perfilIdsCompra, nombresAlternos: pagadorNorm ? [pagadoPor] : [] });
         // Último fallback: compraId, pero solo si identifica una única fila.
         if (idxExiste === -1 && compraKey) {
           const porCompra = clientes.map((c,i)=>({c,i})).filter(({c}) => (!perfilKey || !c?.perfilId) && String(c?.compraId || "").trim() === compraKey && (!pinNorm || String(c?.pin || "").trim() === pinNorm));
@@ -1094,6 +1094,13 @@ async function ajustarInventario(db, { modo, plataforma, correo, nombreCliente, 
         if (i !== -1) { clientes.splice(i, 1); removido = true; }
       }
 
+      if (modo === "ocupar" && clienteKey && compraKey) { // R199e · filas repetidas de esta misma compra en esta cuenta → una por perfil
+        const enCuenta = (Array.isArray(perfilesCompra) ? perfilesCompra : []).filter(p => normCorreo(p?.correo || "") === normCorreo(data.correo || data.ident || data.usuario || data.acceso || correo || ""));
+        if (enCuenta.length) {
+          const mapa = new Map([[perfilesInv.claveCompra(clienteKey, compraKey), enCuenta.map(p => ({ perfilId: String(p.perfilId || "").trim(), nombre: String(p.nombre || "").trim(), pin: String(p.pin || "").trim() }))]]);
+          clientes = perfilesInv.colapsarPerfilesRepetidos(clientes, { perfilesPorCompra: mapa }).filas;
+        }
+      }
       const ocupados = clientes.length;
       const disponibles = hboPlanes.vendidaCompleta({ ...data, clientes }) ? 0 : Math.max(0, cap - ocupados); // R198j · cuenta completa de cualquier plataforma // R196v · completa = 0 para terceros
       const update = { clientes, ocupados, disponibles, accountId: ref.id, sobreasignada: cap > 0 && ocupados > cap, updatedAt: isoNow() };

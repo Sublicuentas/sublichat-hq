@@ -11,6 +11,7 @@ import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fu
 import bodegaVip from "./_bodega-vip.js"; // R196u · Bodega Netflix VIP (fuente única Web/APK/bot)
 import netflixHogar from "./_netflix-hogar.js"; // R196u · Hogar de Netflix Premium (un Hogar por madre)
 import hboPlanes from "./_hbo-planes.js"; // R196u · HBO Platinum 5 / Standard 3 por cuenta
+import perfilesInv from "./_perfiles-inventario.js"; // R199e · un perfil = una fila en Bodega (misma regla que el bot)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
 
@@ -220,6 +221,14 @@ export async function reconciliarInventario(db, accounts = [], opciones = {}) {
         if (legacy.length === 1) index = legacy[0].i;
       }
       if (index < 0) {
+        // R199e · fila del MISMO perfil que quedó con un perfilId viejo/ajeno (guardada por el bot o por otra versión):
+        // se adopta por cliente + compra + nombre + PIN en vez de agregar otra fila. Nunca la de un perfil hermano.
+        const hermanos = rows.filter(r => r.clienteId === row.clienteId && r.compraId === row.compraId).map(r => r.perfilId);
+        const vista = clients.map((c, i) => used.has(i) || c.vinculoInventario ? { nombre: "" } : c);
+        index = perfilesInv.buscarFilaDePerfil(vista, { perfilId: row.perfilId, compraId: row.compraId, clienteId: row.clienteId, nombre: row.nombre, pin: row.pin },
+          { perfilIdsCompra: hermanos, nombresAlternos: row.pagadoPor ? [row.pagadoPor] : [] });
+      }
+      if (index < 0) {
         const slots = new Set(clients.map(c => Number(plainClientValue(c.slot))));
         let slot = 1; while (slots.has(slot)) slot++;
         index = clients.length; clients.push({ slot });
@@ -232,6 +241,16 @@ export async function reconciliarInventario(db, accounts = [], opciones = {}) {
         if (old[field] != null) clients[index][field] = old[field];
       }
     }
+    // R199e · copias del mismo perfil (mismo perfilId, o misma compra + nombre + PIN de más según la ficha) → una.
+    const fichaCuenta = new Map();
+    for (const r of rows) {
+      if (!r.clienteId || !r.compraId) continue;
+      const k = perfilesInv.claveCompra(r.clienteId, r.compraId);
+      if (!fichaCuenta.has(k)) fichaCuenta.set(k, []);
+      fichaCuenta.get(k).push({ perfilId: r.perfilId, nombre: r.nombre, pin: r.pin });
+    }
+    const colapso = perfilesInv.colapsarPerfilesRepetidos(clients, { perfilesPorCompra: fichaCuenta });
+    if (colapso.quitadas.length) clients.splice(0, clients.length, ...colapso.filas);
     const capacidad = Number(account.capacidad) || 0;
     const disponibles = hboPlanes.vendidaCompleta({ ...account, clientes: clients }) ? 0 : Math.max(0, capacidad - clients.length); // R198j · cuenta completa (marca de cliente o de cuenta, cualquier plataforma) // R196v
     return { clientes:clients, ocupados:clients.length, disponibles, ...(account.disp != null ? {disp:disponibles} : {}),
