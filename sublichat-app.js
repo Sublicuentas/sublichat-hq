@@ -5016,14 +5016,11 @@ Le compartimos sus credenciales exclusivas:
 *📎 Pin de acceso: {pin}*
 *📅 Próximo pago: {fecha}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Reglas de su cuenta:
-📌 El perfil no debe ser modificado.
-📌 Servicio exclusivo para Honduras.
-📌 Cuenta con garantía total activa.
-🚫 Prohibido usar VPN.
+🚨 Condiciones del servicio:
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Aviso de Sistema:
 Es posible que en 15 días o más el sistema solicite un código temporal. Cuando le aparezca, notifíquenos y se lo daremos al instante.
@@ -5038,10 +5035,12 @@ Hola, *_{nombre}_*. Le hacemos entrega oficial de sus credenciales de acceso:
 *📧 Correo: {correo}*
 *🔑 Contraseña: {clave}*{pinVipLine}
 
-📺 Puede iniciar sesión en el dispositivo que prefiera (celular, TV, tablet, etc.), pero la reproducción es en UNO a la vez — no se puede ver en varios dispositivos al mismo tiempo.
 *⏳ Próximo pago: {fecha}*
 
-✅ Garantía activa por todo el periodo contratado.
+🚨 Condiciones del servicio:
+📌 Puede usarla en el dispositivo de su preferencia.
+📌 No se puede usar en dos dispositivos en simultáneo.
+📌 Garantía vigente al cumplir indicaciones.
 
 🚀 Sublicuentas`,
     disneyp:
@@ -5055,14 +5054,11 @@ Le hacemos entrega oficial de sus credenciales de acceso:
 *📎 PIN de acceso: {pin}*
 *📅 Renovación: {fecha}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Reglas de su cuenta:
-📌 No se modifica el perfil.
-📌 Uso exclusivo en Honduras (No usar VPN).
-
-✅ Garantía activa sujeta al estricto cumplimiento de estas condiciones.
+🚨 Condiciones del servicio:
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 🚀 El equipo de Sublicuentas`,
     disneys:
@@ -5072,14 +5068,11 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 *📧 Correo: {correo}*{claveLine}{pinLine}
 *📅 Renovación: {renovTexto}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
 🚨 Condiciones del servicio:
-📌 No se modifica perfil
-📌 Uso solo en Honduras
-📌 No usar vpn
-📌 Garantía vigente
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 🚀 Sublicuentas`,
     hbomax:
@@ -5093,14 +5086,11 @@ Aquí tiene los datos para disfrutar de su contenido:
 *🔏 PIN: {pin}*
 *⏳ Próximo pago: {fecha}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-⚠️ Condiciones del servicio:
+🚨 Condiciones del servicio:
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
 📌 No se modifica perfil.
-📌 Conexión válida únicamente para Honduras.
-
-✔️ Garantía vigente durante todo el periodo adquirido.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Código de hogar · HBO Max:
 HBO Max puede pedir un código de hogar en cualquier momento, incluso apenas inicie sesión. Si le aparece, escríbanos y le ayudamos a ingresarlo.
@@ -5113,13 +5103,11 @@ HBO Max puede pedir un código de hogar en cualquier momento, incluso apenas ini
 *📧 Correo: {correo}*{claveLine}{pinLine}
 *📅 Renovación: {renovTexto}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
 🚨 Condiciones del servicio:
-📌 No modificar perfil
-📌 Uso solo en Honduras
-📌 Garantía vigente
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Importante
 📌 Compras y rentas de películas no disponible.
@@ -5135,12 +5123,11 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 *📧 Correo: {correo}*{claveLine}{pinLine}
 *📅 Renovación: {renovTexto}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
 🚨 Condiciones del servicio:
-📌 No usar vpn
-📌 Garantía vigente
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 🚀 Sublicuentas`,
     universal:
@@ -5172,15 +5159,16 @@ Aquí tiene los datos para disfrutar de su contenido:
 *🔒 Clave: {clave}*
 *⏳ Próximo pago: {fecha}*
 
-*⚠️ IMPORTANTE: CUENTA SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
 ⚠️ Detalles del servicio:
 🎬 Acceso a Pelis, Series y Novelas.
 ⚽ Deportes: Liga Española.
 📺 Compatible con TV, Celular, Tablet y Web.
 
-✔️ Garantía vigente durante todo el periodo adquirido.
+🚨 Condiciones del servicio:
+📌 Cuenta solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifica perfil.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 🚀 Sublicuentas`,
     appletv:
@@ -5479,59 +5467,46 @@ Aquí tiene los datos de su cuenta oficial lista para usar:
 📌 No usar VPN.
 📌 Garantía vigente.`,
     netflix:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Reglas de su cuenta:
-📌 Los perfiles no deben ser modificados.
-📌 Servicio exclusivo para Honduras.
-📌 Cuenta con garantía total activa.
-🚫 Prohibido usar VPN.
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifican los perfiles.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Aviso de Sistema:
 Es posible que en 15 días o más el sistema solicite un código temporal. Cuando le aparezca, notifíquenos y se lo daremos al instante.`,
     vipnetflix:
-`📺 Puede iniciar sesión en el dispositivo que prefiera (celular, TV o tableta), pero cada acceso reproduce en UNO a la vez.
-
-✅ Garantía activa por todo el periodo contratado.`,
+`🚨 Condiciones del servicio:
+📌 Puede usarla en el dispositivo de su preferencia.
+📌 No se puede usar en dos dispositivos en simultáneo.
+📌 Garantía vigente al cumplir indicaciones.`,
     disneyp:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Reglas de su cuenta:
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
 📌 No se modifican los perfiles.
-📌 Uso exclusivo en Honduras (No usar VPN).
-
-✅ Garantía activa sujeta al estricto cumplimiento de estas condiciones.`,
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.`,
     disneys:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Condiciones del servicio:
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
 📌 No se modifican los perfiles.
-📌 Uso solo en Honduras.
-📌 No usar VPN.
-📌 Garantía vigente.`,
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.`,
     hbomax:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-⚠️ Condiciones del servicio:
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
 📌 No se modifican los perfiles.
-📌 Conexión válida únicamente para Honduras.
-
-✔️ Garantía vigente durante todo el periodo adquirido.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Código de hogar · HBO Max:
 HBO Max puede pedir un código de hogar en cualquier momento, incluso apenas inicie sesión. Si le aparece, escríbanos y le ayudamos a ingresarlo.`,
     primevideo:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Condiciones del servicio:
-📌 No modificar los perfiles.
-📌 Uso solo en Honduras.
-📌 Garantía vigente.
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifican los perfiles.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.
 
 ⚠️ Importante:
 📌 Compras y rentas de películas no disponibles.
@@ -5539,12 +5514,11 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
 *⚠️ Importante: Solo disponible para la aplicación Prime Video. Prohibido ingresar en Amazon.*`,
     crunchyroll:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-🚨 Condiciones del servicio:
-📌 No usar VPN.
-📌 Garantía vigente.`,
+`🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifican los perfiles.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.`,
     universal:
 `⚠️ Condiciones del servicio:
 📌 Válido para 1 dispositivo por perfil.
@@ -5553,15 +5527,16 @@ _No se puede usar en dos dispositivos al mismo tiempo._
 
 ✔️ Garantía vigente durante todo el periodo adquirido.`,
     vix:
-`*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
-_No se puede usar en dos dispositivos al mismo tiempo._
-
-⚠️ Detalles del servicio:
+`⚠️ Detalles del servicio:
 🎬 Acceso a Pelis, Series y Novelas.
 ⚽ Deportes: Liga Española.
 📺 Compatible con TV, Celular, Tablet y Web.
 
-✔️ Garantía vigente durante todo el periodo adquirido.`,
+🚨 Condiciones del servicio:
+📌 Cada perfil es solo para 1 dispositivo, no se permite acceder en otro.
+📌 No se modifican los perfiles.
+📌 Conexión válida en Honduras.
+📌 Garantía vigente al cumplir indicaciones.`,
     paramount:
 `*⚠️ IMPORTANTE: CADA PERFIL ES SOLO PARA 1 DISPOSITIVO ⚠️*
 _No se puede usar en dos dispositivos al mismo tiempo._

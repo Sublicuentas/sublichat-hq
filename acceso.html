@@ -468,12 +468,9 @@
         if(p.clave)campos+=fieldRow("Serial / licencia",p.clave,`${prefix}-serial`);
       }else{
         if(p.correo)campos+=fieldRow(etiquetaAcceso,p.correo,`${prefix}-${etiquetaAcceso==="Usuario"?"usuario":"correo"}`);
-        // Clave y PIN en la misma línea (ficha más corta). Si solo hay uno, ocupa todo el ancho.
-        if(p.clave&&usaPin)campos+=`<div class="field-pair">${fieldRow("Clave",p.clave,`${prefix}-clave`)}${infoRow("PIN",p.pin||"—","#")}</div>`;
-        else{
-          if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
-          if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
-        }
+        // R200f · Clave en una sola línea (ancho completo) y el PIN abajo, en su propia línea.
+        if(p.clave)campos+=fieldRow("Clave",p.clave,`${prefix}-clave`);
+        if(usaPin)campos+=infoRow("PIN",p.pin||"—","#");
       }
       const nota=perfiles.length>1?notaModo(d,p):"";
       if(perfiles.length>1){
