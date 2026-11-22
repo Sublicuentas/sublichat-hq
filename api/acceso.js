@@ -153,22 +153,24 @@ function vendedorTel(v) {
   return VENDEDORES_REG ? vendedoresReg.telefonoVigente(VENDEDORES_REG, v, "") : "";
 }
 
+// R200f (22/11/2026) · Perfiles de Netflix Premium, HBO Max, Prime Video, Crunchyroll, Disney Premium, Disney Standard y ViX+:
+// las mismas 4 condiciones en URL, Web, APK y fichas. Netflix VIP: su propio texto. Cuenta completa: TERMS_COMPLETA.
 // Condiciones que se muestran en la URL pública. Los avisos operativos internos
 // de entrega pueden ser más detallados en FICHA_TEMPLATES de index.html.
 const TERMS = {
   default: ["No se modifica perfil", "Acceso solo para un dispositivo", "Uso solo en Honduras", "No usar vpn", "Garantía vigente"],
-  netflix: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "El perfil no debe ser modificado.", "Servicio exclusivo para Honduras.", "Cuenta con garantía total activa."],
-  vipnetflix: ["Puede iniciar sesión en el dispositivo que prefiera (celular, TV, tablet, etc.), pero la reproducción es en UNO a la vez — no se puede ver en varios dispositivos al mismo tiempo.", "Garantía activa por todo el periodo contratado."],
-  disneyp: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No se modifica el perfil.", "Uso exclusivo en Honduras (No usar VPN)."],
-  disneys: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No se modifica perfil", "Uso solo en Honduras", "No usar vpn", "Garantía vigente"],
-  hbomax: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No se modifica perfil.", "Conexión válida únicamente para Honduras.", "Garantía vigente durante todo el periodo adquirido."],
-  primevideo: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No modificar perfil", "Uso solo en Honduras", "Garantía vigente", "Compras y rentas de películas no disponible.", "Acceso exclusivo al catálogo oficial de Prime Video."],
+  netflix: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones."],
+  vipnetflix: ["Puede usarla en el dispositivo de su preferencia.", "!No se puede usar en dos dispositivos en simultáneo.", "Garantía vigente al cumplir indicaciones."],
+  disneyp: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones."],
+  disneys: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones."],
+  hbomax: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones."],
+  primevideo: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones.", "Compras y rentas de películas no disponible.", "Acceso exclusivo al catálogo oficial de Prime Video."],
   // "!" al inicio = condición destacada en la URL (recuadro rojo). Crunchyroll: sin restricción de país (oct-2026).
   // 31/10/2026: perfiles de Netflix Premium, Disney, HBO Max, Prime Video, Crunchyroll, ViX y Paramount+ llevan el aviso destacado de 1 dispositivo.
-  crunchyroll: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No usar vpn", "Garantía vigente"],
+  crunchyroll: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones."],
   paramount: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "No se modifica perfil", "Uso solo en Honduras", "No usar vpn", "Garantía vigente"],
   universal: ["Válido para 1 dispositivo.", "No se modifica el perfil.", "Conexión válida únicamente para Honduras.", "Garantía vigente durante todo el periodo adquirido."],
-  vix: ["!Cuenta solo para 1 dispositivo. No se puede usar en dos dispositivos al mismo tiempo.", "Acceso a Pelis, Series y Novelas.", "Deportes: Liga Española.", "Compatible con TV, Celular, Tablet y Web.", "Garantía vigente durante todo el periodo adquirido."],
+  vix: ["!Cuenta solo para 1 dispositivo, no se permite acceder en otro.", "No se modifica perfil.", "Conexión válida en Honduras.", "Garantía vigente al cumplir indicaciones.", "Acceso a Pelis, Series y Novelas.", "Deportes: Liga Española.", "Compatible con TV, Celular, Tablet y Web."],
   spotify: ["Reproduce música sin anuncios ni interrupciones.", "Descargas y reproducción sin conexión.", "Creación de playlists incluida.", "Un dispositivo a la vez por acceso."],
   youtube: ["No cambiar datos de la cuenta", "Uso solo en Honduras", "No usar VPN", "Garantía vigente"],
   deezer: ["No cambiar el correo ni la contraseña.", "Uso exclusivo: solo un dispositivo a la vez, puede usarlo en el de su preferencia."],
@@ -181,6 +183,8 @@ const TERMS = {
   oleada: ["No compartir usuario ni clave.", "Garantía vigente durante su tiempo adquirido."],
   iptv: ["Compatible con TV, Celular (iPhone o Android), Smarters Pro y SmartOne.", "Ingrese manualmente la lista, usuario, contraseña y URL proporcionados.", "No comparta sus accesos fuera de los dispositivos contratados."]
 };
+// Cuenta completa: no lleva las condiciones de perfil (igual que la ficha «cuentaCompleta» de la Web/APK).
+const TERMS_COMPLETA = ["Cuenta completa de uso exclusivo.", "No cambiar el correo ni la contraseña de la cuenta.", "No usar VPN.", "Garantía vigente."];
 function termsFor(plataforma) {
   const p = canonPlat(plataforma);
   if (p === "netflixpremium") return TERMS.netflix;
@@ -615,7 +619,7 @@ function servicioPublico(cliente = {}, servicio = {}, { beneficiarioKey = "", be
     esTvDigital: tvDigital.esTvDigital === true,
     stellaDispositivos: Number(servicio.stellaDispositivos || canonPlat(plataforma).match(/^stellatv([123])$/)?.[1] || 0) || 0,
     // 31/10/2026: el aviso de 1 dispositivo es de PERFILES; una cuenta completa no lo lleva.
-    terminos: servicio.tipoVenta === "cuenta_completa" ? termsFor(plataforma).filter((t) => !/^!Cuenta solo para 1 dispositivo/.test(t)) : termsFor(plataforma),
+    terminos: servicio.tipoVenta === "cuenta_completa" ? TERMS_COMPLETA : termsFor(plataforma), // R200f
     // R188 · lo que se ve en la URL sale del SERVICIO confirmado (nunca del cliente global ni de un valor por defecto).
     dispositivoRegistrado: entrega.etiquetaDispositivo(servicio, perfiles[0] || null),
     avisos: entrega.avisosPara(plataforma),
