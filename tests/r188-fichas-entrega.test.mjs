@@ -32,7 +32,7 @@ test('D02: cambiar el dispositivo de un servicio manda sobre el viejo del perfil
   assert.ok(editado.fichaVersion > anterior.fichaVersion, 'cada guardado sube la versión de la ficha');
 });
 
-test('D03: Prime Video lleva «solo aplicación Prime Video» en la URL (destacado) y en la ficha Web; HBO ≠ Netflix; Crunchyroll sin «solo para Honduras»', () => {
+test('D03: Prime Video lleva «solo aplicación Prime Video» en la URL (destacado) y en la ficha Web; HBO ≠ Netflix; Crunchyroll con las 4 condiciones de perfil (R200f)', () => {
   const prime = A.servicioPublico(cliente, { plataforma: 'primevideo', fechaRenovacion: '04/12/2030', correo: 'p@x.hn', clave: 'k', dispositivo: 'tv' });
   assert.equal(prime.avisos[0].texto, 'Solo disponible para la aplicación Prime Video. Prohibido ingresar en Amazon.'); assert.equal(prime.avisos[0].destacado, true);
   const hbo = E.avisosPara('hbomax'), nf = E.avisosPara('netflix');
@@ -40,7 +40,8 @@ test('D03: Prime Video lleva «solo aplicación Prime Video» en la URL (destaca
   assert.notEqual(hbo[0].id, nf[0].id); assert.deepEqual(E.avisosPara('vipnetflix'), [], 'no se hereda a Netflix VIP'); assert.deepEqual(E.avisosPara('disneyp'), []);
   assert.deepEqual(E.avisosPara('crunchyroll'), []);
   const cr = A.servicioPublico(cliente, { plataforma: 'crunchyroll', fechaRenovacion: '04/12/2030', correo: 'c@x.hn', clave: 'k' });
-  assert.ok(cr.terminos.every((t) => !/honduras/i.test(t)), 'Crunchyroll sin «solo para Honduras»');
+  // R200f (22/11/2026): el dueño pidió las mismas 4 condiciones para Crunchyroll, incluida «Conexión válida en Honduras».
+  assert.deepEqual(cr.terminos, ['!Cuenta solo para 1 dispositivo, no se permite acceder en otro.', 'No se modifica perfil.', 'Conexión válida en Honduras.', 'Garantía vigente al cumplir indicaciones.']);
   const web = fs.readFileSync(new URL('../sublichat-app.js', import.meta.url), 'utf8');
   assert.ok(web.includes(E.AVISOS.primevideo[0].texto) && web.includes(E.AVISOS.hbomax[0].texto), 'la ficha Web usa el texto central exacto');
   const html = fs.readFileSync(new URL('../acceso.html', import.meta.url), 'utf8');
