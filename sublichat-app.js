@@ -4352,8 +4352,9 @@ async function bootAuthOrLogin(){
     const app = getApps().length ? getApp() : initializeApp(CONFIG.firebase);
     const auth = getAuth(app);
     onAuthStateChanged(auth,(user)=>{
-      if(user){ enterApp(); }
-      else{ showLogin(); }
+      if(user && subliSesionVencida()){ subliCerrarPorInactividad(); return; } // R201 · 12 h sin uso
+      if(user){ subliMarcarUso(); enterApp(); }
+      else{ showLogin(); subliTsCargar(); }
     },()=>showLogin());
   }catch(e){ showLogin(); }
 }
@@ -4399,6 +4400,34 @@ async function firebaseSignInWithToken(token){
   await signInWithCustomToken(auth, token);
 }
 
+// R201 · Cloudflare Turnstile: la clave PÚBLICA la entrega /api/login (GET); la secreta vive solo en Vercel.
+const SUBLI_TS={activo:false,siteKey:"",widget:null,token:"",listo:null};
+function subliTsCargar(){
+  if(SUBLI_TS.listo)return SUBLI_TS.listo;
+  SUBLI_TS.listo=(async()=>{
+    try{const r=await fetch("/api/login",{method:"GET",cache:"no-store"});const c=await r.json();SUBLI_TS.activo=!!(c&&c.activo&&c.siteKey);SUBLI_TS.siteKey=SUBLI_TS.activo?String(c.siteKey):"";}catch(_){SUBLI_TS.activo=false;}
+    if(!SUBLI_TS.activo)return;
+    await new Promise((ok,mal)=>{if(window.turnstile)return ok();const sc=document.createElement("script");sc.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";sc.async=true;sc.onload=ok;sc.onerror=()=>mal(new Error("turnstile"));document.head.appendChild(sc);});
+    const box=document.getElementById("loginTurnstile");if(!box)return;box.hidden=false;
+    SUBLI_TS.widget=window.turnstile.render(box,{sitekey:SUBLI_TS.siteKey,action:"login",theme:"light",language:"es",callback:t=>{SUBLI_TS.token=t;},"expired-callback":()=>{SUBLI_TS.token="";},"error-callback":()=>{SUBLI_TS.token="";}});
+  })().catch(()=>{SUBLI_TS.listo=null;});
+  return SUBLI_TS.listo;
+}
+function subliTsReiniciar(){SUBLI_TS.token="";try{if(SUBLI_TS.widget!=null&&window.turnstile)window.turnstile.reset(SUBLI_TS.widget);}catch(_){}}
+
+// R201 · Cierre de sesión automático: 12 h SIN uso (en cualquier pestaña) → vuelve a pedir usuario y clave.
+const SUBLI_INACTIVIDAD_MS=12*60*60*1000;
+function subliMarcarUso(){try{localStorage.setItem("sublichat_ultimo_uso",String(Date.now()));}catch(_){}}
+function subliSesionVencida(){try{const u=Number(localStorage.getItem("sublichat_ultimo_uso")||0);return !!u&&Date.now()-u>SUBLI_INACTIVIDAD_MS;}catch(_){return false;}}
+let subliUsoT=0;["click","keydown","touchstart","scroll"].forEach(ev=>window.addEventListener(ev,()=>{const n=Date.now();if(n-subliUsoT>60000){subliUsoT=n;subliMarcarUso();}},{passive:true,capture:true}));
+async function subliCerrarPorInactividad(){
+  try{const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");await signOut(getAuth());}catch(_){}
+  try{localStorage.removeItem("sublichat_ultimo_uso");}catch(_){}
+  location.reload();
+}
+setInterval(()=>{if(document.body.classList.contains("ready")&&subliSesionVencida())subliCerrarPorInactividad();},60000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&document.body.classList.contains("ready")&&subliSesionVencida())subliCerrarPorInactividad();});
+
 async function tryLogin(){
   const usuario=(lUser.value||"").trim().toLowerCase();
   const clave=lPass.value||"";
@@ -4407,16 +4436,20 @@ async function tryLogin(){
     lErr.textContent="Ingrese usuario y clave de acceso.";
     return;
   }
+  await subliTsCargar();
+  if(SUBLI_TS.activo&&!SUBLI_TS.token){lErr.textContent="Confirme la verificación de seguridad.";return;}
   lBtn.disabled=true;
   lBtn.textContent="VALIDANDO…";
   try{
     const res=await fetch("/api/login",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({usuario,clave})
+      body:JSON.stringify(SUBLI_TS.token?{usuario,clave,turnstileToken:SUBLI_TS.token}:{usuario,clave})
     });
     const data=await res.json().catch(()=>({}));
+    if(res.status===429||res.status===503||(res.status===400&&data.codigo)||res.status===403&&data.codigo){const e=new Error(data.error||"Acceso no autorizado");e.mostrar=true;throw e;} // R201 · bloqueo / verificación: se dice tal cual
     if(!res.ok || !data.token) throw new Error(data.error || "Acceso no autorizado");
+    subliMarcarUso();
     // Guardar usuario/rol ANTES del signIn para que el perfil y RBAC no tomen la sesión anterior.
     localStorage.setItem("sublichat_user", (data.usuario || usuario).toString().toLowerCase());
     localStorage.setItem("sublichat_role", (data.role || usuario || "").toString().toLowerCase());
@@ -4425,11 +4458,12 @@ async function tryLogin(){
     setTimeout(()=>{ try{ window.subliRBAC && window.subliRBAC.apply && window.subliRBAC.apply(); }catch(e){} },120);
   }catch(err){
     console.error(err);
-    lErr.textContent="Usuario o clave incorrectos.";
+    lErr.textContent=err&&err.mostrar?err.message:"Usuario o clave incorrectos.";
     lPass.value="";
   }finally{
     lBtn.disabled=false;
     lBtn.textContent="ACCEDER";
+    subliTsReiniciar(); // el token de Turnstile es de un solo uso
   }
 }
 lBtn.addEventListener("click",tryLogin);

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verificación de seguridad</title>
+<!-- R201 · Cloudflare Turnstile para la APK de Sublichat. Se abre dentro de la app (iframe) porque Turnstile solo
+     funciona en un dominio autorizado. Entrega el token SOLO a la APK (origen https://localhost). Sin claves secretas. -->
+<style>html,body{margin:0;background:transparent;display:flex;justify-content:center;align-items:center;min-height:68px;font:13px system-ui,sans-serif;color:#475569}</style>
+</head><body><div id="ts"></div>
+<script>
+(function(){
+  var DESTINO = "https://localhost";
+  function enviar(t){ try{ parent.postMessage({ tipo:"subli-turnstile", token:t||"" }, DESTINO); }catch(_){} }
+  fetch("/api/login",{method:"GET",cache:"no-store"}).then(function(r){return r.json();}).then(function(c){
+    if(!c||!c.activo||!c.siteKey){ enviar(""); return; }
+    var s=document.createElement("script"); s.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; s.async=true;
+    s.onload=function(){ window.turnstile.render("#ts",{ sitekey:String(c.siteKey), action:"login", theme:"light", language:"es",
+      callback:function(t){enviar(t);}, "expired-callback":function(){enviar("");}, "error-callback":function(){enviar("");} }); };
+    document.head.appendChild(s);
+  }).catch(function(){ document.getElementById("ts").textContent="Sin conexión con la verificación."; });
+})();
+</script></body></html>
