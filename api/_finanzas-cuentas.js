@@ -16,7 +16,7 @@ const PLATAFORMAS = Object.freeze({
   netflix: { id: "netflix", nombre: "Netflix Premium", monedas: ["USD", "HNL", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
   paramount: { id: "paramount", nombre: "Paramount+", monedas: ["HNL", "USD", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "HNL", frecuencia: "mensual" } },
   crunchyroll: { id: "crunchyroll", nombre: "Crunchyroll", monedas: ["PHP", "HNL", "USD", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "anual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "PHP", frecuencia: "mensual" } },
-  primevideo: { id: "primevideo", nombre: "Prime Video", monedas: ["USD", "HNL"], modalidades: TODAS_MOD.filter((m) => m !== "binance"), frecuencias: ["trimestral", "mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "trimestral" } }, // USD, NO USDT
+  primevideo: { id: "primevideo", nombre: "Prime Video", monedas: ["USD", "HNL"], modalidades: TODAS_MOD.filter((m) => m !== "binance"), frecuencias: ["trimestral", "mensual", "anual", "puntual"], defecto: { modalidad: "gift_card", moneda: "USD", frecuencia: "mensual" } }, // USD, NO USDT · gift card SAR (R200i)
   hbomax: { id: "hbomax", nombre: "HBO Max", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["puntual", "mensual"], defecto: { modalidad: "binance", moneda: "USDT", frecuencia: "puntual" } },
   disneyp: { id: "disneyp", nombre: "Disney Premium", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } }, // generalmente por link
   disneys: { id: "disneys", nombre: "Disney Standard", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } },
@@ -64,7 +64,30 @@ function filaCuenta(c, cfg = null, lotes = [], tarjeta = null, hoy = "") {
     costo: conCosto ? { fecha: ult.fecha, moneda: ult.moneda, montoMoneda: ult.costoTotalMoneda, costoHnl: ult.costoTotalHnl, tasa: ult.tasa, duracionDias: Number(ult.duracionDias) || 0, loteId: ult.id || ult.compraId } : null,
     estadoCosto: conCosto ? "con_costo" : "pendiente", compras: lotes.length, ultimaCompra: ult ? ult.fecha : "", proximoPago: proximo,
     pronto: !!(proximo && hoy && proximo <= en7), vencido: !!(proximo && hoy && proximo < hoy),
+    ...(plat === "primevideo" ? giftcardsDe(cfg, hoy) : {}), // R200i · gift cards SAR de Prime Video
   };
+}
+
+// R200i · Prime Video con gift card: saldo actual en SAR, plan de renovación (mensual/anual) con su fecha, y cada gift card
+// comprada (valor SAR, costo USD en Eneba, cargo real en Lempiras de BAC, fecha de compra y fecha de VENCIMIENTO de la gift card).
+function giftcardsDe(cfg, hoy = "") {
+  const g = Array.isArray(cfg && cfg.giftcards) ? cfg.giftcards.slice().sort((a, b) => String(b.fechaCompra).localeCompare(String(a.fechaCompra))) : [];
+  const vigentes = g.filter((x) => x.vence && (!hoy || x.vence >= hoy)).sort((a, b) => String(a.vence).localeCompare(String(b.vence)));
+  const vence = vigentes.length ? vigentes[0].vence : g.length ? g.map((x) => x.vence || "").sort().pop() : "";
+  const en30 = sumarDias(hoy, 30);
+  return { saldoSar: cfg && cfg.saldoSar != null ? Number(cfg.saldoSar) : null, saldoAl: (cfg && cfg.saldoAl) || "", planRenovacion: (cfg && cfg.planRenovacion) || "", giftcards: g.slice(0, 24),
+    giftcardVence: vence || "", giftcardVencePronto: !!(vence && hoy && vence <= en30 && vence >= hoy), giftcardVencida: !!(vence && hoy && vence < hoy) };
+}
+function limpiarGiftcard(b = {}, hoy = "") {
+  const ymd = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const n = (v) => Math.round(Number(v) * 100) / 100;
+  const g = { fechaCompra: String(b.fechaCompra || ""), montoSar: n(b.montoSar), costoUsd: n(b.costoUsd), cargoHnl: n(b.cargoHnl), tienda: String(b.tienda || "Eneba").replace(/[<>]/g, "").slice(0, 40), vence: String(b.vence || ""), loteId: String(b.loteId || "").slice(0, 120), nota: String(b.nota || "").replace(/[<>]/g, "").slice(0, 120) };
+  if (!ymd(g.fechaCompra) || (hoy && g.fechaCompra > hoy)) return { error: "Fecha de compra de la gift card inválida (no puede ser futura)." };
+  if (!(g.montoSar > 0)) return { error: "Escriba el valor de la gift card en SAR." };
+  if (!(g.costoUsd > 0)) return { error: "Escriba cuánto costó en USD." };
+  if (g.vence && !ymd(g.vence)) return { error: "Fecha de vencimiento de la gift card inválida." };
+  if (g.vence && g.vence < g.fechaCompra) return { error: "La gift card no puede vencer antes de comprarse." };
+  return { giftcard: g };
 }
 
 // Valida y limpia la configuración financiera de UNA cuenta (nunca toca Control Maestro).
@@ -78,7 +101,12 @@ function limpiarConfig(plat, b = {}) {
   if (!frecuencia) return { error: `Frecuencia no válida para ${P.nombre}.` };
   const prox = b.proximoPago ? String(b.proximoPago) : "";
   if (prox && !/^\d{4}-\d{2}-\d{2}$/.test(prox)) return { error: "Fecha de próximo pago inválida." };
-  return { config: { modalidad, moneda, frecuencia, proximoPago: prox, notas: String(b.notas || "").replace(/[<>]/g, "").slice(0, 200) } };
+  const extra = {};
+  if (plat === "primevideo") { // R200i · saldo SAR y plan de renovación
+    if (b.saldoSar !== undefined && b.saldoSar !== "" && b.saldoSar !== null) { const sv = Math.round(Number(b.saldoSar) * 100) / 100; if (!(sv >= 0 && sv < 100000)) return { error: "Saldo en SAR inválido." }; extra.saldoSar = sv; }
+    if (b.planRenovacion) { if (!["mensual", "anual"].includes(b.planRenovacion)) return { error: "Plan de renovación: mensual o anual." }; extra.planRenovacion = b.planRenovacion; }
+  }
+  return { config: { modalidad, moneda, frecuencia, proximoPago: prox, notas: String(b.notas || "").replace(/[<>]/g, "").slice(0, 200), ...extra } };
 }
 
-module.exports = { PLATAFORMAS, MODALIDADES, FRECUENCIAS, plataformaDe, filaCuenta, limpiarConfig, sumarDias, activa };
+module.exports = { PLATAFORMAS, MODALIDADES, FRECUENCIAS, plataformaDe, filaCuenta, limpiarConfig, limpiarGiftcard, giftcardsDe, sumarDias, activa };

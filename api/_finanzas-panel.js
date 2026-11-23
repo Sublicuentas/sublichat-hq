@@ -340,7 +340,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad", "finp_tasa_bac"]); // R200g · tasa BAC Honduras // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad", "finp_tasa_bac", "finp_giftcard_guardar"]); // R200g · tasa BAC Honduras // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 // ---------------- R200g · Tasa del dólar de BAC Honduras (compra/venta) para convertir pagos en USD a Lempiras.
 // Fuente pública de BAC Credomatic (XML por país). Se guarda una vez por día en `fin_tasas/bac_{fecha}` para que el
@@ -797,7 +797,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
           tarjetaId = id;
         } else if (tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
         if (lc.config.modalidad === "tarjeta" && !tarjetaId) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
-        const n = { ...lc.config, tarjetaId: lc.config.modalidad === "tarjeta" ? tarjetaId : "" };
+        const n = { ...lc.config, tarjetaId: lc.config.modalidad === "tarjeta" ? tarjetaId : "", ...(lc.config.saldoSar !== undefined ? { saldoAl: hoy } : {}) };
         const antes = { modalidad: a.modalidad || "", moneda: a.moneda || "", frecuencia: a.frecuencia || "", tarjetaId: a.tarjetaId || "", proximoPago: a.proximoPago || "" };
         tx.set(ref, { ...a, ...n, cuentaId: cid, plataforma: plat, correo: String((sc.data() || {}).correo || "").toLowerCase(), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor }),
           historial: [...(a.historial || []), { at: ahora, por: actor, antes, despues: n }].slice(-30) });
@@ -810,6 +810,26 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const t = await tasaBac(db, hoy);
       if (t.error) return ok({ disponible: false, error: t.error });
       return ok({ disponible: true, fuente: t.fuente, fecha: t.fecha, compra: t.compra, venta: t.venta, deHoy: !!t.deHoy, aviso: t.aviso || "" });
+    }
+    if (accion === "finp_giftcard_guardar") { // R200i · gift card SAR de Prime Video (la compra en USD/HNL va aparte por fin_compra_registrar)
+      const cid = txt(body.cuentaId, 120); if (!cid) throw errUsuario("Falta la cuenta.");
+      const lg = finCuentas.limpiarGiftcard(body.giftcard || {}, hoy); if (lg.error) throw errUsuario(lg.error);
+      const r = await db.runTransaction(async (tx) => {
+        const cref = col("inventario").doc(cid), ref = col("fin_cuentas_costo").doc(cid);
+        const [sc, s] = [await tx.get(cref), await tx.get(ref)];
+        if (!sc.exists || finCuentas.plataformaDe((sc.data() || {}).plataforma) !== "primevideo") throw errUsuario("Esa cuenta de Prime Video no está en Control Maestro.");
+        const a = s.exists ? s.data() || {} : {};
+        const lista = Array.isArray(a.giftcards) ? a.giftcards : [];
+        const g = { ...lg.giftcard, id: txt(body.operationId, 80) || `gc_${Date.now()}`, por: actor, at: ahora };
+        if (lista.some((x) => x.id === g.id || (g.loteId && x.loteId === g.loteId))) return { duplicado: true };
+        const sumar = body.sumarSaldo !== false;
+        const saldo = sumar ? Math.round(((Number(a.saldoSar) || 0) + g.montoSar) * 100) / 100 : a.saldoSar ?? null;
+        tx.set(ref, { ...a, cuentaId: cid, plataforma: "primevideo", correo: String((sc.data() || {}).correo || "").toLowerCase(), giftcards: [...lista, g].slice(-60), ...(sumar ? { saldoSar: saldo, saldoAl: hoy } : {}), actualizadoAt: ahora, actualizadoPor: actor,
+          historial: [...(a.historial || []), { at: ahora, por: actor, accion: "giftcard", despues: { montoSar: g.montoSar, vence: g.vence, saldoSar: saldo } }].slice(-30) });
+        audit(tx, { accion: "prime_giftcard", targetType: "fin_cuenta", targetId: cid, before: { saldoSar: a.saldoSar ?? null }, after: { montoSar: g.montoSar, costoUsd: g.costoUsd, cargoHnl: g.cargoHnl, vence: g.vence, saldoSar: saldo, loteId: g.loteId } });
+        return { cuentaId: cid, saldoSar: saldo, giftcard: g };
+      });
+      return ok(r);
     }
     if (accion === "finp_cuenta_historial" && body.spotifyFamiliaId) { // R200g · Spotify Familiar: pagos de UNA cuenta principal
       const fid = txt(body.spotifyFamiliaId, 120);
