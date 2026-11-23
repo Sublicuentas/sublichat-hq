@@ -89,8 +89,10 @@ test('Fase 2 · listas automáticas: cuentas madre de Control Maestro, sin VIP, 
   assert.deepEqual([t.correo, t.ocupados, t.capacidad, t.plan, t.estadoCosto, t.costo], ['madre1@prueba.test', 2, 5, 'Premium', 'pendiente', null]);
   for (const [p, n] of [['paramount', 2], ['crunchyroll', 1], ['primevideo', 1]]) assert.equal((await panel(db, 'finp_cuentas_lista', { plataforma: p })).filas.length, n, p);
   const pend = await panel(db, 'finp_cuentas_lista', { plataforma: 'pendientes' });
-  assert.equal(pend.resumen.pendientes, 7); assert.equal(pend.filas.some((f) => f.cuentaId === 'dis-1' || f.cuentaId === 'vip-1'), false);
-  assert.equal((await panel(db, 'finp_cuentas_lista', { plataforma: 'disneyp' })).ok, false);
+  // R200g (23/11/2026): Disney Premium/Standard y Viki Rakuten también salen en Finanzas › Compras (dis-1 ahora cuenta).
+  assert.equal(pend.resumen.pendientes, 8); assert.equal(pend.filas.some((f) => f.cuentaId === 'vip-1'), false); assert.equal(pend.filas.some((f) => f.cuentaId === 'dis-1'), true);
+  assert.equal((await panel(db, 'finp_cuentas_lista', { plataforma: 'disneyp' })).ok, true);
+  assert.equal((await panel(db, 'finp_cuentas_lista', { plataforma: 'vipnetflix' })).ok, false);
   assert.equal(lotes(db).length, 0, 'sincronizar no crea compras'); assert.equal(intocable(db), antes);
 });
 
@@ -133,7 +135,68 @@ test('Fase 2/3 · pago real por cuenta: HNL sin conversión, PHP anual con cargo
 });
 
 test('Helpers · plataforma por cuenta y validación de configuración', () => {
-  assert.deepEqual(['Netflix', 'vipnetflix', 'Paramount+', 'crunchyroll', 'Prime Video', 'amazon', 'hbomax', 'disneyp'].map(fc.plataformaDe), ['netflix', '', 'paramount', 'crunchyroll', 'primevideo', 'primevideo', 'hbomax', '']);
+  assert.deepEqual(['Netflix', 'vipnetflix', 'Paramount+', 'crunchyroll', 'Prime Video', 'amazon', 'hbomax', 'disneyp', 'disneys', 'Viki Rakuten'].map(fc.plataformaDe), ['netflix', '', 'paramount', 'crunchyroll', 'primevideo', 'primevideo', 'hbomax', 'disneyp', 'disneys', 'viki']); // R200g
   assert.match(fc.limpiarConfig('crunchyroll', { modalidad: 'tarjeta', moneda: 'PHP', frecuencia: 'trimestral' }).error, /Frecuencia/);
   assert.equal(fc.limpiarConfig('crunchyroll', { modalidad: 'paypal', moneda: 'PHP', frecuencia: 'anual' }).config.frecuencia, 'anual');
+});
+
+// ================= R200g (23/11/2026) · Disney Premium/Standard y Viki Rakuten en Compras; historial en todas; USD → L con tasa BAC
+import { leerTasaBacXml } from '../api/_finanzas-panel.js';
+const XML_BAC = '<?xml version="1.0"?><exchangeRates><country><name>Nicaragua</name><buyRateUSD>36.10</buyRateUSD><saleRateUSD>36.90</saleRateUSD></country><country><name>Honduras</name><buyRateUSD>26.1500</buyRateUSD><saleRateUSD>26.4500</saleRateUSD></country></exchangeRates>';
+
+test('R200g · Disney Premium, Disney Standard y Viki: cuentas de Control Maestro con tarjeta, gift card o link/activación', async () => {
+  const s = semilla(); s.inventario['dis-s'] = { plataforma: 'disneys', correo: 'disneys@prueba.test', capacidad: 3 }; s.inventario['vk-1'] = { plataforma: 'viki', correo: 'viki@prueba.test', capacidad: 1 };
+  const db = fakeFirestore(s);
+  for (const [p, id] of [['disneyp', 'dis-1'], ['disneys', 'dis-s'], ['viki', 'vk-1']]) {
+    const r = await panel(db, 'finp_cuentas_lista', { plataforma: p });
+    assert.equal(r.ok, true, JSON.stringify(r)); assert.deepEqual(r.filas.map((f) => f.cuentaId), [id], p);
+    for (const m of ['tarjeta', 'gift_card', 'link']) assert.ok(r.plataformas[p].modalidades.includes(m), `${p} ${m}`);
+  }
+  assert.equal(fc.PLATAFORMAS.disneyp.defecto.modalidad, 'link', 'Disney generalmente por link');
+  for (const p of Object.keys(fc.PLATAFORMAS)) for (const m of ['tarjeta', 'gift_card', 'link']) assert.ok(fc.PLATAFORMAS[p].modalidades.includes(m), `${p} acepta ${m}`);
+  const c = await panel(db, 'finp_cuenta_config', { cuentaId: 'dis-1', modalidad: 'link', moneda: 'USDT', frecuencia: 'mensual' });
+  assert.equal(c.ok, true, JSON.stringify(c));
+});
+
+test('R200g · tasa BAC Honduras: lee el XML, guarda la del día; si BAC falla usa la última guardada; nunca inventa', async () => {
+  assert.deepEqual(leerTasaBacXml(XML_BAC), { compra: 26.15, venta: 26.45 });
+  assert.equal(leerTasaBacXml('<country><name>Honduras</name><buyRateUSD>0</buyRateUSD><saleRateUSD>0</saleRateUSD></country>'), null, 'tasa absurda = no hay tasa');
+  const real = globalThis.fetch;
+  try {
+    // 1) BAC caído y nada guardado → error claro (escribir el cargo a mano)
+    globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => '' });
+    const db0 = fakeFirestore(semilla());
+    const e = await panel(db0, 'finp_tasa_bac', {});
+    assert.equal(e.disponible, false); assert.match(e.error, /Escriba el cargo en Lempiras/);
+    // 2) BAC caído con una tasa guardada de otro día → la usa y dice de qué fecha es
+    const s = semilla(); s.fin_tasas = { 'bac_2026-11-15': { fuente: 'BAC Credomatic Honduras', fecha: '2026-11-15', compra: 26.1, venta: 26.4 } };
+    const v = await panel(fakeFirestore(s), 'finp_tasa_bac', {});
+    assert.deepEqual([v.disponible, v.venta, v.deHoy], [true, 26.4, false]); assert.match(v.aviso, /2026-11-15/);
+    // 3) BAC responde → tasa del día guardada en fin_tasas/bac_{fecha}
+    globalThis.fetch = async (u) => { assert.match(String(u), /sucursalelectronica\.com\/exchangerate/); return { ok: true, status: 200, text: async () => XML_BAC }; };
+    const db = fakeFirestore(semilla());
+    const t = await panel(db, 'finp_tasa_bac', {});
+    assert.deepEqual([t.disponible, t.compra, t.venta, t.deHoy, t.fecha], [true, 26.15, 26.45, true, '2026-11-17']);
+    assert.equal(db._data.get('fin_tasas/bac_2026-11-17').data.venta, 26.45);
+  } finally { globalThis.fetch = real; }
+});
+
+test('R200g · USD a Lempiras automático (13.97 USD × venta BAC) y editable; Historial en todas las plataformas', async () => {
+  assert.match(web, /function usarTasaBac\(m, nombres\)/);
+  assert.match(web, /Math\.round\(monto \* t\.venta \* 100\) \/ 100/, 'USD × tasa de venta');
+  assert.match(web, /cargo\.dataset\.manual !== '1'/, 'si escribió el cargo real, manda el suyo');
+  assert.match(web, /if \(pago === 'banco' && mon === 'USD'\) usarTasaBac\(m\)/);
+  assert.match(web, /usarTasaBac\(m, \{ monto: 'monto' \}\)/, 'también en el cargo de HBO');
+  // historial en cuentas madre (todas), HBO y Spotify
+  assert.match(web, /data-fz-hist="cuenta" data-id="' \+ esc\(x\.cuentaId\)/);
+  assert.match(web, /data-fz-hist="cuenta" data-id="' \+ esc\(f\.cuentaId\)/);
+  assert.match(web, /data-fz-hist="spotify"/);
+  assert.match(web, /Se volvió a pagar/); assert.match(web, /Cada cuánto paga/);
+  for (const t of ['Disney Premium', 'Disney Standard', 'Viki Rakuten']) assert.match(web, new RegExp(`\\['[a-z]+', '${t}'\\]`), t);
+  // historial de Spotify Familiar por cuenta principal
+  const s = semilla(); s.spotify_familias = { f1: { codigo: 'SPF01', madreCorreo: 'spf@prueba.test', estado: 'activa' } };
+  s.fin_productos['SPOTIFY-FAM'] = { nombre: 'Spotify Familiar', categoria: 'musica', modelo: 'cuenta_madre', plataformaKey: 'spotify', capacidad: 5, duracionDias: 30, activo: true };
+  s.fin_lotes = { l1: { productoId: 'SPOTIFY-FAM', fecha: '2026-10-17', referencia: 'Spotify Familiar SPF01 · spf@prueba.test', costoTotalHnl: 320, moneda: 'HNL', costoTotalMoneda: 320 }, l2: { productoId: 'SPOTIFY-FAM', fecha: '2026-11-16', referencia: 'Spotify Familiar SPF01 · spf@prueba.test', costoTotalHnl: 320, moneda: 'HNL', costoTotalMoneda: 320 }, l3: { productoId: 'SPOTIFY-FAM', fecha: '2026-11-16', referencia: 'Spotify Familiar SPF02 · otra@prueba.test', costoTotalHnl: 320 } };
+  const h = await panel(fakeFirestore(s), 'finp_cuenta_historial', { spotifyFamiliaId: 'f1' });
+  assert.equal(h.ok, true, JSON.stringify(h)); assert.deepEqual(h.compras.map((c) => c.loteId), ['l2', 'l1']);
 });

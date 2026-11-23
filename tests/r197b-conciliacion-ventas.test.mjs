@@ -83,7 +83,7 @@ test('C · cliente vigente sin pago en noviembre: sigue en cartera «sin movimie
 test('D · combo con una transferencia: un recibo repartido por servicio; total = dinero recibido; cuadre de integridad en 0', async () => {
   const db = fakeFirestore(semilla());
   const ex = (await call(db, 'finp_ganancias_excel', NOV)).filas.filter((f) => f['Titular de ficha'] === 'Titular D');
-  assert.deepEqual(ex.map((f) => [f.Plataforma, f['Ingreso cobrado'], f.Combo]), [['Netflix Premium', 150, 'Sí'], ['Disney+', 100, 'Sí']]);
+  assert.deepEqual(ex.map((f) => [f.Plataforma, f['Ingreso cobrado'], f.Combo]), [['Netflix Premium', 150, 'Sí'], ['Disney Premium', 100, 'Sí']]);
   assert.equal(new Set(ex.map((f) => f.Referencia)).size, 1, 'mismo recibo de origen');
   const g = await call(db, 'finp_ganancias', NOV);
   assert.deepEqual([g.resumen.cuadre.cobrosOriginalesHnl, g.resumen.cuadre.asignadoServiciosHnl, g.resumen.cuadre.diferenciaHnl], [760, 760, 0]);
