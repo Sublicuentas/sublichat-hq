@@ -13,7 +13,7 @@
 //   (para no duplicar un pago que quizá ya está en el libro). Ver documento R196.
 // ------------------------------------------------------------------------------------------------------------------
 import crypto from "node:crypto";
-import { prepararContexto, calcularGanancias, resultadoCiclos, rentabilidadCuentas, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria, conciliacionCompras, ESTADOS_COSTO } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
+import { INICIO_CONTROL, prepararContexto, calcularGanancias, resultadoCiclos, rentabilidadCuentas, detalleCuenta, filasExcel, mesesDe, rangoMes, nombrePlataforma, conciliarCartera, cuentasDePlataforma, DEFINICIONES, auditarCartera, csvAuditoria, conciliacionCompras, ESTADOS_COSTO } from "./_finanzas-ganancias.js"; // R197 · motor único de ganancias
 import { ventasACostear as ventasACostearG } from "./_finanzas-costeo.js";
 import finCuentas from "./_finanzas-cuentas.js"; // R196z · cuentas madre automáticas desde Control Maestro (solo lectura)
 import hboPlanes from "./_hbo-planes.js"; // R196z · HBO Standard 3 / Platinum 5 en Finanzas
@@ -900,9 +900,10 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const ymdOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
       const mesHoy = hoy.slice(0, 7);
       const mesMenos = (mes, k) => { const n = Number(mes.slice(0, 4)) * 12 + Number(mes.slice(5, 7)) - 1 - k; return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`; };
-      const mesesIni = [3, 2, 1, 0].map((k) => mesMenos(mesHoy, k)); // mes actual y los 3 anteriores (p. ej. ago–nov 2026)
+      const mesesIni = ((m) => m.length ? m : [mesHoy])([3, 2, 1, 0].map((k) => mesMenos(mesHoy, k)).filter((m) => m >= INICIO_CONTROL.slice(0, 7))); // R200k · comparación solo desde octubre 2026 (control exacto)
       let desde = ymdOk(body.desde) ? body.desde : rangoMes(mesHoy).desde, hasta = ymdOk(body.hasta) ? body.hasta : rangoMes(mesHoy).hasta;
       if (hasta < desde) [desde, hasta] = [hasta, desde];
+      if (desde < INICIO_CONTROL) desde = INICIO_CONTROL; if (hasta < desde) hasta = rangoMes(INICIO_CONTROL.slice(0, 7)).hasta; // R200k · nada antes de octubre 2026
       if (Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) > 400) throw errUsuario("Elija un rango de hasta 13 meses.");
       const leerDesde = accion === "finp_ganancias" || accion === "finp_excel_financiero" /* R200c · igual que la Web */ ? [desde, rangoMes(mesesIni[0]).desde].sort()[0] : accion === "finp_rentabilidad" ? new Date(Date.parse(`${hoy}T12:00:00Z`) - 400 * 86400000).toISOString().slice(0, 10) : accion === "finp_ganancias_plataforma" || accion === "finp_auditoria_cartera" ? new Date(Date.parse(`${desde}T12:00:00Z`) - 180 * 86400000).toISOString().slice(0, 10) : desde; // plataforma: 6 meses atrás para «último cobro»
       const mesesConsumo = mesesDe(leerDesde, hasta > hoy ? hasta : hoy);
@@ -930,7 +931,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         }
         const plat = txt(body.plataforma, 40);
         const r = rentabilidadCuentas(ctx, { hoy, plataforma: plat, altas, cobradoCiclo: plat ? await ciclosDe((c) => String(c.plataforma).replace(/^hbomax.*/, "hbomax") === String(plat).replace(/^hbomax.*/, "hbomax")) : null });
-        return ok({ hoy, plataforma: plat, nombre: plat ? nombrePlataforma(plat) : "", plataformas: r.plataformas, total: r.total, cuentas: plat ? r.filas : undefined });
+        return ok({ hoy, desdeControl: r.desdeControl, plataforma: plat, nombre: plat ? nombrePlataforma(plat) : "", plataformas: r.plataformas, total: r.total, cuentas: plat ? r.filas : undefined });
       }
       if (accion === "finp_ganancias_cuenta") {
         const cid = txt(body.cuentaId, 160);

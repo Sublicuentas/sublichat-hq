@@ -680,7 +680,15 @@ const mesesEntre = (ini, fin) => { // meses calendario pagados entre dos fechas 
   const [y1, m1, d1] = ini.split("-").map(Number), [y2, m2, d2] = fin.split("-").map(Number);
   return Math.max(0, (y2 - y1) * 12 + (m2 - m1) - (d2 + 3 < d1 ? 1 : 0));
 };
-export function rentabilidadCuentas(ctx, { hoy, plataforma = "", altas = new Map(), cobradoCiclo = null } = {}) {
+// R200k (23/11/2026) · Control exacto desde OCTUBRE 2026 (pedido del dueño): el bot se usa desde marzo, pero los ingresos
+// reales por perfil se registran completos desde octubre. «Ganancia desde octubre» = lo que pagan los clientes por los días
+// desde el 1 de octubre (o desde que entraron) hasta hoy − la parte de cada compra que cae en ese mismo período.
+// Una compra anual o de 3 meses solo cuenta por los días que caen dentro; una activación pagada antes de octubre sin fecha
+// de vencimiento no se cobra otra vez en el período (se marca). Nada antes de octubre entra en esta cifra.
+export const INICIO_CONTROL = "2026-10-01";
+const diasEntre = (a, b) => (a && b && b > a ? Math.round((ms(b) - ms(a)) / DIA) : 0);
+const sumarDiasG = (f, n) => new Date(ms(f) + n * DIA).toISOString().slice(0, 10);
+export function rentabilidadCuentas(ctx, { hoy, plataforma = "", altas = new Map(), cobradoCiclo = null, desdeControl = INICIO_CONTROL } = {}) {
   const b = plataforma ? base(plataforma) : "";
   const lotesPorCuenta = new Map();
   for (const l of ctx.lotes) { if (l.estado === "anulado" || !l._cuentaId || !(r2(l.costoTotalHnl) > 0) || !ymd(l.fecha) || ymd(l.fecha) > hoy) continue; (lotesPorCuenta.get(l._cuentaId) || lotesPorCuenta.set(l._cuentaId, []).get(l._cuentaId)).push(l); }
@@ -709,32 +717,48 @@ export function rentabilidadCuentas(ctx, { hoy, plataforma = "", altas = new Map
       const alta = altas.get(String(cl.compraId || "")) || "";
       const inicio = [inicioCuenta, alta].filter(Boolean).sort().pop() || ""; // desde la activación, o desde que entró si fue después
       const vence = sv ? ymd(sv.fechaRenovacion) : "";
-      const mesesPagados = inicio && vence ? mesesEntre(inicio, vence > hoy ? vence : vence) : 0;
-      return { perfil: cl.slot != null ? `Perfil ${cl.slot}` : `Perfil ${i + 1}`, cliente: s((sv && (sv.beneficiarioNombre || sv.beneficiario)) || cl.nombre || cli.nombre, 80), cuotaMesHnl: cuota, vence, inicio, mesesPagados, estimadoHnl: r2(cuota * mesesPagados), sinFicha: !sv };
+      const desdeP = [inicio || desdeControl, desdeControl].sort()[1]; // R200k · solo lo que pagó desde octubre (meses pagados hasta su vencimiento)
+      const mesesPagados = desdeP && vence ? mesesEntre(desdeP, vence) : 0;
+      return { perfil: cl.slot != null ? `Perfil ${cl.slot}` : `Perfil ${i + 1}`, cliente: s((sv && (sv.beneficiarioNombre || sv.beneficiario)) || cl.nombre || cli.nombre, 80), cuotaMesHnl: cuota, vence, inicio: desdeP, mesesPagados, estimadoHnl: r2(cuota * mesesPagados), sinFicha: !sv };
     });
+    const finPeriodo = [hoy, ...perfiles.map((p) => p.vence).filter(Boolean)].sort().pop(); // hasta donde ya pagaron los clientes (o hoy)
+    // ---- R200k · parte de lo pagado que cae entre el inicio del control y hoy (todas las compras de la cuenta)
+    let costoVentana = null, activacionAntes = false;
+    if (ls.length) {
+      costoVentana = 0;
+      for (const l of ls) {
+        const p = ctx.productosPorId.get(l.productoId) || {}; const costo = r2(l.costoTotalHnl);
+        const ini = l._ciclo ? ymd(l._ciclo.coberturaDesde) : ymd(l.fechaActivacion) || ymd(l.fecha);
+        const dur = l._ciclo ? diasRango(ymd(l._ciclo.coberturaDesde), ymd(l._ciclo.coberturaHasta)) : Number(l.duracionDias) || (l.vigenciaHasta ? diasEntre(ini, ymd(l.vigenciaHasta)) : 0) || (reglaCosto(l, p) === "cobertura" ? Number(p.duracionDias) || 0 : 0);
+        if (dur > 0 && ini) { const fin = l._ciclo ? sumarDiasG(ymd(l._ciclo.coberturaHasta), 1) : ymd(l.vigenciaHasta) || sumarDiasG(ini, dur); const total = Math.max(1, diasEntre(ini, fin)); const dentro = diasEntre([ini, desdeControl].sort()[1], [fin, finPeriodo].sort()[0]); costoVentana += costo * dentro / total; }
+        else if (ymd(l.fecha) >= desdeControl) costoVentana += costo; // activación pagada dentro del período
+        else activacionAntes = true; // activación pagada antes de octubre, sin vencimiento: no se vuelve a cobrar aquí
+      }
+      costoVentana = r2(costoVentana);
+    } else if (compra && compra.tipo === "mensual") costoVentana = r2(compra.costoMensualHnl * diasEntre([compra.fecha || desdeControl, desdeControl].sort()[1], finPeriodo) / 30.4375);
     const mensual = r2(perfiles.reduce((x, p) => x + p.cuotaMesHnl, 0));
     const estimado = r2(perfiles.reduce((x, p) => x + p.estimadoHnl, 0));
     const mesesCuenta = compra && compra.fecha ? mesesEntre(compra.fecha, hoy) : 0;
-    const costoAcum = !compra ? null : compra.tipo === "activacion" ? compra.costoHnl : r2(compra.costoMensualHnl * Math.max(1, mesesCuenta));
+    const costoAcum = !compra ? null : costoVentana; // R200k · solo la parte del período de control
     const cap = Number(a.capacidad) || cls.length;
     const completa = cls.some((c) => c.cuentaCompleta === true || c.tipoVenta === "cuenta_completa") || (cls.length > 0 && (s(a.modalidadVenta) === "cuenta_completa" || !!s(a.exclusivaCompraId)));
     const reg = cobradoCiclo ? cobradoCiclo.get(a.id) || null : null;
     const estado = !compra ? "sin_compra" : !cls.length ? "vacia" : estimado - costoAcum < 0 ? "por_recuperar" : "ganando";
     filas.push({ cuentaId: a.id, correo: s(a.correo), plataforma: a._familia, base: base(a._familia), nombre: nombrePlataforma(base(a._familia)), plan: s(a.planHbo || a.plan, 20), capacidad: cap, ocupados: cls.length, libres: completa ? 0 : Math.max(0, cap - cls.length), completa,
       compra, meMensualHnl: mensual, gananciaMesHnl: compra ? r2(mensual - compra.costoMensualHnl) : null,
-      estimadoDesdeCompraHnl: estimado, gananciaDesdeCompraHnl: costoAcum == null ? null : r2(estimado - costoAcum), mesesDesdeCompra: mesesCuenta,
+      estimadoDesdeCompraHnl: estimado, gananciaDesdeCompraHnl: costoAcum == null ? null : r2(estimado - costoAcum), mesesDesdeCompra: mesesCuenta, costoPeriodoHnl: costoAcum, activacionAntesDelControl: activacionAntes, desdeControl,
       registradoCajaHnl: reg ? reg.cobradoHnl : null, perfiles, estado });
   }
   filas.sort((x, y) => x.nombre.localeCompare(y.nombre) || (y.gananciaMesHnl ?? -1e9) - (x.gananciaMesHnl ?? -1e9) || x.correo.localeCompare(y.correo));
   const grupos = new Map();
   for (const f of filas) {
-    const g = grupos.get(f.base) || grupos.set(f.base, { plataforma: f.base, nombre: f.nombre, cuentas: 0, perfiles: 0, libres: 0, meMensualHnl: 0, pagueHnl: 0, gananciaMesHnl: 0, gananciaDesdeCompraHnl: 0, sinCompra: 0, sinCompraMensualHnl: 0, vacias: 0, porRecuperar: 0 }).get(f.base);
+    const g = grupos.get(f.base) || grupos.set(f.base, { plataforma: f.base, nombre: f.nombre, cuentas: 0, perfiles: 0, libres: 0, meMensualHnl: 0, pagueHnl: 0, gananciaMesHnl: 0, gananciaDesdeCompraHnl: 0, costoPeriodoHnl: 0, ingresoPeriodoHnl: 0, sinCompra: 0, sinCompraMensualHnl: 0, vacias: 0, porRecuperar: 0 }).get(f.base);
     g.cuentas++; g.perfiles += f.ocupados; g.libres += f.libres; g.meMensualHnl += f.meMensualHnl;
-    if (f.compra) { g.pagueHnl += f.compra.costoHnl; g.gananciaMesHnl += f.gananciaMesHnl; g.gananciaDesdeCompraHnl += f.gananciaDesdeCompraHnl; } else { g.sinCompra++; g.sinCompraMensualHnl += f.meMensualHnl; }
+    if (f.compra) { g.pagueHnl += f.compra.costoHnl; g.gananciaMesHnl += f.gananciaMesHnl; g.gananciaDesdeCompraHnl += f.gananciaDesdeCompraHnl; g.costoPeriodoHnl += f.costoPeriodoHnl || 0; g.ingresoPeriodoHnl += f.estimadoDesdeCompraHnl; } else { g.sinCompra++; g.sinCompraMensualHnl += f.meMensualHnl; }
     if (f.estado === "vacia") g.vacias++; if (f.estado === "por_recuperar") g.porRecuperar++;
   }
-  const plataformas = [...grupos.values()].map((g) => ({ ...g, meMensualHnl: r2(g.meMensualHnl), pagueHnl: r2(g.pagueHnl), gananciaMesHnl: r2(g.gananciaMesHnl), gananciaDesdeCompraHnl: r2(g.gananciaDesdeCompraHnl), sinCompraMensualHnl: r2(g.sinCompraMensualHnl) }))
+  const plataformas = [...grupos.values()].map((g) => ({ ...g, meMensualHnl: r2(g.meMensualHnl), pagueHnl: r2(g.pagueHnl), gananciaMesHnl: r2(g.gananciaMesHnl), gananciaDesdeCompraHnl: r2(g.gananciaDesdeCompraHnl), costoPeriodoHnl: r2(g.costoPeriodoHnl), ingresoPeriodoHnl: r2(g.ingresoPeriodoHnl), sinCompraMensualHnl: r2(g.sinCompraMensualHnl) }))
     .filter((g) => g.perfiles > 0 || g.pagueHnl > 0).sort((x, y) => y.meMensualHnl - x.meMensualHnl);
   const tot = (k) => r2(plataformas.reduce((x, g) => x + g[k], 0));
-  return { hoy, plataformas, filas, total: { cuentas: plataformas.reduce((x, g) => x + g.cuentas, 0), perfiles: plataformas.reduce((x, g) => x + g.perfiles, 0), meMensualHnl: tot("meMensualHnl"), pagueHnl: tot("pagueHnl"), gananciaMesHnl: tot("gananciaMesHnl"), gananciaDesdeCompraHnl: tot("gananciaDesdeCompraHnl"), sinCompra: plataformas.reduce((x, g) => x + g.sinCompra, 0), sinCompraMensualHnl: tot("sinCompraMensualHnl") } };
+  return { hoy, desdeControl, plataformas, filas, total: { cuentas: plataformas.reduce((x, g) => x + g.cuentas, 0), perfiles: plataformas.reduce((x, g) => x + g.perfiles, 0), meMensualHnl: tot("meMensualHnl"), pagueHnl: tot("pagueHnl"), gananciaMesHnl: tot("gananciaMesHnl"), gananciaDesdeCompraHnl: tot("gananciaDesdeCompraHnl"), sinCompra: plataformas.reduce((x, g) => x + g.sinCompra, 0), sinCompraMensualHnl: tot("sinCompraMensualHnl") } };
 }
