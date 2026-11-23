@@ -107,20 +107,25 @@ test('R200c 1 · cada mes del libro = Finanzas Web de ese mes (resumen y por pla
   assert.doesNotMatch(JSON.stringify(x), /"(pin|pinPerfil|telefono|password|clave)"\s*:/i, 'sin PIN, teléfonos ni claves');
 });
 
-test('R200c 2 · el libro tiene 9 hojas, tablas, selectores, gráficos nativos y al recalcular en LibreOffice da lo mismo que la Web', async (t) => {
+test('R200c 2 · el libro tiene 9 hojas + datos del tablero, tablas, 4 selectores, 6 gráficos nativos y al recalcular en LibreOffice da lo mismo que la Web', async (t) => {
   const db = fakeFirestore(semilla());
   const x = await call(db, 'finp_excel_financiero', { desde: '2026-10-01', hasta: '2026-11-30' });
   let ExcelJS, JSZip;
   try { ExcelJS = require('exceljs'); JSZip = require('jszip'); } catch { try { ExcelJS = require('/tmp/claude-0/hqh/libs/node_modules/exceljs'); JSZip = require('/tmp/claude-0/hqh/libs/node_modules/jszip'); } catch { t.skip('exceljs/jszip no instalados'); return; } }
   const buf = await XL.generar(x, { ExcelJS, JSZip }, { mes: '2026-11' });
   const zip = await JSZip.loadAsync(buf);
-  assert.ok(zip.file('xl/charts/chart901.xml') && zip.file('xl/charts/chart902.xml') && zip.file('xl/drawings/drawing901.xml'), 'gráficos nativos');
+  for (let n = 901; n <= 906; n++) assert.ok(zip.file(`xl/charts/chart${n}.xml`), 'gráfico ' + n); assert.ok(zip.file('xl/drawings/drawing901.xml'), 'gráficos nativos');
+  const tiposG = await Promise.all([901, 902, 903, 904, 905, 906].map((n) => zip.file(`xl/charts/chart${n}.xml`).async('string')));
+  assert.ok(tiposG.some((x) => /<c:doughnutChart>/.test(x)) && tiposG.some((x) => /<c:lineChart>/.test(x)) && tiposG.some((x) => /<c:barDir val="col"\/>/.test(x)), 'dona, línea y columnas');
+  assert.ok(tiposG.every((x) => /(&apos;|')10 Datos del tablero(&apos;|')!/.test(x)), 'los gráficos leen la hoja de datos que depende de los selectores');
   const ct = await zip.file('[Content_Types].xml').async('string'); assert.match(ct, /chart901\.xml/);
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf);
   assert.deepEqual(wb.worksheets.map((w) => w.name), XL.HOJAS);
   const p = wb.getWorksheet('01 Panel ejecutivo');
-  assert.equal(p.getCell('B4').dataValidation.type, 'list'); assert.equal(p.getCell('B5').dataValidation.type, 'list');
-  assert.match(String(p.getCell('B7').value.formula), /^SUMIFS\(/);
+  for (const c of ['B4', 'B5', 'B6', 'B7']) assert.equal(p.getCell(c).dataValidation.type, 'list', c);
+  assert.equal(wb.getWorksheet('10 Datos del tablero').state, 'hidden');
+  assert.ok((p.conditionalFormattings || []).length >= 3, 'semáforo con formato condicional');
+  assert.match(String(p.getCell('B9').value.formula), /^SUMIFS\(/);
   const tablas = [...(await Promise.all(Object.keys(zip.files).filter((f) => /^xl\/tables\/table\d+\.xml$/.test(f)).map((f) => zip.file(f).async('string'))))].map((s) => /name="([^"]+)"/.exec(s)[1]);
   for (const n of ['tVentas', 'tCompras', 'tCostos', 'tCuentas', 'tPlataformas', 'tRanking', 'tEvolucion', 'tPendientes']) assert.ok(tablas.includes(n), n);
   // recálculo real (LibreOffice) y lectura de los KPI del Panel
@@ -135,11 +140,11 @@ test('R200c 2 · el libro tiene 9 hojas, tablas, selectores, gráficos nativos y
   const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.readFile(path.join(dir, 'out', 'libro.xlsx'));
   const v = (ws, c) => { const z = wb2.getWorksheet(ws).getCell(c).value; return z && typeof z === 'object' && 'result' in z ? z.result : z; };
   const nov = x.meses.find((m) => m.mes === '2026-11');
-  t.diagnostic(`Panel nov recalculado: cobrado ${v('01 Panel ejecutivo', 'B7')} costo ${v('01 Panel ejecutivo', 'B9')}`);
-  near(v('01 Panel ejecutivo', 'B7'), nov.cobradoHnl, 'Panel cobrado nov');
-  near(v('01 Panel ejecutivo', 'B8'), nov.cobradoCubiertoHnl, 'Panel cobrado con costo nov');
-  near(v('01 Panel ejecutivo', 'B9'), nov.costoHnl, 'Panel costo nov');
-  near(v('01 Panel ejecutivo', 'B14'), nov.desembolsoHnl, 'Panel compras pagadas nov');
+  t.diagnostic(`Panel nov recalculado: cobrado ${v('01 Panel ejecutivo', 'B9')} costo ${v('01 Panel ejecutivo', 'B11')}`);
+  near(v('01 Panel ejecutivo', 'B9'), nov.cobradoHnl, 'Panel cobrado nov');
+  near(v('01 Panel ejecutivo', 'B10'), nov.cobradoCubiertoHnl, 'Panel cobrado con costo nov');
+  near(v('01 Panel ejecutivo', 'B11'), nov.costoHnl, 'Panel costo nov');
+  near(v('01 Panel ejecutivo', 'B16'), nov.desembolsoHnl, 'Panel compras pagadas nov');
   const ev = wb2.getWorksheet('07 Evolucion anual');
   for (let r = 4; r <= 5; r++) { const mes = ev.getCell('A' + r).value; const m = x.meses.find((z) => z.mes === mes); const g = (c) => { const z = ev.getCell(c + r).value; return z && typeof z === 'object' ? z.result : z; };
     near(g('C'), m.cobradoHnl, mes + ' evol cobrado'); near(g('E'), m.costoHnl, mes + ' evol costo'); near(g('I'), m.desembolsoHnl, mes + ' evol compras'); }
@@ -150,9 +155,22 @@ test('R200c 2 · el libro tiene 9 hojas, tablas, selectores, gráficos nativos y
   execFileSync(lo, [envLo, '--headless', '--calc', '--convert-to', 'xlsx:Calc MS Excel 2007 XML', '--outdir', path.join(dir, 'out'), path.join(dir, 'plat.xlsx')], { stdio: 'ignore', timeout: 120000 });
   const wb4 = new ExcelJS.Workbook(); await wb4.xlsx.readFile(path.join(dir, 'out', 'plat.xlsx'));
   const v4 = (c) => { const z = wb4.getWorksheet('01 Panel ejecutivo').getCell(c).value; return z && typeof z === 'object' && 'result' in z ? z.result : z; };
-  t.diagnostic(`Panel nov · ${pp.nombre}: cobrado ${v4('B7')} costo ${v4('B9')}`);
-  near(v4('B7'), pp.cobradoHnl, `Panel ${pp.nombre} cobrado`); near(v4('B9'), pp.costoHnl, `Panel ${pp.nombre} costo`);
-  assert.ok(Math.abs(v4('B7') - nov.cobradoHnl) > 0.01, 'el selector cambió la cifra');
+  t.diagnostic(`Panel nov · ${pp.nombre}: cobrado ${v4('B9')} costo ${v4('B11')}`);
+  near(v4('B9'), pp.cobradoHnl, `Panel ${pp.nombre} cobrado`); near(v4('B11'), pp.costoHnl, `Panel ${pp.nombre} costo`);
+  assert.ok(Math.abs(v4('B9') - nov.cobradoHnl) > 0.01, 'el selector cambió la cifra');
+  // selector de VENDEDOR: ingresos del vendedor; el costo dice «No aplica» (no se reparte por vendedor)
+  const vend = x.ventas.filter((z) => z.mes === '2026-11')[0].vendedor;
+  const cobV = x.ventas.filter((z) => z.mes === '2026-11' && z.vendedor === vend).reduce((a, z) => a + z.cobrado, 0);
+  const wb5 = new ExcelJS.Workbook(); await wb5.xlsx.load(buf); wb5.getWorksheet('01 Panel ejecutivo').getCell('B6').value = vend;
+  fs.writeFileSync(path.join(dir, 'vend.xlsx'), Buffer.from(await wb5.xlsx.writeBuffer()));
+  execFileSync(lo, [envLo, '--headless', '--calc', '--convert-to', 'xlsx:Calc MS Excel 2007 XML', '--outdir', path.join(dir, 'out'), path.join(dir, 'vend.xlsx')], { stdio: 'ignore', timeout: 120000 });
+  const wb6 = new ExcelJS.Workbook(); await wb6.xlsx.readFile(path.join(dir, 'out', 'vend.xlsx'));
+  const v6 = (h, c) => { const z = wb6.getWorksheet(h).getCell(c).value; return z && typeof z === 'object' && 'result' in z ? z.result : z; };
+  near(v6('01 Panel ejecutivo', 'B9'), cobV, 'Panel cobrado del vendedor'); assert.match(String(v6('01 Panel ejecutivo', 'B11')), /No aplica/);
+  t.diagnostic(`Panel nov · vendedor ${vend}: cobrado ${v6('01 Panel ejecutivo', 'B9')}`);
+  // la hoja de datos de los gráficos también cambió: suma por plataforma = cobrado del vendedor
+  const dsh = wb6.getWorksheet('10 Datos del tablero'); let sp = 0; for (let r = 5; r <= 40; r++) { const z = dsh.getCell('E' + r).value; const n = z && typeof z === 'object' ? z.result : z; if (typeof n === 'number') sp += n; }
+  near(sp, cobV, 'gráfico por plataforma con el filtro de vendedor');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
