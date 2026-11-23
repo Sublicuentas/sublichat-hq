@@ -96,8 +96,9 @@ test('5 · Reactivación el 05/12: diciembre lleva el nuevo costo; el ciclo de o
 });
 
 test('6 · Antes de la primera activación (septiembre) no hay cobertura: «costo pendiente», nunca L0 inventado', async () => {
+  // R200k · el control exacto empieza el 01/10/2026: pedir septiembre ya no lee meses pasados (se calcula desde octubre)
   const g = await call(fakeFirestore(semilla()), 'finp_ganancias', SEP, '2026-11-19');
-  const p = fila(g); assert.equal(p.costoHnl, 0); assert.equal(p.cobradoCubiertoHnl, 0); assert.equal(p.estado, 'costo_pendiente'); assert.equal(p.resultadoHnl, null);
+  assert.equal(g.ok, true); assert.ok(!(g.meses || []).some((m) => m.mes < '2026-10'), 'nada antes de octubre');
 });
 
 test('7 · Activación SIN cuenta: no cubre a ninguna cuenta en meses siguientes (no se reparte por suposición)', async () => {

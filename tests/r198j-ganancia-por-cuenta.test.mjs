@@ -52,8 +52,9 @@ test('1 · el ejemplo del dueño: pagué L56 el 28/08; me pagan L340 al mes; gan
   const c = cta(x, 'venta6@prueba.test');
   assert.deepEqual([c.compra.fecha, c.compra.costoHnl, c.compra.montoMoneda, c.compra.tipo], ['2026-08-28', 56, 2, 'activacion']);
   assert.equal(c.meMensualHnl, 340); assert.equal(c.gananciaMesHnl, 340, 'la activación ya se pagó: no se resta cada mes');
-  assert.deepEqual(c.perfiles.map((p) => p.mesesPagados), [3, 3, 3, 3, 3]);
-  assert.equal(c.estimadoDesdeCompraHnl, 1020); assert.equal(c.gananciaDesdeCompraHnl, 964); assert.equal(c.estado, 'ganando');
+  // R200k · control desde 01/10/2026: solo los meses pagados desde octubre; la activación de agosto no se vuelve a restar
+  assert.deepEqual(c.perfiles.map((p) => p.mesesPagados), [2, 2, 2, 2, 2]);
+  assert.equal(c.estimadoDesdeCompraHnl, 680); assert.equal(c.costoPeriodoHnl, 0); assert.equal(c.activacionAntesDelControl, true); assert.equal(c.gananciaDesdeCompraHnl, 680); assert.equal(c.estado, 'ganando');
 });
 
 test('2 · cliente que entró después de la activación: cuenta desde su alta, no desde la activación', async () => {
@@ -65,7 +66,7 @@ test('2 · cliente que entró después de la activación: cuenta desde su alta, 
 test('3 · sin compra registrada: no se inventa costo; vacía: activación sin recuperar; cuenta completa: 0 libres', async () => {
   const x = await call(fakeFirestore(semilla()), 'finp_rentabilidad', { plataforma: 'hbomax' });
   const sc = cta(x, 'completa@prueba.test'); assert.equal(sc.estado, 'sin_compra'); assert.equal(sc.compra, null); assert.equal(sc.gananciaMesHnl, null); assert.equal(sc.completa, true); assert.equal(sc.libres, 0);
-  const va = cta(x, 'vacia@prueba.test'); assert.equal(va.estado, 'vacia'); assert.equal(va.gananciaDesdeCompraHnl, -56);
+  const va = cta(x, 'vacia@prueba.test'); assert.equal(va.estado, 'vacia'); assert.equal(va.gananciaDesdeCompraHnl, 0, 'R200k · activación de febrero: fuera del control desde octubre');
 });
 
 test('4 · resumen por plataforma (todas las plataformas) y cuenta con vigencia: costo mensual se resta cada mes', async () => {

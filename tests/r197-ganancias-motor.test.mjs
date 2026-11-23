@@ -116,20 +116,20 @@ test('detalle de la cuenta HBO: 4 clientes con su precio, cobros, compra vincula
   assert.deepEqual([c.cobradoHnl, c.costoPeriodoHnl, c.resultadoPeriodoHnl, c.compras.length, c.compras[0].fechaActivacion], [360, 93.1, 266.9, 1, '2026-11-05']);
 });
 
-test('ago–nov 2026, renovación de octubre en su mes y bandeja de conciliación', async () => {
+test('oct–nov 2026 (R200k: control desde octubre), renovación de octubre en su mes y bandeja de conciliación', async () => {
   const db = fakeFirestore(semilla());
   const g = await call(db, 'finp_ganancias', { desde: '2026-11-01', hasta: '2026-11-30' });
-  assert.deepEqual(g.meses.map((m) => m.mes), ['2026-08', '2026-09', '2026-10', '2026-11']);
-  assert.equal(g.meses[2].cobradoHnl, 90); assert.equal(g.anterior.mes, '2026-10');
+  assert.deepEqual(g.meses.map((m) => m.mes), ['2026-10', '2026-11']);
+  assert.equal(g.meses[0].cobradoHnl, 90); assert.equal(g.anterior.mes, '2026-10');
   assert.equal(g.bandejaConteo.ingreso_sin_confirmar, 1); assert.equal(g.bandejaConteo.pago_pendiente, 1);
   assert.equal(g.costeo.activo, true);
   // repetir no cambia nada (idempotente)
   const g2 = await call(db, 'finp_ganancias', { desde: '2026-11-01', hasta: '2026-11-30' });
   const sinHora = (x) => { const { calculadoAt, ...r } = x; return r; };
   assert.deepEqual(sinHora(g2.resumen), sinHora(g.resumen));
-  // período sin datos: no se presenta L0 como resultado comprobado
-  const vacio = await call(db, 'finp_ganancias', { desde: '2026-06-01', hasta: '2026-06-30' });
-  assert.equal(vacio.resumen.estado, 'sin_datos');
+  // R200k · pedir junio (antes del control) no lee meses pasados: se calcula desde octubre
+  const junio = await call(db, 'finp_ganancias', { desde: '2026-06-01', hasta: '2026-06-30' });
+  assert.equal(junio.ok, true); assert.ok(!(junio.meses || []).some((m) => m.mes < '2026-10'));
 });
 
 test('familias de plataforma', () => {
