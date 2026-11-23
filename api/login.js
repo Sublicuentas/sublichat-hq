@@ -8,6 +8,7 @@
 
 const crypto = require("crypto");
 const admin = require("firebase-admin");
+const { verificarTurnstile, turnstileConfigPublica, ipCliente } = require("./_turnstile.js"); // R201
 
 const LOGIN_ALLOWED_ORIGINS = new Set([
   "https://localhost",
@@ -71,28 +72,33 @@ function verifyPassword(clave, storedHash){
    memoria, así que un Map local NO frena nada de forma confiable entre
    instancias. Bloquea por USUARIO (no por IP) tras varios fallos seguidos,
    así rotar de IP no le sirve de nada a quien intente adivinar la clave. */
-const LOGIN_MAX_FALLOS = 8;
+// R201 · Protocolo de seguridad: 3 fallos del usuario en 15 min → 30 min bloqueado (429).
+// Por IP: LOGIN_MAX_FALLOS_IP (10 por defecto) porque Tigo/Claro comparten una IP entre muchas personas.
+const LOGIN_MAX_FALLOS = 3;
+const LOGIN_MAX_FALLOS_IP = Math.max(3, Math.min(Number(process.env.LOGIN_MAX_FALLOS_IP) || 10, 50));
 const LOGIN_VENTANA_MS = 15 * 60 * 1000;
-const LOGIN_BLOQUEO_MS = 15 * 60 * 1000;
+const LOGIN_BLOQUEO_MS = 30 * 60 * 1000;
+function ipKey(ip){ return "sublichat_ip_" + crypto.createHash("sha256").update(String(ip || "sin_ip")).digest("hex").slice(0, 32); }
 
 function throttleKey(usuario){
   const k = String(usuario || "").trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "_").slice(0, 120);
   return "sublichat_" + (k || "desconocido");
 }
 
-async function checkThrottle(db, usuario){
-  const snap = await db.collection("login_attempts").doc(throttleKey(usuario)).get();
-  if(!snap.exists) return { blocked:false };
-  const d = snap.data() || {};
-  const now = Date.now();
-  if((d.bloqueadoHasta || 0) > now){
-    return { blocked:true, retryAfterSeconds: Math.ceil((d.bloqueadoHasta - now) / 1000) };
-  }
+async function checkThrottle(db, usuario, ip){
+  const ids = [throttleKey(usuario)]; if(ip) ids.push(ipKey(ip));
+  const snaps = await Promise.all(ids.map((id) => db.collection("login_attempts").doc(id).get()));
+  const now = Date.now(); let hasta = 0;
+  for(const snap of snaps) if(snap.exists) hasta = Math.max(hasta, Number((snap.data() || {}).bloqueadoHasta) || 0);
+  if(hasta > now) return { blocked:true, retryAfterSeconds: Math.ceil((hasta - now) / 1000) };
   return { blocked:false };
 }
 
-async function registerFailure(db, usuario){
-  const ref = db.collection("login_attempts").doc(throttleKey(usuario));
+async function registerFailure(db, usuario, ip){
+  await registrarFallo(db, db.collection("login_attempts").doc(throttleKey(usuario)), LOGIN_MAX_FALLOS);
+  if(ip) await registrarFallo(db, db.collection("login_attempts").doc(ipKey(ip)), LOGIN_MAX_FALLOS_IP);
+}
+async function registrarFallo(db, ref, maximo){
   try{
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
@@ -102,7 +108,7 @@ async function registerFailure(db, usuario){
       const fallos = ventanaVencida ? 1 : Number(d.fallos || 0) + 1;
       const primerFalloEn = ventanaVencida ? now : d.primerFalloEn;
       const patch = { fallos, primerFalloEn, updatedAt: now };
-      if(fallos >= LOGIN_MAX_FALLOS) patch.bloqueadoHasta = now + LOGIN_BLOQUEO_MS;
+      if(fallos >= maximo) patch.bloqueadoHasta = now + LOGIN_BLOQUEO_MS;
       tx.set(ref, patch, { merge:true });
     });
   }catch(_){ /* el throttle nunca debe tumbar el login por un error transitorio */ }
@@ -122,6 +128,7 @@ module.exports = async function handler(req, res){
     return res.status(204).end();
   }
   if(!cors.allowed) return res.status(403).json({ error:"Origen no autorizado" });
+  if(req.method === "GET"){ res.setHeader("Cache-Control","no-store"); return res.status(200).json(turnstileConfigPublica()); } // R201 · solo la clave PÚBLICA de Turnstile
   if(req.method !== "POST"){
     return res.status(405).json({ error:"Método no permitido" });
   }
@@ -137,10 +144,22 @@ module.exports = async function handler(req, res){
     if(!key || !clave){
       return res.status(400).json({ error:"Usuario y clave requeridos" });
     }
+    if(typeof usuario !== "string" || typeof clave !== "string" || key.length > 80 || clave.length > 200){
+      return res.status(400).json({ error:"Acceso no autorizado" }); // R201 · solo texto y de largo acotado
+    }
 
-    const throttle = await checkThrottle(db, key);
+    // R201 · Turnstile se valida ANTES de tocar la base de datos o revisar la clave.
+    const ts = await verificarTurnstile(req, { token: (req.body || {}).turnstileToken, accion: "login" });
+    if(!ts.ok){
+      const msg = { verificacion_requerida:"Confirme la verificación de seguridad.", verificacion_fallida:"La verificación de seguridad no pasó. Intente de nuevo.", verificacion_no_disponible:"La verificación de seguridad no responde. Intente en un minuto." }[ts.error];
+      return res.status(ts.status).json({ error: msg || "Verificación requerida", codigo: ts.error });
+    }
+    const ip = ipCliente(req);
+
+    const throttle = await checkThrottle(db, key, ip);
     if(throttle.blocked){
-      return res.status(429).json({ error:"Demasiados intentos. Probá de nuevo en unos minutos.", retryAfterSeconds: throttle.retryAfterSeconds });
+      res.setHeader("Retry-After", String(throttle.retryAfterSeconds));
+      return res.status(429).json({ error:"Demasiados intentos fallidos. Por seguridad, espere " + Math.ceil(throttle.retryAfterSeconds / 60) + " minutos.", retryAfterSeconds: throttle.retryAfterSeconds });
     }
 
     const users = JSON.parse(process.env.AUTH_USERS_JSON || "{}");
@@ -163,7 +182,7 @@ module.exports = async function handler(req, res){
       return a.length===b.length && crypto.timingSafeEqual(a,b);
     })());
     if(!record || (!validHash && !validPlain)){
-      await registerFailure(db, key);
+      await registerFailure(db, key, ip);
       // Misma respuesta para usuario inexistente o clave mala.
       return res.status(401).json({ error:"Acceso no autorizado" });
     }
