@@ -598,7 +598,7 @@
       '<p class="fz-pie">El proveedor de un extra VIP se toma del NOMBRE (Trap/Deku), nunca del precio. Los valores 2.50/2.70 USDT son solo referencia.</p></div>';
   }
   function vCompras(d) {
-    var subs = [['registradas', 'Compras registradas'], ['pendientes', 'Cuentas por configurar'], ['spotify', 'Spotify Familiar'], ['hbo', 'HBO Max'], ['netflix', 'Netflix Premium'], ['paramount', 'Paramount+'], ['crunchyroll', 'Crunchyroll'], ['primevideo', 'Prime Video'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
+    var subs = [['registradas', 'Compras registradas'], ['pendientes', 'Cuentas por configurar'], ['spotify', 'Spotify Familiar'], ['hbo', 'HBO Max'], ['netflix', 'Netflix Premium'], ['paramount', 'Paramount+'], ['crunchyroll', 'Crunchyroll'], ['primevideo', 'Prime Video'], ['disneyp', 'Disney Premium'], ['disneys', 'Disney Standard'], ['viki', 'Viki Rakuten'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
     var nav = '<div class="fz-subtabs">' + subs.map(function (s) { return '<button type="button" class="' + (st.sub === s[0] ? 'on' : '') + '" data-fz-sub="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (st.sub === 'vip') return nav + vVip();
     if (st.sub === 'importar') return nav + vImportar();
@@ -648,7 +648,7 @@
     var rows = r.filas.map(function (f) {
       var ren = f.proximaRenovacion ? fecha(f.proximaRenovacion) + (f.vencida ? ' <span class="fz-pill warn">vencida</span>' : f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '<span class="fz-pend">Pendiente</span>';
       return '<tr><td><b>' + esc(f.codigo) + '</b></td><td>' + esc(f.madreCorreo) + '</td><td class="n">' + f.ocupados + '/' + f.capacidad + '</td><td class="n">' + (f.costoMensualHnl == null ? '<span class="fz-pend">Pendiente</span>' : L(f.costoMensualHnl, true)) + '</td><td>' + ren + '</td><td>' + (f.ultimoPago ? fecha(f.ultimoPago) : '—') + '</td>' +
-        '<td class="c"><button type="button" class="fz-btn sm" data-fz-spf="pago" data-id="' + esc(f.familiaId) + '">Registrar pago</button> <button type="button" class="fz-btn sec sm" data-fz-spf="editar" data-id="' + esc(f.familiaId) + '">Editar</button></td></tr>';
+        '<td class="c"><button type="button" class="fz-btn sm" data-fz-spf="pago" data-id="' + esc(f.familiaId) + '">Registrar pago</button> <button type="button" class="fz-btn sec sm" data-fz-spf="editar" data-id="' + esc(f.familiaId) + '">Editar</button> <button type="button" class="fz-btn sec sm" data-fz-hist="spotify" data-id="' + esc(f.familiaId) + '" data-titulo="' + esc(f.codigo + ' · ' + f.madreCorreo) + '">Historial</button></td></tr>';
     }).join('');
     return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta</th><th>Correo principal</th><th class="n">Invitados</th><th class="n">Pago mensual</th><th>Renovación</th><th>Último pago</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" class="fz-vacio-s">Aún no hay cuentas. Créelas con /spotifyf en el bot.</td></tr>') + '</tbody></table></div></div>';
   }
@@ -696,7 +696,7 @@
       return '<tr><td><b>' + esc(f.correo) + '</b><small>' + esc(f.nombrePlan || '') + (f.capacidad ? ' · ' + f.ocupados + '/' + f.capacidad + ' perfiles' : '') + '</small></td><td>' + (tj ? '<span class="fz-pill">Tarjeta</span>' : '<span class="fz-pill sec">Activación USDT</span>') + '</td><td>' + (tj ? tjTxt(f.tarjeta) : '<small>Binance · por activación</small>') + '</td>' +
         '<td>' + (tj ? esc(f.periodicidad === 'puntual' ? 'Pago puntual' : 'Mensual') + (f.proximoCobro ? ' · ' + fecha(f.proximoCobro) + (f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '') : '—') + '</td><td>' + ult + '</td>' +
         '<td class="c">' + (tj ? '<button type="button" class="fz-btn sm" data-fz-hbo="cargo" data-id="' + esc(f.cuentaId) + '">Registrar cargo</button> ' : '<button type="button" class="fz-btn sm" data-fz-hbo="activacion" data-id="' + esc(f.cuentaId) + '">Registrar activación</button> ') +
-        '<button type="button" class="fz-btn sec sm" data-fz-hbo="config" data-id="' + esc(f.cuentaId) + '">Cómo se paga</button></td></tr>';
+        '<button type="button" class="fz-btn sec sm" data-fz-hbo="config" data-id="' + esc(f.cuentaId) + '">Cómo se paga</button> <button type="button" class="fz-btn sec sm" data-fz-hist="cuenta" data-id="' + esc(f.cuentaId) + '" data-titulo="' + esc(f.correo) + '">Historial</button></td></tr>';
     }).join('');
     var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + r.filas.length + '</b></div><div><small>Con tarjeta</small><b>' + r.porTarjeta + '</b></div><div><small>Por activación USDT</small><b>' + (r.filas.length - r.porTarjeta) + '</b></div></div>';
     return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta madre</th><th>Modalidad</th><th>Medio de pago</th><th>Cobro</th><th>Último cargo</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="fz-vacio-s">No hay cuentas HBO Max en Control Maestro.</td></tr>') + '</tbody></table></div></div>';
@@ -731,7 +731,7 @@
     }
     if (!prod) { toast('No hay producto «HBO Max» de cuenta madre en el catálogo: créelo en Productos para que el cargo cuente en Ganancias.'); return; }
     var html2 = '<div class="fz-form"><label>Fecha del cargo<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '"></label><label>Moneda del cargo<select name="moneda"><option>USD</option><option>HNL</option></select></label>' +
-      '<label>Monto<input type="number" step="any" min="0" name="monto"></label><label>Cargo real en HNL<input type="number" step="any" min="0" name="cargoHnl" placeholder="Lo que cobró el banco (si fue en USD)"></label>' +
+      '<label>Monto<input type="number" step="any" min="0" name="monto"></label><label>Cargo real en HNL<input type="number" step="any" min="0" name="cargoHnl" placeholder="Se calcula con la tasa BAC (USD)"></label><p class="fz-sub w2" data-tasa-bac></p>' +
       '<label class="w2">Debitado de<select name="bancoId"><option value="">— banco del libro —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select></label>' +
       '<label>Próximo cobro<input type="date" name="prox" value="' + esc(f.periodicidad === 'puntual' ? '' : masUnMes(f.proximoCobro && f.proximoCobro >= hoy ? f.proximoCobro : hoy)) + '"></label></div>' +
       '<p class="fz-sub">Tarjeta: ' + tjTxt(f.tarjeta) + '. Se registra UNA compra de «' + esc(prod.nombre) + '» con el costo real en Lempiras (la tasa queda guardada y no cambia después). El mismo cargo no se puede registrar dos veces.</p>';
@@ -746,20 +746,23 @@
       var c = await api('fin_compra_registrar', { operationId: opid, compra: { productoId: prod.id, fecha: cargo.fecha, cantidad: 1, costoTotal: monto, moneda: mon, cargoHnl: mon === 'HNL' ? 0 : hnl, pago: 'banco', bancoId: val(m, 'bancoId'), duracionDias: f.periodicidad === 'puntual' ? undefined : 30, cuentaInventarioId: id, referencia: 'HBO Max · tarjeta •••• ' + ((f.tarjeta || {}).ultimos4 || '') + ' · ' + f.correo } });
       await api('finp_hbo_guardar', { cuentaId: id, cargo: Object.assign({}, cargo, { loteId: c.loteId || '' }), proximoCobro: val(m, 'prox') });
       toast(c.duplicado ? 'Ese cargo ya estaba registrado (no se duplicó).' : 'Cargo registrado (1 compra).'); st.hbo = null; cargar(true);
-    }, 'Guardar compra');
+    }, 'Guardar compra', { alAbrir: function (m) { var ir = function () { usarTasaBac(m, { monto: 'monto' }); }; ir(); m.addEventListener('change', ir); m.addEventListener('input', function (e) { if (e.target.name === 'monto') ir(); }); } }); // R200g · USD → L con tasa BAC
   }
 
   // ---------------------------------------------------------------------------------------------------- R196z · cuentas madre automáticas
   // Netflix Premium, Paramount+, Crunchyroll, Prime Video (y «Cuentas por configurar» de todas, HBO incluido) se LEEN de Control
   // Maestro: aquí no se crean cuentas. Sin compra real = «Costo pendiente de configurar» (nunca L0). «Registrar pago» abre la
   // compra con la cuenta ya elegida; «Cómo se paga» guarda modalidad, moneda, frecuencia y tarjeta mínima (solo Finanzas).
-  var CUENTAS_SUB = { pendientes: 'Cuentas por configurar', netflix: 'Netflix Premium', paramount: 'Paramount+', crunchyroll: 'Crunchyroll', primevideo: 'Prime Video' };
+  var CUENTAS_SUB = { pendientes: 'Cuentas por configurar', netflix: 'Netflix Premium', paramount: 'Paramount+', crunchyroll: 'Crunchyroll', primevideo: 'Prime Video', disneyp: 'Disney Premium', disneys: 'Disney Standard', viki: 'Viki Rakuten' }; // R200g · + Disney y Viki
   var NOTA_PLAT = {
     pendientes: 'Cuentas madre de Control Maestro que todavía no tienen un pago registrado. Configure cómo se paga cada una y registre su pago real.',
     netflix: 'Cada cuenta madre con su modalidad real: tarjeta de banco hondureño (cargo USD y Lempiras reales, mensual) o saldo / gift card pagada en USDT (sin cobro mensual inventado).',
     paramount: 'Tarjeta local en Lempiras, mensual. Cada cuenta lleva su propio costo (L150 es solo un ejemplo, no un costo fijo).',
     crunchyroll: 'Mega Fan en pesos filipinos (PHP), mensual o anual por cuenta, con el cargo real en Lempiras (BAC / PayPal). El anual se reparte en 12 meses en reportes; el pago queda en su fecha.',
-    primevideo: 'Cuenta de Arabia Saudita en USD (no USDT), cada 3 meses. El costo se reconoce en los 3 meses; no se crean cobros mensuales.'
+    primevideo: 'Cuenta de Arabia Saudita en USD (no USDT), cada 3 meses. El costo se reconoce en los 3 meses; no se crean cobros mensuales.',
+    disneyp: 'Generalmente se paga por link / activación (USDT). También tarjeta o gift card. Cada pago queda en el historial de la cuenta.',
+    disneys: 'Disney Standard (sin ESPN). Generalmente por link / activación (USDT). También tarjeta o gift card.',
+    viki: 'Viki Rakuten: tarjeta en USD (se convierte a Lempiras con la tasa de BAC del día), gift card o activación.'
   };
   st.cta = st.cta || {}; st.ctaF = st.ctaF || {};
   async function cargarCuentas(plat) { try { st.cta[plat] = await api('finp_cuentas_lista', { plataforma: plat }); } catch (e) { st.cta[plat] = { error: e.message }; } if (st.tab === 'compras' && st.sub === plat) pintar(); }
@@ -778,7 +781,7 @@
       var modo = x.configurada ? esc(MOD[x.modalidad] || x.modalidad) + '<small>' + esc(x.moneda) + ' · ' + esc((FR[x.frecuencia] || {}).label || x.frecuencia) + (x.tarjeta ? ' · ' + esc(x.tarjeta.banco) + ' •••• ' + esc(x.tarjeta.ultimos4) : '') + '</small>' : '<span class="fz-pend">Sin configurar</span>';
       var prox = x.proximoPago ? fecha(x.proximoPago) + (x.vencido ? ' <span class="fz-pill warn">vencido</span>' : x.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '—';
       return '<tr><td><b>' + esc(x.correo) + '</b><small>' + (plat === 'pendientes' ? esc(x.plataformaNombre) + ' · ' : '') + (x.plan ? esc(x.plan) + ' · ' : '') + x.ocupados + '/' + x.capacidad + ' perfiles</small></td><td>' + modo + '</td><td class="n">' + costoTxt(x.costo) + '</td><td>' + (x.ultimaCompra ? fecha(x.ultimaCompra) + (x.compras > 1 ? '<small>' + x.compras + ' compras</small>' : '') : '—') + '</td><td>' + prox + '</td>' +
-        '<td class="c"><button type="button" class="fz-btn sm" data-fz-cta="pago" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">' + (x.estadoCosto === 'pendiente' ? 'Registrar pago' : 'Nuevo pago') + '</button> <button type="button" class="fz-btn sec sm" data-fz-cta="config" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">Cómo se paga</button>' + (x.compras ? ' <button type="button" class="fz-btn sec sm" data-fz-cta="hist" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">Historial</button>' : '') + '</td></tr>';
+        '<td class="c"><button type="button" class="fz-btn sm" data-fz-cta="pago" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">' + (x.estadoCosto === 'pendiente' ? 'Registrar pago' : 'Nuevo pago') + '</button> <button type="button" class="fz-btn sec sm" data-fz-cta="config" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">Cómo se paga</button> <button type="button" class="fz-btn sec sm" data-fz-hist="cuenta" data-id="' + esc(x.cuentaId) + '" data-titulo="' + esc(x.correo) + '">Historial</button></td></tr>'; // R200g · historial en todas
     }).join('');
     var vacio = plat === 'pendientes' ? 'Todas las cuentas madre tienen su pago registrado.' : 'No hay cuentas de ' + esc(CUENTAS_SUB[plat]) + ' en Control Maestro.';
     return cab + mini + filtros + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta madre</th><th>Cómo se paga</th><th class="n">Último costo</th><th>Última compra</th><th>Próximo pago</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="fz-vacio-s">' + vacio + '</td></tr>') + '</tbody></table></div>' +
@@ -793,20 +796,11 @@
       var def = P.defecto || {}, mod = x.modalidad || def.modalidad, mon = x.moneda || def.moneda, fr = x.frecuencia || def.frecuencia;
       var prods = (r.productos || []).filter(function (p) { return p.plataforma === x.plataforma; });
       var pSel = (prods.find(function (p) { return p.modelo === 'cuenta_madre'; }) || prods[0] || {}).id || '';
-      if (!prods.length) { toast('No hay producto de ' + (P.nombre || x.plataforma) + ' en el catálogo: créelo en Productos para que el costo cuente en Ganancias.', true); return; }
-      abrirCompra(pSel, { titulo: 'Registrar pago · ' + (P.nombre || ''), cuentaId: x.cuentaId, correo: x.correo, plan: x.plan, plataforma: x.plataforma, plataformaNombre: P.nombre, tarjeta: x.tarjeta, productos: prods, monedas: P.monedas, moneda: mon, frecuencia: fr, pago: mod === 'gift_card' && mon === 'USDT' ? 'binance_hist' : 'banco', alGuardar: recargar });
+      if (!prods.length) { crearProductoPlataforma(x.plataforma, P.nombre || x.plataforma, recargar); return; }
+      abrirCompra(pSel, { titulo: 'Registrar pago · ' + (P.nombre || ''), cuentaId: x.cuentaId, correo: x.correo, plan: x.plan, plataforma: x.plataforma, plataformaNombre: P.nombre, tarjeta: x.tarjeta, productos: prods, monedas: P.monedas, moneda: mon, frecuencia: fr, pago: mon === 'USDT' ? 'binance_hist' : 'banco', alGuardar: recargar }); // R200g · link/activación en USDT = Binance ya pagado
       return;
     }
-    if (acc === 'hist') {
-      var mm = modal('Historial · ' + x.correo, '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div>'); mm.classList.add('ancho');
-      api('finp_cuenta_historial', { cuentaId: id }).then(function (h) {
-        var b = mm.querySelector('.fz-modal-b'); if (!b) return;
-        b.innerHTML = '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Fecha</th><th>Folio</th><th>Producto</th><th class="n">Monto</th><th class="n">Tasa</th><th class="n">Costo HNL</th><th>Período</th><th>Pago</th><th>Por</th></tr></thead><tbody>' +
-          h.compras.map(function (c) { return '<tr><td>' + fecha(c.fecha) + '</td><td>' + esc(folio(c.loteId)) + '</td><td>' + esc(c.producto) + '</td><td class="n">' + esc(c.montoMoneda) + ' ' + esc(c.moneda) + '</td><td class="n">' + (c.moneda === 'HNL' ? '—' : esc(c.tasa)) + '</td><td class="n"><b>' + L(c.costoHnl, true) + '</b></td><td>' + (c.duracionDias ? c.duracionDias + ' días' : 'puntual') + '</td><td>' + esc(c.pago) + '</td><td>' + esc(c.por) + '</td></tr>'; }).join('') +
-          '</tbody></table></div><p class="fz-sub">Cada fila es una compra real con su tasa guardada (no cambia aunque cambie la tasa general).</p>';
-      }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
-      return;
-    }
+    if (acc === 'hist') { verHistorial({ cuentaId: id }, x.correo); return; }
     // config: modalidad, moneda, frecuencia, tarjeta (solo banco, titular, últimos 4) y próximo pago
     var def2 = P.defecto || {};
     var ops = (r.tarjetas || []).map(function (t) { return '<option value="' + esc(t.id) + '"' + (x.tarjeta && x.tarjeta.id === t.id ? ' selected' : '') + '>' + esc(t.banco + ' · ' + t.titular + ' · •••• ' + t.ultimos4) + '</option>'; }).join('');
@@ -824,6 +818,30 @@
       if (b.modalidad === 'tarjeta') { if (val(m, 'tarjetaId')) b.tarjetaId = val(m, 'tarjetaId'); else b.tarjetaNueva = { banco: val(m, 'banco'), titular: val(m, 'titular'), ultimos4: val(m, 'ultimos4') }; }
       await api('finp_cuenta_config', b); toast('Guardado.'); recargar(); pintar();
     }, 'Guardar', { alAbrir: function (m) { ajustar(m); m.addEventListener('change', function () { ajustar(m); }); } });
+  }
+
+  // R200g · Historial de pagos de UNA cuenta (todas las plataformas, Spotify Familiar incluido): cuándo se pagó, cuándo se
+  // volvió a pagar (días entre pagos), hasta cuándo cubre, monto original, tasa guardada y Lempiras. Las anuladas se ven tachadas.
+  function verHistorial(peticion, titulo) {
+    var mm = modal('Historial de pagos · ' + titulo, '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div>'); mm.classList.add('ancho');
+    api('finp_cuenta_historial', peticion).then(function (h) {
+      var b = mm.querySelector('.fz-modal-b'); if (!b) return;
+      var cs = h.compras || [], vig = cs.filter(function (c) { return c.estado !== 'anulado'; });
+      if (!cs.length) { b.innerHTML = '<div class="fz-vacio-s">Esta cuenta todavía no tiene pagos registrados. Use «Nuevo pago» / «Registrar pago».</div>'; return; }
+      var dias = function (a, z) { return Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(z + 'T12:00:00Z')) / 86400000); };
+      var rows = cs.map(function (c) {
+        var an = c.estado === 'anulado', i = vig.indexOf(c), prev = i >= 0 ? vig[i + 1] : null;
+        var entre = an ? '—' : prev ? dias(c.fecha, prev.fecha) + ' días <small>después del ' + fecha(prev.fecha) + '</small>' : '<small>primer pago</small>';
+        var cubre = c.vigenciaHasta ? fecha(c.vigenciaHasta) : c.duracionDias ? c.duracionDias + ' días' : 'puntual';
+        return '<tr class="' + (an ? 'fz-anulada' : '') + '"><td><b>' + fecha(c.fecha) + '</b>' + (an ? ' <span class="fz-pill mal" title="' + esc(c.motivoAnulacion || '') + '">Anulada</span>' : '') + '</td><td>' + entre + '</td><td>' + cubre + '</td><td>' + esc(c.producto) + '<small>' + esc(folio(c.loteId)) + '</small></td>' +
+          '<td class="n">' + (c.moneda === 'HNL' ? L(c.montoMoneda, true) : esc(c.montoMoneda) + ' ' + esc(c.moneda)) + '</td><td class="n">' + (c.moneda === 'HNL' ? '—' : esc(c.tasa)) + '</td><td class="n"><b>' + L(c.costoHnl, true) + '</b></td><td>' + esc(c.pago) + (c.referencia ? '<small>' + esc(c.referencia) + '</small>' : '') + '</td><td>' + esc(c.por) + '</td></tr>';
+      }).join('');
+      var total = vig.reduce(function (s, c) { return s + (Number(c.costoHnl) || 0); }, 0);
+      var prom = vig.length > 1 ? Math.round(dias(vig[0].fecha, vig[vig.length - 1].fecha) / (vig.length - 1)) : 0;
+      b.innerHTML = '<div class="fz-mini"><div><small>Pagos</small><b>' + vig.length + '</b></div><div><small>Total pagado</small><b>' + L(total, true) + '</b></div><div><small>Primer pago</small><b>' + (vig.length ? fecha(vig[vig.length - 1].fecha) : '—') + '</b></div><div><small>Último pago</small><b>' + (vig.length ? fecha(vig[0].fecha) : '—') + '</b></div>' + (prom ? '<div><small>Cada cuánto paga</small><b>' + prom + ' días</b></div>' : '') + '</div>' +
+        '<div class="fz-tw" style="margin-top:10px"><table class="fz-t"><thead><tr><th>Fecha de pago</th><th>Se volvió a pagar</th><th>Cubre hasta</th><th>Producto</th><th class="n">Monto</th><th class="n">Tasa</th><th class="n">Lempiras</th><th>Cómo se pagó</th><th>Por</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<p class="fz-sub">Cada fila es un pago real con su tasa guardada: no cambia aunque cambie la tasa del día.</p>';
+    }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
   }
 
   // ---------------------------------------------------------------------------------------------------- Netflix VIP (lista)
@@ -1081,6 +1099,29 @@
   var FREC_DIAS = { mensual: 30, trimestral: 90, anual: 365, puntual: 0 };
   // Registrar compra. `ctx` (opcional) = cuenta madre de Control Maestro ya elegida: { cuentaId, correo, plan, plataforma,
   // pago, moneda, frecuencia, monedas, tarjeta, despues(r, compra) }. Los campos se muestran según el método de pago y la moneda.
+  // R200g · USD → Lempiras automático con la tasa de VENTA de BAC Honduras del día. Se llena el «Cargo real en Lempiras»;
+  // si el banco cobró otro monto, se escribe el real y ese manda. La tasa queda guardada en la compra y no cambia después.
+  function tasaBacHoy() {
+    if (st.tasaBac && st.tasaBac.dia === (st.data && st.data.hoy)) return st.tasaBac.p;
+    var p = api('finp_tasa_bac').catch(function (e) { return { disponible: false, error: e.message }; });
+    st.tasaBac = { dia: st.data && st.data.hoy, p: p }; return p;
+  }
+  function usarTasaBac(m, nombres) {
+    nombres = nombres || {}; var nMon = nombres.moneda || 'moneda', nMonto = nombres.monto || 'costoTotal', nCargo = nombres.cargo || 'cargoHnl';
+    var info = m.querySelector('[data-tasa-bac]'), cargo = m.querySelector('[name="' + nCargo + '"]');
+    if (!info || !cargo) return;
+    if (!cargo.dataset.bacListo) { cargo.dataset.bacListo = '1'; cargo.addEventListener('input', function () { cargo.dataset.manual = cargo.value ? '1' : ''; }); }
+    var mon = val(m, nMon), monto = Number(val(m, nMonto));
+    if (mon !== 'USD' || (nombres.soloSi && !nombres.soloSi())) { info.textContent = ''; return; }
+    info.textContent = 'Consultando la tasa de BAC Honduras…';
+    tasaBacHoy().then(function (t) {
+      if (val(m, nMon) !== 'USD') { info.textContent = ''; return; }
+      if (!t || !t.disponible) { info.textContent = (t && t.error) || 'No se pudo leer la tasa de BAC. Escriba el cargo en Lempiras.'; return; }
+      var hnl = monto > 0 ? Math.round(monto * t.venta * 100) / 100 : 0;
+      if (hnl > 0 && cargo.dataset.manual !== '1' && cargo.value !== hnl.toFixed(2)) { cargo.value = hnl.toFixed(2); cargo.dispatchEvent(new Event('change', { bubbles: true })); } // revalida el formulario
+      info.innerHTML = 'Tasa BAC Honduras ' + esc(t.deHoy ? 'de hoy' : 'del ' + fecha(t.fecha)) + ': venta <b>L' + esc(t.venta) + '</b> · compra L' + esc(t.compra) + (hnl > 0 ? ' → ' + esc(monto) + ' USD = <b>' + L(hnl, true) + '</b>' : '') + (cargo.dataset.manual === '1' ? ' · <i>usted escribió otro cargo: se usa el suyo</i>' : '') + (t.aviso ? '<br><small>' + esc(t.aviso) + '</small>' : '');
+    });
+  }
   function abrirCompra(prodId, ctx) {
     ctx = ctx || {};
     var d = st.data; var hoy = d.hoy;
@@ -1103,7 +1144,8 @@
       '<label data-si="banco">Banco del libro<select name="bancoId"><option value="">— elegir —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select>' + fe('bancoId') + '</label>' +
       '<label data-si="hist">Tasa HNL por USDT<input type="number" name="tasa" min="0" step="any" inputmode="decimal" placeholder="Ej. 26.50">' + fe('tasa') + '</label>' +
       '<div class="fz-cuenta-ro" data-si="hist"><small>Equivalente en Lempiras</small><b data-equiv>—</b><span>Gasto ya pagado: no descuenta saldo de Binance ni de bancos.</span></div>' +
-      '<label data-si="divisa">Cargo real en Lempiras<input type="number" name="cargoHnl" min="0" step="any" inputmode="decimal" placeholder="Lo que cobró el banco">' + fe('cargoHnl') + '</label>' +
+      '<label data-si="divisa">Cargo real en Lempiras<input type="number" name="cargoHnl" min="0" step="any" inputmode="decimal" placeholder="Se calcula con la tasa BAC (USD)">' + fe('cargoHnl') + '</label>' +
+      '<p class="fz-sub w2" data-si="divisa" data-tasa-bac></p>' +
       (dur != null ? '<input type="hidden" name="duracionDias" value="' + dur + '">' : '') +
       '<label class="w2">Referencia<input name="referencia" maxlength="80" placeholder="Comprobante o nota (opcional)"></label></div>' +
       '<p class="fz-sub" data-nota></p>';
@@ -1113,9 +1155,10 @@
       m.querySelector('[data-si="banco"]').hidden = pago !== 'banco';
       m.querySelectorAll('[data-si="hist"]').forEach(function (x) { x.hidden = pago !== 'binance_hist'; });
       var eq = m.querySelector('[data-equiv]'), cu = Number(val(m, 'costoTotal')), ta = Number(val(m, 'tasa')); if (eq) eq.textContent = cu > 0 && ta > 0 ? L(Math.round(cu * ta * 100) / 100, true) + ' (' + cu + ' USDT × ' + ta + ')' : '—';
-      m.querySelector('[data-si="divisa"]').hidden = !(pago === 'banco' && mon !== 'HNL' && mon !== 'USDT');
+      m.querySelectorAll('[data-si="divisa"]').forEach(function (x) { x.hidden = !(pago === 'banco' && mon !== 'HNL' && mon !== 'USDT'); });
+      if (pago === 'banco' && mon === 'USD') usarTasaBac(m); // R200g
       var n = m.querySelector('[data-nota]');
-      n.textContent = (pago === 'binance_hist' ? 'Compra ya pagada en Binance: se guarda USDT, fecha real, tasa y Lempiras una sola vez, sin tocar saldos.' : mon === 'HNL' ? 'Costo en Lempiras: no necesita conversión.' : mon === 'USDT' ? 'USDT: se descuenta de la billetera Binance a su tasa del día; la tasa queda guardada en esta compra y no cambia después.' : 'Divisa: escriba el cargo REAL en Lempiras que cobró el banco; esa tasa queda guardada en esta compra y no cambia después.') +
+      n.textContent = (pago === 'binance_hist' ? 'Compra ya pagada en Binance: se guarda USDT, fecha real, tasa y Lempiras una sola vez, sin tocar saldos.' : mon === 'HNL' ? 'Costo en Lempiras: no necesita conversión.' : mon === 'USDT' ? 'USDT: se descuenta de la billetera Binance a su tasa del día; la tasa queda guardada en esta compra y no cambia después.' : (mon === 'USD' ? 'Dólares: el cargo en Lempiras se calcula solo con la tasa de venta de BAC Honduras del día; si el banco cobró otro monto, escriba el real. La tasa queda guardada en esta compra.' : 'Divisa: escriba el cargo REAL en Lempiras que cobró el banco; esa tasa queda guardada en esta compra y no cambia después.')) +
         (ctx.frecuencia ? ' Período: ' + ({ mensual: '1 mes', trimestral: '3 meses (se reparte en los 3 meses en reportes; el pago queda en su fecha)', anual: '12 meses (se reparte en reportes; el pago queda en su fecha)', puntual: 'por activación, sin cobro mensual' }[ctx.frecuencia] || '') + '.' : '');
     }
     function validar(m) {
@@ -1145,6 +1188,18 @@
       toast(r.duplicado ? 'Esa compra ya estaba registrada (no se duplicó).' : 'Compra guardada · folio ' + folio(r.loteId) + (r.costoTotalHnl != null ? ' · ' + L(r.costoTotalHnl, true) : '') + '.');
       if (ctx.alGuardar) ctx.alGuardar(r); cargar(true);
     }, 'Guardar compra', { validar: validar, alAbrir: function (m) { ajustar(m); m.addEventListener('change', function () { ajustar(m); }); m.addEventListener('input', function (e) { if (e.target.name === 'costoTotal' || e.target.name === 'tasa') ajustar(m); }); } });
+  }
+  // R200g · plataforma sin producto en el catálogo: se ofrece crearlo (sin costo de referencia: nunca una tarifa fija).
+  function crearProductoPlataforma(plat, nombre, alListo) {
+    var link = plat === 'disneyp' || plat === 'disneys' || plat === 'hbomax';
+    var html = '<p>No hay producto de <b>' + esc(nombre) + '</b> en el catálogo de Finanzas. Créelo para que sus pagos cuenten en Ganancias.</p>' +
+      '<div class="fz-form"><label class="w2">Nombre<input name="nombre" maxlength="80" value="' + esc(nombre + (link ? ' (link)' : ' · cuenta madre')) + '"></label>' +
+      '<label>Modelo<select name="modelo"><option value="link"' + (link ? ' selected' : '') + '>Link / activación</option><option value="cuenta_madre"' + (link ? '' : ' selected') + '>Cuenta madre / perfiles</option></select></label>' +
+      '<label>Duración (días)<input type="number" name="dur" min="0" value="30"></label></div><p class="fz-sub">Sin costo de referencia: el costo real sale de cada pago que registre.</p>';
+    modal('Crear producto · ' + nombre, html, async function (m) {
+      await api('fin_producto_guardar', { producto: { nombre: val(m, 'nombre'), categoria: 'perfiles', modelo: val(m, 'modelo'), capacidad: 1, duracionDias: Number(val(m, 'dur')) || 0, plataformaKey: plat } });
+      toast('Producto creado. Ya puede registrar el pago.'); if (alListo) alListo(); cargar(true);
+    }, 'Crear producto');
   }
   function abrirProveedor(id) {
     var p = (st.data.proveedores || []).find(function (x) { return x.id === id; }) || { alias: '', pais: '', moneda: 'USDT', metodoPago: '', activo: true, notas: '' };
@@ -1258,6 +1313,7 @@
       if ((t = e.target.closest('[data-fz-rentre]'))) { cargarRent(true); return; }
       if ((t = e.target.closest('[data-fz-ganplat]'))) { abrirPlataforma(t.dataset.fzGanplat); return; } // R197b · antes solo filtraba la tabla de abajo (parecía no abrir)
       if ((t = e.target.closest('[data-fz-gancta]'))) { abrirGanCuenta(t.dataset.fzGancta); return; }
+      if ((t = e.target.closest('[data-fz-hist]'))) { verHistorial(t.dataset.fzHist === 'spotify' ? { spotifyFamiliaId: t.dataset.id } : { cuentaId: t.dataset.id }, t.dataset.titulo || ''); return; } // R200g
       if ((t = e.target.closest('[data-fz-cta]'))) { abrirCuenta(t.dataset.fzCta, t.dataset.plat, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ctaf]'))) { st.ctaF[st.sub] = t.dataset.fzCtaf; pintar(); return; }
       if ((t = e.target.closest('[data-fz-vip]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirVip(t.dataset.fzVip, t.dataset.id); return; }
