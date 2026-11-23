@@ -22,9 +22,9 @@ const s = (v, max = 120) => String(v ?? "").trim().slice(0, max);
 const DIA = 86400000;
 
 export const NOMBRES = Object.freeze({
-  netflix: "Netflix Premium", vipnetflix: "Netflix VIP", disneyp: "Disney+", disneys: "Disney+ (cuenta)", hbomax: "HBO Max", hbomax_standard: "HBO Standard", hbomax_platinum: "HBO Platinum",
+  netflix: "Netflix Premium", vipnetflix: "Netflix VIP", disneyp: "Disney Premium", disneys: "Disney Standard", hbomax: "HBO Max", hbomax_standard: "HBO Standard", hbomax_platinum: "HBO Platinum",
   primevideo: "Prime Video", paramount: "Paramount+", crunchyroll: "Crunchyroll", spotify: "Spotify Familiar", youtube: "YouTube Premium", vix: "ViX+", appletv: "Apple TV",
-  viki: "Viki", deezer: "Deezer", canva: "Canva", gemini: "Gemini Pro", chatgpt: "ChatGPT", duolingo: "Duolingo", office: "Office", office2021: "Office 2021", autocad: "Autodesk",
+  viki: "Viki Rakuten", deezer: "Deezer", canva: "Canva", gemini: "Gemini Pro", chatgpt: "ChatGPT", duolingo: "Duolingo", office: "Office", office2021: "Office 2021", autocad: "Autodesk",
   eset: "Antivirus", elevenreader: "Eleven Reader", iptv: "IPTV", stellatv: "Stella TV", oleada: "Oleada TV", latintv: "LatinTV", liontv: "Lion TV", evoutouch: "Evoutouch", icomplay: "IcomPlay",
   universal: "Universal+", steam: "Steam", freefire: "Free Fire",
 });

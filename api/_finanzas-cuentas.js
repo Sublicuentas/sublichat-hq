@@ -8,14 +8,21 @@
 //   configurar», nunca L0 ni compra ficticia. Sincronizar NO crea compras, ventas ni ingresos.
 "use strict";
 
+// R200g (23/11/2026) · Todas las plataformas aceptan tarjeta, gift card y link/activación (más PayPal/Binance donde aplica),
+// con historial de pagos. + Disney Premium, Disney Standard (sin ESPN) y Viki Rakuten. Las monedas en USD se convierten
+// a Lempiras con la tasa de venta de BAC Honduras del día (editable: si el banco cobró otro monto, se escribe el real).
+const TODAS_MOD = ["tarjeta", "gift_card", "link", "binance", "paypal", "otro"];
 const PLATAFORMAS = Object.freeze({
-  netflix: { id: "netflix", nombre: "Netflix Premium", monedas: ["USD", "HNL", "USDT"], modalidades: ["tarjeta", "gift_card", "otro"], frecuencias: ["mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
-  paramount: { id: "paramount", nombre: "Paramount+", monedas: ["HNL", "USD"], modalidades: ["tarjeta", "otro"], frecuencias: ["mensual"], defecto: { modalidad: "tarjeta", moneda: "HNL", frecuencia: "mensual" } },
-  crunchyroll: { id: "crunchyroll", nombre: "Crunchyroll", monedas: ["PHP", "HNL", "USD"], modalidades: ["tarjeta", "paypal", "otro"], frecuencias: ["mensual", "anual"], defecto: { modalidad: "tarjeta", moneda: "PHP", frecuencia: "mensual" } },
-  primevideo: { id: "primevideo", nombre: "Prime Video", monedas: ["USD", "HNL"], modalidades: ["tarjeta", "gift_card", "otro"], frecuencias: ["trimestral", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "trimestral" } }, // USD, NO USDT
-  hbomax: { id: "hbomax", nombre: "HBO Max", monedas: ["USDT", "USD", "HNL"], modalidades: ["binance", "tarjeta"], frecuencias: ["puntual", "mensual"], defecto: { modalidad: "binance", moneda: "USDT", frecuencia: "puntual" } },
+  netflix: { id: "netflix", nombre: "Netflix Premium", monedas: ["USD", "HNL", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
+  paramount: { id: "paramount", nombre: "Paramount+", monedas: ["HNL", "USD", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "HNL", frecuencia: "mensual" } },
+  crunchyroll: { id: "crunchyroll", nombre: "Crunchyroll", monedas: ["PHP", "HNL", "USD", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "anual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "PHP", frecuencia: "mensual" } },
+  primevideo: { id: "primevideo", nombre: "Prime Video", monedas: ["USD", "HNL"], modalidades: TODAS_MOD.filter((m) => m !== "binance"), frecuencias: ["trimestral", "mensual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "trimestral" } }, // USD, NO USDT
+  hbomax: { id: "hbomax", nombre: "HBO Max", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["puntual", "mensual"], defecto: { modalidad: "binance", moneda: "USDT", frecuencia: "puntual" } },
+  disneyp: { id: "disneyp", nombre: "Disney Premium", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } }, // generalmente por link
+  disneys: { id: "disneys", nombre: "Disney Standard", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } },
+  viki: { id: "viki", nombre: "Viki Rakuten", monedas: ["USD", "HNL", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "anual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
 });
-const MODALIDADES = Object.freeze({ tarjeta: "Tarjeta bancaria", gift_card: "Saldo / gift card", binance: "Activación USDT · Binance", paypal: "PayPal", otro: "Otro método" });
+const MODALIDADES = Object.freeze({ tarjeta: "Tarjeta bancaria", gift_card: "Saldo / gift card", link: "Link / activación", binance: "Activación USDT · Binance", paypal: "PayPal", otro: "Otro método" });
 const FRECUENCIAS = Object.freeze({ mensual: { label: "Mensual", dias: 30 }, trimestral: { label: "Cada 3 meses", dias: 90 }, anual: { label: "Anual", dias: 365 }, puntual: { label: "Por activación / puntual", dias: 0 } });
 
 const norm = (v = "") => String(v || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
@@ -28,6 +35,8 @@ function plataformaDe(p) {
   if (/^crunchy/.test(t)) return "crunchyroll";
   if (/^(primevideo|prime|amazon)/.test(t)) return "primevideo";
   if (/^(hbo|max$)/.test(t)) return "hbomax";
+  if (/^disney/.test(t)) return /^disneys$|sinespn|standard|estandar/.test(t) ? "disneys" : "disneyp"; // R200g
+  if (/^(viki|rakuten)/.test(t)) return "viki";
   return "";
 }
 const ocupadosDe = (d = {}) => Math.max(Number(d.ocupados || 0) || 0, Array.isArray(d.clientes) ? d.clientes.length : 0);

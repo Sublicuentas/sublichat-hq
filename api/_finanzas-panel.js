@@ -340,7 +340,49 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad"]); // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad", "finp_tasa_bac"]); // R200g · tasa BAC Honduras // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+
+// ---------------- R200g · Tasa del dólar de BAC Honduras (compra/venta) para convertir pagos en USD a Lempiras.
+// Fuente pública de BAC Credomatic (XML por país). Se guarda una vez por día en `fin_tasas/bac_{fecha}` para que el
+// valor quede trazable; si BAC no responde se usa la última guardada (se dice de qué fecha es). La tasa de cada compra
+// queda fija en la compra y NO cambia después aunque cambie la tasa del día.
+export const BAC_XML_URL = "https://www.sucursalelectronica.com/exchangerate/showXmlExchangeRate.do";
+export function leerTasaBacXml(xml = "", pais = "Honduras") {
+  const bloques = String(xml || "").split(/<country>/i).slice(1);
+  for (const b of bloques) {
+    const nombre = (/<name>\s*([^<]+?)\s*<\/name>/i.exec(b) || [])[1] || "";
+    if (nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() !== pais.toLowerCase()) continue;
+    const num = (tag) => Number(String((new RegExp(`<${tag}>\\s*([^<]+?)\\s*</${tag}>`, "i").exec(b) || [])[1] || "").replace(",", "."));
+    const compra = num("buyRateUSD"), venta = num("saleRateUSD");
+    if (compra > 5 && compra < 100 && venta > 5 && venta < 100 && venta >= compra) return { compra, venta };
+    return null;
+  }
+  return null;
+}
+let tasaBacCache = null; // { t, dato }
+async function tasaBac(db, hoy, fetcher = globalThis.fetch) {
+  if (tasaBacCache && Date.now() - tasaBacCache.t < 30 * 60 * 1000 && tasaBacCache.dato.fecha === hoy) return tasaBacCache.dato;
+  const ref = db.collection("fin_tasas").doc(`bac_${hoy}`);
+  let error = "";
+  try {
+    const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 7000);
+    const r = await fetcher(BAC_XML_URL, { signal: ctrl.signal, headers: { "user-agent": "Mozilla/5.0 Sublichat", accept: "application/xml,text/xml" } }).finally(() => clearTimeout(to));
+    const t = r && r.ok ? leerTasaBacXml(await r.text()) : null;
+    if (t) {
+      const dato = { fuente: "BAC Credomatic Honduras", fecha: hoy, compra: t.compra, venta: t.venta, consultadoAt: new Date().toISOString(), deHoy: true };
+      try { await ref.set(dato, { merge: true }); } catch (_) {}
+      tasaBacCache = { t: Date.now(), dato }; return dato;
+    }
+    error = r && !r.ok ? `BAC respondió ${r.status}` : "BAC no trajo la tasa de Honduras";
+  } catch (e) { error = e && e.name === "AbortError" ? "BAC tardó demasiado" : "No se pudo consultar BAC"; }
+  // Respaldo: la última tasa guardada (de hoy o de otro día), nunca inventada.
+  try {
+    const hoyDoc = await ref.get(); if (hoyDoc.exists) return { ...hoyDoc.data(), deHoy: true };
+    const todas = (await db.collection("fin_tasas").get()).docs.map((x) => x.data() || {}).filter((x) => x.fuente === "BAC Credomatic Honduras" && x.venta > 0 && x.fecha <= hoy).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    if (todas.length) return { ...todas[0], deHoy: false, aviso: `${error}. Se usa la última tasa guardada (${todas[0].fecha}).` };
+  } catch (_) {}
+  return { error: `${error}. Escriba el cargo en Lempiras que cobró el banco.` };
+}
 
 async function leerVipBase(db) {
   const inv = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
@@ -763,11 +805,26 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       });
       return ok(r);
     }
+    if (accion === "finp_tasa_bac") { // R200g · tasa del día (venta = la que cobra el banco al pagar en USD)
+      const t = await tasaBac(db, hoy);
+      if (t.error) return ok({ disponible: false, error: t.error });
+      return ok({ disponible: true, fuente: t.fuente, fecha: t.fecha, compra: t.compra, venta: t.venta, deHoy: !!t.deHoy, aviso: t.aviso || "" });
+    }
+    if (accion === "finp_cuenta_historial" && body.spotifyFamiliaId) { // R200g · Spotify Familiar: pagos de UNA cuenta principal
+      const fid = txt(body.spotifyFamiliaId, 120);
+      const sf = await col("spotify_familias").doc(fid).get(); if (!sf.exists) throw errUsuario("Esa cuenta de Spotify Familiar no existe.");
+      const codigo = String((sf.data() || {}).codigo || ""), madre = String((sf.data() || {}).madreCorreo || "").toLowerCase();
+      const prods = (await col("fin_productos").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).filter((p) => p.plataformaKey === "spotify" || /spotify/i.test(p.nombre || ""));
+      const lotes = (await Promise.all(prods.map((p) => col("fin_lotes").where("productoId", "==", p.id).get()))).flatMap((sn) => sn.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })))
+        .filter((l) => { const ref = String(l.referencia || ""); return (codigo && ref.startsWith(`Spotify Familiar ${codigo} `)) || (madre && ref.toLowerCase().includes(madre)); })
+        .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+      return ok({ familiaId: fid, compras: lotes.map((l) => ({ loteId: l.id, fecha: l.fecha, producto: l.producto, moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: l.costoTotalHnl, duracionDias: l.duracionDias || 0, vigenciaHasta: l.vigenciaHasta || "", pago: l.cuentaPagoNombre || l.pago, referencia: l.referencia || "", estado: l.estado || "activo", motivoAnulacion: l.motivoAnulacion || "", por: l.createdBy || "" })), cambios: [] });
+    }
     if (accion === "finp_cuenta_historial") { // compras reales de UNA cuenta (más reciente primero); no cambia nada
       const cid = txt(body.cuentaId, 120); if (!cid) throw errUsuario("Falta la cuenta.");
       const lotes = (await col("fin_lotes").where("cuentaInventarioId", "==", cid).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
       const cfg = await col("fin_cuentas_costo").doc(cid).get();
-      return ok({ cuentaId: cid, compras: lotes.map((l) => ({ loteId: l.id, fecha: l.fecha, producto: l.producto, moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: l.costoTotalHnl, duracionDias: l.duracionDias || 0, vigenciaHasta: l.vigenciaHasta || "", pago: l.cuentaPagoNombre || l.pago, referencia: l.referencia || "", estado: l.estado || "activo", por: l.createdBy || "" })),
+      return ok({ cuentaId: cid, compras: lotes.map((l) => ({ loteId: l.id, fecha: l.fecha, producto: l.producto, moneda: l.moneda, montoMoneda: l.costoTotalMoneda, tasa: l.tasa, costoHnl: l.costoTotalHnl, duracionDias: l.duracionDias || 0, vigenciaHasta: l.vigenciaHasta || "", pago: l.cuentaPagoNombre || l.pago, referencia: l.referencia || "", estado: l.estado || "activo", motivoAnulacion: l.motivoAnulacion || "", por: l.createdBy || "" })),
         cambios: cfg.exists ? (cfg.data().historial || []).slice(-10).reverse() : [] });
     }
 
