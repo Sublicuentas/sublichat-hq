@@ -200,3 +200,37 @@ test('R200g · USD a Lempiras automático (13.97 USD × venta BAC) y editable; H
   const h = await panel(fakeFirestore(s), 'finp_cuenta_historial', { spotifyFamiliaId: 'f1' });
   assert.equal(h.ok, true, JSON.stringify(h)); assert.deepEqual(h.compras.map((c) => c.loteId), ['l2', 'l1']);
 });
+
+// ================= R200i (23/11/2026) · activación Netflix por USDT ya pagada + gift cards SAR de Prime Video
+test('R200i · activación Netflix 10 USDT pagada con L280, válida hasta que venza: se guarda (antes daba error)', async () => {
+  const db = fakeFirestore(semilla());
+  const base = { productoId: 'NFX-PREM', fecha: '2026-11-17', fechaActivacion: '2026-07-16', cantidad: 1, costoTotal: 10, moneda: 'USDT', cuentaInventarioId: 'nf-gift', referencia: 'SE PAGO EN JULIO SOLO 10 USDT' };
+  // Binance ya pagado (histórico) con los Lempiras pagados, sin tasa
+  const r = await empresa(db, 'fin_compra_registrar', { operationId: 'act-nf-0001', compra: { ...base, pago: 'binance', binanceHistorico: true, cargoHnl: 280, vigenciaHasta: '2026-12-16', duracionDias: 153 } });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const l = lotes(db)[0];
+  assert.deepEqual([l.costoTotalHnl, l.tasa, l.vigenciaHasta, l.fechaActivacion, l.moneda], [280, 28, '2026-12-16', '2026-07-16', 'USDT']);
+  // «Banco / tarjeta» + USDT también se puede, escribiendo los Lempiras (antes el campo no aparecía y daba error)
+  const r2 = await empresa(db, 'fin_compra_registrar', { operationId: 'act-nf-0002', compra: { ...base, cuentaInventarioId: 'nf-tarjeta', pago: 'banco', bancoId: 'bac', cargoHnl: 280 } });
+  assert.equal(r2.ok, true, JSON.stringify(r2)); assert.equal(r2.costoTotalHnl, 280);
+  assert.match(web, /x\.hidden = !\(pago === 'banco' && mon !== 'HNL'\); \}\); \/\/ R200i/, 'el cargo en Lempiras aparece también con USDT');
+  assert.match(web, /name="hnlHist"/); assert.match(web, /name="vigenciaHasta"/);
+  assert.match(web, /pago: mon === 'USDT' \|\| mod === 'binance' \|\| mod === 'link' \? 'binance_hist'/, 'cuenta por activación abre Binance ya pagado');
+});
+
+test('R200i · Prime Video gift card SAR: saldo, renovación mensual/anual, vencimiento de la gift card y su compra', async () => {
+  const db = fakeFirestore(semilla());
+  const c = await empresa(db, 'fin_compra_registrar', { operationId: 'gc-0001', compra: { productoId: 'PRIME', fecha: '2026-11-15', cantidad: 1, costoTotal: 13.97, moneda: 'USD', cargoHnl: 369.5, pago: 'banco', bancoId: 'bac', cuentaInventarioId: 'pv-1', duracionDias: 30, referencia: 'Gift card 50 SAR · Eneba' } });
+  assert.equal(c.ok, true, JSON.stringify(c));
+  const g = await panel(db, 'finp_giftcard_guardar', { cuentaId: 'pv-1', operationId: 'gc-0001', giftcard: { fechaCompra: '2026-11-15', montoSar: 50, costoUsd: 13.97, cargoHnl: 369.5, tienda: 'Eneba', vence: '2027-11-15', loteId: c.loteId } });
+  assert.equal(g.ok, true, JSON.stringify(g)); assert.equal(g.saldoSar, 50);
+  assert.equal((await panel(db, 'finp_giftcard_guardar', { cuentaId: 'pv-1', operationId: 'gc-0001', giftcard: { fechaCompra: '2026-11-15', montoSar: 50, costoUsd: 13.97, vence: '2027-11-15', loteId: c.loteId } })).duplicado, true, 'doble clic no suma dos veces');
+  assert.match((await panel(db, 'finp_giftcard_guardar', { cuentaId: 'pv-1', giftcard: { fechaCompra: '2026-11-15', montoSar: 0, costoUsd: 5 } })).error, /SAR/);
+  assert.match((await panel(db, 'finp_giftcard_guardar', { cuentaId: 'nf-gift', giftcard: { fechaCompra: '2026-11-15', montoSar: 50, costoUsd: 13 } })).error, /Prime Video/);
+  const cfg = await panel(db, 'finp_cuenta_config', { cuentaId: 'pv-1', modalidad: 'gift_card', moneda: 'USD', frecuencia: 'mensual', proximoPago: '2026-12-15', saldoSar: 34.5, planRenovacion: 'mensual' });
+  assert.equal(cfg.ok, true, JSON.stringify(cfg));
+  const f = (await panel(db, 'finp_cuentas_lista', { plataforma: 'primevideo' })).filas.find((x) => x.cuentaId === 'pv-1');
+  assert.deepEqual([f.saldoSar, f.planRenovacion, f.proximoPago, f.giftcardVence, f.giftcards.length, f.giftcards[0].montoSar, f.giftcards[0].costoUsd], [34.5, 'mensual', '2026-12-15', '2027-11-15', 1, 50, 13.97]);
+  assert.equal(f.estadoCosto, 'con_costo');
+  assert.match(web, /<th>Saldo gift card<\/th><th>Renovación<\/th><th>Vence gift card<\/th>/); assert.match(web, /data-fz-gc=/); assert.match(web, /usarTasaBac\(mm, \{ monto: 'costoUsd' \}\)/);
+});
