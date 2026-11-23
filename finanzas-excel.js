@@ -11,7 +11,7 @@
   var MONEY = '"L"#,##0.00;[Red]-"L"#,##0.00', PCT = '0.0%', FECHA = 'dd/mm/yyyy';
   var TIPO = { venta: 'Alta nueva', renovacion: 'Renovación cobrada', ingreso_manual: 'Otro cobro' };
   var REGLA = { cobertura: 'Por vigencia', cobertura_documentada: 'Cobertura documentada', activacion: 'Por activación', consumo: 'Por consumo (PEPS)', lote_sin_consumo: 'Lote sin consumo', mensual_acceso: 'Mensual por acceso', mensual_familia: 'Mensual por familia' };
-  var HOJAS = ['01 Panel ejecutivo', '02 Ventas y renovaciones', '03 Compras e inversion', '04 Costos asignados', '05 Rentab por cuenta', '06 Rentab por plataforma', '07 Evolucion anual', '08 Pendientes', '09 Parametros'];
+  var HOJAS = ['01 Panel ejecutivo', '02 Ventas y renovaciones', '03 Compras e inversion', '04 Costos asignados', '05 Rentab por cuenta', '06 Rentab por plataforma', '07 Evolucion anual', '08 Pendientes', '09 Parametros', '10 Datos del tablero'];
 
   function fechaX(ymd) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null; }
   function colL(n) { var s = ''; while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
@@ -43,9 +43,9 @@
     // ---------- 02 Ventas y renovaciones
     var h2 = HOJAS[1], w2 = ws[h2];
     w2.getCell('A1').value = 'Ventas y renovaciones cobradas · una fila por servicio (un pago conjunto se reparte una sola vez)'; w2.getCell('A1').font = { bold: true, size: 13 };
-    var c2 = [{ h: 'ID', w: 30 }, { h: 'Mes', w: 9 }, { h: 'Fecha', w: 11, fmt: FECHA }, { h: 'Tipo', w: 18 }, { h: 'Plataforma', w: 16 }, { h: 'Cuenta madre', w: 26 }, { h: 'Perfil', w: 10 }, { h: 'Beneficiario', w: 22 }, { h: 'Titular', w: 22 }, { h: 'Vendedor', w: 16 },
+    var c2 = [{ h: 'ID', w: 30 }, { h: 'Mes', w: 9 }, { h: 'Fecha', w: 11, fmt: FECHA }, { h: 'Tipo', w: 18 }, { h: 'Plataforma', w: 16 }, { h: 'Cuenta madre', w: 26 }, { h: 'Perfil', w: 10 }, { h: 'Beneficiario', w: 22 }, { h: 'Titular', w: 22 }, { h: 'Vendedor', w: 16 }, { h: 'Banco', w: 18 },
       { h: 'Valor', w: 11, fmt: MONEY }, { h: 'Descuento', w: 11, fmt: MONEY }, { h: 'Cobrado', w: 11, fmt: MONEY }, { h: 'Pendiente', w: 11, fmt: MONEY }, { h: 'Costo vinculado', w: 9 }, { h: 'Cobrado con costo', w: 12, fmt: MONEY }, { h: 'ID cobro', w: 26 }, { h: 'ID compra (servicio)', w: 20 }, { h: 'Combo', w: 7 }];
-    var t2 = tabla(w2, 'tVentas', 3, c2, (x.ventas || []).map(function (v) { var cub = v.costoVinculado ? 'Sí' : 'No'; return [v.id, v.mes, fechaX(v.fecha), TIPO[v.tipo] || v.tipo, plat(v.plataforma), v.cuenta || '', v.perfil || '', v.beneficiario || '', v.titular || '', nom(v.vendedor), num(v.valor), num(v.descuento), num(v.cobrado), num(v.pendiente), cub, cub === 'Sí' ? num(v.cobrado) : 0, v.cobroId || '', v.compraId || '', v.combo ? 'Sí' : '']; }));
+    var t2 = tabla(w2, 'tVentas', 3, c2, (x.ventas || []).map(function (v) { var cub = v.costoVinculado ? 'Sí' : 'No'; return [v.id, v.mes, fechaX(v.fecha), TIPO[v.tipo] || v.tipo, plat(v.plataforma), v.cuenta || '', v.perfil || '', v.beneficiario || '', v.titular || '', nom(v.vendedor) || 'Sin vendedor', String(v.banco || '').trim() || 'Sin banco', num(v.valor), num(v.descuento), num(v.cobrado), num(v.pendiente), cub, cub === 'Sí' ? num(v.cobrado) : 0, v.cobroId || '', v.compraId || '', v.combo ? 'Sí' : '']; }));
     for (var r = t2.desde; r <= t2.hasta && (x.ventas || []).length; r++) w2.getCell(t2.mapa['Cobrado con costo'] + r).value = { formula: 'IF(' + t2.mapa['Costo vinculado'] + r + '="Sí",' + t2.mapa.Cobrado + r + ',0)', result: w2.getCell(t2.mapa['Cobrado con costo'] + r).value };
     w2.views = [{ state: 'frozen', ySplit: 3 }];
 
@@ -141,7 +141,7 @@
       ['Compra / inversión', 'Salida efectiva al proveedor en su fecha (hoja 03, columna «Pagado en el período»). No es lo mismo que el costo del mes.'], ['Costo atribuido', 'Asignación sustentada de compra, activación o período al servicio vendido (hoja 04). La misma compra no se descuenta dos veces.'],
       ['Ganancia calculable', 'Cobrado con costo vinculado − costo atribuido. Lo cobrado sin costo queda fuera y se marca pendiente.'], ['Cobertura', 'Porcentaje del ingreso cobrado que tiene costo vinculado. Menos de 99.5% = margen PARCIAL (no definitivo).'],
       ['Anulaciones', 'Una compra anulada queda en la hoja 03 con motivo, fecha y usuario, y en la 08 para revisión. Su pago se revirtió con asiento inverso.'], ['Totales del período', 'En el Panel, «Todo el período» es la SUMA de los meses. La Web muestra cada mes con el mismo cálculo.'],
-      ['Privacidad', 'Sin teléfonos, PIN, claves ni tokens.'], ['Interactividad', 'Tablas con filtros/orden en cada hoja; en el Panel elija Mes y Plataforma (lista desplegable) y todo se recalcula. Sin macros.']];
+      ['Privacidad', 'Sin teléfonos, PIN, claves ni tokens.'], ['Interactividad', 'Tablas con filtros/orden en cada hoja. En el Panel (dashboard) elija Mes, Plataforma, Vendedor y Banco: tarjetas, semáforo y los 6 gráficos se recalculan solos. Con Vendedor o Banco el costo dice «No aplica» (el costo es por cuenta/plataforma). Sin macros.']];
     if (x.truncado) p9.push(['Aviso', 'Alguna hoja superó 20 000 filas: se exportaron las primeras 20 000. Elija un período más corto para el detalle completo.']);
     Object.keys(x.definiciones || {}).forEach(function (k) { p9.push(['Definición · ' + k, x.definiciones[k]]); });
     p9.forEach(function (p, i) { w9.getCell('A' + (i + 1)).value = p[0]; w9.getCell('A' + (i + 1)).font = { bold: true }; w9.getCell('B' + (i + 1)).value = p[1]; w9.getCell('B' + (i + 1)).alignment = { wrapText: true, vertical: 'top' }; });
@@ -151,54 +151,129 @@
     listaM.forEach(function (m, i) { w9.getCell('D' + (i + 2)).value = m; }); listaP.forEach(function (p, i) { w9.getCell('E' + (i + 2)).value = p; });
     w9.getColumn(4).width = 16; w9.getColumn(5).width = 18;
 
-    // ---------- 01 Panel ejecutivo (selectores + KPIs por fórmula + vínculos + gráficos)
-    var h1 = HOJAS[0], w1 = ws[h1];
-    w1.getColumn(1).width = 36; w1.getColumn(2).width = 20; w1.getColumn(3).width = 9; [4, 5, 6, 7, 8, 9, 10, 11, 12].forEach(function (c) { w1.getColumn(c).width = 14; });
-    w1.getCell('A1').value = 'Sublichat · Panel financiero'; w1.getCell('A1').font = { bold: true, size: 18, color: { argb: TXT } };
+    // ---------- 01 Panel ejecutivo = DASHBOARD (R200h): selectores Mes, Plataforma, Vendedor y Banco; tarjetas con semáforo;
+    // 6 gráficos nativos que leen la hoja oculta «10 Datos del tablero», cuyas fórmulas dependen de los selectores: al cambiar
+    // un selector Excel recalcula y los gráficos cambian solos. Sin macros. Con Vendedor o Banco el costo dice «No aplica».
+    var h1 = HOJAS[0], w1 = ws[h1], h10 = HOJAS[9], w10 = ws[h10];
+    w1.getColumn(1).width = 36; w1.getColumn(2).width = 20; w1.getColumn(3).width = 3; for (var cc = 4; cc <= 20; cc++) w1.getColumn(cc).width = 11;
+    w1.getCell('A1').value = 'Sublichat · Dashboard financiero'; w1.getCell('A1').font = { bold: true, size: 18, color: { argb: TXT } };
     w1.getCell('A2').value = 'Período ' + nombreMes(meses[0]) + ' → ' + nombreMes(meses[meses.length - 1]) + ' · generado ' + String(x.generado || '').replace('T', ' ').slice(0, 16) + ' UTC'; w1.getCell('A2').font = { color: { argb: 'FF5B6472' } };
-    w1.getCell('A4').value = 'Mes'; w1.getCell('A5').value = 'Plataforma';
+    w1.getCell('A3').value = 'Elija en las celdas amarillas: tarjetas y gráficos cambian solos. «Todo el período» suma los meses.'; w1.getCell('A3').font = { italic: true, color: { argb: 'FF5B6472' } };
     var ultimo = meses[meses.length - 1] || 'Todo el período';
-    w1.getCell('B4').value = opts.mes && meses.indexOf(opts.mes) >= 0 ? opts.mes : ultimo; w1.getCell('B5').value = 'Todas';
-    ['B4', 'B5'].forEach(function (c) { var cell = w1.getCell(c); cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4CC' } }; cell.font = { bold: true }; cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }; });
-    w1.getCell('B4').dataValidation = { type: 'list', allowBlank: false, formulae: [q(h9) + '!$D$2:$D$' + (listaM.length + 1)], showErrorMessage: true, errorTitle: 'Mes', error: 'Elija un mes de la lista.' };
-    w1.getCell('B5').dataValidation = { type: 'list', allowBlank: false, formulae: [q(h9) + '!$E$2:$E$' + (listaP.length + 1)], showErrorMessage: true, errorTitle: 'Plataforma', error: 'Elija una plataforma de la lista.' };
-    w1.getCell('C4').value = '◀ elija'; w1.getCell('C5').value = '◀ elija'; w1.getCell('C4').font = w1.getCell('C5').font = { italic: true, color: { argb: 'FF8A93A0' } };
-    var cM = 'IF($B$4="Todo el período","*",$B$4)', cP = 'IF($B$5="Todas","*",$B$5)';
-    var sumV = function (k) { return 'SUMIFS(' + rango(h2, t2, k) + ',' + rango(h2, t2, 'Mes') + ',' + cM + ',' + rango(h2, t2, 'Plataforma') + ',' + cP + ')'; };
+    var ventasX = x.ventas || [];
+    var vendL = [], bancoL = [];
+    ventasX.forEach(function (v) { var n = nom(v.vendedor) || 'Sin vendedor'; if (vendL.indexOf(n) < 0) vendL.push(n); String(v.banco || 'Sin banco').split(' + ').forEach(function (b) { b = b.trim() || 'Sin banco'; if (bancoL.indexOf(b) < 0) bancoL.push(b); }); });
+    vendL.sort(); bancoL.sort();
+    var listaV = ['Todos'].concat(vendL), listaB = ['Todos'].concat(bancoL);
+    w9.getCell('F1').value = 'Vendedores'; w9.getCell('G1').value = 'Bancos'; w9.getCell('F1').font = w9.getCell('G1').font = { bold: true };
+    listaV.forEach(function (v, i) { w9.getCell('F' + (i + 2)).value = v; }); listaB.forEach(function (b, i) { w9.getCell('G' + (i + 2)).value = b; });
+    w9.getColumn(6).width = 18; w9.getColumn(7).width = 18;
+    var mesIni = opts.mes && meses.indexOf(opts.mes) >= 0 ? opts.mes : ultimo;
+    var sels = [['A4', 'B4', 'Mes', mesIni, '$D$2:$D$' + (listaM.length + 1)], ['A5', 'B5', 'Plataforma', 'Todas', '$E$2:$E$' + (listaP.length + 1)], ['A6', 'B6', 'Vendedor', 'Todos', '$F$2:$F$' + (listaV.length + 1)], ['A7', 'B7', 'Banco', 'Todos', '$G$2:$G$' + (listaB.length + 1)]];
+    sels.forEach(function (s) {
+      w1.getCell(s[0]).value = s[2]; w1.getCell(s[0]).font = { bold: true };
+      var cell = w1.getCell(s[1]); cell.value = s[3]; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4CC' } }; cell.font = { bold: true };
+      cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      cell.dataValidation = { type: 'list', allowBlank: false, formulae: [q(h9) + '!' + s[4]], showErrorMessage: true, errorTitle: s[2], error: 'Elija una opción de la lista.' };
+    });
+    var cM = 'IF($B$4="Todo el período","*",$B$4)', cP = 'IF($B$5="Todas","*",$B$5)', cV = 'IF($B$6="Todos","*",$B$6)', cB = 'IF($B$7="Todos","*","*"&$B$7&"*")';
+    var conVB = 'OR($B$6<>"Todos",$B$7<>"Todos")';
+    var R2 = function (k) { return rango(h2, t2, k); };
+    var filtrosV = function (sinMes, sinPlat, sinVend, sinBanco) { return (sinMes ? '' : ',' + R2('Mes') + ',' + cM) + (sinPlat ? '' : ',' + R2('Plataforma') + ',' + cP) + (sinVend ? '' : ',' + R2('Vendedor') + ',' + cV) + (sinBanco ? '' : ',' + R2('Banco') + ',' + cB); };
+    var sumV = function (k) { return 'SUMIFS(' + R2(k) + filtrosV() + ')'; };
     var sumC = 'SUMIFS(' + rango(h4, t4, 'Costo reconocido HNL') + ',' + rango(h4, t4, 'Mes') + ',' + cM + ',' + rango(h4, t4, 'Plataforma') + ',' + cP + ')';
     var sumK = 'SUMIFS(' + rango(h3, t3, 'Pagado en el período (caja)') + ',' + rango(h3, t3, 'Mes') + ',' + cM + ',' + rango(h3, t3, 'Plataforma') + ',' + cP + ')';
-    var cntV = function (tipo) { return 'COUNTIFS(' + rango(h2, t2, 'Mes') + ',' + cM + ',' + rango(h2, t2, 'Plataforma') + ',' + cP + ',' + rango(h2, t2, 'Tipo') + ',"' + tipo + '")'; };
-    // valores precalculados para el mes inicial (Todas): así se ven aunque Excel no recalcule (vista previa)
-    var mSel = (x.meses || []).filter(function (m) { return m.mes === w1.getCell('B4').value; })[0] || {};
+    var cntV = function (tipo) { return 'COUNTIFS(' + R2('Tipo') + ',"' + tipo + '"' + filtrosV() + ')'; };
+    var mSel = (x.meses || []).filter(function (m) { return m.mes === mesIni; })[0] || {};
+    var cuentaTipo = function (t) { return ventasX.filter(function (v) { return v.mes === mesIni && v.tipo === t; }).length; };
     var kpis = [
       ['Ingresos cobrados', sumV('Cobrado'), num(mSel.cobradoHnl), MONEY, HOJAS[1]],
       ['Cobrado con costo vinculado', sumV('Cobrado con costo'), num(mSel.cobradoCubiertoHnl), MONEY, HOJAS[1]],
-      ['Costo atribuido', sumC, num(mSel.costoHnl), MONEY, HOJAS[3]],
-      ['Ganancia calculable', 'B8-B9', num((mSel.cobradoCubiertoHnl || 0) - (mSel.costoHnl || 0)), MONEY, HOJAS[5]],
-      ['Margen (sobre cobrado con costo)', 'IF(B8>0,B10/B8,"—")', mSel.cobradoCubiertoHnl > 0 ? ((mSel.cobradoCubiertoHnl - mSel.costoHnl) / mSel.cobradoCubiertoHnl) : '—', PCT, HOJAS[5]],
-      ['Cobertura de costos', 'IF(B7>0,B8/B7,"—")', mSel.cobradoHnl > 0 ? mSel.cobradoCubiertoHnl / mSel.cobradoHnl : '—', PCT, HOJAS[7]],
-      ['Calidad del resultado', 'IF(AND(ISNUMBER(B12),B12>=0.995),"Definitivo","Parcial: faltan costos por vincular")', '', null, HOJAS[7]],
-      ['Compras pagadas (inversión, caja)', sumK, num(mSel.desembolsoHnl), MONEY, HOJAS[2]],
-      ['Altas nuevas (servicios)', cntV('Alta nueva'), '', '0', HOJAS[1]],
-      ['Renovaciones cobradas (servicios)', cntV('Renovación cobrada'), '', '0', HOJAS[1]],
+      ['Costo atribuido', 'IF(' + conVB + ',"No aplica (filtro de vendedor/banco)",' + sumC + ')', num(mSel.costoHnl), MONEY, HOJAS[3]],
+      ['Ganancia calculable', 'IF(ISNUMBER(B11),B10-B11,"No aplica")', num((mSel.cobradoCubiertoHnl || 0) - (mSel.costoHnl || 0)), MONEY, HOJAS[5]],
+      ['Margen (sobre cobrado con costo)', 'IF(AND(ISNUMBER(B12),B10>0),B12/B10,"—")', mSel.cobradoCubiertoHnl > 0 ? ((mSel.cobradoCubiertoHnl - mSel.costoHnl) / mSel.cobradoCubiertoHnl) : '—', PCT, HOJAS[5]],
+      ['Cobertura de costos', 'IF(B9>0,B10/B9,"—")', mSel.cobradoHnl > 0 ? mSel.cobradoCubiertoHnl / mSel.cobradoHnl : '—', PCT, HOJAS[7]],
+      ['Calidad del resultado', 'IF(' + conVB + ',"Solo ingresos (filtro de vendedor/banco)",IF(AND(ISNUMBER(B14),B14>=0.995),"Definitivo","Parcial: faltan costos por vincular"))', mSel.cobradoHnl > 0 && mSel.cobradoCubiertoHnl / mSel.cobradoHnl >= 0.995 ? 'Definitivo' : 'Parcial: faltan costos por vincular', null, HOJAS[7]],
+      ['Compras pagadas (inversión, caja)', 'IF(' + conVB + ',"No aplica (filtro de vendedor/banco)",' + sumK + ')', num(mSel.desembolsoHnl), MONEY, HOJAS[2]],
+      ['Altas nuevas (servicios)', cntV('Alta nueva'), cuentaTipo('venta'), '0', HOJAS[1]],
+      ['Renovaciones cobradas (servicios)', cntV('Renovación cobrada'), cuentaTipo('renovacion'), '0', HOJAS[1]],
     ];
     kpis.forEach(function (k, i) {
-      var r = 7 + i, a = w1.getCell('A' + r), b = w1.getCell('B' + r);
+      var r = 9 + i, a = w1.getCell('A' + r), b = w1.getCell('B' + r);
       a.value = { text: k[0] + '  ↗', hyperlink: '#' + q(k[4]) + '!A1' }; a.font = { bold: true, color: { argb: 'FF178EF1' }, underline: true };
       b.value = { formula: k[1], result: k[2] }; if (k[3]) b.numFmt = k[3]; b.font = { bold: true, size: 13 };
-      b.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS } };
+      b.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS } }; b.alignment = { wrapText: true, vertical: 'middle' };
+      w1.getRow(r).height = 22;
     });
-    w1.getCell('A18').value = 'Vínculos'; w1.getCell('A18').font = { bold: true };
-    HOJAS.slice(1).forEach(function (h, i) { var c = w1.getCell('A' + (19 + i)); c.value = { text: h, hyperlink: '#' + q(h) + '!A1' }; c.font = { color: { argb: 'FF178EF1' }, underline: true }; });
-    w1.getCell('A3').value = 'Elija Mes y Plataforma en las celdas amarillas: todas las cifras salen de las hojas de detalle. «Todo el período» suma los meses.'; w1.getCell('A3').font = { italic: true, color: { argb: 'FF5B6472' } };
+    // Semáforo: verde / amarillo / rojo (formato condicional: cambia solo con los selectores)
+    var verde = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFD7F5E3' } }, amar = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFF1C2' } }, rojo = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFDDCDC' } };
+    var semaforo = function (ref, reglas) { w1.addConditionalFormatting({ ref: ref, rules: reglas.map(function (rg, i) { return { type: 'expression', priority: i + 1, formulae: [rg[0]], style: { fill: rg[1], font: { bold: true } } }; }) }); };
+    semaforo('B12', [['AND(ISNUMBER(B12),B12<0)', rojo], ['AND(ISNUMBER(B12),B12>=0)', verde]]);
+    semaforo('B13', [['AND(ISNUMBER(B13),B13>=0.3)', verde], ['AND(ISNUMBER(B13),B13>=0.15)', amar], ['ISNUMBER(B13)', rojo]]);
+    semaforo('B14', [['AND(ISNUMBER(B14),B14>=0.995)', verde], ['AND(ISNUMBER(B14),B14>=0.8)', amar], ['ISNUMBER(B14)', rojo]]);
+    semaforo('B15', [['B15="Definitivo"', verde], ['LEFT(B15,7)="Parcial"', amar]]);
+    w1.getCell('A20').value = 'Semáforo: verde = bien · amarillo = revisar · rojo = atención. Margen ≥30% verde, 15–30% amarillo; cobertura ≥99.5% verde, ≥80% amarillo.'; w1.getCell('A20').font = { italic: true, size: 9, color: { argb: 'FF5B6472' } }; w1.getCell('A20').alignment = { wrapText: true }; w1.getRow(20).height = 40;
+    w1.getCell('A22').value = 'Vínculos'; w1.getCell('A22').font = { bold: true };
+    HOJAS.slice(1, 9).forEach(function (h, i) { var c = w1.getCell('A' + (23 + i)); c.value = { text: h, hyperlink: '#' + q(h) + '!A1' }; c.font = { color: { argb: 'FF178EF1' }, underline: true }; });
     w1.views = [{ showGridLines: false }];
     w1.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1, paperSize: 9 };
 
-    var evol = x.meses || [];
-    var graficos = { evolucion: { hoja: h7, filas: [t7.desde, t7.hasta], cat: t7.mapa.Nombre, cats: evol.map(function (m) { return nombreMes(m.mes); }),
-        vals: { 'Cobrado': evol.map(function (m) { return num(m.cobradoHnl); }), 'Costo atribuido': evol.map(function (m) { return num(m.costoHnl); }), 'Ganancia calculable': evol.map(function (m) { return num(m.cobradoCubiertoHnl - m.costoHnl); }) }, series: [['Cobrado', t7.mapa.Cobrado, '178EF1'], ['Costo atribuido', t7.mapa['Costo atribuido'], 'E6211C'], ['Ganancia calculable', t7.mapa['Ganancia calculable'], '13BD63']] },
-      ranking: { hoja: h6, filas: [t6b.desde, t6b.hasta], cat: t6b.mapa.Plat, cats: orden,
-        vals: { 'Ganancia calculable': orden.map(function (n) { return num(tot[n].cub - tot[n].costo); }), 'Cobrado': orden.map(function (n) { return num(tot[n].cob); }) }, series: [['Ganancia calculable', t6b.mapa.Res, '13BD63'], ['Cobrado', t6b.mapa.Cob, '178EF1']] }, vacio: !meses.length };
+    // ---------- 10 Datos del tablero (oculta): fórmulas que dependen de los selectores del Panel
+    var P1 = function (c) { return q(h1) + '!$' + c.replace(/(\d+)/, '$$$1'); };
+    var pM = P1('B4'), pP = P1('B5'), pV = P1('B6'), pB = P1('B7');
+    var dM = 'IF(' + pM + '="Todo el período","*",' + pM + ')', dP = 'IF(' + pP + '="Todas","*",' + pP + ')', dV = 'IF(' + pV + '="Todos","*",' + pV + ')', dB = 'IF(' + pB + '="Todos","*","*"&' + pB + '&"*")';
+    var dVB = 'OR(' + pV + '<>"Todos",' + pB + '<>"Todos")';
+    var fV = function (sinMes, sinPlat, sinVend, sinBanco) { return (sinMes ? '' : ',' + R2('Mes') + ',' + dM) + (sinPlat ? '' : ',' + R2('Plataforma') + ',' + dP) + (sinVend ? '' : ',' + R2('Vendedor') + ',' + dV) + (sinBanco ? '' : ',' + R2('Banco') + ',' + dB); };
+    w10.getCell('A1').value = 'Datos del tablero · se calculan solos según los selectores del Panel (no editar)'; w10.getCell('A1').font = { bold: true };
+    w10.getCell('X1').value = 'Mes base'; w10.getCell('Y1').value = { formula: 'IF(' + pM + '="Todo el período","' + ultimo + '",' + pM + ')', result: mesIni === 'Todo el período' ? ultimo : mesIni };
+    w10.getCell('X2').value = 'Primer día'; w10.getCell('Y2').value = { formula: 'DATE(VALUE(LEFT(Y1,4)),VALUE(MID(Y1,6,2)),1)' }; w10.getCell('Y2').numFmt = FECHA;
+    w10.getCell('X3').value = 'Días del mes'; w10.getCell('Y3').value = { formula: 'DAY(EOMONTH(Y2,0))' };
+    var mesBase = mesIni === 'Todo el período' ? ultimo : mesIni;
+    var cab = function (col, a, b) { w10.getCell(col[0] + '4').value = a; w10.getCell(col[1] + '4').value = b; w10.getCell(col[0] + '4').font = w10.getCell(col[1] + '4').font = { bold: true }; };
+    var sumaJs = function (filtro) { return num(ventasX.filter(filtro).reduce(function (a, v) { return a + (Number(v.cobrado) || 0); }, 0)); };
+    var enMes = function (v) { return mesIni === 'Todo el período' || v.mes === mesIni; };
+    // (1) Cobrado por día del mes base
+    cab(['A', 'B'], 'Día', 'Cobrado');
+    var dias = []; var dimJs = new Date(Date.UTC(+mesBase.slice(0, 4), +mesBase.slice(5, 7), 0)).getUTCDate();
+    for (var dd = 1; dd <= 31; dd++) {
+      var rr2 = 4 + dd; w10.getCell('A' + rr2).value = String(dd);
+      var vJs = dd > dimJs ? null : sumaJs(function (v) { return v.mes === mesBase && Number(String(v.fecha).slice(8, 10)) === dd; });
+      w10.getCell('B' + rr2).value = { formula: 'IF(' + dd + '>$Y$3,NA(),SUMIFS(' + R2('Cobrado') + ',' + R2('Fecha') + ',$Y$2+' + (dd - 1) + fV(true) + '))', result: vJs == null ? { error: '#N/A' } : vJs };
+      dias.push(vJs == null ? '' : vJs);
+    }
+    // (2) Cobrado por plataforma · (3) por vendedor · (4) por banco
+    var bloque = function (cols, titulo, lista, critCol, formula, js) {
+      cab(cols, titulo, 'Cobrado'); var vals = [];
+      lista.forEach(function (n, i) { var r = 5 + i; w10.getCell(cols[0] + r).value = n; var v = js(n); vals.push(v); w10.getCell(cols[1] + r).value = { formula: formula(cols[0] + r), result: v }; });
+      return { filas: [5, 4 + Math.max(1, lista.length)], cats: lista, vals: vals };
+    };
+    var bP = bloque(['D', 'E'], 'Plataforma', plats, 'Plataforma', function (c) { return 'SUMIFS(' + R2('Cobrado') + ',' + R2('Plataforma') + ',' + c + fV(false, true) + ')'; }, function (n) { return sumaJs(function (v) { return enMes(v) && plat(v.plataforma) === n; }); });
+    var bV = bloque(['G', 'H'], 'Vendedor', vendL, 'Vendedor', function (c) { return 'SUMIFS(' + R2('Cobrado') + ',' + R2('Vendedor') + ',' + c + fV(false, false, true) + ')'; }, function (n) { return sumaJs(function (v) { return enMes(v) && (nom(v.vendedor) || 'Sin vendedor') === n; }); });
+    var bB = bloque(['J', 'K'], 'Banco', bancoL, 'Banco', function (c) { return 'SUMIFS(' + R2('Cobrado') + ',' + R2('Banco') + ',"*"&' + c + '&"*"' + fV(false, false, false, true) + ')'; }, function (n) { return sumaJs(function (v) { return enMes(v) && String(v.banco || 'Sin banco').split(' + ').map(function (b) { return b.trim(); }).indexOf(n) >= 0; }); });
+    // (5) Evolución mensual (cobrado; costo solo sin filtro de vendedor/banco)
+    cab(['M', 'N'], 'Mes', 'Cobrado'); w10.getCell('O4').value = 'Costo atribuido'; w10.getCell('P4').value = 'Clave'; w10.getCell('O4').font = { bold: true };
+    var evC = [], evK = [];
+    meses.forEach(function (m, i) {
+      var r = 5 + i, mm = (x.meses || [])[i] || {};
+      w10.getCell('M' + r).value = nombreMes(m); w10.getCell('P' + r).value = m;
+      var c = num(mm.cobradoHnl); evC.push(c); evK.push(num(mm.costoHnl));
+      w10.getCell('N' + r).value = { formula: 'SUMIFS(' + R2('Cobrado') + ',' + R2('Mes') + ',P' + r + fV(true) + ')', result: c };
+      w10.getCell('O' + r).value = { formula: 'IF(' + dVB + ',NA(),SUMIFS(' + rango(h4, t4, 'Costo reconocido HNL') + ',' + rango(h4, t4, 'Mes') + ',P' + r + ',' + rango(h4, t4, 'Plataforma') + ',' + dP + '))', result: num(mm.costoHnl) };
+    });
+    // (6) Altas vs renovaciones
+    cab(['R', 'S'], 'Tipo', 'Cobrado'); var tipos = [['Alta nueva', 'venta'], ['Renovación cobrada', 'renovacion'], ['Otro cobro', 'ingreso_manual']], tpV = [];
+    tipos.forEach(function (t, i) { var r = 5 + i; w10.getCell('R' + r).value = t[0]; var v = sumaJs(function (x2) { return enMes(x2) && x2.tipo === t[1]; }); tpV.push(v); w10.getCell('S' + r).value = { formula: 'SUMIFS(' + R2('Cobrado') + ',' + R2('Tipo') + ',R' + r + fV() + ')', result: v }; });
+    w10.state = 'hidden';
+
+    var G = function (filas, catCol, series, cats, vals) { return { hoja: h10, filas: filas, cat: catCol, series: series, cats: cats, vals: vals }; };
+    var graficos = { vacio: !meses.length, lista: [
+      { tipo: 'col', titulo: 'Cobrado por día del mes', g: G([5, 35], 'A', [['Cobrado', 'B', '178EF1']], Array.from({ length: 31 }, function (_, i) { return String(i + 1); }), { Cobrado: dias }), ancla: [3, 3, 11, 19] },
+      { tipo: 'bar', titulo: 'Cobrado por plataforma', g: G(bP.filas, 'D', [['Cobrado', 'E', '13BD63']], bP.cats, { Cobrado: bP.vals }), ancla: [11, 3, 19, 19] },
+      { tipo: 'line', titulo: 'Evolución mensual (costo: sin filtro de vendedor/banco)', g: G([5, 4 + Math.max(1, meses.length)], 'M', [['Cobrado', 'N', '178EF1'], ['Costo atribuido', 'O', 'E6211C']], meses.map(nombreMes), { Cobrado: evC, 'Costo atribuido': evK }), ancla: [3, 20, 11, 36] },
+      { tipo: 'doughnut', titulo: 'Altas nuevas vs. renovaciones', g: G([5, 7], 'R', [['Cobrado', 'S', '178EF1']], tipos.map(function (t) { return t[0]; }), { Cobrado: tpV }), ancla: [11, 20, 19, 36] },
+      { tipo: 'bar', titulo: 'Cobrado por vendedor', g: G(bV.filas, 'G', [['Cobrado', 'H', '8B5CF6']], bV.cats, { Cobrado: bV.vals }), ancla: [3, 37, 11, 53] },
+      { tipo: 'bar', titulo: 'Cobrado por banco', g: G(bB.filas, 'J', [['Cobrado', 'K', 'F5B800']], bB.cats, { Cobrado: bB.vals }), ancla: [11, 37, 19, 53] },
+    ] };
     return { wb: wb, graficos: graficos };
   }
 
@@ -216,19 +291,29 @@
   }
   function chartXml(g, tipo, titulo) {
     var ejes = '<c:axId val="5001"/><c:axId val="5002"/>';
-    var cuerpo = tipo === 'line' ? '<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' + g.series.map(function (s, i) { return serieXml(g, s, i, 'line'); }).join('') + '<c:marker val="1"/>' + ejes + '</c:lineChart>'
-      : '<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>' + g.series.map(function (s, i) { return serieXml(g, s, i, 'bar'); }).join('') + '<c:gapWidth val="60"/>' + ejes + '</c:barChart>';
-    var catAx = '<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="' + (tipo === 'bar' ? 'maxMin' : 'minMax') + '"/></c:scaling><c:delete val="0"/><c:axPos val="' + (tipo === 'bar' ? 'l' : 'b') + '"/><c:numFmt formatCode="General" sourceLinked="0"/><c:tickLblPos val="low"/><c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx>';
-    var valAx = '<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="' + (tipo === 'bar' ? 'b' : 'l') + '"/><c:majorGridlines><c:spPr><a:ln><a:solidFill><a:srgbClr val="E5E9F0"/></a:solidFill></a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="&quot;L&quot;#,##0" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>';
+    var serT = tipo === 'line' ? 'line' : 'bar';
+    var cuerpo;
+    if (tipo === 'line') cuerpo = '<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' + g.series.map(function (s, i) { return serieXml(g, s, i, 'line'); }).join('') + '<c:marker val="1"/>' + ejes + '</c:lineChart>';
+    else if (tipo === 'doughnut') {
+      var colores = ['178EF1', '13BD63', 'F5B800', '8B5CF6', 'E6211C'];
+      var ser = serieXml(g, g.series[0], 0, 'pie').replace('<c:invertIfNegative val="0"/>', '').replace(/<c:spPr>.*?<\/c:spPr>/, '');
+      var dpts = (g.cats || []).map(function (_, k) { return '<c:dPt><c:idx val="' + k + '"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="' + colores[k % colores.length] + '"/></a:solidFill></c:spPr></c:dPt>'; }).join('');
+      ser = ser.replace('<c:cat>', dpts + '<c:dLbls><c:numFmt formatCode="0%" sourceLinked="0"/><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls><c:cat>');
+      cuerpo = '<c:doughnutChart><c:varyColors val="1"/>' + ser + '<c:firstSliceAng val="0"/><c:holeSize val="55"/></c:doughnutChart>';
+    } else cuerpo = '<c:barChart><c:barDir val="' + (tipo === 'col' ? 'col' : 'bar') + '"/><c:grouping val="clustered"/><c:varyColors val="0"/>' + g.series.map(function (s, i) { return serieXml(g, s, i, serT); }).join('') + '<c:gapWidth val="60"/>' + ejes + '</c:barChart>';
+    var horizontal = tipo === 'bar';
+    var catAx = '<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="' + (horizontal ? 'maxMin' : 'minMax') + '"/></c:scaling><c:delete val="0"/><c:axPos val="' + (horizontal ? 'l' : 'b') + '"/><c:numFmt formatCode="General" sourceLinked="0"/><c:tickLblPos val="low"/><c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx>';
+    var valAx = '<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="' + (horizontal ? 'b' : 'l') + '"/><c:majorGridlines><c:spPr><a:ln><a:solidFill><a:srgbClr val="E5E9F0"/></a:solidFill></a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="&quot;L&quot;#,##0" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>';
+    var leyenda = tipo === 'line' || tipo === 'doughnut' ? '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' : '';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<c:roundedCorners val="0"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr><a:r><a:rPr lang="es-HN" sz="1200" b="1"/><a:t>' + titulo + '</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>' + cuerpo + catAx + valAx + '</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
+      '<c:roundedCorners val="0"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr><a:r><a:rPr lang="es-HN" sz="1200" b="1"/><a:t>' + titulo + '</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>' + cuerpo + (tipo === 'doughnut' ? '' : catAx + valAx) + '</c:plotArea>' + leyenda + '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
   }
   function anclaXml(id, col0, row0, col1, row1, nombre) {
     return '<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>' + col0 + '</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>' + row0 + '</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>' + col1 + '</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>' + row1 + '</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>' +
       '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="' + (id + 1) + '" name="' + nombre + '"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId' + id + '"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>';
   }
   async function insertarGraficos(JSZip, buffer, graficos) {
-    if (graficos.vacio) return buffer;
+    if (graficos.vacio || !(graficos.lista || []).length) return buffer;
     var zip = await JSZip.loadAsync(buffer);
     var wbXml = await zip.file('xl/workbook.xml').async('string');
     var wbRels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
@@ -236,11 +321,16 @@
     var target = (new RegExp('<Relationship [^>]*Id="' + rid + '"[^>]*Target="([^"]+)"').exec(wbRels) || new RegExp('<Relationship [^>]*Target="([^"]+)"[^>]*Id="' + rid + '"').exec(wbRels) || [])[1];
     if (!target) return buffer;
     var hojaPath = 'xl/' + target.replace(/^\/?xl\//, ''), hojaNombre = hojaPath.split('/').pop(), relsPath = 'xl/worksheets/_rels/' + hojaNombre + '.rels';
-    zip.file('xl/charts/chart901.xml', chartXml(graficos.evolucion, 'line', 'Cobros, costos y ganancia por mes'));
-    zip.file('xl/charts/chart902.xml', chartXml(graficos.ranking, 'bar', 'Ganancia por plataforma (período)'));
-    zip.file('xl/drawings/drawing901.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      anclaXml(1, 3, 5, 12, 22, 'Evolucion') + anclaXml(2, 3, 23, 12, 42, 'Plataformas') + '</xdr:wsDr>');
-    zip.file('xl/drawings/_rels/drawing901.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart901.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart902.xml"/></Relationships>');
+    var anclas = '', relsD = '', ct = '';
+    graficos.lista.forEach(function (c, i) {
+      var n = 901 + i;
+      zip.file('xl/charts/chart' + n + '.xml', chartXml(c.g, c.tipo, c.titulo));
+      anclas += anclaXml(i + 1, c.ancla[0], c.ancla[1], c.ancla[2], c.ancla[3], 'Grafico' + (i + 1));
+      relsD += '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart' + n + '.xml"/>';
+      ct += '<Override PartName="/xl/charts/chart' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>';
+    });
+    zip.file('xl/drawings/drawing901.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' + anclas + '</xdr:wsDr>');
+    zip.file('xl/drawings/_rels/drawing901.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + relsD + '</Relationships>');
     var rel = '<Relationship Id="rIdDw901" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing901.xml"/>';
     var rels = zip.file(relsPath) ? await zip.file(relsPath).async('string') : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
     zip.file(relsPath, rels.replace('</Relationships>', rel + '</Relationships>'));
@@ -249,9 +339,8 @@
     var tag = '<drawing r:id="rIdDw901"/>', antes = ['<legacyDrawing', '<legacyDrawingHF', '<picture', '<oleObjects', '<controls', '<webPublishItems', '<tableParts', '<extLst', '</worksheet>'];
     for (var i = 0; i < antes.length; i++) { var k = hoja.indexOf(antes[i]); if (k >= 0) { hoja = hoja.slice(0, k) + tag + hoja.slice(k); break; } }
     zip.file(hojaPath, hoja);
-    var ct = await zip.file('[Content_Types].xml').async('string');
-    ct = ct.replace('</Types>', '<Override PartName="/xl/charts/chart901.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/charts/chart902.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/drawings/drawing901.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
-    zip.file('[Content_Types].xml', ct);
+    var cts = await zip.file('[Content_Types].xml').async('string');
+    zip.file('[Content_Types].xml', cts.replace('</Types>', ct + '<Override PartName="/xl/drawings/drawing901.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>'));
     return zip.generateAsync({ type: typeof window === 'undefined' ? 'nodebuffer' : 'arraybuffer', compression: 'DEFLATE' });
   }
 

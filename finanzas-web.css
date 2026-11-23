@@ -180,3 +180,21 @@ html body #screen-finanzas.fz-screen.fz-screen>.card>h2,html body #screen-finanz
 .fz-acc-graf{display:flex;justify-content:flex-end;margin:10px 0 14px}
 .fz-link{all:unset;cursor:pointer;color:#178EF1;font-weight:600;text-decoration:underline}
 @media (max-width:1100px){.fz-g3{grid-template-columns:minmax(0,1fr)}}
+
+/* R200h · dashboard interactivo (filtros arriba, pantalla completa / TV). Fondo blanco liso, sin degradados. */
+.fz-dash-f{padding:12px 14px;margin-bottom:14px}
+.fz-dash-fr{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fz-dash-fr select,.fz-dash-fr input{min-height:36px;border:1px solid var(--b);border-radius:10px;padding:4px 10px;font:inherit;font-size:13px;background:#fff;color:var(--t);max-width:100%}
+.fz-dash-fr select{flex:1 1 170px;min-width:0}
+.fz-dash-fr label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--m)}
+.fz-dash-acc{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.fz-dash-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fz-chip-f{all:unset;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:999px;background:#FDECEC;color:#B4141C;border:1px solid #F7C9C7}
+.fz-chip-f:hover{background:#FBDADA}
+.fz-dash-f .fz-sub{margin:8px 0 0}
+#rbac-finanzas:fullscreen{background:#fff;overflow:auto;padding:16px}
+html.fz-tv .fz-dash.tv .fz-kpi strong{font-size:34px}
+html.fz-tv .fz-dash.tv .fz-chart h3,html.fz-tv .fz-dash.tv .fz-cab h3{font-size:18px}
+html.fz-tv .fz-dash.tv .fz-chart-box{height:300px!important}
+html.fz-tv .fz-dash.tv .fz-sub{font-size:13.5px}
+@media (max-width:640px){.fz-dash-fr select{flex:1 1 100%}.fz-dash-acc{margin-left:0;width:100%}.fz-dash-acc .fz-btn{flex:1}}

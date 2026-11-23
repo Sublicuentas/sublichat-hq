@@ -129,32 +129,134 @@
       plugins: [{ id: 'fzEtiquetas', afterDatasetsDraw: function (ch) { var ctx = ch.ctx; ctx.save(); ctx.font = '700 13px Inter,system-ui,sans-serif'; ctx.fillStyle = '#1F2430'; ctx.textAlign = 'center'; ch.getDatasetMeta(0).data.forEach(function (b, i) { ctx.fillText(L(ch.data.datasets[0].data[i]), b.x, b.y - 8); }); ctx.restore(); } }] });
   }
 
+  // ---------------------------------------------------------------------------------------------- R200h · DASHBOARD INTERACTIVO
+  // Filtros arriba (período, plataforma, vendedor, banco): tarjetas y gráficos cambian al instante, sin recargar.
+  // Mismas cifras que Ganancias (finp_ganancias). Reglas: con filtro de PLATAFORMA el costo y la ganancia salen de esa
+  // plataforma (mismo motor). Con filtro de VENDEDOR o BANCO se muestran solo ingresos: el costo es por cuenta/plataforma
+  // y repartirlo por vendedor sería una cifra inventada. Pantalla completa / TV con actualización cada 5 minutos.
+  st.dash = st.dash || { periodo: 'mes', plat: '', vend: '', banco: '', tv: false };
+  var DIAS_SEM = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  function dashRango(per) {
+    var hoy = (st.data && st.data.hoy) || new Date().toISOString().slice(0, 10), y = +hoy.slice(0, 4), m = +hoy.slice(5, 7);
+    var ini = function (yy, mm) { var d = new Date(Date.UTC(yy, mm - 1, 1)); return d.toISOString().slice(0, 10); };
+    var fin = function (yy, mm) { return new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10); };
+    if (per === 'anterior') return { desde: ini(y, m - 1), hasta: fin(y, m - 1) };
+    if (per === '3m') return { desde: ini(y, m - 2), hasta: hoy };
+    if (per === '6m') return { desde: ini(y, m - 5), hasta: hoy };
+    if (per === 'anio') return { desde: y + '-01-01', hasta: hoy };
+    return null; // 'mes' = el mes elegido arriba; 'rango' = desde/hasta escritos
+  }
+  function dashDatos(g) {
+    var F = st.dash, gr = g.graficos || {}, todas = gr.transacciones || [];
+    var tx = todas.filter(function (t) { return (!F.plat || t.plataforma === F.plat) && (!F.vend || t.vendedor === F.vend) && (!F.banco || String(t.banco || '').split(' + ').indexOf(F.banco) >= 0); });
+    var hay = !!(F.plat || F.vend || F.banco), soloIngresos = !!(F.vend || F.banco);
+    var sum = function (arr, k) { return Math.round(arr.reduce(function (a, t) { return a + (Number(t[k]) || 0); }, 0) * 100) / 100; };
+    var pRow = F.plat ? (g.porPlataforma || []).find(function (p) { return p.plataforma === F.plat; }) || null : null;
+    var clientes = {}; tx.forEach(function (t) { if (t.beneficiario) clientes[t.beneficiario] = 1; });
+    var cub = sum(tx.filter(function (t) { return t.costoCubierto; }), 'cobrado');
+    var D = { tx: tx, hay: hay, soloIngresos: soloIngresos, pRow: pRow, incompleto: (gr.transaccionesTotal || 0) > todas.length,
+      cobrado: sum(tx, 'cobrado'), pendiente: sum(tx, 'pendiente'), cubierto: cub, altas: tx.filter(function (t) { return t.tipo === 'venta'; }).length, renov: tx.filter(function (t) { return t.tipo === 'renovacion'; }).length, clientes: Object.keys(clientes).length };
+    if (!soloIngresos && pRow) { D.cobrado = pRow.cobradoHnl; D.cubierto = pRow.cobradoCubiertoHnl; D.pendiente = pRow.pendienteHnl || 0; D.altas = pRow.altas; D.renov = pRow.renovaciones; D.clientes = pRow.clientes; D.incompleto = false; } // solo plataforma: cifras exactas del motor
+    return D;
+  }
+  function dashOpciones(g) {
+    var todas = (g.graficos || {}).transacciones || [], v = {}, b = {};
+    todas.forEach(function (t) { if (t.vendedor) v[t.vendedor] = 1; String(t.banco || '').split(' + ').forEach(function (x) { if (x) b[x] = 1; }); });
+    var plats = (g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).map(function (p) { return [p.plataforma, p.nombre]; });
+    return { plats: plats, vends: Object.keys(v).sort(), bancos: Object.keys(b).sort() };
+  }
+  function dashFiltrosHtml(g) {
+    var F = st.dash, o = dashOpciones(g), r = ganRango();
+    var sel = function (k, vacio, lista) { return '<select data-fz-dash="' + k + '" aria-label="' + vacio + '"><option value="">' + vacio + '</option>' + lista.map(function (x) { var v = Array.isArray(x) ? x[0] : x, t = Array.isArray(x) ? x[1] : x; return '<option value="' + esc(v) + '"' + (F[k] === v ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select>'; };
+    var per = '<select data-fz-dash="periodo" aria-label="Período">' + [['mes', 'Mes elegido (' + nombreMes(st.mes) + ')'], ['anterior', 'Mes anterior'], ['3m', 'Últimos 3 meses'], ['6m', 'Últimos 6 meses'], ['anio', 'Este año'], ['rango', 'Personalizado']].map(function (x) { return '<option value="' + x[0] + '"' + (F.periodo === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>';
+    var rango = F.periodo === 'rango' ? '<label>Desde<input type="date" data-fz-dash="desde" value="' + esc(r.desde) + '"></label><label>Hasta<input type="date" data-fz-dash="hasta" value="' + esc(r.hasta) + '"></label>' : '';
+    var chips = [['plat', 'Plataforma', (o.plats.find(function (p) { return p[0] === F.plat; }) || [])[1]], ['vend', 'Vendedor', F.vend], ['banco', 'Banco', F.banco]].filter(function (c) { return st.dash[c[0]]; })
+      .map(function (c) { return '<button type="button" class="fz-chip-f" data-fz-dashq="' + c[0] + '">' + c[1] + ': <b>' + esc(c[2] || st.dash[c[0]]) + '</b> ✕</button>'; }).join('');
+    return '<div class="fz-card fz-dash-f"><div class="fz-dash-fr">' + per + rango + sel('plat', 'Todas las plataformas', o.plats) + sel('vend', 'Todos los vendedores', o.vends) + sel('banco', 'Todos los bancos', o.bancos) +
+      '<div class="fz-dash-acc">' + (chips ? '<button type="button" class="fz-btn sec sm" data-fz-dashq="todo">Limpiar filtros</button>' : '') + '<button type="button" class="fz-btn sec sm" data-fz-tv>' + ico('cols') + (st.dash.tv ? 'Salir de pantalla completa' : 'Pantalla completa / TV') + '</button></div></div>' +
+      (chips ? '<div class="fz-dash-chips">' + chips + '</div>' : '') + '<p class="fz-sub">Período: <b>' + fecha(r.desde) + ' al ' + fecha(r.hasta) + '</b> · toque una barra (plataforma, vendedor o banco) para filtrar todo el tablero.' + (st.dash.tv ? ' Se actualiza solo cada 5 minutos.' : '') + '</p></div>';
+  }
+  function dashKpis(g, D) {
+    if (!D.hay) return ganKpis(g);
+    var card = function (ic, cls, t, val, extra) { return '<div class="fz-card fz-kpi"><span class="fz-kpi-i ' + cls + '">' + ico(ic) + '</span><div><small>' + t + '</small><strong>' + val + '</strong>' + (extra || '') + '</div></div>'; };
+    var p = D.pRow, res, costo, mg;
+    if (D.soloIngresos || !p) { costo = '<span class="fz-pend">No aplica</span>'; res = '<span class="fz-pend">No aplica</span>'; mg = '<span class="fz-pend">—</span>'; }
+    else { costo = L(p.costoHnl); res = p.resultadoHnl == null ? '<span class="fz-pend">Pendiente · costo incompleto</span>' : L(p.resultadoHnl); mg = p.margen == null ? '—' : P(p.margen); }
+    if (!D.soloIngresos && p) { D = Object.assign({}, D, { cobrado: p.cobradoHnl, cubierto: p.cobradoCubiertoHnl, pendiente: p.pendienteHnl || 0, altas: p.altas, renov: p.renovaciones, clientes: p.clientes, incompleto: false }); } // solo plataforma: cifras exactas del motor
+    var nota = D.soloIngresos ? '<em class="fz-nota">Con filtro de vendedor o banco se muestran solo ingresos: el costo es por cuenta y plataforma (no se reparte por vendedor).</em>' : '<em class="fz-nota">Costo y ganancia de esta plataforma (mismo cálculo que Ganancias).</em>';
+    return '<div class="fz-kpis">' +
+      card('coins', 'v', 'Ingresos cobrados (filtrado)', L(D.cobrado), '<em class="fz-nota">' + D.altas + ' alta(s) · ' + D.renov + ' renovación(es) · ' + D.clientes + ' cliente(s)</em><em class="fz-nota">Pendiente ' + L(D.pendiente) + '</em>' + (D.incompleto ? '<em class="fz-nota">Período muy grande: se filtraron las ' + ((g.graficos || {}).transacciones || []).length + ' transacciones más recientes.</em>' : '')) +
+      card('layers', 'r', 'Costos directos', costo, nota) + card('cols', 'v', 'Resultado después de costos', res, '') +
+      card('pct', 'a', 'Margen', mg, '<em class="fz-nota">Cobrado con costo vinculado: ' + L(D.cubierto) + '</em>') + '</div>';
+  }
+  async function cargarProximos(forzar) {
+    if (st.dashProx && !forzar) return; st.dashProx = { cargando: true };
+    try { st.dashProx = await api('finp_cuentas_lista', { plataforma: 'proximos' }); } catch (e) { st.dashProx = { error: e.message }; }
+    if (st.tab === 'resumen') pintar();
+  }
+  function proximosHtml() {
+    var r = st.dashProx; if (!r) { cargarProximos(); r = { cargando: true }; }
+    var cab = '<div class="fz-card"><div class="fz-cab">' + ico('alert', 'am') + '<h3>Pagos a proveedores por vencer (7 días)</h3><button type="button" class="fz-btn sec sm" data-fz-tab="compras" data-sub="pendientes">Ir a Compras</button></div>';
+    if (r.cargando) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
+    if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
+    var f = (r.filas || []).filter(function (x) { return !st.dash.plat || x.plataforma === st.dash.plat || (st.dash.plat === 'hbomax_standard' || st.dash.plat === 'hbomax_platinum') && x.plataforma === 'hbomax'; });
+    return cab + (f.length ? '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Cuenta madre</th><th>Próximo pago</th><th class="n">Último costo</th><th></th></tr></thead><tbody>' + f.slice(0, 12).map(function (x) {
+      return '<tr><td><b>' + esc(x.correo) + '</b><small>' + esc(x.plataformaNombre) + '</small></td><td>' + (x.proximoPago ? fecha(x.proximoPago) : '—') + (x.vencido ? ' <span class="fz-pill mal">vencido</span>' : ' <span class="fz-pill warn">pronto</span>') + '</td><td class="n">' + (x.costo ? L(x.costo.costoHnl, true) : '<span class="fz-pend">Pendiente</span>') + '</td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-hist="cuenta" data-id="' + esc(x.cuentaId) + '" data-titulo="' + esc(x.correo) + '">Historial</button></td></tr>';
+    }).join('') + '</tbody></table></div>' + (f.length > 12 ? '<p class="fz-sub">Y ' + (f.length - 12) + ' más en Compras.</p>' : '') : '<div class="fz-vacio-s">Ningún pago a proveedor vence en los próximos 7 días.</div>') + '</div>';
+  }
+  function tvIniciar(on) {
+    st.dash.tv = on; clearInterval(st.dashTvT);
+    var el = document.querySelector('#rbac-finanzas') || host();
+    if (on) {
+      try { if (el && el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(function () {}); } catch (_) {}
+      st.dashTvT = setInterval(function () { if (st.tab === 'resumen' && st.dash.tv) { st.dashProx = null; cargarGan(true); } }, 5 * 60 * 1000);
+    } else { try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (_) {} }
+    document.documentElement.classList.toggle('fz-tv', on); pintar();
+  }
+  document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && st.dash.tv) tvIniciar(false); });
+
   // ---------------------------------------------------------------------------------------------- R200b · GRÁFICOS CONCILIADOS
   // Salen de la MISMA respuesta que las tarjetas (finp_ganancias): mismos filtros, mismos totales. Nada de cifras decorativas.
   // «Ganancia por categoría» quedaba vacío porque leía otra fuente (fin_consumos/PEPS) mientras las tarjetas usan el motor único.
   st.graf = st.graf || { tend: 'mes', orden: 'ganancia', inv: 'proveedor' };
   var COL = { cobrado: '#178EF1', costo: '#E6211C', resultado: '#13BD63', pend: '#C7CDD6', amarillo: '#F5B800', morado: '#8B5CF6' };
   function graficosHtml(g) {
-    var G = st.graf, gr = g.graficos, r = g.resumen || {};
+    var G = st.graf, gr = g.graficos, r = g.resumen || {}, D = dashDatos(g);
     var sel = function (k, opts) { return '<select class="fz-gsel" data-fz-graf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (G[k] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
     var caja = function (id, titulo, extra, alto, pie) { return '<div class="fz-card fz-chart"><div class="fz-cab"><h3>' + titulo + '</h3>' + (extra || '') + '</div><div class="fz-chart-box" style="height:' + (alto || 250) + 'px"><canvas id="' + id + '" role="img" aria-label="' + esc(titulo) + '"></canvas></div>' + (pie || '') + '</div>'; };
-    var cob = gr.cobertura || {}, totCob = (cob.cubiertoHnl || 0) + (cob.sinCostoHnl || 0);
+    var cobC = D.hay ? D.cubierto : (gr.cobertura || {}).cubiertoHnl || 0, totCob = D.hay ? D.cobrado : (gr.cobertura || {}).cubiertoHnl + (gr.cobertura || {}).sinCostoHnl || 0;
+    var nComp = function (t) { return D.tx.filter(function (x) { return x.tipo === t; }).length; };
+    var nPlat = D.soloIngresos ? Object.keys(D.tx.reduce(function (a, t) { a[t.plataforma] = 1; return a; }, {})).length : (g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).length;
     return '<div class="fz-g2">' +
-        caja('fzGTend', 'Tendencia: cobros, costos y ganancia', sel('tend', [['mes', 'Por mes'], ['dia', 'Por día']]), 260, '<p class="fz-sub">Toque un punto para ver sus transacciones' + (G.tend === 'mes' ? ' (abre ese mes)' : '') + '. «Pendiente» = mes con costo incompleto: no se grafica como ganancia.</p>') +
-        caja('fzGPlat', 'Rentabilidad por plataforma', sel('orden', [['ganancia', 'Mayor ganancia'], ['ingreso', 'Mayor ingreso'], ['margen', 'Peor margen']]), Math.max(220, Math.min(520, 34 * ((g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).length + 1))), '<p class="fz-sub">Gris = resultado pendiente (faltan costos por vincular). Toque una barra para abrir sus cuentas.</p>') +
+        caja('fzGTend', D.hay ? 'Tendencia del filtro: cobrado' : 'Tendencia: cobros, costos y ganancia', D.hay ? '' : sel('tend', [['mes', 'Por mes'], ['dia', 'Por día']]), 260, '<p class="fz-sub">' + (D.hay ? 'Con filtros se grafica lo cobrado (por día o por mes según el período).' : 'Toque un punto para ver sus transacciones' + (G.tend === 'mes' ? ' (abre ese mes)' : '') + '. «Pendiente» = mes con costo incompleto: no se grafica como ganancia.') + '</p>') +
+        caja('fzGPlat', D.soloIngresos ? 'Cobrado por plataforma (filtro)' : 'Rentabilidad por plataforma', D.soloIngresos ? '' : sel('orden', [['ganancia', 'Mayor ganancia'], ['ingreso', 'Mayor ingreso'], ['margen', 'Peor margen']]), Math.max(220, Math.min(520, 34 * (nPlat + 1))), '<p class="fz-sub">Toque una barra para filtrar todo el tablero por esa plataforma.' + (D.soloIngresos ? '' : ' Gris = resultado pendiente (faltan costos por vincular).') + '</p>') +
       '</div><div class="fz-g3">' +
-        caja('fzGComp', 'Altas nuevas vs. renovaciones cobradas', '', 220, '<p class="fz-sub">' + (gr.composicion.venta.n) + ' alta(s) · ' + gr.composicion.renovacion.n + ' renovación(es) · ' + gr.composicion.ingreso_manual.n + ' otro(s) cobro(s).</p>') +
-        caja('fzGCob', 'Cobertura de costos', '<button type="button" class="fz-btn sec sm" data-fz-graf-pend>Ver pendientes</button>', 220, '<p class="fz-sub">' + (totCob ? P(Math.round((cob.cubiertoHnl || 0) / totCob * 1000) / 10) + ' del ingreso cobrado tiene costo vinculado.' : 'Sin cobros en el período.') + '</p>') +
-        caja('fzGInv', 'Inversión y compras (caja)', sel('inv', [['proveedor', 'Por proveedor'], ['pago', 'Por método de pago'], ['moneda', 'Por moneda']]), 220, '<p class="fz-sub">Pagos a proveedores del período (' + L(r.desembolsoHnl) + '). No es lo mismo que el costo atribuido a las ventas (' + L(r.costoHnl) + ').</p>') +
-      '</div><div class="fz-acc-graf"><button type="button" class="fz-btn sec sm" data-fz-trans="">' + ico('doc') + 'Ver transacciones (' + (gr.transaccionesTotal || 0) + ')</button></div>';
+        caja('fzGComp', 'Altas nuevas vs. renovaciones', '', 220, '<p class="fz-sub">' + nComp('venta') + ' alta(s) · ' + nComp('renovacion') + ' renovación(es) · ' + nComp('ingreso_manual') + ' otro(s) cobro(s).</p>') +
+        caja('fzGCob', 'Cobertura de costos', '<button type="button" class="fz-btn sec sm" data-fz-graf-pend>Ver pendientes</button>', 220, '<p class="fz-sub">' + (totCob ? P(Math.round(cobC / totCob * 1000) / 10) + ' del ingreso cobrado tiene costo vinculado.' : 'Sin cobros en el período.') + '</p>') +
+        caja('fzGInv', 'Inversión y compras (caja)', sel('inv', [['proveedor', 'Por proveedor'], ['pago', 'Por método de pago'], ['moneda', 'Por moneda']]), 220, '<p class="fz-sub">Pagos a proveedores del período (' + L(r.desembolsoHnl) + '). No es lo mismo que el costo atribuido (' + L(r.costoHnl) + ').' + (D.soloIngresos ? ' No cambia con vendedor/banco.' : '') + '</p>') +
+      '</div><div class="fz-g3">' +
+        caja('fzGVend', 'Top vendedores', '', 240, '<p class="fz-sub">Cobrado por vendedor. Toque uno para filtrar.</p>') +
+        caja('fzGBanco', 'Cobros por banco', '', 240, '<p class="fz-sub">A qué banco entró el dinero. Toque uno para filtrar.</p>') +
+        caja('fzGSem', 'Ventas por día de la semana', '', 240, '<p class="fz-sub">Cobrado y cantidad de ventas según el día.</p>') +
+      '</div><div class="fz-g2">' +
+        caja('fzGCli', 'Top 10 clientes', '', 300, '<p class="fz-sub">Por monto cobrado en el período (beneficiario del servicio).</p>') + proximosHtml() +
+      '</div><div class="fz-acc-graf"><button type="button" class="fz-btn sec sm" data-fz-trans="">' + ico('doc') + 'Ver transacciones (' + (D.hay ? D.tx.length : gr.transaccionesTotal || 0) + ')</button></div>';
   }
   function dibujarGraficos(g) {
     if (!window.Chart) return;
-    var gr = g.graficos, G = st.graf, nuevo = function (id, cfg) { var cv = document.getElementById(id); if (!cv) return; var ch = new window.Chart(cv, cfg); st.charts.push(ch); return ch; };
-    var base = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 12 } } }, tooltip: { callbacks: { label: function (c) { return (c.dataset.label ? c.dataset.label + ': ' : '') + (c.raw == null ? 'Pendiente' : L(c.raw)); } } } } };
+    var gr = g.graficos, G = st.graf, D = dashDatos(g), nuevo = function (id, cfg) { var cv = document.getElementById(id); if (!cv) return; var ch = new window.Chart(cv, cfg); st.charts.push(ch); return ch; };
+    var grande = st.dash.tv ? 15 : 12;
+    var base = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: grande } } }, tooltip: { callbacks: { label: function (c) { return (c.dataset.label ? c.dataset.label + ': ' : '') + (c.raw == null ? 'Pendiente' : L(c.raw)); } } } } };
     var ejeL = { grid: { color: '#EEF1F5' }, border: { display: false }, ticks: { color: '#8A93A0', callback: function (v) { return L(v); } } };
+    var agrupar = function (key) { var m = {}; D.tx.forEach(function (t) { var k = key(t); if (!k) return; var x = m[k] || (m[k] = { k: k, cobrado: 0, n: 0 }); x.cobrado = Math.round((x.cobrado + (Number(t.cobrado) || 0)) * 100) / 100; x.n++; }); return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.cobrado - a.cobrado; }); };
+    var filtrarPor = function (k, v) { st.dash[k] = st.dash[k] === v ? '' : v; pintar(); };
     // Tendencia
-    if (G.tend === 'dia') {
+    if (D.hay) {
+      var r = ganRango(), largo = (Date.parse(r.hasta) - Date.parse(r.desde)) / 864e5 > 62;
+      var serie = agrupar(function (t) { return largo ? String(t.fecha).slice(0, 7) : t.fecha; }).sort(function (a, b) { return a.k.localeCompare(b.k); });
+      nuevo('fzGTend', { type: 'bar', data: { labels: serie.map(function (x) { return largo ? nombreMes(x.k) : x.k.slice(8) + '/' + x.k.slice(5, 7); }), datasets: [{ label: 'Cobrado', data: serie.map(function (x) { return x.cobrado; }), backgroundColor: COL.cobrado, borderRadius: 3 }] },
+        options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (el.length && !largo) abrirTransacciones({ fecha: serie[el[0].index].k }); } }) });
+    } else if (G.tend === 'dia') {
       var dd = gr.porDia || [];
       nuevo('fzGTend', { type: 'bar', data: { labels: dd.map(function (x) { return x.fecha.slice(8) + '/' + x.fecha.slice(5, 7); }), datasets: [{ label: 'Cobrado', data: dd.map(function (x) { return x.cobradoHnl; }), backgroundColor: COL.cobrado, borderRadius: 3 }, { label: 'Pagos a proveedores', data: dd.map(function (x) { return x.desembolsoHnl || 0; }), backgroundColor: COL.costo, borderRadius: 3 }] },
         options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (el.length) abrirTransacciones({ fecha: dd[el[0].index].fecha }); } }) });
@@ -164,36 +266,59 @@
         { label: 'Cobrado', data: ms.map(function (m) { return m.cobradoHnl; }), borderColor: COL.cobrado, backgroundColor: COL.cobrado, tension: .25 },
         { label: 'Costo atribuido', data: ms.map(function (m) { return m.costoHnl; }), borderColor: COL.costo, backgroundColor: COL.costo, tension: .25 },
         { label: 'Ganancia calculable', data: ms.map(function (m) { return m.resultadoHnl == null ? null : m.resultadoHnl; }), borderColor: COL.resultado, backgroundColor: COL.resultado, tension: .25, spanGaps: false }] },
-        options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (!el.length) return; var mg = ms[el[0].index].mes, pg = mg.split('-'); st.mes = mg; st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; cargar(true); } }) });
+        options: Object.assign({}, base, { scales: { x: { grid: { display: false } }, y: ejeL }, onClick: function (e, el) { if (!el.length) return; var mg = ms[el[0].index].mes, pg = mg.split('-'); st.mes = mg; st.dash.periodo = 'mes'; st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; cargar(true); } }) });
     }
-    // Rentabilidad por plataforma (resultado null = pendiente, barra gris con el ingreso cubierto 0)
-    var pl = (g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).slice();
-    pl.sort(G.orden === 'ingreso' ? function (a, b) { return b.cobradoHnl - a.cobradoHnl; } : G.orden === 'margen' ? function (a, b) { return (a.margen == null ? 1e9 : a.margen) - (b.margen == null ? 1e9 : b.margen); } : function (a, b) { return (b.resultadoHnl == null ? -1e12 : b.resultadoHnl) - (a.resultadoHnl == null ? -1e12 : a.resultadoHnl); });
-    nuevo('fzGPlat', { type: 'bar', data: { labels: pl.map(function (p) { return p.nombre + (p.resultadoHnl == null ? ' · pendiente' : ''); }), datasets: [
-      { label: 'Ganancia calculable', data: pl.map(function (p) { return p.resultadoHnl == null ? 0 : p.resultadoHnl; }), backgroundColor: pl.map(function (p) { return p.resultadoHnl == null ? COL.pend : p.resultadoHnl >= 0 ? COL.resultado : COL.costo; }), borderRadius: 4 },
-      { label: 'Cobrado', data: pl.map(function (p) { return p.cobradoHnl; }), backgroundColor: 'rgba(23,142,241,.25)', borderRadius: 4 }] },
-      options: Object.assign({}, base, { indexAxis: 'y', scales: { x: ejeL, y: { grid: { display: false } } },
-        plugins: Object.assign({}, base.plugins, { tooltip: { callbacks: { label: function (c) { var p = pl[c.dataIndex]; if (c.datasetIndex === 0) return p.resultadoHnl == null ? 'Resultado pendiente · cobertura ' + (p.coberturaCostos == null ? '—' : p.coberturaCostos + '%') : 'Ganancia ' + L(p.resultadoHnl) + (p.margen == null ? '' : ' · margen ' + p.margen + '%') + (p.margenDefinitivo ? '' : ' (parcial)'); return 'Cobrado ' + L(p.cobradoHnl); } } } }),
-        onClick: function (e, el) { if (el.length) abrirPlataforma(pl[el[0].index].plataforma); } }) });
-    // Composición
-    var cp = gr.composicion;
-    nuevo('fzGComp', { type: 'doughnut', data: { labels: ['Altas nuevas', 'Renovaciones', 'Otros cobros'], datasets: [{ data: [cp.venta.cobradoHnl, cp.renovacion.cobradoHnl, cp.ingreso_manual.cobradoHnl], backgroundColor: [COL.cobrado, COL.resultado, COL.amarillo] }] },
+    // Plataformas: con vendedor/banco = cobrado por plataforma; si no, rentabilidad (la elegida resaltada)
+    if (D.soloIngresos) {
+      var pc = agrupar(function (t) { return t.plataforma; }), nom = {}; D.tx.forEach(function (t) { nom[t.plataforma] = t.nombre; });
+      nuevo('fzGPlat', { type: 'bar', data: { labels: pc.map(function (x) { return nom[x.k] || x.k; }), datasets: [{ label: 'Cobrado', data: pc.map(function (x) { return x.cobrado; }), backgroundColor: pc.map(function (x) { return !st.dash.plat || st.dash.plat === x.k ? COL.cobrado : 'rgba(23,142,241,.25)'; }), borderRadius: 4 }] },
+        options: Object.assign({}, base, { indexAxis: 'y', plugins: Object.assign({}, base.plugins, { legend: { display: false } }), scales: { x: ejeL, y: { grid: { display: false } } }, onClick: function (e, el) { if (el.length) filtrarPor('plat', pc[el[0].index].k); } }) });
+    } else {
+      var pl = (g.porPlataforma || []).filter(function (p) { return p.cobradoHnl > 0 || p.costoHnl > 0; }).slice();
+      pl.sort(G.orden === 'ingreso' ? function (a, b) { return b.cobradoHnl - a.cobradoHnl; } : G.orden === 'margen' ? function (a, b) { return (a.margen == null ? 1e9 : a.margen) - (b.margen == null ? 1e9 : b.margen); } : function (a, b) { return (b.resultadoHnl == null ? -1e12 : b.resultadoHnl) - (a.resultadoHnl == null ? -1e12 : a.resultadoHnl); });
+      var apagado = function (p, c) { return st.dash.plat && st.dash.plat !== p.plataforma ? c.replace(/^#(..)(..)(..)$/, function (_, r, g2, b) { return 'rgba(' + parseInt(r, 16) + ',' + parseInt(g2, 16) + ',' + parseInt(b, 16) + ',.25)'; }) : c; };
+      nuevo('fzGPlat', { type: 'bar', data: { labels: pl.map(function (p) { return p.nombre + (p.resultadoHnl == null ? ' · pendiente' : ''); }), datasets: [
+        { label: 'Ganancia calculable', data: pl.map(function (p) { return p.resultadoHnl == null ? 0 : p.resultadoHnl; }), backgroundColor: pl.map(function (p) { return apagado(p, p.resultadoHnl == null ? COL.pend : p.resultadoHnl >= 0 ? COL.resultado : COL.costo); }), borderRadius: 4 },
+        { label: 'Cobrado', data: pl.map(function (p) { return p.cobradoHnl; }), backgroundColor: 'rgba(23,142,241,.25)', borderRadius: 4 }] },
+        options: Object.assign({}, base, { indexAxis: 'y', scales: { x: ejeL, y: { grid: { display: false } } },
+          plugins: Object.assign({}, base.plugins, { tooltip: { callbacks: { label: function (c) { var p = pl[c.dataIndex]; if (c.datasetIndex === 0) return p.resultadoHnl == null ? 'Resultado pendiente · cobertura ' + (p.coberturaCostos == null ? '—' : p.coberturaCostos + '%') : 'Ganancia ' + L(p.resultadoHnl) + (p.margen == null ? '' : ' · margen ' + p.margen + '%') + (p.margenDefinitivo ? '' : ' (parcial)'); return 'Cobrado ' + L(p.cobradoHnl); } } } }),
+          onClick: function (e, el) { if (el.length) filtrarPor('plat', pl[el[0].index].plataforma); } }) });
+    }
+    // Composición y cobertura (del filtro)
+    var cs = function (t) { return Math.round(D.tx.filter(function (x) { return x.tipo === t; }).reduce(function (a, x) { return a + x.cobrado; }, 0) * 100) / 100; };
+    var cp = D.hay ? { a: cs('venta'), r: cs('renovacion'), o: cs('ingreso_manual') } : { a: gr.composicion.venta.cobradoHnl, r: gr.composicion.renovacion.cobradoHnl, o: gr.composicion.ingreso_manual.cobradoHnl };
+    nuevo('fzGComp', { type: 'doughnut', data: { labels: ['Altas nuevas', 'Renovaciones', 'Otros cobros'], datasets: [{ data: [cp.a, cp.r, cp.o], backgroundColor: [COL.cobrado, COL.resultado, COL.amarillo] }] },
       options: Object.assign({}, base, { cutout: '58%', onClick: function (e, el) { if (el.length) abrirTransacciones({ tipo: ['venta', 'renovacion', 'ingreso_manual'][el[0].index] }); } }) });
-    // Cobertura
-    var cb = gr.cobertura;
-    nuevo('fzGCob', { type: 'doughnut', data: { labels: ['Con costo vinculado', 'Sin costo (pendiente)'], datasets: [{ data: [cb.cubiertoHnl, cb.sinCostoHnl], backgroundColor: [COL.resultado, COL.pend] }] },
+    var cb = D.hay ? { c: D.cubierto, s: Math.round((D.cobrado - D.cubierto) * 100) / 100 } : { c: gr.cobertura.cubiertoHnl, s: gr.cobertura.sinCostoHnl };
+    nuevo('fzGCob', { type: 'doughnut', data: { labels: ['Con costo vinculado', 'Sin costo (pendiente)'], datasets: [{ data: [cb.c, cb.s], backgroundColor: [COL.resultado, COL.pend] }] },
       options: Object.assign({}, base, { cutout: '58%', onClick: function (e, el) { if (el.length) abrirTransacciones({ cubierto: el[0].index === 0 }); } }) });
-    // Inversión
+    // Inversión (caja)
     var inv = (G.inv === 'pago' ? gr.inversionPago : G.inv === 'moneda' ? gr.inversionMoneda : gr.inversionProveedor) || [];
     nuevo('fzGInv', { type: 'bar', data: { labels: inv.slice(0, 8).map(function (x) { return x.clave; }), datasets: [{ label: 'Pagado', data: inv.slice(0, 8).map(function (x) { return x.costoHnl; }), backgroundColor: COL.morado, borderRadius: 4 }] },
       options: Object.assign({}, base, { plugins: Object.assign({}, base.plugins, { legend: { display: false } }), scales: { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: ejeL } }) });
+    // Vendedores / bancos / día de semana / clientes
+    var barras = function (id, lista, color, clave, maxN, horizontal) {
+      var l = lista.slice(0, maxN || 10);
+      nuevo(id, { type: 'bar', data: { labels: l.map(function (x) { return x.k; }), datasets: [{ label: 'Cobrado', data: l.map(function (x) { return x.cobrado; }), backgroundColor: l.map(function (x) { return !clave || !st.dash[clave] || st.dash[clave] === x.k ? color : 'rgba(150,160,175,.35)'; }), borderRadius: 4 }] },
+        options: Object.assign({}, base, { indexAxis: horizontal ? 'y' : 'x', plugins: Object.assign({}, base.plugins, { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return L(c.raw) + ' · ' + l[c.dataIndex].n + ' venta(s)'; } } } }), scales: horizontal ? { x: ejeL, y: { grid: { display: false } } } : { x: { grid: { display: false } }, y: ejeL },
+          onClick: function (e, el) { if (el.length && clave) filtrarPor(clave, l[el[0].index].k); } }) });
+    };
+    barras('fzGVend', agrupar(function (t) { return t.vendedor; }), COL.resultado, 'vend', 8, true);
+    var bancos = {}; D.tx.forEach(function (t) { String(t.banco || 'Sin banco').split(' + ').forEach(function (b) { var x = bancos[b] || (bancos[b] = { k: b, cobrado: 0, n: 0 }); x.cobrado = Math.round((x.cobrado + t.cobrado) * 100) / 100; x.n++; }); });
+    barras('fzGBanco', Object.keys(bancos).map(function (k) { return bancos[k]; }).sort(function (a, b) { return b.cobrado - a.cobrado; }), COL.cobrado, 'banco', 8, true);
+    var sem = DIAS_SEM.map(function (dn) { return { k: dn, cobrado: 0, n: 0 }; }); D.tx.forEach(function (t) { var i = new Date(t.fecha + 'T12:00:00Z').getUTCDay(); if (isNaN(i)) return; sem[i].cobrado = Math.round((sem[i].cobrado + t.cobrado) * 100) / 100; sem[i].n++; });
+    var semL = sem.slice(1).concat(sem.slice(0, 1)); // lunes primero
+    nuevo('fzGSem', { type: 'bar', data: { labels: semL.map(function (x) { return x.k.slice(0, 3); }), datasets: [{ label: 'Cobrado', data: semL.map(function (x) { return x.cobrado; }), backgroundColor: COL.amarillo, borderRadius: 4, yAxisID: 'y' }, { type: 'line', label: 'Ventas', data: semL.map(function (x) { return x.n; }), borderColor: COL.costo, backgroundColor: COL.costo, yAxisID: 'y2', tension: .3 }] },
+      options: Object.assign({}, base, { plugins: Object.assign({}, base.plugins, { tooltip: { callbacks: { label: function (c) { return c.datasetIndex ? c.raw + ' venta(s)' : 'Cobrado ' + L(c.raw); } } } }), scales: { x: { grid: { display: false } }, y: ejeL, y2: { position: 'right', grid: { display: false }, beginAtZero: true, ticks: { precision: 0 } } } }) });
+    barras('fzGCli', agrupar(function (t) { return t.beneficiario; }), COL.morado, '', 10, true);
   }
   // Transacciones (drill-down): mismas líneas del cálculo; filtros por plataforma, tipo, vendedor y texto.
   function abrirTransacciones(filtro) {
     var g = st.gan[ganClave()]; if (!g || !g.graficos) return;
     filtro = filtro || {};
     var TIPO = { venta: 'Alta nueva', renovacion: 'Renovación cobrada', ingreso_manual: 'Otro cobro' };
-    var todas = g.graficos.transacciones || [];
+    var DF = st.dash || {}; // R200h · respeta los filtros del dashboard
+    var todas = (g.graficos.transacciones || []).filter(function (t) { return (!DF.plat || t.plataforma === DF.plat) && (!DF.vend || t.vendedor === DF.vend) && (!DF.banco || String(t.banco || '').split(' + ').indexOf(DF.banco) >= 0); });
     var plats = []; todas.forEach(function (t) { if (plats.indexOf(t.nombre) < 0) plats.push(t.nombre); }); plats.sort();
     var vends = []; todas.forEach(function (t) { if (vends.indexOf(t.vendedor) < 0) vends.push(t.vendedor); }); vends.sort();
     var html = '<div class="fz-filtros fz-comp-f"><input type="search" data-tf="q" placeholder="Cliente, cuenta o referencia"><select data-tf="plat"><option value="">Todas las plataformas</option>' + plats.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select>' +
@@ -577,8 +702,10 @@
     var compras = '<div class="fz-card"><div class="fz-cab">' + ico('cart') + '<h3>Últimas compras</h3><button type="button" class="fz-btn sm" data-fz="compra">' + ico('plus') + 'Registrar compra</button></div>' +
       ((d.lotes || []).filter(function (l) { return l.estado !== 'anulado'; }).slice(0, 6).map(function (l) { return '<div class="fz-lin">' + logo(l.producto) + '<div><b>' + esc(l.producto) + '</b><small>' + fecha(l.fecha) + ' · ' + esc(l.proveedor || 'Sin proveedor') + ' · ' + esc(l.cuentaPagoNombre || l.pago || '') + '</small></div><strong>' + L(l.costoTotalHnl) + '</strong></div>'; }).join('') || '<div class="fz-vacio-s">Sin compras registradas.</div>') + '</div>';
     var g = st.gan[ganClave()]; if (!g) cargarGan(); // R197 · mismas cifras que Ganancias
-    var cab = g && g.resumen ? ganKpis(g) : '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando…</b></div>';
-    return cab + (g && g.graficos ? graficosHtml(g) : '') + '<div class="fz-g2">' + alertasHtml(d, 4) + compras + '</div><div class="fz-g2 c">' + vip + '</div>' + notaCosteo(d);
+    if (g && g.error) return '<div class="fz-card fz-vacio"><b>No se pudo calcular</b><span>' + esc(g.error) + '</span></div>';
+    if (!g || !g.resumen) return '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Calculando…</b></div>';
+    var dash = '<div class="fz-dash' + (st.dash.tv ? ' tv' : '') + '" id="fzDash">' + (g.graficos ? dashFiltrosHtml(g) + dashKpis(g, dashDatos(g)) + graficosHtml(g) : ganKpis(g)) + '</div>'; // R200h · dashboard interactivo
+    return dash + (st.dash.tv ? '' : '<div class="fz-g2">' + alertasHtml(d, 4) + compras + '</div><div class="fz-g2 c">' + vip + '</div>' + notaCosteo(d));
   }
   function vProveedores(d) {
     var cp = d.costosProveedor || [], rp = d.rentProveedores || [];
@@ -1302,6 +1429,8 @@
       if ((t = e.target.closest('[data-fz-viptab]'))) { st.vip.tab = t.dataset.fzViptab; st.vip.pagina = 1; st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-pag]'))) { st.vip.pagina += Number(t.dataset.fzPag); st.vip.res = null; pintar(); return; }
       if ((t = e.target.closest('[data-fz-menu]'))) { var mm = t.parentNode; var abierto = mm.classList.contains('on'); h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); if (!abierto) mm.classList.add('on'); e.stopPropagation(); return; }
+      if ((t = e.target.closest('[data-fz-dashq]'))) { if (t.dataset.fzDashq === 'todo') { st.dash.plat = st.dash.vend = st.dash.banco = ''; } else st.dash[t.dataset.fzDashq] = ''; pintar(); return; } // R200h
+      if ((t = e.target.closest('[data-fz-tv]'))) { tvIniciar(!st.dash.tv); return; }
       if ((t = e.target.closest('[data-fz-trans]'))) { abrirTransacciones({}); return; } // R200b
       if ((t = e.target.closest('[data-fz-graf-pend]'))) { abrirTransacciones({ cubierto: false }); return; }
       if ((t = e.target.closest('[data-fz-compra]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirAnularCompra(t.dataset.id, t.dataset.fzCompra); return; } // R200a
@@ -1345,6 +1474,12 @@
       if (t.matches('[data-fz-mes]')) { if (/^\d{4}-\d{2}$/.test(t.value)) { st.mes = t.value; st.ganR = null; st.rep.desde = st.rep.hasta = ''; cargar(true); } }
       if (t.matches('[data-fz-ganf]')) { st.ganF[t.dataset.fzGanf] = t.value; pintar(); }
       if (t.matches('[data-fz-graf]')) { st.graf[t.dataset.fzGraf] = t.value; pintar(); return; } // R200b
+      if (t.matches('[data-fz-dash]')) { // R200h · filtros del dashboard
+        var k = t.dataset.fzDash;
+        if (k === 'periodo') { st.dash.periodo = t.value; var rg = dashRango(t.value); if (t.value === 'mes') st.ganR = null; else if (rg) st.ganR = rg; else st.ganR = ganRango(); st.dashProx = st.dashProx; cargarGan(); pintar(); return; }
+        if (k === 'desde' || k === 'hasta') { var cur = ganRango(); var nr = { desde: cur.desde, hasta: cur.hasta }; nr[k] = t.value; if (/^\d{4}-\d{2}-\d{2}$/.test(nr.desde) && /^\d{4}-\d{2}-\d{2}$/.test(nr.hasta) && nr.desde <= nr.hasta) { st.ganR = nr; cargarGan(); pintar(); } return; }
+        st.dash[k] = t.value; pintar(); return;
+      }
       if (t.matches('[data-fz-compf]') && t.dataset.fzCompf !== 'q') { st.compF[t.dataset.fzCompf] = t.value; pintar(); } // R200a
       else if (t.matches('[data-fz-file]') && t.files[0]) leerArchivo(t.files[0]);
       else if (t.matches('[data-fz-res]')) { st.imp.res[t.dataset.fzRes] = t.value; }
