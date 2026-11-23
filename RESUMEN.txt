@@ -1,0 +1,33 @@
+ENTREGA 113 · Sublichat HQ (Vercel) · Ganancias calculadas solo desde el 01/10/2026
+
+QUÉ CAMBIA
+- Ganancia por cuenta / por plataforma: nada antes del 01/10/2026.
+  · Ingresos: cuota de cada perfil × meses que pagó desde el 01/10 (o desde que entró, si fue después).
+  · Costo: solo la parte de cada compra que cae entre el 01/10 y hasta donde pagaron los clientes.
+    Compra anual o trimestral → solo sus días de oct–nov. Activación pagada antes de octubre → no se vuelve a restar.
+    Activación pagada en oct/nov → se resta completa.
+- Detalle contable (Ganancias, Excel financiero): el rango no puede empezar antes del 01/10/2026; la comparación de meses muestra solo oct–nov.
+- Pantalla: «Calculado desde 01/10/2026» y columna «Ganancia desde 01/10/2026».
+- Solo lectura: no se modifica ni borra nada (compras, ventas, Control Maestro intactos).
+
+ARCHIVOS (subir con «Add files via upload» respetando carpetas)
+  index.html                     (cache r200k)
+  finanzas-web.js
+  api/_finanzas-ganancias.js
+  api/_finanzas-panel.js
+  tests/r200k-rentabilidad-desde-octubre.test.mjs   (nuevo)
+  tests/r197-ganancias-motor.test.mjs               (ajustado a la regla nueva)
+  tests/r198i-costo-por-activacion.test.mjs         (ajustado)
+  tests/r198j-ganancia-por-cuenta.test.mjs          (ajustado)
+
+CONCILIACIÓN (caso de prueba, datos ficticios, hoy 23/11/2026)
+  Crunchyroll: compra anual L2,400 del 01/04 (365 días)
+    Perfil 1 (alta en marzo, vence 05/12): cuenta desde 01/10 → 2 meses × L100 = L200
+    Perfil 2 (alta 20/10, vence 10/12): 1 mes × L100 = L100
+    Ingresos oct–nov L300 · Costo del período 2,400 × 70/365 = L460.27 · Resultado −L160.27
+    (antes restaba la compra completa desde abril)
+  Paramount+: activación L300 del 10/05 → costo del período L0 · ingreso 2 × L90 = L180 · ganancia L180
+  Misma activación pagada el 12/10 → se resta completa: L90 × 1 − L300 = −L210
+
+PRUEBAS: 538/544 (las 6 que fallan ya fallaban antes: 54, 55, 57, 58, 135, 230)
+ROLLBACK: volver a subir los mismos 4 archivos de la versión anterior desde GitHub (commit f7c9221).
