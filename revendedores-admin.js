@@ -966,19 +966,68 @@ async function eliminarServicio(clienteId,idx){
   catch(e){ alert(e.message); }
 }
 
-/* ═══════════ RECOMPENSAS ═══════════ */
+/* ═══════════ RECOMPENSAS · R204 SubliPoints (solicitudes, catálogo y ranking del mes) ═══════════
+   Todo es manual: aprobar exige confirmar que se comprobó el cupo y el acceso real; la entrega se registra
+   con una nota SIN claves ni datos de acceso y el costo real. La Gift Card L100 se acredita al aprobar. */
+const SP_EST={pendiente_aprobacion:['warn','Pendiente de aprobación'],aprobada:['info','Aprobada · por entregar'],entregada:['ok','Entregada'],rechazada:['bad','Rechazada'],pendiente:['warn','Pendiente (programa anterior)']};
 async function loadRecompensas(force){
   if(state.recompensas&&!force)return renderRecompensas();
   const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando recompensas…</div>';
-  try{const d=await api('GET','recompensas');state.recompensas=d.recompensas||[];renderRecompensas()}catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+  try{
+    const [d,c,r]=await Promise.all([api('GET','recompensas'),api('GET','recompensas/catalogo').catch(()=>({catalogo:[]})),api('GET','sublipoints').catch(()=>null)]);
+    state.recompensas=d.recompensas||[];state.rewardCat=c.catalogo||[];state.spRanking=r;state.rewardTab=state.rewardTab||'solicitudes';renderRecompensas();
+  }catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+function spMes(m){const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const [y,n]=String(m||'').split('-');return n?`${M[Number(n)-1]} ${y}`:''}
+function rewardCard(r){
+  const sp=r.programa==='sublipoints',[k,t]=SP_EST[r.estado]||['', r.estado||'pendiente'];
+  const meta=sp?`${esc(r.socio||r.socio_norm)} · ${esc(r.nivel)} · ${esc(spMes(r.mes))} · ${Number(r.puntos)||0} pts`:`${esc(r.socio||r.socio_norm)} · ${esc(r.nivel||'')} · programa anterior`;
+  const trazas=[r.aprobadoPor?`Aprobó: ${esc(r.aprobadoPor)}`:'',r.entregadoPor?`Entregó: ${esc(r.entregadoPor)}`:'',r.costoRealHnl!=null?`Costo real: ${money(r.costoRealHnl)}`:'',r.notaEntrega?`Nota: ${esc(r.notaEntrega)}`:'',r.motivoRechazo?`Motivo: ${esc(r.motivoRechazo)}`:''].filter(Boolean).join(' · ');
+  let acciones='';
+  if(sp&&r.estado==='pendiente_aprobacion')acciones=`<label class="cr-check"><input type="checkbox" id="rwOk-${esc(r.id)}"> Comprobé el cupo y el acceso real</label><label class="cr-field">Costo real (opcional)<input id="rwCosto-${esc(r.id)}" type="number" min="0" step="0.01" placeholder="L"></label><div class="cr-row" style="gap:8px;justify-content:flex-start"><button class="cr-btn red" data-rw-act="aprobada" data-rw-id="${esc(r.id)}">Aprobar${r.recompensaId==='inm_giftcard_100'?' y acreditar L100':''}</button><button class="cr-btn ghost" data-rw-act="rechazada" data-rw-id="${esc(r.id)}">Rechazar</button></div>`;
+  else if(sp&&r.estado==='aprobada')acciones=`<label class="cr-field">Nota para el socio (sin claves ni datos de acceso)<input id="rwNota-${esc(r.id)}" maxlength="300" placeholder="Ej. Enviado a su correo registrado"></label><label class="cr-field">Costo real<input id="rwCosto-${esc(r.id)}" type="number" min="0" step="0.01" value="${r.costoRealHnl!=null?esc(r.costoRealHnl):''}" placeholder="L"></label><div class="cr-row" style="gap:8px;justify-content:flex-start"><button class="cr-btn red" data-rw-act="entregada" data-rw-id="${esc(r.id)}">Marcar entregada</button><button class="cr-btn ghost" data-rw-act="rechazada" data-rw-id="${esc(r.id)}">Rechazar</button></div>`;
+  else if(!sp&&r.estado==='pendiente')acciones=`<div class="cr-row" style="gap:8px;justify-content:flex-start"><button class="cr-btn red" data-reward-id="${esc(r.id)}" data-reward-status="entregada">Entregada</button><button class="cr-btn ghost" data-reward-id="${esc(r.id)}" data-reward-status="rechazada">Rechazar</button></div>`;
+  return `<article class="cr-card"><div class="cr-row"><h3>🎁 ${esc(r.recompensa||'Recompensa')}</h3><span class="cr-badge ${k==='ok'?'':k==='bad'?'paused':''}">${esc(t)}</span></div><small>${meta}${r.detalle?` · ${esc(r.detalle)}`:''}</small>${trazas?`<div class="cr-status" style="margin:8px 0">${trazas}</div>`:''}${acciones}</article>`;
 }
 function renderRecompensas(){
   const b=$('#revBody');if(!state.recompensas)return loadRecompensas();
-  b.innerHTML=`<div class="cr-tools"><span>Solicitudes de premios de los socios</span><button class="cr-btn ghost" id="rewardReload">Actualizar</button></div><div class="cr-grid">${state.recompensas.map(r=>`<article class="cr-card"><div class="cr-row"><h3>🎁 ${esc(r.recompensa||'Recompensa')}</h3><span class="cr-badge ${r.estado==='entregada'?'':r.estado==='rechazada'?'paused':''}">${esc(r.estado||'pendiente')}</span></div><small>Socio: ${esc(r.socio||r.socio_norm||'—')} · Nivel ${esc(r.nivel||'—')} · ${Number(r.ventas)||0} ventas</small><div class="cr-row"><button class="cr-btn danger" data-reward-status="rechazada" data-reward-id="${esc(r.id)}">Rechazar</button><button class="cr-btn red" data-reward-status="entregada" data-reward-id="${esc(r.id)}">✓ Marcar entregada</button></div></article>`).join('')||'<div class="cr-empty">No hay solicitudes de recompensa.</div>'}</div>`;
+  const tab=state.rewardTab||'solicitudes',pend=state.recompensas.filter(r=>['pendiente_aprobacion','aprobada','pendiente'].includes(r.estado)).length;
+  const tabs=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Recompensas SubliPoints</b><br><small>Una por socio por mes, del nivel más alto. Entrega 100% manual. Sublicuentas y Relojes no participan.</small></div><button class="cr-btn ghost" id="rewardReload">Actualizar</button></div><div class="cr-row" style="gap:8px;justify-content:flex-start;margin:0 0 12px">${[['solicitudes',`Solicitudes${pend?` (${pend})`:''}`],['catalogo','Catálogo de premios'],['ranking','SubliPoints del mes']].map(([k,t])=>`<button class="cr-btn ${tab===k?'red':'ghost'}" data-rw-tab="${k}">${t}</button>`).join('')}</div>`;
+  let cuerpo='';
+  if(tab==='solicitudes')cuerpo=state.recompensas.length?`<div class="cr-grid">${state.recompensas.map(rewardCard).join('')}</div>`:'<div class="cr-empty">Todavía no hay solicitudes.</div>';
+  if(tab==='catalogo')cuerpo=`<div class="cr-grid">${(state.rewardCat||[]).map(x=>`<article class="cr-card"><div class="cr-row"><h3>${esc(x.nombre)}</h3><span class="cr-badge ${x.agotado?'paused':''}">${esc(x.nivel)}${x.agotado?' · agotado':''}</span></div><small>${esc(x.detalle||'')}</small>
+    ${x.tipo==='giftcard'?'<div class="cr-status" style="margin:8px 0">L100 de saldo promocional, una sola vez al aprobar. Productos elegibles: todos menos Netflix. Vencimiento, máximo por pedido y combinación con descuentos se configuran cuando se active el pago con saldo.</div>':`<label class="cr-field">Duración<input data-cat="${esc(x.id)}" data-k="duracion" maxlength="40" value="${esc(x.duracion||'')}" placeholder="Por definir"></label>`}
+    ${x.id==='inm_hbo'?`<label class="cr-field">Plan de HBO<select data-cat="${esc(x.id)}" data-k="plan">${['','Standard','Platinum','Basic con anuncios'].map(p=>`<option value="${p}" ${String(x.plan||'')===p?'selected':''}>${p||'Por configurar'}</option>`).join('')}</select></label>`:''}
+    <label class="cr-field">Costo real por premio<input data-cat="${esc(x.id)}" data-k="costoHnl" type="number" min="0" step="0.01" value="${x.costoHnl!=null?esc(x.costoHnl):''}" placeholder="L"></label>
+    <label class="cr-field">Cupos (vacío = sin límite)<input data-cat="${esc(x.id)}" data-k="cupos" type="number" min="0" step="1" value="${x.cupos!=null?esc(x.cupos):''}"></label>
+    <label class="cr-field">Disponibilidad<select data-cat="${esc(x.id)}" data-k="disponibilidad"><option value="disponible" ${x.disponibilidad!=='agotado'?'selected':''}>Disponible</option><option value="agotado" ${x.disponibilidad==='agotado'?'selected':''}>Agotado</option></select></label>
+    <label class="cr-check"><input type="checkbox" data-cat="${esc(x.id)}" data-k="activo" ${x.activo!==false?'checked':''}> Activo</label>
+    <button class="cr-btn red" data-cat-save="${esc(x.id)}">Guardar</button></article>`).join('')}</div>`;
+  if(tab==='ranking'){const r=state.spRanking;cuerpo=!r?'<div class="cr-empty">No se pudo leer SubliPoints.</div>':`<div class="cr-card"><b>SubliPoints · ${esc(spMes(r.mes))}</b><br><small>En vigor desde ${esc(new Date(r.inicio).toLocaleString('es-HN'))}. Pedidos suman +2 por servicio al marcarlos «Pago confirmado»; renovaciones +1 al confirmar el pago en Panel Dios › Comprobantes.</small>${(r.ranking||[]).length?`<ol style="margin:10px 0 0;padding-left:20px">${r.ranking.map(x=>`<li style="margin:6px 0"><b>${esc(x.socio||x.socio_norm)}</b> — ${x.puntos} pts · ${esc(x.nivel)} <small>(${x.ventasNuevas} nuevas · ${x.renovaciones} renov.)</small></li>`).join('')}</ol>`:'<p>Todavía no hay puntos este mes.</p>'}</div>`;}
+  b.innerHTML=tabs+cuerpo;
   $('#rewardReload').onclick=()=>loadRecompensas(true);
+  b.querySelectorAll('[data-rw-tab]').forEach(x=>x.onclick=()=>{state.rewardTab=x.dataset.rwTab;renderRecompensas()});
   b.querySelectorAll('[data-reward-id]').forEach(x=>x.onclick=()=>setRewardStatus(x.dataset.rewardId,x.dataset.rewardStatus));
+  b.querySelectorAll('[data-rw-act]').forEach(x=>x.onclick=()=>setRewardSP(x.dataset.rwId,x.dataset.rwAct,x));
+  b.querySelectorAll('[data-cat-save]').forEach(x=>x.onclick=()=>saveRewardCat(x.dataset.catSave,x));
 }
 async function setRewardStatus(id,estado){try{await api('PATCH','recompensas/'+id,{estado});await loadRecompensas(true)}catch(e){alert(e.message)}}
+async function setRewardSP(id,estado,btn){
+  const body={estado};const ok=$(`#rwOk-${CSS.escape(id)}`),costo=$(`#rwCosto-${CSS.escape(id)}`),nota=$(`#rwNota-${CSS.escape(id)}`);
+  if(estado==='aprobada'){if(!ok||!ok.checked)return alert('Marque «Comprobé el cupo y el acceso real» antes de aprobar.');body.disponibilidadComprobada=true}
+  if(estado==='rechazada'){const m=prompt('Motivo del rechazo (lo verá el socio):');if(!m||!m.trim())return;body.motivo=m.trim()}
+  if(estado==='entregada'&&!confirm('¿Confirma que la recompensa ya fue entregada al socio?'))return;
+  if(costo&&costo.value!=='')body.costoRealHnl=Number(costo.value);if(nota)body.nota=nota.value;
+  btn.disabled=true;btn.textContent='Guardando…';
+  try{const r=await api('PATCH','recompensas/'+id,body);if(r.sinCambios)alert('Ya estaba en ese estado: no se repitió nada.');await loadRecompensas(true)}
+  catch(e){btn.disabled=false;btn.textContent='Reintentar';alert((e.data&&e.data.detail)||e.message)}
+}
+async function saveRewardCat(id,btn){
+  const body={};document.querySelectorAll(`[data-cat="${CSS.escape(id)}"]`).forEach(el=>{body[el.dataset.k]=el.type==='checkbox'?el.checked:el.value});
+  btn.disabled=true;btn.textContent='Guardando…';
+  try{await api('PATCH','recompensas/catalogo/'+id,body);btn.textContent='✓ Guardado';setTimeout(()=>loadRecompensas(true),500)}
+  catch(e){btn.disabled=false;btn.textContent='Guardar';alert(e.message)}
+}
 
 /* ═══════════ R145 · PRECIOS PARA REVENDEDORES (página pública) ═══════════
    El precio sale de la colección "precios" (tarifa general) del Panel de Socios.
