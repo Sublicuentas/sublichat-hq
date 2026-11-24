@@ -13,5 +13,10 @@ test('catálogo editable: duración, costo, cupos, disponibilidad, activo y plan
 });
 test('pedidos: estado «pago confirmado» y el puente solo agrega sublipoints (lectura)', () => {
   assert.match(s, /<option value="pago confirmado"/);
-  assert.match(api, /"consultas", "sublipoints"\]/);
+  assert.match(api, /"consultas", "sublipoints", "billetera"\]/);
+});
+test('billetera: acreditar exige confirmar el depósito y el monto real; rechazar pide motivo', () => {
+  assert.match(s, /Confirmé que el dinero llegó a la cuenta/);
+  assert.match(s, /Monto que realmente llegó/);
+  assert.match(s, /billetera\/recargas\/\$\{id\}\/\$\{accion\}/);
 });
