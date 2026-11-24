@@ -1064,37 +1064,34 @@ function renderBilletera(){
   b.querySelectorAll('[data-bl-act]').forEach(x=>x.onclick=()=>revisarRecarga(x.dataset.blId,x.dataset.blAct,x));
 }
 /* R206 · Fase 4 · Descuento por pagar con billetera. Vive aparte (billetera_config/billetera_descuentos):
-   NO cambia precios del catálogo ni Control Maestro. Sin costo registrado → sin descuento. Netflix nunca.
-   Regla aprobada: hasta 5% y siempre queda ganancia de al menos el 10% del precio, nunca menos de L10. */
+   NO cambia precios del catálogo ni Control Maestro. Regla del dueño: 5% parejo en todo menos Netflix, sin pedir
+   costos. Aquí solo se puede bajar el % o apagar el descuento de un producto. */
 async function renderDescuentosBil(force){
   const b=$('#revBody');
-  if(!state.bilDesc||force){b.innerHTML='<div class="cr-empty">Cargando descuentos…</div>';try{state.bilDesc=await api('GET','billetera/descuentos')}catch(e){b.innerHTML=`<div class="cr-tools"><button class="cr-btn ghost" id="bdVolver">← Volver a recargas</button></div><div class="cr-empty">${esc((e.data&&e.data.detail)||e.message)}${/solo_admin_general|403/.test(e.message)?' · Solo administración general puede ver costos.':''}</div>`;const v=$('#bdVolver');if(v)v.onclick=()=>{state.billeteraFiltro='pendiente';renderBilletera()};return}}
+  if(!state.bilDesc||force){b.innerHTML='<div class="cr-empty">Cargando descuentos…</div>';try{state.bilDesc=await api('GET','billetera/descuentos')}catch(e){b.innerHTML=`<div class="cr-tools"><button class="cr-btn ghost" id="bdVolver">← Volver a recargas</button></div><div class="cr-empty">${esc((e.data&&e.data.detail)||e.message)}${/solo_admin_general|403/.test(e.message)?' · Solo administración general puede cambiar descuentos.':''}</div>`;const v=$('#bdVolver');if(v)v.onclick=()=>{state.billeteraFiltro='pendiente';renderBilletera()};return}}
   const d=state.bilDesc,c=d.config||{},q=(state.bilDescQ||'').toLowerCase();
   const filas=(d.productos||[]).filter(p=>!q||(p.nombre+' '+p.categoria).toLowerCase().includes(q));
-  const conCosto=(d.productos||[]).filter(p=>p.costoHnl!=null).length;
-  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Descuento por pagar con saldo de billetera</b><br><small>Solo aplica al pagar con saldo. La transferencia con comprobante conserva el precio normal. Los precios del catálogo no se tocan.</small></div><button class="cr-btn ghost" id="bdVolver">← Recargas</button></div>
+  const apagados=(d.productos||[]).filter(p=>!p.activo&&!p.excluido).length;
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Descuento por pagar con saldo de billetera</b><br><small>5% en todo menos Netflix, solo al pagar con saldo. No hay que llenar nada; aquí puede bajar el % o apagarlo en un producto. La transferencia con comprobante conserva el precio normal. Los precios del catálogo no se tocan.</small></div><button class="cr-btn ghost" id="bdVolver">← Recargas</button></div>
     <div class="cr-card" style="margin:0 0 12px"><h3 style="margin:0 0 8px">Reglas</h3>
       <div class="cr-row" style="gap:10px;flex-wrap:wrap;justify-content:flex-start">
         <label class="cr-field">Descuento máximo (%)<input id="bdPct" type="number" min="0" max="5" step="0.5" value="${esc(c.pctMax)}"></label>
-        <label class="cr-field">Ganancia mínima (% del precio)<input id="bdMPct" type="number" min="0" max="90" step="1" value="${esc(c.margenMinPct)}"></label>
-        <label class="cr-field">Ganancia mínima (L)<input id="bdMHnl" type="number" min="0" step="1" value="${esc(c.margenMinHnl)}"></label>
         <label class="cr-check"><input type="checkbox" id="bdComb" ${c.combinarGiftDescuento?'checked':''}> Permitir Gift Card + descuento juntos</label>
         <button class="cr-btn red" id="bdGuardarCfg">Guardar reglas</button></div>
-      <small>Excluidos siempre: ${esc((c.excluir||[]).join(', '))}. Productos con costo registrado: <b>${conCosto}</b> de ${(d.productos||[]).length}. Sin costo no hay descuento.</small></div>
+      <small>Se aplica a todos los productos menos ${esc((c.excluir||[]).map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(', '))}. No necesita registrar costos. Productos con descuento apagado: <b>${apagados}</b>.</small></div>
     <div class="cr-tools"><input id="bdBuscar" class="cr-input" placeholder="Buscar producto…" value="${esc(state.bilDescQ||'')}" style="max-width:320px"></div>
-    <div class="cr-card"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr><th style="text-align:left">Producto</th><th>Precio socio</th><th>Costo (L)</th><th>% máx.</th><th>Activo</th><th>Descuento hoy</th><th></th></tr></thead><tbody>
+    <div class="cr-card"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr><th style="text-align:left">Producto</th><th>Precio socio</th><th>% (máx. ${esc(c.pctMax)})</th><th>Activo</th><th>Descuento hoy</th><th></th></tr></thead><tbody>
     ${filas.map(p=>`<tr style="border-top:1px solid #e5e7eb"><td style="padding:6px 4px"><b>${esc(p.nombre)}</b><br><small>${esc(p.categoria)}</small></td>
       <td style="text-align:center">${p.precio==null?'Comisión':money(p.precio)}</td>
-      ${p.excluido||p.precio==null?`<td colspan="4" style="text-align:center"><small>${p.excluido?'Excluido (Netflix)':'Sin precio fijo: no aplica'}</small></td><td></td>`
-      :`<td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="costoHnl" type="number" min="0" step="0.01" value="${p.costoHnl==null?'':esc(p.costoHnl)}" placeholder="—" style="width:90px"></td>
-      <td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="pct" type="number" min="0" max="5" step="0.5" value="${p.pct==null?'':esc(p.pct)}" placeholder="${esc(c.pctMax)}" style="width:64px"></td>
+      ${p.excluido||p.precio==null?`<td colspan="3" style="text-align:center"><small>${p.excluido?'Excluido (Netflix)':'Sin precio fijo: no aplica'}</small></td><td></td>`
+      :`<td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="pct" type="number" min="0" max="5" step="0.5" value="${p.pct==null?'':esc(p.pct)}" placeholder="${esc(c.pctMax)}" style="width:64px"></td>
       <td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="activo" type="checkbox" ${p.activo?'checked':''}></td>
       <td style="text-align:center">${p.descuentoHoy?`<b>−${money(p.descuentoHoy)}</b>`:`<small>${esc(p.motivo||'—')}</small>`}</td>
       <td><button class="cr-btn ghost" data-bd-save="${esc(p.clave)}" data-bd-nombre="${esc(p.nombre)}">Guardar</button></td>`}</tr>`).join('')}
     </tbody></table></div>`;
   $('#bdVolver').onclick=()=>{state.billeteraFiltro='pendiente';renderBilletera()};
   const bb=$('#bdBuscar');bb.oninput=()=>{state.bilDescQ=bb.value;clearTimeout(state.bdT);state.bdT=setTimeout(()=>{renderDescuentosBil();const n=$('#bdBuscar');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
-  $('#bdGuardarCfg').onclick=async(ev)=>{const btn=ev.currentTarget;const body={pctMax:Number($('#bdPct').value),margenMinPct:Number($('#bdMPct').value),margenMinHnl:Number($('#bdMHnl').value),combinarGiftDescuento:$('#bdComb').checked};
+  $('#bdGuardarCfg').onclick=async(ev)=>{const btn=ev.currentTarget;const body={pctMax:Number($('#bdPct').value),combinarGiftDescuento:$('#bdComb').checked};
     if(!(body.pctMax>=0&&body.pctMax<=5))return alert('El descuento máximo es de 0% a 5%.');
     btn.disabled=true;btn.textContent='Guardando…';try{await api('PATCH','billetera/descuentos/config',body);await renderDescuentosBil(true)}catch(e){btn.disabled=false;btn.textContent='Guardar reglas';alert((e.data&&e.data.detail)||e.message)}};
   b.querySelectorAll('[data-bd-save]').forEach(x=>x.onclick=async()=>{const k=x.dataset.bdSave,body={nombre:x.dataset.bdNombre};
