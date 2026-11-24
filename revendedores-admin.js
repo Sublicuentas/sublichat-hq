@@ -186,6 +186,7 @@ function shell(){
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
         <button class="cr-tab" data-rtab="billetera">💳 Billetera</button>
+        <button class="cr-tab" data-rtab="mensajes">🗓️ Mensaje del día</button>
         <button class="cr-tab" data-rtab="publico">🏷️ Precios para Revendedores</button>
       </div>
       <div id="revBody"></div>
@@ -203,7 +204,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,buzon:renderBuzon,historial:renderHistorial,promociones:renderPromociones,recompensas:renderRecompensas,billetera:renderBilletera,publico:renderPublico}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,buzon:renderBuzon,historial:renderHistorial,promociones:renderPromociones,recompensas:renderRecompensas,billetera:renderBilletera,mensajes:renderMensajesDia,publico:renderPublico}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
@@ -1034,6 +1035,34 @@ async function saveRewardCat(id,btn){
 /* ═══════════ BILLETERA · R205 (recargas con verificación manual) ═══════════
    El comprobante NO acredita. Se aprueba solo después de ver el dinero en la cuenta del negocio.
    Aprobar dos veces no duplica (el servidor lo impide). Rechazar exige motivo y no toca el saldo. */
+/* R213 · Mensaje del día del Portal de Socios. Un texto por fecha de Honduras; igual para todos los socios.
+   Si una fecha no tiene mensaje publicado, el bot usa una frase del banco (respaldo) y deja una alerta aquí.
+   Solo administración general puede publicar o retirar (el bot lo valida). Texto plano, sin < ni >. */
+async function renderMensajesDia(force){
+  const b=$('#revBody');
+  if(!state.mensajesDia||force){b.innerHTML='<div class="cr-empty">Cargando mensajes…</div>';try{state.mensajesDia=await api('GET','mensajes-dia')}catch(e){b.innerHTML=`<div class="cr-empty">${esc((e.data&&e.data.detail)||e.message)}${/403|solo_admin/.test(e.message)?' · Solo administración general.':''}</div>`;return}}
+  const d=state.mensajesDia,lim=d.limites||{min:10,max:220};
+  const fmt=(f)=>{try{return new Date(f+'T12:00:00Z').toLocaleDateString('es-HN',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'})}catch(_){return f}};
+  const sinProg=(d.dias||[]).filter(x=>x.fuente!=='programado').length;
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Mensaje del día · Portal de Socios</b><br><small>Se muestra en el Inicio de todos los socios durante el día de Honduras. Recomendado: 15 a 22 palabras (máx. ${lim.max} caracteres). Sin el lema corporativo.</small></div><button class="cr-btn ghost" id="mdRecargar">Actualizar</button></div>
+    ${sinProg?`<div class="cr-status" style="margin:0 0 10px">⚠️ ${sinProg} de los próximos ${(d.dias||[]).length} días no tienen mensaje programado: se usará una frase de respaldo (distinta cada día).</div>`:''}
+    <div class="cr-card">${(d.dias||[]).map(x=>`<div class="md-row" style="border-top:1px solid #e5e7eb;padding:10px 0">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(fmt(x.fecha))}${x.fecha===d.hoy?' · HOY':''}</b>
+        <span class="cr-pill" style="font-size:12px;padding:2px 8px;border-radius:99px;background:${x.fuente==='programado'?'#E6F6EC;color:#0E7639':'#FFF6DB;color:#8A6300'}">${x.fuente==='programado'?'Programado':'Respaldo automático'}</span></div>
+      <textarea data-md="${esc(x.fecha)}" rows="2" maxlength="${lim.max}" style="width:100%;margin-top:6px" placeholder="${esc(x.texto)}">${x.programado&&x.programado.estado!=='retirado'?esc(x.programado.texto):''}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px"><small data-md-cnt="${esc(x.fecha)}"></small>
+        <button class="cr-btn red" data-md-pub="${esc(x.fecha)}">Publicar</button>
+        ${x.programado&&x.programado.estado==='publicado'?`<button class="cr-btn ghost" data-md-ret="${esc(x.fecha)}">Retirar (usar respaldo)</button>`:''}
+        <small style="color:#64748b">Se verá: «${esc(x.texto)}»</small></div></div>`).join('')}</div>
+    ${(d.alertas||[]).length?`<details style="margin-top:10px"><summary>Días que usaron respaldo (${d.alertas.length})</summary><small>${d.alertas.map(a=>esc(a.fecha)).join(' · ')}</small></details>`:''}`;
+  $('#mdRecargar').onclick=()=>renderMensajesDia(true);
+  const contar=(ta)=>{const t=ta.value.trim(),w=t?t.split(/\s+/).length:0,c=b.querySelector(`[data-md-cnt="${CSS.escape(ta.dataset.md)}"]`);if(c)c.textContent=t?`${w} palabras · ${t.length}/${lim.max}`:'';};
+  b.querySelectorAll('textarea[data-md]').forEach(ta=>{contar(ta);ta.oninput=()=>contar(ta)});
+  b.querySelectorAll('[data-md-pub]').forEach(btn=>btn.onclick=async()=>{const f=btn.dataset.mdPub,ta=b.querySelector(`textarea[data-md="${CSS.escape(f)}"]`),t=(ta&&ta.value||'').trim();
+    if(/[<>]/.test(t))return alert('El mensaje no puede llevar < ni >.');if(t.length<(lim.min||10))return alert('Escriba el mensaje (mínimo '+(lim.min||10)+' caracteres).');
+    btn.disabled=true;btn.textContent='Publicando…';try{await api('PUT','mensajes-dia/'+encodeURIComponent(f),{texto:t,estado:'publicado'});await renderMensajesDia(true)}catch(e){btn.disabled=false;btn.textContent='Publicar';alert((e.data&&e.data.detail)||e.message)}});
+  b.querySelectorAll('[data-md-ret]').forEach(btn=>btn.onclick=async()=>{if(!confirm('¿Retirar este mensaje? Ese día se mostrará la frase de respaldo.'))return;btn.disabled=true;try{await api('PUT','mensajes-dia/'+encodeURIComponent(btn.dataset.mdRet),{estado:'retirado'});await renderMensajesDia(true)}catch(e){btn.disabled=false;alert((e.data&&e.data.detail)||e.message)}});
+}
 async function loadBilletera(force){
   if(state.billetera&&!force)return renderBilletera();
   const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando billetera…</div>';
