@@ -17,4 +17,4 @@ test('pedido pagado con billetera se distingue y cancelar informa la devolución
   assert.match(s, /devolucionBilletera/);
   assert.match(s, /ya se había devuelto antes \(no se duplica\)/);
 });
-test('caché del script renovada', () => { assert.match(html, /revendedores-admin\.js\?v=20261123-r206b?/); });
+test('caché del script renovada', () => { assert.match(html, /revendedores-admin\.js\?v=20261124-r213?/); });
