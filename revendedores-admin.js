@@ -225,6 +225,7 @@ function pedidoCard(p){
     <div class="order-metrics"><div class="order-metric">Pagado a Sublicuentas<b>${money(costo)}</b></div>${p.clientePrincipal?`<div class="order-metric">Cliente principal<b>${esc(`${p.clientePrincipal.nombre||''} ${p.clientePrincipal.apellido||''}`.trim())}</b></div>`:''}</div>
     ${Array.isArray(p.productos)&&p.productos.some(x=>x.clienteNombre||x.dispositivo||x.correo||x.notas||x.detalleServicio)?`<ol class="order-lines" style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.45">${p.productos.map(x=>`<li><b>${esc(x.servicio||'')}</b>${(x.cantidad||1)>1?` ×${x.cantidad}`:''} — para ${esc(x.clienteNombre||x.perfil||'—')}${x.destinatario?.tipo==='otro'?' (otro cliente)':''}${[x.perfil&&x.perfil!==x.clienteNombre?`perfil ${x.perfil}`:'',x.dispositivo,x.marcaTv,x.correo,x.detalleServicio?`${x.datoRequerido||'detalle'}: ${x.detalleServicio}`:'',x.notas?`nota: ${x.notas}`:''].filter(Boolean).map(v=>' · '+esc(v)).join('')}</li>`).join('')}</ol>`:''}
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
+    ${p.pago&&p.pago.metodo==='billetera'?`<div class="cr-status good" style="margin:0 0 10px">💳 Pagado con saldo de billetera ${esc(p.pago.negocio==='relojes'?'Relojes':'Sublicuentas')}: ${money(p.pago.saldoReal)}${p.pago.giftCard?` + Gift Card ${money(p.pago.giftCard)}`:''}${p.pago.descuentoBilletera?` · descuento ${money(p.pago.descuentoBilletera)}`:''} · lista ${money(p.pago.lista)}. Sin comprobante: el cobro ya está hecho. Entregar manualmente. Cancelar devuelve el saldo.</div>`:''}
     ${p.pagoRevision?`<div class="cr-status bad" style="margin:0 0 10px">⚠️ Posible comprobante repetido (igual al pedido #${esc(p.pagoRevision.pedidoRelacionadoRef||'')}). Revise antes de aprobar.</div>`:''}${p.historicoAnterior?`<div class="cr-status" style="margin:0 0 10px">Histórico anterior: este pedido mezclaba clientes (se conserva tal cual).</div>`:''}
     <div class="order-status-tools">
       <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="pago confirmado" ${estado==='pago confirmado'?'selected':''}>Pago confirmado (suma SubliPoints)</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
@@ -250,7 +251,7 @@ function renderPedidos(){
 async function guardarEstadoPedido(id,btn){
   const estado=$('#pedidoEstado-'+id)?.value||'pendiente',detalle=$('#pedidoDetalle-'+id)?.value.trim()||'';
   const old=btn.textContent;btn.disabled=true;btn.textContent='Guardando…';
-  try{const r=await api('PATCH',`compras/${id}/estado`,{estado,detalle});const sp=r&&r.sublipoints;const spTxt=!sp?'':sp.duplicado?' SubliPoints: ya se habían sumado antes (no se duplican).':sp.omitido==='antes_del_inicio'?' SubliPoints: pedido anterior al inicio del programa, no suma.':sp.puntos>0?` SubliPoints: +${sp.puntos} al socio.`:sp.puntos<0?` SubliPoints: ${sp.puntos} (anulado).`:'';status('✅ Estado actualizado y socio notificado.'+spTxt,'good');await loadPedidos(true)}
+  try{const r=await api('PATCH',`compras/${id}/estado`,{estado,detalle});const sp=r&&r.sublipoints;const spTxt=!sp?'':sp.duplicado?' SubliPoints: ya se habían sumado antes (no se duplican).':sp.omitido==='antes_del_inicio'?' SubliPoints: pedido anterior al inicio del programa, no suma.':sp.puntos>0?` SubliPoints: +${sp.puntos} al socio.`:sp.puntos<0?` SubliPoints: ${sp.puntos} (anulado).`:'';const dv=r&&r.devolucionBilletera;const dvTxt=!dv?'':dv.duplicado?' Billetera: ya se había devuelto antes (no se duplica).':(dv.real||dv.promocional)?` Billetera: devuelto ${money((dv.real||0)+(dv.promocional||0))} al socio.`:'';status('✅ Estado actualizado y socio notificado.'+spTxt+dvTxt,'good');await loadPedidos(true)}
   catch(e){status(e.message,'bad');btn.disabled=false;btn.textContent=old}
 }
 
@@ -1040,6 +1041,7 @@ async function loadBilletera(force){
 }
 function renderBilletera(){
   const b=$('#revBody');if(!state.billetera)return loadBilletera();
+  if(state.billeteraFiltro==='descuentos')return renderDescuentosBil();
   const d=state.billetera,f=state.billeteraFiltro||'pendiente',lista=(d.recargas||[]).filter(r=>f==='todas'||r.estado===f);
   const cnt=k=>(d.recargas||[]).filter(r=>r.estado===k).length;
   const fecha=v=>{try{return new Date(v).toLocaleString('es-HN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}catch(_){return''}};
@@ -1054,12 +1056,50 @@ function renderBilletera(){
   const t=d.total||{};
   b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Billetera de socios</b><br><small>Recargas por transferencia. Nada se acredita hasta que usted confirme el depósito real. Recargar no es una venta.</small></div><button class="cr-btn ghost" id="blReload">Actualizar</button></div>
     <div class="order-metrics" style="margin:0 0 12px"><div class="order-metric">Saldo real de socios · Sublicuentas<b>${money((t.sublicuentas||{}).real||0)}</b></div><div class="order-metric">Saldo real de socios · Relojes<b>${money((t.relojes||{}).real||0)}</b></div><div class="order-metric">Gift Cards (promocional)<b>${money(((t.sublicuentas||{}).promocional||0)+((t.relojes||{}).promocional||0))}</b></div></div>
-    <div class="cr-row" style="gap:8px;justify-content:flex-start;margin:0 0 12px">${[['pendiente',`Pendientes (${cnt('pendiente')})`],['aprobada','Acreditadas'],['rechazada','Rechazadas'],['todas','Todas'],['saldos','Saldos por socio']].map(([k,l])=>`<button class="cr-btn ${f===k?'red':'ghost'}" data-bl-f="${k}">${l}</button>`).join('')}</div>
+    <div class="cr-row" style="gap:8px;justify-content:flex-start;margin:0 0 12px">${[['pendiente',`Pendientes (${cnt('pendiente')})`],['aprobada','Acreditadas'],['rechazada','Rechazadas'],['todas','Todas'],['saldos','Saldos por socio'],['descuentos','Descuentos por pagar con saldo']].map(([k,l])=>`<button class="cr-btn ${f===k?'red':'ghost'}" data-bl-f="${k}">${l}</button>`).join('')}</div>
     ${f==='saldos'?`<div class="cr-card">${(d.saldos||[]).length?`<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr><th style="text-align:left">Socio</th><th>Sublicuentas</th><th>Relojes</th><th>Promocional</th></tr></thead><tbody>${d.saldos.map(x=>`<tr><td>${esc(x.socio)}</td><td style="text-align:right">${money(x.saldos.sublicuentas.real)}</td><td style="text-align:right">${money(x.saldos.relojes.real)}</td><td style="text-align:right">${money(x.saldos.sublicuentas.promocional+x.saldos.relojes.promocional)}</td></tr>`).join('')}</tbody></table>`:'Sin saldos todavía.'}</div>`
       :(lista.length?`<div class="cr-grid">${lista.map(card).join('')}</div>`:'<div class="cr-empty">No hay recargas en este filtro.</div>')}`;
   $('#blReload').onclick=()=>loadBilletera(true);
   b.querySelectorAll('[data-bl-f]').forEach(x=>x.onclick=()=>{state.billeteraFiltro=x.dataset.blF;renderBilletera()});
   b.querySelectorAll('[data-bl-act]').forEach(x=>x.onclick=()=>revisarRecarga(x.dataset.blId,x.dataset.blAct,x));
+}
+/* R206 · Fase 4 · Descuento por pagar con billetera. Vive aparte (billetera_config/billetera_descuentos):
+   NO cambia precios del catálogo ni Control Maestro. Sin costo registrado → sin descuento. Netflix nunca.
+   Regla aprobada: hasta 5% y siempre queda ganancia de al menos el 10% del precio, nunca menos de L10. */
+async function renderDescuentosBil(force){
+  const b=$('#revBody');
+  if(!state.bilDesc||force){b.innerHTML='<div class="cr-empty">Cargando descuentos…</div>';try{state.bilDesc=await api('GET','billetera/descuentos')}catch(e){b.innerHTML=`<div class="cr-tools"><button class="cr-btn ghost" id="bdVolver">← Volver a recargas</button></div><div class="cr-empty">${esc((e.data&&e.data.detail)||e.message)}${/solo_admin_general|403/.test(e.message)?' · Solo administración general puede ver costos.':''}</div>`;const v=$('#bdVolver');if(v)v.onclick=()=>{state.billeteraFiltro='pendiente';renderBilletera()};return}}
+  const d=state.bilDesc,c=d.config||{},q=(state.bilDescQ||'').toLowerCase();
+  const filas=(d.productos||[]).filter(p=>!q||(p.nombre+' '+p.categoria).toLowerCase().includes(q));
+  const conCosto=(d.productos||[]).filter(p=>p.costoHnl!=null).length;
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Descuento por pagar con saldo de billetera</b><br><small>Solo aplica al pagar con saldo. La transferencia con comprobante conserva el precio normal. Los precios del catálogo no se tocan.</small></div><button class="cr-btn ghost" id="bdVolver">← Recargas</button></div>
+    <div class="cr-card" style="margin:0 0 12px"><h3 style="margin:0 0 8px">Reglas</h3>
+      <div class="cr-row" style="gap:10px;flex-wrap:wrap;justify-content:flex-start">
+        <label class="cr-field">Descuento máximo (%)<input id="bdPct" type="number" min="0" max="5" step="0.5" value="${esc(c.pctMax)}"></label>
+        <label class="cr-field">Ganancia mínima (% del precio)<input id="bdMPct" type="number" min="0" max="90" step="1" value="${esc(c.margenMinPct)}"></label>
+        <label class="cr-field">Ganancia mínima (L)<input id="bdMHnl" type="number" min="0" step="1" value="${esc(c.margenMinHnl)}"></label>
+        <label class="cr-check"><input type="checkbox" id="bdComb" ${c.combinarGiftDescuento?'checked':''}> Permitir Gift Card + descuento juntos</label>
+        <button class="cr-btn red" id="bdGuardarCfg">Guardar reglas</button></div>
+      <small>Excluidos siempre: ${esc((c.excluir||[]).join(', '))}. Productos con costo registrado: <b>${conCosto}</b> de ${(d.productos||[]).length}. Sin costo no hay descuento.</small></div>
+    <div class="cr-tools"><input id="bdBuscar" class="cr-input" placeholder="Buscar producto…" value="${esc(state.bilDescQ||'')}" style="max-width:320px"></div>
+    <div class="cr-card"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr><th style="text-align:left">Producto</th><th>Precio socio</th><th>Costo (L)</th><th>% máx.</th><th>Activo</th><th>Descuento hoy</th><th></th></tr></thead><tbody>
+    ${filas.map(p=>`<tr style="border-top:1px solid #e5e7eb"><td style="padding:6px 4px"><b>${esc(p.nombre)}</b><br><small>${esc(p.categoria)}</small></td>
+      <td style="text-align:center">${p.precio==null?'Comisión':money(p.precio)}</td>
+      ${p.excluido||p.precio==null?`<td colspan="4" style="text-align:center"><small>${p.excluido?'Excluido (Netflix)':'Sin precio fijo: no aplica'}</small></td><td></td>`
+      :`<td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="costoHnl" type="number" min="0" step="0.01" value="${p.costoHnl==null?'':esc(p.costoHnl)}" placeholder="—" style="width:90px"></td>
+      <td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="pct" type="number" min="0" max="5" step="0.5" value="${p.pct==null?'':esc(p.pct)}" placeholder="${esc(c.pctMax)}" style="width:64px"></td>
+      <td style="text-align:center"><input data-bd="${esc(p.clave)}" data-k="activo" type="checkbox" ${p.activo?'checked':''}></td>
+      <td style="text-align:center">${p.descuentoHoy?`<b>−${money(p.descuentoHoy)}</b>`:`<small>${esc(p.motivo||'—')}</small>`}</td>
+      <td><button class="cr-btn ghost" data-bd-save="${esc(p.clave)}" data-bd-nombre="${esc(p.nombre)}">Guardar</button></td>`}</tr>`).join('')}
+    </tbody></table></div>`;
+  $('#bdVolver').onclick=()=>{state.billeteraFiltro='pendiente';renderBilletera()};
+  const bb=$('#bdBuscar');bb.oninput=()=>{state.bilDescQ=bb.value;clearTimeout(state.bdT);state.bdT=setTimeout(()=>{renderDescuentosBil();const n=$('#bdBuscar');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
+  $('#bdGuardarCfg').onclick=async(ev)=>{const btn=ev.currentTarget;const body={pctMax:Number($('#bdPct').value),margenMinPct:Number($('#bdMPct').value),margenMinHnl:Number($('#bdMHnl').value),combinarGiftDescuento:$('#bdComb').checked};
+    if(!(body.pctMax>=0&&body.pctMax<=5))return alert('El descuento máximo es de 0% a 5%.');
+    btn.disabled=true;btn.textContent='Guardando…';try{await api('PATCH','billetera/descuentos/config',body);await renderDescuentosBil(true)}catch(e){btn.disabled=false;btn.textContent='Guardar reglas';alert((e.data&&e.data.detail)||e.message)}};
+  b.querySelectorAll('[data-bd-save]').forEach(x=>x.onclick=async()=>{const k=x.dataset.bdSave,body={nombre:x.dataset.bdNombre};
+    b.querySelectorAll(`[data-bd="${CSS.escape(k)}"]`).forEach(el=>{body[el.dataset.k]=el.type==='checkbox'?el.checked:el.value});
+    x.disabled=true;x.textContent='Guardando…';try{await api('PATCH','billetera/descuentos/producto/'+encodeURIComponent(k),body);await renderDescuentosBil(true)}catch(e){x.disabled=false;x.textContent='Guardar';alert((e.data&&e.data.detail)||e.message)}});
 }
 async function revisarRecarga(id,accion,btn){
   const body={};
