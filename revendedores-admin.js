@@ -185,6 +185,7 @@ function shell(){
         <button class="cr-tab" data-rtab="historial">🗂️ Entregas antiguas</button>
         <button class="cr-tab" data-rtab="promociones">🔥 Promociones</button>
         <button class="cr-tab" data-rtab="recompensas">Recompensas</button>
+        <button class="cr-tab" data-rtab="billetera">💳 Billetera</button>
         <button class="cr-tab" data-rtab="publico">🏷️ Precios para Revendedores</button>
       </div>
       <div id="revBody"></div>
@@ -202,7 +203,7 @@ function status(msg,cls){
 }
 
 function render(){
-  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,buzon:renderBuzon,historial:renderHistorial,promociones:renderPromociones,recompensas:renderRecompensas,publico:renderPublico}[state.tab]||renderPrecios)();
+  ({precios:renderPrecios,vendedores:renderVendedores,clientes:renderClientes,pedidos:renderPedidos,buzon:renderBuzon,historial:renderHistorial,promociones:renderPromociones,recompensas:renderRecompensas,billetera:renderBilletera,publico:renderPublico}[state.tab]||renderPrecios)();
 }
 
 /* ═══════════ PEDIDOS DE SOCIOS ═══════════ */
@@ -1027,6 +1028,46 @@ async function saveRewardCat(id,btn){
   btn.disabled=true;btn.textContent='Guardando…';
   try{await api('PATCH','recompensas/catalogo/'+id,body);btn.textContent='✓ Guardado';setTimeout(()=>loadRecompensas(true),500)}
   catch(e){btn.disabled=false;btn.textContent='Guardar';alert(e.message)}
+}
+
+/* ═══════════ BILLETERA · R205 (recargas con verificación manual) ═══════════
+   El comprobante NO acredita. Se aprueba solo después de ver el dinero en la cuenta del negocio.
+   Aprobar dos veces no duplica (el servidor lo impide). Rechazar exige motivo y no toca el saldo. */
+async function loadBilletera(force){
+  if(state.billetera&&!force)return renderBilletera();
+  const b=$('#revBody');if(b)b.innerHTML='<div class="cr-empty">Cargando billetera…</div>';
+  try{state.billetera=await api('GET','billetera');state.billeteraFiltro=state.billeteraFiltro||'pendiente';renderBilletera()}catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
+}
+function renderBilletera(){
+  const b=$('#revBody');if(!state.billetera)return loadBilletera();
+  const d=state.billetera,f=state.billeteraFiltro||'pendiente',lista=(d.recargas||[]).filter(r=>f==='todas'||r.estado===f);
+  const cnt=k=>(d.recargas||[]).filter(r=>r.estado===k).length;
+  const fecha=v=>{try{return new Date(v).toLocaleString('es-HN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}catch(_){return''}};
+  const card=r=>`<article class="cr-card"><div class="cr-row"><h3>💳 ${money(r.monto)} · ${esc(r.negocioNombre)}</h3><span class="cr-badge ${r.estado==='aprobada'?'':r.estado==='rechazada'?'paused':''}">${esc({pendiente:'Pendiente de verificar',aprobada:'Acreditada',rechazada:'Rechazada'}[r.estado]||r.estado)}</span></div>
+    <small>Socio: <b>${esc(r.socio)}</b> · ${esc(r.banco)} · Ref <b>${esc(r.referencia)}</b> · ${esc(fecha(r.fecha))} · #${esc(r.ref)}</small>
+    ${r.imagenUrl?`<div style="margin:8px 0"><a class="cr-btn ghost" href="${esc(r.imagenUrl)}" target="_blank" rel="noopener noreferrer">Ver comprobante</a></div>`:'<div class="cr-status bad" style="margin:8px 0">Sin foto guardada: revise en Telegram.</div>'}
+    ${r.estado==='pendiente'?`<label class="cr-check"><input type="checkbox" id="blOk-${esc(r.id)}"> Confirmé que el dinero llegó a la cuenta de ${esc(r.negocioNombre)}</label>
+      <label class="cr-field">Monto que realmente llegó<input id="blMonto-${esc(r.id)}" type="number" min="10" step="0.01" value="${esc(r.monto)}"></label>
+      <div class="cr-row" style="gap:8px;justify-content:flex-start"><button class="cr-btn red" data-bl-act="aprobar" data-bl-id="${esc(r.id)}">Acreditar saldo</button><button class="cr-btn ghost" data-bl-act="rechazar" data-bl-id="${esc(r.id)}">Rechazar</button></div>`
+      :`<div class="cr-status" style="margin:8px 0">${r.estado==='aprobada'?`Acreditado ${money(r.montoAcreditado)}`:`Motivo: ${esc(r.motivo)}`}${r.revisadoPor?` · por ${esc(r.revisadoPor)}`:''}${r.revisadoAt?` · ${esc(fecha(r.revisadoAt))}`:''}</div>`}
+  </article>`;
+  const t=d.total||{};
+  b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap;gap:8px"><div><b>Billetera de socios</b><br><small>Recargas por transferencia. Nada se acredita hasta que usted confirme el depósito real. Recargar no es una venta.</small></div><button class="cr-btn ghost" id="blReload">Actualizar</button></div>
+    <div class="order-metrics" style="margin:0 0 12px"><div class="order-metric">Saldo real de socios · Sublicuentas<b>${money((t.sublicuentas||{}).real||0)}</b></div><div class="order-metric">Saldo real de socios · Relojes<b>${money((t.relojes||{}).real||0)}</b></div><div class="order-metric">Gift Cards (promocional)<b>${money(((t.sublicuentas||{}).promocional||0)+((t.relojes||{}).promocional||0))}</b></div></div>
+    <div class="cr-row" style="gap:8px;justify-content:flex-start;margin:0 0 12px">${[['pendiente',`Pendientes (${cnt('pendiente')})`],['aprobada','Acreditadas'],['rechazada','Rechazadas'],['todas','Todas'],['saldos','Saldos por socio']].map(([k,l])=>`<button class="cr-btn ${f===k?'red':'ghost'}" data-bl-f="${k}">${l}</button>`).join('')}</div>
+    ${f==='saldos'?`<div class="cr-card">${(d.saldos||[]).length?`<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr><th style="text-align:left">Socio</th><th>Sublicuentas</th><th>Relojes</th><th>Promocional</th></tr></thead><tbody>${d.saldos.map(x=>`<tr><td>${esc(x.socio)}</td><td style="text-align:right">${money(x.saldos.sublicuentas.real)}</td><td style="text-align:right">${money(x.saldos.relojes.real)}</td><td style="text-align:right">${money(x.saldos.sublicuentas.promocional+x.saldos.relojes.promocional)}</td></tr>`).join('')}</tbody></table>`:'Sin saldos todavía.'}</div>`
+      :(lista.length?`<div class="cr-grid">${lista.map(card).join('')}</div>`:'<div class="cr-empty">No hay recargas en este filtro.</div>')}`;
+  $('#blReload').onclick=()=>loadBilletera(true);
+  b.querySelectorAll('[data-bl-f]').forEach(x=>x.onclick=()=>{state.billeteraFiltro=x.dataset.blF;renderBilletera()});
+  b.querySelectorAll('[data-bl-act]').forEach(x=>x.onclick=()=>revisarRecarga(x.dataset.blId,x.dataset.blAct,x));
+}
+async function revisarRecarga(id,accion,btn){
+  const body={};
+  if(accion==='aprobar'){const ok=$(`#blOk-${CSS.escape(id)}`);if(!ok||!ok.checked)return alert('Marque «Confirmé que el dinero llegó» antes de acreditar.');const m=$(`#blMonto-${CSS.escape(id)}`);body.montoRecibido=m?Number(m.value):undefined;if(!confirm(`¿Acreditar ${money(body.montoRecibido)} al socio? Solo se acredita una vez.`))return}
+  else{const m=prompt('Motivo del rechazo (lo verá el socio):');if(!m||!m.trim())return;body.motivo=m.trim()}
+  btn.disabled=true;btn.textContent='Guardando…';
+  try{const r=await api('POST',`billetera/recargas/${id}/${accion}`,body);if(r.sinCambios)alert('Ya estaba revisada: no se repitió nada.');await loadBilletera(true)}
+  catch(e){btn.disabled=false;btn.textContent='Reintentar';alert((e.data&&e.data.detail)||e.message)}
 }
 
 /* ═══════════ R145 · PRECIOS PARA REVENDEDORES (página pública) ═══════════
