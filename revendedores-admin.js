@@ -62,6 +62,7 @@ function shell(){
       #rbac-revendedores .order-card{border-left:4px solid #d92d20}
       #rbac-revendedores .order-card[data-status="entregado"]{border-left-color:#12b76a}
       #rbac-revendedores .order-card[data-status="en proceso"]{border-left-color:#2e90fa}
+      #rbac-revendedores .order-card[data-status="pago confirmado"]{border-left-color:#17A052}
       #rbac-revendedores .order-card[data-status="falta información"]{border-left-color:#f79009}
       #rbac-revendedores .order-card[data-status="cancelado"]{border-left-color:#667085}
       #rbac-revendedores .order-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
@@ -211,7 +212,7 @@ async function loadPedidos(force){
   try{const d=await api('GET','compras',undefined,{limit:240});state.pedidos=Array.isArray(d)?d:(d.compras||d.items||[]);renderPedidos()}
   catch(e){if(b)b.innerHTML=`<div class="cr-empty">${esc(e.message)}</div>`}
 }
-function pedidoEstado(v){const s=String(v||'pendiente').trim().toLowerCase();return ['pendiente','en proceso','falta información','entregado','cancelado'].includes(s)?s:'pendiente'}
+function pedidoEstado(v){const s=String(v||'pendiente').trim().toLowerCase();return ['pendiente','pago confirmado','en proceso','falta información','entregado','cancelado'].includes(s)?s:'pendiente'} /* R203 · «pago confirmado» suma SubliPoints */
 function pedidoFecha(v){if(!v)return'—';const d=new Date(typeof v==='number'?v:v._seconds?v._seconds*1000:v.seconds?v.seconds*1000:v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('es-HN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 function pedidoCard(p){
   const estado=pedidoEstado(p.estado),costo=Number(p.monto)||0;
@@ -225,7 +226,7 @@ function pedidoCard(p){
     ${p.detalleEstado?`<div class="cr-status" style="margin:0 0 10px">${esc(p.detalleEstado)}</div>`:''}
     ${p.pagoRevision?`<div class="cr-status bad" style="margin:0 0 10px">⚠️ Posible comprobante repetido (igual al pedido #${esc(p.pagoRevision.pedidoRelacionadoRef||'')}). Revise antes de aprobar.</div>`:''}${p.historicoAnterior?`<div class="cr-status" style="margin:0 0 10px">Histórico anterior: este pedido mezclaba clientes (se conserva tal cual).</div>`:''}
     <div class="order-status-tools">
-      <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
+      <label class="cr-field">Estado<select id="pedidoEstado-${esc(p.id)}"><option value="pendiente" ${estado==='pendiente'?'selected':''}>Pendiente</option><option value="pago confirmado" ${estado==='pago confirmado'?'selected':''}>Pago confirmado (suma SubliPoints)</option><option value="en proceso" ${estado==='en proceso'?'selected':''}>En proceso</option><option value="falta información" ${estado==='falta información'?'selected':''}>Falta información</option><option value="entregado" ${estado==='entregado'?'selected':''}>Entregado</option><option value="cancelado" ${estado==='cancelado'?'selected':''}>Cancelado</option></select></label>
       <label class="cr-field">Mensaje al socio<input id="pedidoDetalle-${esc(p.id)}" maxlength="300" value="${esc(p.detalleEstado||'')}" placeholder="Ej. Listo, revise su correo"></label>
       <button class="cr-btn red" data-pedido-save="${esc(p.id)}">Actualizar</button>
       <button class="cr-btn" data-pedido-entregas="${esc(p.id)}">📦 Entregas${p.entregaResumen&&p.entregaResumen.publicados?` · ${p.entregaResumen.publicados}/${p.entregaResumen.requeridos}`:''}</button>
@@ -235,7 +236,7 @@ function pedidoCard(p){
 function renderPedidos(){
   const b=$('#revBody');if(!state.pedidos)return loadPedidos();
   const counts={};state.pedidos.forEach(p=>{const e=pedidoEstado(p.estado);counts[e]=(counts[e]||0)+1});
-  const filtros=[['todos','Todos'],['pendiente','Pendientes'],['en proceso','En proceso'],['falta información','Falta información'],['entregado','Entregados'],['cancelado','Cancelados']];
+  const filtros=[['todos','Todos'],['pendiente','Pendientes'],['pago confirmado','Pago confirmado'],['en proceso','En proceso'],['falta información','Falta información'],['entregado','Entregados'],['cancelado','Cancelados']];
   const list=state.pedidoFiltro==='todos'?state.pedidos:state.pedidos.filter(p=>pedidoEstado(p.estado)===state.pedidoFiltro);
   b.innerHTML=`<div class="cr-tools" style="flex-wrap:wrap"><div><b>Seguimiento de pedidos</b><br><small>Cambie el estado aquí. El socio lo ve en su panel y recibe aviso en Buzón/Telegram.</small></div><button class="cr-btn ghost" id="pedidoReload">Actualizar</button></div>
     <div class="cr-tabs" style="margin-bottom:12px;overflow:auto">${filtros.map(([k,l])=>`<button class="cr-tab ${state.pedidoFiltro===k?'on':''}" data-pedido-filter="${k}">${l}${k==='todos'?` · ${state.pedidos.length}`:counts[k]?` · ${counts[k]}`:''}</button>`).join('')}</div>
@@ -248,7 +249,7 @@ function renderPedidos(){
 async function guardarEstadoPedido(id,btn){
   const estado=$('#pedidoEstado-'+id)?.value||'pendiente',detalle=$('#pedidoDetalle-'+id)?.value.trim()||'';
   const old=btn.textContent;btn.disabled=true;btn.textContent='Guardando…';
-  try{await api('PATCH',`compras/${id}/estado`,{estado,detalle});status('✅ Estado actualizado y socio notificado.','good');await loadPedidos(true)}
+  try{const r=await api('PATCH',`compras/${id}/estado`,{estado,detalle});const sp=r&&r.sublipoints;const spTxt=!sp?'':sp.duplicado?' SubliPoints: ya se habían sumado antes (no se duplican).':sp.omitido==='antes_del_inicio'?' SubliPoints: pedido anterior al inicio del programa, no suma.':sp.puntos>0?` SubliPoints: +${sp.puntos} al socio.`:sp.puntos<0?` SubliPoints: ${sp.puntos} (anulado).`:'';status('✅ Estado actualizado y socio notificado.'+spTxt,'good');await loadPedidos(true)}
   catch(e){status(e.message,'bad');btn.disabled=false;btn.textContent=old}
 }
 
