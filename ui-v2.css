@@ -412,3 +412,18 @@ html.ui-v2:not(#v2a):not(#v2b):not(#v2c) #v2Shell .v2-panel-buscar input{backgro
 #v2Inicio .v2-carga-error{padding:20px;display:grid;gap:10px;justify-items:start;border-color:#F5C2BE!important}#v2Inicio .v2-carga-error p{margin:0;color:#58616D}
 @keyframes v2Pulso{0%,100%{opacity:1}50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){#v2Inicio .v2-esq *,#v2Inicio .v2-esq-g::before{animation:none}}
+
+/* R204 · Pantalla completa y minimizar menú (todas las cuentas). Blanco liso, sin degradados. */
+.v2-vista svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+html.v2-sin-fs .v2-fs{display:none!important}
+html.ui-v2.v2-min{--v2-head:0px!important}
+html.ui-v2.v2-min .v2-top,html.ui-v2.v2-min .v2-nav{display:none!important}
+html.ui-v2.v2-min:not(#v2a):not(#v2b):not(#v2c):not(#v2d) body .wrap{margin-top:0!important;min-height:100vh!important}
+.v2-flota{position:fixed;top:10px;right:14px;z-index:1300;display:flex;gap:6px;padding:5px;background:#fff;border:1px solid #E2E7EF;border-radius:999px;box-shadow:0 4px 14px rgba(20,25,32,.12);font-family:var(--v2-font)}
+.v2-flota[hidden]{display:none!important}
+.v2-flota-b{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;border-radius:999px;font-size:13px;font-weight:600;color:#141920;cursor:pointer;transition:background .15s}
+.v2-flota-b:hover{background:#FFF0EF;color:#E2231A}
+.v2-flota-b:focus-visible,.v2-vista:focus-visible{outline:2px solid #E2231A;outline-offset:2px}
+.v2-flota-b svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:767px){.v2-flota{top:8px;right:8px}.v2-flota-b span{display:none}.v2-flota-b{width:38px;padding:0;justify-content:center}}
+@media (max-width:520px){.v2-vista[data-v2vista="min"]{display:none!important}}

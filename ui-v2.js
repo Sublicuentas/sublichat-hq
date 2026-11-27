@@ -66,6 +66,11 @@
     mas: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
     salir: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>', atras: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'
   };
+  // R204 · Pantalla completa y minimizar menú (para todos los usuarios, en todas las pantallas).
+  P.pantalla = '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>';
+  P.salirPantalla = '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>';
+  P.minimizar = '<path d="m18 15-6-6-6 6"/><path d="M5 20h14"/>';
+  P.restaurar = '<path d="m6 9 6 6 6-6"/><path d="M5 4h14"/>';
   function ico(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (P[k] || P.mas) + '</svg>'; }
   P.flecha = '<path d="m6 9 6 6 6-6"/>';
   P.op = '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>';
@@ -103,6 +108,8 @@
           '<label class="v2-buscar" id="v2BuscarBox">' + ico('buscar') + '<input id="v2Buscar" type="search" placeholder="Buscar cliente o teléfono" autocomplete="off" aria-label="Buscar cliente o teléfono"></label>' +
           '<div class="v2-top-der">' +
             '<button class="v2-ico-btn v2-solo-movil" id="v2BuscarMovil" type="button" aria-label="Buscar">' + ico('buscar') + '</button>' +
+            '<button class="v2-ico-btn v2-vista" type="button" data-v2vista="min" aria-label="Minimizar menú" title="Minimizar menú (más espacio)">' + ico('minimizar') + '</button>' + // R204
+            '<button class="v2-ico-btn v2-vista v2-fs" type="button" data-v2vista="fs" aria-label="Pantalla completa" title="Pantalla completa">' + ico('pantalla') + '</button>' + // R204
             '<button class="v2-ico-btn" id="v2Avisos" type="button" aria-label="Tickets y avisos">' + ico('campana') + '<span class="v2-punto" id="v2Punto"></span></button>' +
             '<div class="v2-user-box">' +
               '<button class="v2-user" id="v2User" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="v2PopUser"><img src="/assets/sublirobot-96.webp" alt=""><span class="v2-who"><b id="v2Nombre"></b><small id="v2Rol"></small></span>' + ico('flecha') + '</button>' +
@@ -165,7 +172,49 @@
     });
     window.addEventListener('resize', function () { clearTimeout(t2); t2 = setTimeout(ajustarFila, 120); });
     var t2;
+    vistaTrabajo();
     construir(); usuario(); campana();
+  }
+  // R204 · Vista de trabajo: «Pantalla completa» usa la pantalla completa del navegador (Esc también sale) y «Minimizar menú»
+  // esconde la barra oscura y la fila de secciones para ganar espacio; queda un botón flotante para volver. Se recuerda en
+  // este navegador. Un navegador no deja minimizar la VENTANA desde una página: por eso minimiza el menú.
+  var CLAVE_MIN = 'sublichat_menu_min';
+  function fsDoc() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function fsPuede() { var d = document.documentElement; return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled) && !!(d.requestFullscreen || d.webkitRequestFullscreen); }
+  function fsAlternar() {
+    try {
+      if (fsDoc()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+      var d = document.documentElement, r = (d.requestFullscreen || d.webkitRequestFullscreen).call(d, { navigationUI: 'hide' });
+      if (r && r.catch) r.catch(function () {});
+    } catch (_) {}
+  }
+  function pintarVista() {
+    var fs = !!fsDoc(), min = document.documentElement.classList.contains('v2-min');
+    document.querySelectorAll('[data-v2vista="fs"]').forEach(function (b) { b.innerHTML = ico(fs ? 'salirPantalla' : 'pantalla') + (b.classList.contains('v2-flota-b') ? '<span>' + (fs ? 'Salir de pantalla completa' : 'Pantalla completa') + '</span>' : ''); b.setAttribute('aria-label', fs ? 'Salir de pantalla completa' : 'Pantalla completa'); b.title = fs ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'; b.setAttribute('aria-pressed', fs ? 'true' : 'false'); });
+    var fl = document.getElementById('v2Flota'); if (fl) fl.hidden = !min;
+  }
+  function minimizar(si) {
+    document.documentElement.classList.toggle('v2-min', !!si);
+    try { if (si) localStorage.setItem(CLAVE_MIN, '1'); else localStorage.removeItem(CLAVE_MIN); } catch (_) {}
+    if (!si) cerrarTodo(); pintarVista();
+    try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+  }
+  function vistaTrabajo() {
+    var fl = document.createElement('div'); fl.id = 'v2Flota'; fl.className = 'v2-flota'; fl.hidden = true;
+    fl.setAttribute('role', 'toolbar'); fl.setAttribute('aria-label', 'Vista de trabajo');
+    fl.innerHTML = '<button type="button" class="v2-flota-b" data-v2vista="max">' + ico('restaurar') + '<span>Mostrar menú</span></button>' +
+      '<button type="button" class="v2-flota-b v2-fs" data-v2vista="fs">' + ico('pantalla') + '<span>Pantalla completa</span></button>';
+    document.body.appendChild(fl);
+    var alClic = function (e) {
+      var b = e.target.closest('[data-v2vista]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+      var a = b.getAttribute('data-v2vista');
+      if (a === 'fs') fsAlternar(); else minimizar(a === 'min');
+    };
+    shell.addEventListener('click', alClic); fl.addEventListener('click', alClic);
+    if (!fsPuede()) document.documentElement.classList.add('v2-sin-fs'); // iPhone: el navegador no lo permite
+    document.addEventListener('fullscreenchange', pintarVista); document.addEventListener('webkitfullscreenchange', pintarVista);
+    var guardado = false; try { guardado = localStorage.getItem(CLAVE_MIN) === '1'; } catch (_) {}
+    minimizar(guardado);
   }
   function abrirPop(pop, origen) {
     pop.hidden = false; origen.setAttribute('aria-expanded', 'true');
