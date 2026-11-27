@@ -198,3 +198,16 @@ html.fz-tv .fz-dash.tv .fz-chart h3,html.fz-tv .fz-dash.tv .fz-cab h3{font-size:
 html.fz-tv .fz-dash.tv .fz-chart-box{height:300px!important}
 html.fz-tv .fz-dash.tv .fz-sub{font-size:13.5px}
 @media (max-width:640px){.fz-dash-fr select{flex:1 1 100%}.fz-dash-acc{margin-left:0;width:100%}.fz-dash-acc .fz-btn{flex:1}}
+/* R205 · Buscador en todas las tablas de Finanzas (correo, cuenta, cliente, banco…). Blanco liso. */
+.fz-busca{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0 8px}
+.fz-busca label{position:relative;display:flex;align-items:center;gap:8px;flex:1 1 260px;max-width:420px;height:38px;padding:0 12px;border:1px solid #DCE2EA;border-radius:10px;background:#fff;color:#6B7684;cursor:text}
+.fz-busca label:focus-within{border-color:#E2231A;box-shadow:0 0 0 3px rgba(226,35,26,.12)}
+.fz-busca label .fz-i{width:17px;height:17px;flex:none}
+.fz-busca input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:500 13px/1 inherit;color:#141920;padding:0;height:100%}
+.fz-busca input::-webkit-search-cancel-button{display:none}
+.fz-busca-x{all:unset;cursor:pointer;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:18px;line-height:1;color:#6B7684}
+.fz-busca-x:hover{background:#FFF0EF;color:#E2231A}
+.fz-busca [data-busn]{font-size:12px;color:#6B7684;white-space:nowrap}
+.fz-busca-v{font-size:12px;font-weight:600;color:#B45309}
+.fz-t tr[hidden]{display:none!important}
+@media (max-width:640px){.fz-busca label{max-width:none;flex-basis:100%}}

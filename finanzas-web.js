@@ -11,6 +11,7 @@
   var HOST_ID = 'rbac-finanzas';
   var TABS = [['resumen', 'Resumen', 'bar'], ['proveedores', 'Proveedores', 'users'], ['compras', 'Compras', 'cart'], ['ganancias', 'Ganancias', 'trend'], ['reportes', 'Reportes', 'doc']];
   var I = {
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', // R205
     bar: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16v-4"/><path d="M12 16V8"/><path d="M17 16v-7"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
@@ -618,11 +619,19 @@
       k('Cuentas sin pago registrado', t.sinCompra ? '<span class="rj">' + t.sinCompra + '</span>' : '0', t.sinCompra ? 'Cobran ' + L(t.sinCompraMensualHnl) + ' al mes: registre cuánto pagó para ver su ganancia' : 'Todas tienen su pago') + '</div>' +
       '<div class="fz-card"><div class="fz-cab">' + ico('layers') + '<h3>Ganancia por cuenta</h3><span class="fz-sub r">Calculado desde ' + fecha(x.desdeControl || '2026-10-01') + ' · lo que pagué por la cuenta vs. lo que pagan sus clientes</span></div>' +
       '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Plataforma</th><th class="n">Cuentas</th><th class="n">Perfiles</th><th class="n">Me pagan al mes</th><th class="n">Pagué (última compra)</th><th class="n">Ganancia neta al mes</th><th class="n">Ganancia desde ' + fecha(x.desdeControl || '2026-10-01') + '</th><th></th></tr></thead><tbody>' +
-      (x.plataformas || []).map(function (p) { return '<tr><td><div class="fz-prod">' + logo(p.nombre) + '<b>' + esc(p.nombre) + '</b></div>' + (p.sinCompra ? '<small class="fz-pend">' + p.sinCompra + ' cuenta(s) sin pago registrado</small>' : '') + (p.vacias ? '<small class="fz-pend">' + p.vacias + ' cuenta(s) sin clientes</small>' : '') + '</td><td class="n">' + p.cuentas + '</td><td class="n">' + p.perfiles + (p.libres ? '<small>' + p.libres + ' libre(s)</small>' : '') + '</td><td class="n"><b>' + L(p.meMensualHnl) + '</b></td><td class="n">' + L(p.pagueHnl) + '</td><td class="n"><b class="' + (p.gananciaMesHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaMesHnl) + '</b></td><td class="n"><b class="' + (p.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaDesdeCompraHnl) + '</b></td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-rentplat="' + esc(p.plataforma) + '">Ver cuentas</button></td></tr>'; }).join('') +
+      (x.plataformas || []).map(function (p) { return '<tr data-busca="' + esc(busIndice(x, p.plataforma)) + '" data-busplat="' + esc(p.plataforma) + '"><td><div class="fz-prod">' + logo(p.nombre) + '<b>' + esc(p.nombre) + '</b></div>' + (p.sinCompra ? '<small class="fz-pend">' + p.sinCompra + ' cuenta(s) sin pago registrado</small>' : '') + (p.vacias ? '<small class="fz-pend">' + p.vacias + ' cuenta(s) sin clientes</small>' : '') + '</td><td class="n">' + p.cuentas + '</td><td class="n">' + p.perfiles + (p.libres ? '<small>' + p.libres + ' libre(s)</small>' : '') + '</td><td class="n"><b>' + L(p.meMensualHnl) + '</b></td><td class="n">' + L(p.pagueHnl) + '</td><td class="n"><b class="' + (p.gananciaMesHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaMesHnl) + '</b></td><td class="n"><b class="' + (p.gananciaDesdeCompraHnl >= 0 ? 'vd' : 'rj') + '">' + L(p.gananciaDesdeCompraHnl) + '</b></td><td class="c"><button type="button" class="fz-btn sec sm" data-fz-rentplat="' + esc(p.plataforma) + '">Ver cuentas</button></td></tr>'; }).join('') +
       '</tbody></table></div><p class="fz-sub">Cuenta por activación (link): se paga una vez y la cuenta sigue hasta la próxima activación; todo lo que pagan los clientes después es ganancia. Cuenta con vigencia (30 días, mensual): su costo se resta cada mes. Una cuenta sin pago registrado no se calcula: no se inventan costos.</p></div>';
   }
   var EST_RENT = { ganando: ['Ganando', 'ok'], por_recuperar: ['Por recuperar', 'warn'], vacia: ['Sin clientes', 'warn'], sin_compra: ['Sin pago registrado', 'pend'] };
-  function abrirRentPlat(plat) {
+  // R205 · Correos y clientes de cada plataforma (para que el buscador encuentre la plataforma por un correo).
+  function busIndice(x, plat) { return (x.indice || []).filter(function (i) { return i.p === plat; }).map(function (i) { return i.c + ' ' + (i.cl || ''); }).join(' '); }
+  function abrirRentPlat(plat, q) {
+    if (q == null) { // R205 · el modal abre ya filtrado SOLO si lo buscado es un correo/cliente de esa plataforma (no el nombre de la plataforma)
+      q = (st.busq && st.busq['ganancias']) || ''; var qn = busNorm(q).split(' ').filter(Boolean);
+      var hay = qn.length && ((st.rent && st.rent.indice) || []).some(function (i) { var t = busNorm(i.c + ' ' + (i.cl || '')); return i.p === plat && qn.every(function (w) { return t.indexOf(w) >= 0; }); });
+      if (!hay) q = '';
+    }
+    st.busq = st.busq || {}; st.busq['m:Ganancia por cuenta'] = q;
     var mm = modal('Ganancia por cuenta', '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div>'); mm.classList.add('ancho');
     api('finp_rentabilidad', { plataforma: plat }).then(function (x) {
       var b = mm.querySelector('.fz-modal-b'); if (!b) return; var h = mm.querySelector('.fz-modal-h h3, .fz-modal-h b'); if (h) h.textContent = 'Ganancia por cuenta · ' + x.nombre;
@@ -1261,6 +1270,56 @@
   // quedaba blanco sobre blanco (invisible: solo se veía «Cancelar»). Ahora .fz-modal define sus propios colores (CSS) y el
   // pie (Cancelar · Guardar) queda fijo abajo, visible también en celular. Guardar: valida, «Guardando…», sin doble envío;
   // solo se cierra si el servidor confirmó; si falla, los datos escritos se quedan.
+  // ---------------------------------------------------------------------------------------------------- R205 · buscador
+  // En TODA tabla de Finanzas (Ganancias, Compras, cuentas madre, Spotify, HBO, historial, modales…) aparece un buscador de
+  // correo, cuenta, cliente, banco, referencia… Filtra en la pantalla (no lee nada más de la base) y recuerda lo escrito
+  // mientras cambia de pestaña. Las tablas que ya tienen su buscador propio (Netflix VIP, Compras registradas, Productos) no se tocan.
+  st.busq = st.busq || {};
+  function busNorm(v) { return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+  function busClave(tw) {
+    var m = tw.closest('.fz-modal'); if (m) return 'm:' + (m.getAttribute('aria-label') || '').replace(/ · .*$/, '');
+    var cards = [].slice.call(document.querySelectorAll('.fz .fz-tw')); return st.tab + (st.tab === 'compras' ? ':' + st.sub : '') + (cards.indexOf(tw) > 0 ? ':' + cards.indexOf(tw) : '');
+  }
+  function busFiltrar(box) {
+    var tw = box.nextElementSibling; if (!tw) return; var q = busNorm(box.querySelector('input').value), partes = q ? q.split(' ') : [];
+    var filas = [].slice.call(tw.querySelectorAll('table.fz-t > tbody > tr')), total = 0, vis = 0, ult = null, ultOk = true;
+    filas.forEach(function (tr) {
+      if (tr.classList.contains('fz-rent-det')) { tr.hidden = !ultOk; return; } // detalle de clientes: va con su cuenta
+      total++;
+      var txt = busNorm(tr.textContent + ' ' + (tr.getAttribute('data-busca') || '') + ' ' + (tr.nextElementSibling && tr.nextElementSibling.classList.contains('fz-rent-det') ? tr.nextElementSibling.textContent : ''));
+      ultOk = partes.every(function (p) { return txt.indexOf(p) >= 0; }); tr.hidden = !ultOk; if (ultOk) vis++;
+    });
+    var n = box.querySelector('[data-busn]'); n.textContent = q ? vis + ' de ' + total : total + (total === 1 ? ' fila' : ' filas');
+    var v = box.querySelector('[data-busv]'); v.hidden = !(q && !vis);
+    box.querySelector('[data-busx]').hidden = !q;
+  }
+  function busMontar(raiz) {
+    (raiz || document).querySelectorAll('.fz .fz-tw, .fz-modal .fz-tw').forEach(function (tw) {
+      var prev = tw.previousElementSibling;
+      if (prev && prev.classList.contains('fz-busca')) return;
+      if (tw.closest('details:not([open])') && !tw.closest('.fz-avz')) { /* se monta al abrir */ }
+      var card = tw.closest('.fz-card, .fz-modal-b') || tw.parentNode;
+      if (card.querySelector('[data-fz-vipq], [data-tf="q"], [data-fz-compf="q"]')) return; // ya tiene su buscador
+      if (tw.closest('.fz-rent-det')) return; // tabla interna de clientes
+      var n = tw.querySelectorAll('table.fz-t > tbody > tr:not(.fz-rent-det)').length; if (n < 2) return;
+      var clave = busClave(tw), q = st.busq[clave] || '';
+      var box = document.createElement('div'); box.className = 'fz-busca'; box.setAttribute('role', 'search');
+      box.innerHTML = '<label>' + ico('search') + '<input type="search" placeholder="Buscar correo, cuenta, cliente, banco…" aria-label="Buscar en esta tabla" autocomplete="off"><button type="button" class="fz-busca-x" data-busx aria-label="Borrar búsqueda" hidden>×</button></label><span data-busn></span><span class="fz-busca-v" data-busv hidden>Sin resultados para esa búsqueda.</span>';
+      tw.parentNode.insertBefore(box, tw);
+      var inp = box.querySelector('input'); inp.value = q; box.dataset.clave = clave;
+      inp.addEventListener('input', function () { st.busq[clave] = inp.value; busFiltrar(box); });
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Escape' && inp.value) { e.stopPropagation(); inp.value = ''; st.busq[clave] = ''; busFiltrar(box); } });
+      box.querySelector('[data-busx]').addEventListener('click', function () { inp.value = ''; st.busq[clave] = ''; busFiltrar(box); inp.focus(); });
+      busFiltrar(box);
+    });
+  }
+  var busPend = 0;
+  new MutationObserver(function (ms) {
+    if (busPend) return;
+    if (!ms.some(function (m) { return [].some.call(m.addedNodes, function (x) { return x.nodeType === 1 && (x.matches('.fz, .fz-modal, .fz-tw, table, tbody, tr') || (x.querySelector && x.querySelector('.fz-tw'))); }); })) return;
+    busPend = requestAnimationFrame(function () { busPend = 0; busMontar(document); });
+  }).observe(document.body, { childList: true, subtree: true });
+
   function modal(titulo, html, onOk, okTxt, opts) {
     opts = opts || {};
     var m = document.createElement('div'); m.className = 'fz-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', titulo);
