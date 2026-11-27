@@ -55,7 +55,7 @@ test('Catálogo (proyecto Relojes) fuera del menú de Sublichat; su pantalla, pe
   assert.match(v2, /conocidos\['catalogo-relojes'\] = 1; \/\/ R199c/, 'tampoco reaparece dentro de «Más»');
   assert.match(app, /ensureScreen\('catalogo-relojes'/);
   assert.ok(fs.existsSync(new URL('../api/catalogo-relojes.js', import.meta.url)) || /catalogo-relojes/.test(app));
-  assert.match(html, /\/ui-v2\.js\?v=20261120-r199[c-z]/);
+  assert.match(html, /\/ui-v2\.js\?v=(20261120-r199[c-z]|202611(2[7-9]|30)-r2\d\d)/);
 });
 
 test('Solo presentación: sin textos nuevos, sin degradados lineales, sin tocar endpoints', () => {
