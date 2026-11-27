@@ -1060,14 +1060,14 @@
     var r = st.vip.res;
     var c = (r && r.conteo) || {};
     var tabs = [['trap', 'Trap'], ['deku', 'Deku'], ['propio', 'Propios'], ['sin', 'Sin proveedor']];
-    var cab = '<div class="fz-card"><div class="fz-cab">' + logo('Netflix') + '<h3>Netflix VIP</h3><input class="fz-in" type="search" placeholder="Buscar correo, cliente o cuenta madre" data-fz-vipq value="' + esc(st.vip.q) + '"></div>' +
+    var cab = '<div class="fz-card"><div class="fz-cab">' + logo('Netflix') + '<h3>Netflix VIP</h3><input class="fz-in" type="search" placeholder="Buscar correo, cliente o cuenta madre" data-fz-vipq value="' + esc(st.vip.q) + '"><button type="button" class="fz-btn sec sm" data-fz-vipbodega="1" title="Extras «sin unidad en Bodega»: los pasa a Bodega ya asignados a su cliente">' + ico('box') + 'Pasar a Bodega</button></div>' +
       '<div class="fz-subtabs in">' + tabs.map(function (t) { return '<button type="button" class="' + (st.vip.tab === t[0] ? 'on' : '') + '" data-fz-viptab="' + t[0] + '">' + t[1] + ' <span>' + (c[t[0]] || 0) + '</span></button>'; }).join('') + '</div>';
     if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
     if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
     var rows = r.filas.map(function (f) {
       return '<tr><td><b>' + esc(f.correo) + '</b><small>' + esc(f.madre || '') + '</small></td><td>' + esc(f.cliente || '—') + (f.sinInventario ? '<small>' + (f.estadoCM === 'sin_asignacion' ? 'Sin asignación comercial' : 'Asignada en Telegram · sin unidad en Bodega') + '</small>' : '') + '</td><td>' + esc(f.proveedor || '—') + '</td><td class="n">' + U(f.costoMensualUsdt) + '<small>' + (f.costoMensualHnl ? L(f.costoMensualHnl, true) : '') + '</small></td>' +
         '<td>' + fecha(f.proximoPagoProveedor) + '</td><td>' + esc(f.loteId || '—') + '</td><td class="c">' + pill(ESTADO_VIP, f.estado) + '</td><td class="c"><div class="fz-menu"><button type="button" class="fz-ib" data-fz-menu aria-label="Opciones">' + ico('dots') + '</button>' +
-        '<div class="fz-menu-l"><button type="button" data-fz-vip="editar" data-id="' + esc(f.cmId) + '">Editar</button><button type="button" data-fz-vip="reemplazar" data-id="' + esc(f.cmId) + '"' + (f.estado === 'sin_registro' || f.sinInventario ? ' disabled' : '') + '>Reemplazar</button><button type="button" data-fz-vip="baja" data-id="' + esc(f.cmId) + '"' + (f.estado === 'sin_registro' || f.estado === 'baja' ? ' disabled' : '') + '>Dar de baja</button><button type="button" data-fz-vip="historial" data-id="' + esc(f.cmId) + '">Historial</button></div></div></td></tr>';
+        '<div class="fz-menu-l"><button type="button" data-fz-vip="editar" data-id="' + esc(f.cmId) + '">Editar</button><button type="button" data-fz-vip="reemplazar" data-id="' + esc(f.cmId) + '">Reemplazar por correo nuevo</button><button type="button" data-fz-vip="baja" data-id="' + esc(f.cmId) + '"' + (f.estado === 'sin_registro' || f.estado === 'baja' ? ' disabled' : '') + '>Dar de baja</button><button type="button" data-fz-vip="historial" data-id="' + esc(f.cmId) + '">Historial</button></div></div></td></tr>';
     }).join('');
     var pag = '<div class="fz-pag"><span>' + r.total + ' extra(s) · página ' + r.pagina + ' de ' + r.paginas + '</span><button type="button" class="fz-btn sec sm" data-fz-pag="-1"' + (r.pagina <= 1 ? ' disabled' : '') + '>Anterior</button><button type="button" class="fz-btn sec sm" data-fz-pag="1"' + (r.pagina >= r.paginas ? ' disabled' : '') + '>Siguiente</button></div>';
     return cab + '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Correo / ID extra</th><th>Cliente (Control Maestro)</th><th>Proveedor</th><th class="n">Costo mensual</th><th>Próximo cobro proveedor</th><th>Lote</th><th class="c">Estado</th><th></th></tr></thead><tbody>' +
@@ -1516,6 +1516,75 @@
     m.classList.add('ancho');
     m.addEventListener('click', function (e) { var b = e.target.closest('[data-fz="compra"]'); if (b) { m.remove(); abrirCompra(b.dataset.prod); } });
   }
+  // R207 · Reemplazar el extra A por un correo NUEVO B: B entra a Bodega asignado al mismo cliente, la ficha pasa de A a B,
+  // A desaparece de Bodega/Control Maestro/bot/APK (queda archivado) y B entra a Finanzas con proveedor, costo USDT y tasa Binance.
+  function abrirReemplazoVip(f, id) {
+    var hoy = (st.data && st.data.hoy) || '';
+    var provs = [['Trap colombiano', 'trap'], ['Deku peruano', 'deku'], ['VIP propio', 'propio']];
+    var html = '<div class="fz-cuenta-ro w2"><small>Extra actual (se quita de Bodega al guardar)</small><b>' + esc(f.correo) + '</b><span>' + esc(f.cliente || 'Sin cliente') + (f.proveedor ? ' · ' + esc(f.proveedor) : '') + '</span></div>' +
+      '<div class="fz-form"><label class="w2">Correo nuevo del extra<input name="correo" type="email" maxlength="120" autocomplete="off" placeholder="nuevo.extra@dominio.com">' + fe('correo') + '</label>' +
+      '<label class="w2">Clave del correo nuevo <small>(opcional: también se puede pegar luego en Bodega VIP)</small><input name="clave" maxlength="80" autocomplete="off" spellcheck="false"></label>' +
+      '<label>Proveedor<select name="proveedor"><option value="">— elegir —</option>' + provs.map(function (p) { return '<option' + (f.grupo === p[1] ? ' selected' : '') + '>' + p[0] + '</option>'; }).join('') + '</select>' + fe('proveedor') + '</label>' +
+      '<label>Costo mensual USDT<input type="number" step="any" min="0" name="costo" value="' + esc(f.costoMensualUsdt == null ? '' : f.costoMensualUsdt) + '">' + fe('costo') + '</label>' +
+      '<label>Tasa Binance (L por USDT)<input type="number" step="any" min="0" name="tasa" value="' + esc(f.tasa == null ? '' : f.tasa) + '">' + fe('tasa') + '</label>' +
+      '<label>Próximo cobro del proveedor<input type="date" name="prox" value="' + esc(f.proximoPagoProveedor && f.proximoPagoProveedor >= hoy ? f.proximoPagoProveedor : '') + '">' + fe('prox') + '</label>' +
+      '<label class="w2">¿Cómo se pagó el extra nuevo?<select name="pago"><option value="historico">Ya pagado en Binance (registrar compra con esa tasa)</option><option value="binance">Descontar del saldo Binance en Sublichat</option><option value="garantia">Sin pago: reposición / garantía del proveedor</option></select></label>' +
+      '<label class="w2">Motivo<input name="motivo" maxlength="160" value="Se cayó / sin membresía"></label></div>' +
+      '<p class="fz-sub">El cliente sigue con su misma fecha y precio; solo cambia el correo del extra en su ficha. El correo viejo deja de salir en Bodega, Control Maestro, bot y APK (queda archivado con su historial).</p>';
+    var opid = opId();
+    var m = modal('Reemplazar extra VIP', html, async function (mm) {
+      var r = await api('finp_vip_reemplazo_nuevo', { de: id, correo: val(mm, 'correo'), clave: val(mm, 'clave'), proveedor: val(mm, 'proveedor'), costoUsdt: val(mm, 'costo'), tasa: val(mm, 'tasa'), proximoPagoProveedor: val(mm, 'prox'), motivo: val(mm, 'motivo') });
+      var pago = val(mm, 'pago'), aviso = '';
+      if (pago !== 'garantia') {
+        var prods = (st.data && st.data.productosCatalogo) || [];
+        var prod = prods.find(function (p) { return p.activo !== false && p.id === 'NFX-VIP'; }) || prods.find(function (p) { return p.activo !== false && /vip/i.test(p.nombre); });
+        if (!prod) aviso = ' Falta el producto Netflix VIP en el catálogo: registre la compra en Compras.';
+        else {
+          try {
+            var cmp = { productoId: prod.id, fecha: hoy, cantidad: 1, costoTotal: Number(val(mm, 'costo')), moneda: 'USDT', pago: 'binance', binanceHistorico: pago === 'historico', cuentaInventarioId: r.a, referencia: 'Reemplazo ' + r.correoA + ' → ' + r.correoB };
+            if (pago === 'historico') cmp.tasa = Number(val(mm, 'tasa'));
+            var c = await api('fin_compra_registrar', { operationId: opid, compra: cmp }); aviso = ' Compra ' + folio(c.loteId) + ' registrada.';
+          } catch (e) { aviso = ' El reemplazo quedó hecho, pero la compra no se registró: ' + e.message; }
+        }
+      }
+      toast('Listo: ' + r.correoA + ' → ' + r.correoB + (r.fichas ? ' · ' + r.fichas + ' ficha(s) actualizada(s)' : '') + (r.claveFaltante ? ' · pegue la clave en Bodega VIP' : '') + '.' + aviso);
+      st.vip.res = null; cargar(true);
+    }, 'Reemplazar', { validar: function (mm) {
+      var e = {};
+      if (!/^[^\s@]+@[^\s@]+\.[a-z0-9-]{2,}$/i.test(val(mm, 'correo').trim())) e.correo = 'Escriba el correo nuevo.';
+      if (!val(mm, 'proveedor')) e.proveedor = 'Elija el proveedor.';
+      if (!(Number(val(mm, 'costo')) > 0)) e.costo = 'Escriba el costo en USDT.';
+      if (!(Number(val(mm, 'tasa')) > 0)) e.tasa = 'Escriba la tasa Binance.';
+      if (!val(mm, 'prox')) e.prox = 'Elija la fecha.';
+      return e;
+    } });
+    m.classList.add('ancho');
+  }
+  // R207 · Extras «sin unidad en Bodega» que ya usa un cliente de Telegram → Bodega, ya asignados (nunca quedan libres para vender).
+  function abrirPasarBodega() {
+    var mm = modal('Pasar extras VIP a Bodega', '<div class="fz-vacio-s"><span class="fz-spin"></span> Revisando extras y clientes…</div>'); mm.classList.add('ancho');
+    api('finp_vip_bodega_preview', {}).then(function (r) {
+      var b = mm.querySelector('.fz-modal-b'); if (!b) return; var k = r.conteo || {};
+      var ET = { listo: ['Listo', 'ok'], varios_clientes: ['Varios clientes: revisar', 'warn'], sin_cliente: ['Sin cliente en Telegram', 'warn'], ya_en_bodega: ['Ya está en Bodega', 'pend'] };
+      var listos = (r.filas || []).filter(function (f) { return f.estado === 'listo'; });
+      b.innerHTML = '<div class="fz-mini"><div><small>Listos para pasar</small><b>' + (k.listo || 0) + '</b></div><div><small>Varios clientes</small><b>' + (k.varios_clientes || 0) + '</b></div><div><small>Sin cliente</small><b>' + (k.sin_cliente || 0) + '</b></div><div><small>Ya en Bodega</small><b>' + (k.ya_en_bodega || 0) + '</b></div></div>' +
+        '<p class="fz-sub">Cada extra «Listo» entra a Bodega VIP ya <b>asignado</b> a su cliente (no queda libre para vender) y se liga con su costo de Finanzas. No crea ventas ni cambia precios, fechas o fichas. La clave queda pendiente: péguela después en Bodega › ⭐ Netflix VIP › Cargar lote (correo | clave).</p>' +
+        '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Correo del extra</th><th>Cliente</th><th>Proveedor</th><th>Estado</th></tr></thead><tbody>' + (r.filas || []).map(function (f) { return '<tr><td><b>' + esc(f.correo) + '</b></td><td>' + esc((f.clientes || []).join(', ') || '—') + '</td><td>' + esc(f.proveedor || '—') + '</td><td>' + pill(ET, f.estado) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+        '<div class="fz-acc" style="margin-top:12px"><span data-prog class="fz-sub"></span><button type="button" class="fz-btn" data-pasar' + (listos.length ? '' : ' disabled') + '>Pasar ' + listos.length + ' a Bodega y asignar</button></div>';
+      var btn = b.querySelector('[data-pasar]'), prog = b.querySelector('[data-prog]');
+      btn.addEventListener('click', async function () {
+        if (!confirm('¿Pasar ' + listos.length + ' extras a Bodega, cada uno asignado a su cliente?')) return;
+        btn.disabled = true; var ids = listos.map(function (f) { return f.finId; }), hechos = 0, malos = [];
+        for (var i = 0; i < ids.length; i += 50) {
+          prog.textContent = 'Pasando ' + Math.min(i + 50, ids.length) + ' de ' + ids.length + '…';
+          try { var x = await api('finp_vip_bodega_pasar', { ids: ids.slice(i, i + 50) }); hechos += x.pasados || 0; malos = malos.concat(x.saltados || []); }
+          catch (e) { malos.push({ correo: 'lote ' + (i / 50 + 1), motivo: e.message }); }
+        }
+        prog.textContent = hechos + ' pasados a Bodega' + (malos.length ? ' · ' + malos.length + ' sin pasar: ' + malos.slice(0, 5).map(function (y) { return y.correo + ' (' + y.motivo + ')'; }).join(', ') : '') + '.';
+        toast(hechos + ' extras pasados a Bodega y asignados.'); st.vip.res = null; cargarVip();
+      });
+    }).catch(function (e) { var b = mm.querySelector('.fz-modal-b'); if (b) b.textContent = e.message; });
+  }
   function abrirVip(acc, id) {
     var f = filaVip(id); if (!f) return;
     if (acc === 'historial') {
@@ -1526,11 +1595,7 @@
       modal('Dar de baja · ' + f.correo, '<p>Marca el extra como <b>Baja</b> en Finanzas (deja de contarse como costo mensual). No toca la cuenta ni al cliente en Control Maestro.</p>', async function () { await api('finp_vip_editar', { cmId: id, cambios: { estadoSeguimiento: 'baja' } }); toast('Extra dado de baja en Finanzas.'); st.vip.res = null; pintar(); }, 'Dar de baja');
       return;
     }
-    if (acc === 'reemplazar') {
-      modal('Reemplazar · ' + f.correo, '<div class="fz-form"><label class="w2">ID del acceso VIP de reemplazo (ya existente en Control Maestro)<input name="a" maxlength="80"></label><label class="fz-check w2"><input type="checkbox" name="pagado"> El reemplazo se pagó (registrar luego la compra en Compras)</label></div><p class="fz-sub">El cliente y su vencimiento no cambian.</p>',
-        async function (m) { var r = await api('finp_vip_reemplazar', { de: id, a: val(m, 'a'), pagado: val(m, 'pagado') }); toast(r.aviso || 'Reemplazo registrado.'); st.vip.res = null; pintar(); }, 'Reemplazar');
-      return;
-    }
+    if (acc === 'reemplazar') { abrirReemplazoVip(f, id); return; }
     var provs = [['Trap colombiano', 'trap'], ['Deku peruano', 'deku'], ['VIP propio', 'propio']];
     var html = '<div class="fz-form"><label>Proveedor<select name="proveedor"><option value="">—</option>' + provs.map(function (p) { return '<option' + (f.grupo === p[1] ? ' selected' : '') + '>' + p[0] + '</option>'; }).join('') + '</select></label>' +
       '<label>Costo mensual USDT<input type="number" step="any" name="costo" value="' + esc(f.costoMensualUsdt == null ? '' : f.costoMensualUsdt) + '"></label><label>Tasa HNL por USDT<input type="number" step="any" name="tasa" value="' + esc(f.tasa == null ? '' : f.tasa) + '"></label>' +
@@ -1599,6 +1664,7 @@
       if ((t = e.target.closest('[data-fz-hbo]'))) { abrirHbo(t.dataset.fzHbo, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ganmes]'))) { var mg = t.dataset.fzGanmes, pg = mg.split('-'); st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); return; }
       if ((t = e.target.closest('[data-fz-gantri]'))) { var gm = (st.gan[ganClave()] || {}).meses || []; if (gm.length >= 3) { var u = gm[gm.length - 1].mes, pu = u.split('-'); st.ganR = { desde: gm[gm.length - 3].mes + '-01', hasta: u + '-' + String(new Date(Date.UTC(+pu[0], +pu[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); } return; }
+      if ((t = e.target.closest('[data-fz-vipbodega]'))) { abrirPasarBodega(); return; } // R207
       if ((t = e.target.closest('[data-fz-rentplat]'))) { abrirRentPlat(t.dataset.fzRentplat); return; } // R198j
       if ((t = e.target.closest('[data-fz-rentre]'))) { cargarRent(true); return; }
       if ((t = e.target.closest('[data-fz-ganplat]'))) { abrirPlataforma(t.dataset.fzGanplat); return; } // R197b · antes solo filtraba la tabla de abajo (parecía no abrir)
