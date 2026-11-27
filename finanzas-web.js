@@ -908,7 +908,7 @@
     primevideo: 'Cuenta de Arabia Saudita pagada con gift card en SAR (comprada en USD en Eneba con BAC Honduras). Por cuenta: saldo SAR, renovación mensual o anual con su fecha y vencimiento de la gift card (botón «Gift cards»).',
     disneyp: 'Generalmente se paga por link / activación (USDT). También tarjeta o gift card. Cada pago queda en el historial de la cuenta.',
     disneys: 'Disney Standard (sin ESPN). Generalmente por link / activación (USDT). También tarjeta o gift card.',
-    viki: 'Viki Rakuten: tarjeta en USD (se convierte a Lempiras con la tasa de BAC del día), gift card o activación.'
+    viki: 'Viki Rakuten: tarjeta bancaria (USD o PHP, con el cargo real en Lempiras de BAC), link de pago / activación (USDT), gift card o PayPal. Cada pago queda en el historial de la cuenta.'
   };
   st.cta = st.cta || {}; st.ctaF = st.ctaF || {};
   async function cargarCuentas(plat) { try { st.cta[plat] = await api('finp_cuentas_lista', { plataforma: plat }); } catch (e) { st.cta[plat] = { error: e.message }; } if (st.tab === 'compras' && st.sub === plat) pintar(); }
@@ -990,7 +990,11 @@
       var def = P.defecto || {}, mod = x.modalidad || def.modalidad, mon = x.moneda || def.moneda, fr = x.frecuencia || def.frecuencia;
       var prods = (r.productos || []).filter(function (p) { return p.plataforma === x.plataforma; });
       var pSel = (prods.find(function (p) { return p.modelo === 'cuenta_madre'; }) || prods[0] || {}).id || '';
-      if (!prods.length) { crearProductoPlataforma(x.plataforma, P.nombre || x.plataforma, recargar); return; }
+      // R202 · Sin producto en el catálogo: se crea solo (sin costo de referencia) y se abre el pago de una vez, igual que en HBO Max.
+      if (!prods.length) { productoAuto(x, P, mod, plat, id); return; }
+      // R202 · Si se paga por link/activación y hay producto de link, ese va primero; con tarjeta o gift card, la cuenta madre.
+      var pLink = (mod === 'link' || mod === 'binance') && prods.find(function (p) { return p.modelo === 'link'; });
+      if (pLink) pSel = pLink.id;
       abrirCompra(pSel, { titulo: 'Registrar pago · ' + (P.nombre || ''), cuentaId: x.cuentaId, correo: x.correo, plan: x.plan, plataforma: x.plataforma, plataformaNombre: P.nombre, tarjeta: x.tarjeta, productos: prods, monedas: P.monedas, frecuencia: fr, moneda: (mod === 'binance' || mod === 'link') && (P.monedas || []).indexOf('USDT') >= 0 ? 'USDT' : mon, pago: mon === 'USDT' || mod === 'binance' || mod === 'link' ? 'binance_hist' : 'banco', alGuardar: recargar }); // R200i · activación/link = Binance ya pagado (USDT + Lempiras)
       return;
     }
@@ -1398,6 +1402,21 @@
       toast(r.duplicado ? 'Esa compra ya estaba registrada (no se duplicó).' : 'Compra guardada · folio ' + folio(r.loteId) + (r.costoTotalHnl != null ? ' · ' + L(r.costoTotalHnl, true) : '') + '.');
       if (ctx.alGuardar) ctx.alGuardar(r); cargar(true);
     }, 'Guardar compra', { validar: validar, alAbrir: function (m) { proponerVence(m); m.addEventListener('input', function (e) { if (e.target.name === 'vigenciaHasta') e.target.dataset.editado = '1'; if (e.target.name === 'fecha' || e.target.name === 'fechaActivacion') proponerVence(m); }); m.addEventListener('change', function (e) { if (e.target.name === 'fecha' || e.target.name === 'fechaActivacion') proponerVence(m); }); ajustar(m); m.addEventListener('change', function () { ajustar(m); }); m.addEventListener('input', function (e) { if (e.target.name === 'costoTotal' || e.target.name === 'tasa' || e.target.name === 'hnlHist') ajustar(m); }); } });
+  }
+  // R202 · Crea el producto de la plataforma sin preguntar (nombre «<Plataforma> · cuenta madre», modelo cuenta madre, 30 días, SIN
+  // costo de referencia: el costo real sale de cada pago) y vuelve a abrir «Registrar pago». Si ya existía con ese código, solo recarga.
+  var autoCreando = {};
+  async function productoAuto(x, P, mod, plat, id) {
+    if (autoCreando[plat]) return; autoCreando[plat] = true;
+    try {
+      var nombre = (P.nombre || x.plataforma) + ' · cuenta madre';
+      try { await api('fin_producto_guardar', { producto: { nombre: nombre, categoria: 'perfiles', modelo: 'cuenta_madre', capacidad: 1, duracionDias: 30, plataformaKey: x.plataforma } }); }
+      catch (e) { if (!/ya existe/i.test(e.message || '')) throw e; }
+      st.cta[plat] = null; await Promise.all([cargarCuentas(plat), cargar(true)]);
+      var r2 = st.cta[plat] || {};
+      if (!(r2.productos || []).some(function (p) { return p.plataforma === x.plataforma; })) { crearProductoPlataforma(x.plataforma, P.nombre || x.plataforma, function () { st.cta = {}; }); return; }
+      abrirCuenta('pago', plat, id);
+    } catch (e) { toast(e.message, true); } finally { autoCreando[plat] = false; }
   }
   // R200g · plataforma sin producto en el catálogo: se ofrece crearlo (sin costo de referencia: nunca una tarifa fija).
   function crearProductoPlataforma(plat, nombre, alListo) {
