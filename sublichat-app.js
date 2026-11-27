@@ -1396,6 +1396,7 @@ function invAbrir(c){
     <div class="iv-row"><span class="k">Estado</span><span class="v">${c.estado||"—"}</span></div>
     ${perfilesHtml}
     ${String(c.plataforma||"").toLowerCase()==="hbomax"?`<div id="invHboBox" class="iv-perfiles" data-inv-id="${clienteEsc(c.id||"")}"><div class="cr-label">📦 Plan HBO</div><p class="hg-estado">${clienteEsc(invPlanHbo(c))}</p></div>`:""}
+    ${invTipoDisney(c.plataforma)?`<div id="invDisneyBox" class="iv-perfiles"><div class="cr-label">🏰 Tipo de cuenta Disney</div><p class="hg-estado">${invTipoDisney(c.plataforma)==="disneyp"?"Disney Premium con ESPN":"Disney Premium sin ESPN"}</p><div class="vip-row"><button type="button" class="hg-btn" data-inv-disney="disneyp"${invTipoDisney(c.plataforma)==="disneyp"?" disabled":""}>Con ESPN</button><button type="button" class="hg-btn" data-inv-disney="disneys"${invTipoDisney(c.plataforma)==="disneys"?" disabled":""}>Sin ESPN</button></div><p class="vip-muted">Pasa la cuenta y sus ventas al otro tipo. No saca a ningún cliente ni cambia precios, fechas ni PIN.</p></div>`:""}
     ${String(c.plataforma||"").toLowerCase()==="netflix"?`<div id="invHogarBox" class="iv-perfiles" data-inv-id="${clienteEsc(c.id||"")}"></div>`:""}
     <button class="cobro-btn renew iv-edit-btn" id="invEditBtn" style="width:100%">✏️ Editar ${identLabel.toLowerCase()} / clave</button>
     <button class="cobro-btn iv-edit-btn" id="invCapBtn" style="width:100%;margin-top:8px">👥 Editar capacidad</button>
@@ -1406,6 +1407,7 @@ function invAbrir(c){
   if(eb)eb.addEventListener("click",()=>invEditar(c));
   const cb=document.getElementById("invCapBtn");if(cb)cb.addEventListener("click",()=>invEditarCapacidad(c));
   const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
+  document.querySelectorAll("#invDisneyBox [data-inv-disney]").forEach(b=>b.addEventListener("click",()=>invCambiarTipoDisney(c,b.getAttribute("data-inv-disney")))); // R206
   try{window.SublichatHogar?.montar(document.getElementById("invHogarBox"));}catch(_){} // R196u · Hogar Netflix Premium
   try{window.SublichatHbo?.montar(document.getElementById("invHboBox"),(r)=>invHboGuardado(c,r));}catch(_){} // R196u · plan HBO · R196z4: antes llamaba a invCargar (no existe) y la tarjeta/Control Maestro quedaban con el plan viejo
 }
@@ -1466,6 +1468,26 @@ async function invEditarCapacidad(c){
     const j=await invPost({accion:"editarCuenta",docId:c.id,capacidad:n});
     if(j.ok){mostrarToast(`✅ Capacidad: ${invCap(c)} → ${n} · ${n-ocu} libre${n-ocu===1?"":"s"}`);invCerrar();setTimeout(()=>load(),700);}
     else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
+  }catch(_){if(hint)hint.textContent="⚠️ No pude conectar.";}
+}
+// R206 · Disney Premium con ESPN ↔ sin ESPN en la MISMA cuenta (mismo id): la cuenta y sus ventas ligadas cambian de tipo.
+function invTipoDisney(p){const t=String(p||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");if(!/^disney/.test(t))return "";return /sinespn|^disneys$|standard|estandar/.test(t)?"disneys":"disneyp";}
+async function invCambiarTipoDisney(c,tipo){
+  const nombre=tipo==="disneyp"?"Disney Premium con ESPN":"Disney Premium sin ESPN";
+  if(!confirm(`¿Pasar ${c.correo||"esta cuenta"} a ${nombre}?\n\nSus ${invOcupados(c)} cliente(s) siguen en la cuenta; sus ventas también pasan a ${nombre}.`))return;
+  const hint=document.getElementById("invHint");if(hint)hint.textContent="Guardando…";
+  try{
+    let j=await invPost({accion:"disneyTipo",docId:c.id,tipo});
+    if(!j.ok&&j.code==="requiere_excepcion"&&j.capacidadSugerida){
+      if(!confirm(`${j.error}\n\n¿Confirmar capacidad excepcional de ${j.capacidadSugerida}? No se elimina ningún cliente.`)){if(hint)hint.textContent="";return;}
+      j=await invPost({accion:"disneyTipo",docId:c.id,tipo,autorizarExcepcion:true,motivo:"Perfiles ya vendidos"});
+    }
+    if(!j.ok){if(hint)hint.textContent="⚠️ "+(j.error||"No se pudo cambiar.");return;}
+    const it=(INVENTARIO||[]).find(x=>String(x.id)===String(c.id));
+    [it,c].filter(Boolean).forEach(o=>{o.plataforma=j.plataforma;if(j.capacidad){o.capacidad=j.capacidad;o.disponibles=j.disponibles;if(o.disp!=null)o.disp=j.disponibles;}});
+    try{bumpControlDataVersion();window.sublichatControlSyncLoadedData?.(`✅ ${nombre} actualizado en Control Maestro.`);}catch(_){}
+    mostrarToast(`✅ ${j.yaEstaba?"Ya era":"Ahora es"} ${nombre}${j.ventasSincronizadas?` · ${j.ventasSincronizadas} venta(s) actualizadas`:""}${j.avisoVentas?" · "+j.avisoVentas:""}`);
+    invCerrar();setTimeout(()=>{try{load();}catch(_){}},700);
   }catch(_){if(hint)hint.textContent="⚠️ No pude conectar.";}
 }
 async function invEditarUrl(c){
