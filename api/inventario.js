@@ -10,7 +10,8 @@ import planesTv from "./_planes-tv.js"; // R187 · catálogo central de planes (
 import spotifyFam from "./_spotify-familias.js"; // R188 · Spotify Familiar (fuente única Web/APK/bot)
 import bodegaVip from "./_bodega-vip.js"; // R196u · Bodega Netflix VIP (fuente única Web/APK/bot)
 import netflixHogar from "./_netflix-hogar.js"; // R196u · Hogar de Netflix Premium (un Hogar por madre)
-import hboPlanes from "./_hbo-planes.js"; // R196u · HBO Platinum 5 / Standard 3 por cuenta
+import hboPlanes from "./_hbo-planes.js";
+import disneyTipo from "./_disney-tipo.js"; // R206 · Disney con ESPN ↔ sin ESPN por cuenta // R196u · HBO Platinum 5 / Standard 3 por cuenta
 import perfilesInv from "./_perfiles-inventario.js"; // R199e · un perfil = una fila en Bodega (misma regla que el bot)
 import push from "./_push.js"; // Fase 2 · aviso push de cambios importantes (sin datos de la cuenta)
 import PERMISOS from "./_permisos.js"; // R162 · módulos por usuario que define Sublicuentas
@@ -629,6 +630,19 @@ export default async function handler(req, res) {
         }
       } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 300), code: e?.code || "", capacidadSugerida: e?.capacidadSugerida ?? null, plan: e?.plan || "" }); }
       return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
+    }
+
+    // R206 · Disney Premium con ESPN ↔ sin ESPN (misma cuenta, mismo id). Mismo permiso que el plan HBO.
+    if (accion === "disneyTipo") {
+      const usr = String(authUser.usuario || authUser.uid || "");
+      const adminTipo = spotifyFam.esAdministradorMadres(authUser) || permisosCtx.overrides?.["hbo-planes"] === true || permisosCtx.overrides?.["tipo-cuenta"] === true;
+      if (!adminTipo) return res.status(403).json({ ok: false, error: "Solo Sublicuentas (o un perfil autorizado) cambia el tipo de cuenta." });
+      try {
+        const origen = String(req.body.origen || "web").slice(0, 10);
+        const r = await disneyTipo.cambiarTipo(db, { inventarioId: docId, tipo: req.body.tipo, autorizarExcepcion: req.body.autorizarExcepcion === true, motivo: String(req.body.motivo || "").slice(0, 160), usuario: usr, origen });
+        if (r.ok && !r.yaEstaba) { try { r.ventasSincronizadas = (await disneyTipo.sincronizarVentas(db, { inventarioId: docId, usuario: usr, origen })).ventas; } catch (e) { r.avisoVentas = "El tipo quedó guardado en la cuenta; las ventas ligadas se sincronizan al reintentar."; } }
+        return res.status(200).json(r);
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 300), code: e?.code || "", capacidadSugerida: e?.capacidadSugerida ?? null, tipo: e?.tipo || "" }); }
     }
 
     // R196u · Hogar de Netflix Premium (PDF v2.0 · 03): ver = quien puede inventario; asignar/quitar = Sublicuentas o permiso «hogar-netflix».
