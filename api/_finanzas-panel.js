@@ -652,14 +652,15 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
 
     // ---------------- R196f · Spotify Familiar: lo único que se llena en Finanzas es el pago mensual (L) y la renovación de la cuenta principal
     if (accion === "finp_spf_lista") {
-      const [fams, fin] = await Promise.all([todos("spotify_familias"), todos("fin_spotify_cuentas")]);
-      const finDe = new Map(fin.map((x) => [x.id, x]));
+      const [fams, fin, tarjetas] = await Promise.all([todos("spotify_familias"), todos("fin_spotify_cuentas"), todos("fin_tarjetas")]);
+      const finDe = new Map(fin.map((x) => [x.id, x])), tDe = new Map(tarjetas.map((x) => [x.id, x])); // R201 · tarjeta que paga cada cuenta
+      const tjPub = (t) => (t ? { id: t.id, banco: t.banco, titular: t.titular, ultimos4: t.ultimos4 } : null);
       const en7 = new Date(Date.parse(`${hoy}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
       const filas = fams.filter((f) => f.estado !== "inactiva").map((f) => { const x = finDe.get(f.id) || {}; const ocup = (f.miembros || []).filter((m) => m.estado === "activo").length;
-        return { familiaId: f.id, codigo: f.codigo || "", madreCorreo: f.madreCorreo || "", ocupados: ocup, capacidad: Number(f.capacidad || 5), costoMensualHnl: x.costoMensualHnl ?? null, proximaRenovacion: x.proximaRenovacion || "", ultimoPago: x.ultimoPago || "", ultimoLoteId: x.ultimoLoteId || "",
+        return { familiaId: f.id, codigo: f.codigo || "", madreCorreo: f.madreCorreo || "", ocupados: ocup, capacidad: Number(f.capacidad || 5), costoMensualHnl: x.costoMensualHnl ?? null, proximaRenovacion: x.proximaRenovacion || "", ultimoPago: x.ultimoPago || "", ultimoLoteId: x.ultimoLoteId || "", tarjeta: tjPub(x.tarjetaId ? tDe.get(x.tarjetaId) : null),
           vencida: !!(x.proximaRenovacion && x.proximaRenovacion < hoy), pronto: !!(x.proximaRenovacion && x.proximaRenovacion >= hoy && x.proximaRenovacion <= en7), historial: (x.historial || []).slice(-10) }; })
         .sort((a, b) => String(a.proximaRenovacion || "9999").localeCompare(String(b.proximaRenovacion || "9999")) || a.codigo.localeCompare(b.codigo));
-      return ok({ hoy, filas, totalMensualHnl: r2(filas.reduce((a, f) => a + (Number(f.costoMensualHnl) || 0), 0)), sinDatos: filas.filter((f) => f.costoMensualHnl == null || !f.proximaRenovacion).length, pronto: filas.filter((f) => f.pronto || f.vencida).length });
+      return ok({ hoy, filas, tarjetas: tarjetas.map(tjPub), sinTarjeta: filas.filter((f) => !f.tarjeta).length, totalMensualHnl: r2(filas.reduce((a, f) => a + (Number(f.costoMensualHnl) || 0), 0)), sinDatos: filas.filter((f) => f.costoMensualHnl == null || !f.proximaRenovacion).length, pronto: filas.filter((f) => f.pronto || f.vencida).length });
     }
     if (accion === "finp_spf_guardar") {
       const fid = String(body.familiaId || "");
@@ -669,15 +670,33 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       if (ren === null) throw errUsuario("Fecha de renovación inválida.");
       const pago = body.ultimoPago ? fechaExcel(body.ultimoPago) : "";
       if (pago === null || (pago && pago > hoy)) throw errUsuario("Fecha de pago inválida.");
+      // R201 · tarjeta que paga la cuenta: solo banco, titular y últimos 4 (nunca el número completo ni CVV). Misma tarjeta = mismo registro.
+      let tarjetaNueva = null;
+      if (body.tarjetaNueva) {
+        const banco = txt(body.tarjetaNueva.banco, 60), titular = txt(body.tarjetaNueva.titular, 80), u4 = String(body.tarjetaNueva.ultimos4 || "").replace(/\s/g, "");
+        if (!/^\d{4}$/.test(u4)) throw errUsuario(/\d{5,}/.test(u4) ? "Escriba SOLO los últimos 4 dígitos. Nunca el número completo de la tarjeta." : "Los últimos 4 dígitos deben ser 4 números.");
+        if (banco.length < 2 || titular.length < 3) throw errUsuario("Escriba el banco y el nombre del titular de la tarjeta.");
+        tarjetaNueva = { banco, titular, ultimos4: u4 };
+      }
       await db.runTransaction(async (tx) => {
         const fref = col("spotify_familias").doc(fid), ref = col("fin_spotify_cuentas").doc(fid);
         const [sf, s] = [await tx.get(fref), await tx.get(ref)];
         if (!sf.exists || (sf.data() || {}).estado === "inactiva") throw errUsuario("Esa cuenta de Spotify Familiar no existe.");
         const a = s.exists ? s.data() : {};
-        const n = { costoMensualHnl: costo === null ? a.costoMensualHnl ?? null : r2(costo), proximaRenovacion: ren || a.proximaRenovacion || "", ...(pago ? { ultimoPago: pago } : {}), ...(body.loteId ? { ultimoLoteId: txt(body.loteId, 120) } : {}) };
+        let tarjetaId = a.tarjetaId || "";
+        if (tarjetaNueva) {
+          const tid = `tj_${tarjetaNueva.banco}_${tarjetaNueva.ultimos4}_${tarjetaNueva.titular}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_]+/g, "-").slice(0, 120);
+          const tref = col("fin_tarjetas").doc(tid), ts = await tx.get(tref);
+          if (!ts.exists) tx.set(tref, { ...tarjetaNueva, creadoAt: ahora, creadoPor: actor });
+          tarjetaId = tid;
+        } else if (body.tarjetaId !== undefined) {
+          tarjetaId = txt(body.tarjetaId, 120);
+          if (tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
+        }
+        const n = { costoMensualHnl: costo === null ? a.costoMensualHnl ?? null : r2(costo), proximaRenovacion: ren || a.proximaRenovacion || "", tarjetaId, ...(pago ? { ultimoPago: pago } : {}), ...(body.loteId ? { ultimoLoteId: txt(body.loteId, 120) } : {}) };
         tx.set(ref, { ...a, ...n, familiaId: fid, codigo: (sf.data() || {}).codigo || "", madreCorreo: (sf.data() || {}).madreCorreo || "", actualizadoAt: ahora, actualizadoPor: actor,
-          historial: [...(a.historial || []), { at: ahora, por: actor, antes: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, despues: n }].slice(-30) });
-        audit(tx, { accion: "spotify_familiar_pago", targetType: "spotify_familia", targetId: fid, before: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "" }, after: n });
+          historial: [...(a.historial || []), { at: ahora, por: actor, antes: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "", tarjetaId: a.tarjetaId || "" }, despues: n }].slice(-30) });
+        audit(tx, { accion: "spotify_familiar_pago", targetType: "spotify_familia", targetId: fid, before: { costoMensualHnl: a.costoMensualHnl ?? null, proximaRenovacion: a.proximaRenovacion || "", tarjetaId: a.tarjetaId || "" }, after: n });
       });
       try { await spotifyFam.sincronizarBodega(db, fid); } catch (_) {} // Bodega muestra pago y renovación
       return ok({ familiaId: fid });
