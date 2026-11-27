@@ -16,7 +16,7 @@ test('R112: 5 categorías y clasificación por plataforma (servicios viejos)', (
 test('R112: lo GUARDADO manda (Netflix como cuenta completa) y solo las 5 plataformas permitidas', () => {
   const c = clasificarServicio({ plataforma: 'netflix', tipoVenta: 'cuenta_completa' });
   assert.equal(c.categoria, 'cuentas_completas');
-  for (const p of ['viki', 'disneys', 'hbomax', 'netflix', 'crunchyroll']) assert.ok(puedeSerCuentaCompleta(p), p);
+  for (const p of ['viki', 'disneyp', 'disneys', 'hbomax', 'netflix', 'crunchyroll']) assert.ok(puedeSerCuentaCompleta(p), p);
   assert.equal(puedeSerCuentaCompleta('spotify'), false);
   assert.match(normalizarServicioVenta({ plataforma: 'spotify', tipoVenta: 'cuenta_completa', correo: 'a', clave: 'b' }).error, /no se vende/);
 });
