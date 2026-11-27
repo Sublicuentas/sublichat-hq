@@ -51,7 +51,14 @@
   var st = { tab: 'ganancias', mes: '', data: null, cargando: false, error: '', sub: 'registradas', vip: { tab: 'trap', q: '', pagina: 1, res: null }, imp: null, jobs: null, rep: { desde: '', hasta: '' }, chart: null };
 
   async function api(accion, body) {
-    var r = await fetch('/api/finanzas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ accion: accion, origen: 'web' }, body || {})) });
+    // R201 · «Failed to fetch» = la conexión se cortó antes de llegar al servidor. Se reintenta solo (2 veces) y, si sigue,
+    // se muestra un mensaje claro con «Reintentar» en vez del texto técnico del navegador.
+    var cuerpo = JSON.stringify(Object.assign({ accion: accion, origen: 'web' }, body || {})), r = null, ultimoErr = null;
+    for (var intento = 0; intento < 3 && !r; intento++) {
+      try { r = await fetch('/api/finanzas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: cuerpo }); }
+      catch (e) { ultimoErr = e; if (intento < 2) await new Promise(function (ok) { setTimeout(ok, 1200 * (intento + 1)); }); }
+    }
+    if (!r) throw new Error(navigator.onLine === false ? 'Sin internet en este equipo. Revise la conexión y toque Reintentar.' : 'No se pudo conectar con el servidor de Finanzas (' + (ultimoErr && ultimoErr.message || 'conexión cortada') + '). Toque Reintentar.');
     var j = null; try { j = await r.json(); } catch (_) {}
     // R196i · error con causa visible (antes salía solo «No se pudo completar.»)
     if (r.status === 403) throw new Error((j && j.error) || 'Sin autorización para Finanzas. Sublicuentas lo activa en Permisos.');
@@ -725,12 +732,12 @@
       '<p class="fz-pie">El proveedor de un extra VIP se toma del NOMBRE (Trap/Deku), nunca del precio. Los valores 2.50/2.70 USDT son solo referencia.</p></div>';
   }
   function vCompras(d) {
-    var subs = [['registradas', 'Compras registradas'], ['pendientes', 'Cuentas por configurar'], ['spotify', 'Spotify Familiar'], ['hbo', 'HBO Max'], ['netflix', 'Netflix Premium'], ['paramount', 'Paramount+'], ['crunchyroll', 'Crunchyroll'], ['primevideo', 'Prime Video'], ['disneyp', 'Disney Premium'], ['disneys', 'Disney Standard'], ['viki', 'Viki Rakuten'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
+    var subs = [['registradas', 'Compras registradas'], ['pendientes', 'Cuentas por configurar'], ['spotify', 'Spotify Familiar'], ['hbomax', 'HBO Max'], ['netflix', 'Netflix Premium'], ['paramount', 'Paramount+'], ['crunchyroll', 'Crunchyroll'], ['primevideo', 'Prime Video'], ['disneyp', 'Disney Premium'], ['disneys', 'Disney Standard'], ['viki', 'Viki Rakuten'], ['vip', 'Netflix VIP'], ['importar', 'Importar Excel']];
     var nav = '<div class="fz-subtabs">' + subs.map(function (s) { return '<button type="button" class="' + (st.sub === s[0] ? 'on' : '') + '" data-fz-sub="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (st.sub === 'vip') return nav + vVip();
     if (st.sub === 'importar') return nav + vImportar();
     if (st.sub === 'spotify') return nav + vSpotify();
-    if (st.sub === 'hbo') return nav + vHbo();
+    if (st.sub === 'hbo') st.sub = 'hbomax'; // R201 · HBO Max ya usa la vista de cuentas madre
     if (CUENTAS_SUB[st.sub]) return nav + vCuentas(st.sub);
     // R200a · filtros por fecha, proveedor, producto y estado + menú por fila (Ver detalle / Eliminar compra)
     var F = st.compF = st.compF || { q: '', prov: '', estado: 'vigentes', desde: '', hasta: '' };
@@ -880,9 +887,10 @@
   // Netflix Premium, Paramount+, Crunchyroll, Prime Video (y «Cuentas por configurar» de todas, HBO incluido) se LEEN de Control
   // Maestro: aquí no se crean cuentas. Sin compra real = «Costo pendiente de configurar» (nunca L0). «Registrar pago» abre la
   // compra con la cuenta ya elegida; «Cómo se paga» guarda modalidad, moneda, frecuencia y tarjeta mínima (solo Finanzas).
-  var CUENTAS_SUB = { pendientes: 'Cuentas por configurar', netflix: 'Netflix Premium', paramount: 'Paramount+', crunchyroll: 'Crunchyroll', primevideo: 'Prime Video', disneyp: 'Disney Premium', disneys: 'Disney Standard', viki: 'Viki Rakuten' }; // R200g · + Disney y Viki
+  var CUENTAS_SUB = { pendientes: 'Cuentas por configurar', hbomax: 'HBO Max', netflix: 'Netflix Premium', paramount: 'Paramount+', crunchyroll: 'Crunchyroll', primevideo: 'Prime Video', disneyp: 'Disney Premium', disneys: 'Disney Standard', viki: 'Viki Rakuten' }; // R200g · + Disney y Viki
   var NOTA_PLAT = {
     pendientes: 'Cuentas madre de Control Maestro que todavía no tienen un pago registrado. Configure cómo se paga cada una y registre su pago real.',
+    hbomax: 'Standard 3 perfiles · Platinum 5. Por cuenta: activación por link de pago o USDT · Binance (cada activación es una compra con su costo real y su fecha de vencimiento) o tarjeta bancaria (cargo mensual real). Los cargos que ya tenía registrados siguen en el historial.',
     netflix: 'Cada cuenta madre con su modalidad real: tarjeta de banco hondureño (cargo USD y Lempiras reales, mensual) o saldo / gift card pagada en USDT (sin cobro mensual inventado).',
     paramount: 'Tarjeta local en Lempiras, mensual. Cada cuenta lleva su propio costo (L150 es solo un ejemplo, no un costo fijo).',
     crunchyroll: 'Mega Fan en pesos filipinos (PHP), mensual o anual por cuenta, con el cargo real en Lempiras (BAC / PayPal). El anual se reparte en 12 meses en reportes; el pago queda en su fecha.',
@@ -898,7 +906,7 @@
     var r = st.cta[plat], f = st.ctaF[plat] || 'todas';
     var cab = '<div class="fz-card"><div class="fz-cab">' + (plat === 'pendientes' ? ico('layers') : logo(CUENTAS_SUB[plat])) + '<h3>' + esc(CUENTAS_SUB[plat]) + (plat === 'pendientes' ? '' : ' · cuentas madre') + '</h3></div><p class="fz-sub">' + esc(NOTA_PLAT[plat]) + ' Las cuentas vienen de Control Maestro (solo consulta).</p>';
     if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
-    if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
+    if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + ' <button type="button" class="fz-btn sec sm" data-fz-cta-retry="' + esc(plat) + '">Reintentar</button></div></div>';
     var rs = r.resumen || {};
     var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + rs.cuentas + '</b></div><div><small>Con costo</small><b>' + rs.conCosto + '</b></div><div><small>Costo pendiente</small><b>' + rs.pendientes + '</b></div><div><small>Pago en 7 días</small><b>' + rs.proximos + '</b></div></div>';
     var filtros = plat === 'pendientes' ? '' : '<div class="fz-filtros">' + [['todas', 'Todas'], ['sin', 'Sin costo'], ['con', 'Con costo'], ['proximo', 'Próximo pago']].map(function (x) { return '<button type="button" class="' + (f === x[0] ? 'on' : '') + '" data-fz-ctaf="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
@@ -968,7 +976,6 @@
     var P = (r.plataformas || {})[x.plataforma] || {}, MOD = r.modalidades || {}, FR = r.frecuencias || {};
     var recargar = function () { st.cta = {}; st.hbo = null; };
     if (acc === 'pago') {
-      if (x.plataforma === 'hbomax') { st.sub = 'hbo'; pintar(); toast('HBO Max: registre la activación o el cargo desde su lista.'); return; }
       var def = P.defecto || {}, mod = x.modalidad || def.modalidad, mon = x.moneda || def.moneda, fr = x.frecuencia || def.frecuencia;
       var prods = (r.productos || []).filter(function (p) { return p.plataforma === x.plataforma; });
       var pSel = (prods.find(function (p) { return p.modelo === 'cuenta_madre'; }) || prods[0] || {}).id || '';
@@ -1315,7 +1322,8 @@
       '<label class="w2">Producto<select name="productoId"><option value="">— elegir —</option>' + prods.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === prodId ? ' selected' : '') + '>' + esc(p.nombre) + ' · ' + esc((d.modelos[p.modelo] || {}).label || p.modelo) + '</option>'; }).join('') + '</select>' + fe('productoId') + '</label>' +
       '<label>Fecha de pago<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '">' + fe('fecha') + '</label>' +
       '<label>Fecha de activación <small>(opcional)</small><input type="date" name="fechaActivacion" max="' + esc(hoy) + '">' + fe('fechaActivacion') + '</label>' +
-      '<label>Vence / cubre hasta <small>(opcional)</small><input type="date" name="vigenciaHasta">' + fe('vigenciaHasta') + '</label>' + // R200i · activación: no se vuelve a pagar hasta que venza
+      (ctx.cuentaId ? '<label>Próximo pago <small>(cubre hasta · puede cambiarlo)</small><input type="date" name="vigenciaHasta">' + fe('vigenciaHasta') + '</label>' // R201 · se calcula con la frecuencia y se puede editar
+        : '<label>Vence / cubre hasta <small>(opcional)</small><input type="date" name="vigenciaHasta">' + fe('vigenciaHasta') + '</label>') + // R200i · activación: no se vuelve a pagar hasta que venza
       (ctx.cuentaId ? '<input type="hidden" name="cantidad" value="1">' : '<label>Cantidad<input type="number" name="cantidad" min="1" step="1" value="1" placeholder="Ej. 1">' + fe('cantidad') + '</label>') +
       '<label>Pagado con<select name="pago">' + [['banco', 'Banco / tarjeta (Lempiras o divisa)'], ['binance_hist', 'Binance USDT · ya pagado (histórico)'], ['binance', 'Binance USDT · descontar del saldo en Sublichat'], ['credito', 'A crédito (por pagar)'], ['inicial', 'Inventario inicial (ya lo tenía)']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === pagoSel ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
       '<label>Proveedor<select name="proveedorId"><option value="">— sin proveedor —</option>' + (d.proveedores || []).filter(function (p) { return p.activo; }).map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.alias) + '</option>'; }).join('') + '</select>' + fe('proveedorId') + '</label>' +
@@ -1358,6 +1366,14 @@
       if (pago === 'credito' && !val(m, 'proveedorId')) e.proveedorId = 'A crédito: elija a qué proveedor se le debe.';
       return e;
     }
+    // R201 · Próximo pago de la cuenta madre: fecha de pago (o de activación) + 1 mes / 3 meses / 12 meses según la frecuencia.
+    // Si es por activación (puntual) queda vacío para que se escriba la fecha real de vencimiento. El usuario siempre puede cambiarla.
+    var MESES_FREC = { mensual: 1, trimestral: 3, anual: 12 };
+    function sumarMeses(ymd, n) { if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || '') || !n) return ''; var p = ymd.split('-').map(Number), d = new Date(Date.UTC(p[0], p[1] - 1 + n, 1, 12)), fin = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 12)).getUTCDate(); d.setUTCDate(Math.min(p[2], fin)); return d.toISOString().slice(0, 10); }
+    function proponerVence(m) {
+      if (!ctx.cuentaId) return; var inp = m.querySelector('[name="vigenciaHasta"]'); if (!inp || inp.dataset.editado === '1') return;
+      var n = MESES_FREC[ctx.frecuencia]; inp.value = n ? sumarMeses(val(m, 'fechaActivacion') || val(m, 'fecha'), n) : '';
+    }
     var opid = opId();
     modal(ctx.titulo || 'Registrar compra', html, async function (m) {
       var pago = val(m, 'pago'), mon = val(m, 'moneda');
@@ -1370,7 +1386,7 @@
       if (ctx.despues) await ctx.despues(r, compra);
       toast(r.duplicado ? 'Esa compra ya estaba registrada (no se duplicó).' : 'Compra guardada · folio ' + folio(r.loteId) + (r.costoTotalHnl != null ? ' · ' + L(r.costoTotalHnl, true) : '') + '.');
       if (ctx.alGuardar) ctx.alGuardar(r); cargar(true);
-    }, 'Guardar compra', { validar: validar, alAbrir: function (m) { ajustar(m); m.addEventListener('change', function () { ajustar(m); }); m.addEventListener('input', function (e) { if (e.target.name === 'costoTotal' || e.target.name === 'tasa' || e.target.name === 'hnlHist') ajustar(m); }); } });
+    }, 'Guardar compra', { validar: validar, alAbrir: function (m) { proponerVence(m); m.addEventListener('input', function (e) { if (e.target.name === 'vigenciaHasta') e.target.dataset.editado = '1'; if (e.target.name === 'fecha' || e.target.name === 'fechaActivacion') proponerVence(m); }); m.addEventListener('change', function (e) { if (e.target.name === 'fecha' || e.target.name === 'fechaActivacion') proponerVence(m); }); ajustar(m); m.addEventListener('change', function () { ajustar(m); }); m.addEventListener('input', function (e) { if (e.target.name === 'costoTotal' || e.target.name === 'tasa' || e.target.name === 'hnlHist') ajustar(m); }); } });
   }
   // R200g · plataforma sin producto en el catálogo: se ofrece crearlo (sin costo de referencia: nunca una tarifa fija).
   function crearProductoPlataforma(plat, nombre, alListo) {
@@ -1502,6 +1518,7 @@
       if ((t = e.target.closest('[data-fz-gc]'))) { abrirGiftcards(t.dataset.fzGc); return; } // R200i
       if ((t = e.target.closest('[data-fz-cta]'))) { abrirCuenta(t.dataset.fzCta, t.dataset.plat, t.dataset.id); return; }
       if ((t = e.target.closest('[data-fz-ctaf]'))) { st.ctaF[st.sub] = t.dataset.fzCtaf; pintar(); return; }
+      if ((t = e.target.closest('[data-fz-cta-retry]'))) { delete st.cta[t.dataset.fzCtaRetry]; pintar(); return; } // R201
       if ((t = e.target.closest('[data-fz-vip]'))) { h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); }); abrirVip(t.dataset.fzVip, t.dataset.id); return; }
       h.querySelectorAll('.fz-menu.on').forEach(function (x) { x.classList.remove('on'); });
       if (!(t = e.target.closest('[data-fz]'))) return;
