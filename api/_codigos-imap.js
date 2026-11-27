@@ -325,6 +325,12 @@ function esUniversal(from="",subject=""){
   return f.includes("universal")||s.includes("universal")||s.includes("universal+");
 }
 
+// R201 · Rakuten Viki (noreply@viki.com)
+function esViki(from="",subject=""){
+  const f=from.toLowerCase(); const s=subject.toLowerCase();
+  return f.includes("viki") || s.includes("viki") || f.includes("rakuten");
+}
+
 function esSpotify(from="",subject=""){
   const f=from.toLowerCase(); const s=subject.toLowerCase();
   return f.includes("spotify") || s.includes("spotify");
@@ -346,7 +352,8 @@ function esReset(subject = "", _text = "") {
   const s = normalizarTextoBusqueda(subject);
   return s.includes("restablec") || s.includes("reset") || s.includes("recupera") ||
          s.includes("olvidaste") || s.includes("cambiar tu contrasena") || s.includes("cambia tu contrasena") ||
-         s.includes("change your password") || s.includes("forgot your password");
+         s.includes("change your password") || s.includes("forgot your password") ||
+         s.includes("cambio de contrasena") || s.includes("password reset") || s.includes("reset your password"); // R201 · Viki: «Solicitud de cambio de contraseña»
 }
 
 function esVix(from="",subject=""){
@@ -512,6 +519,8 @@ function extraerLink(text="", html="") {
     // Vix
     /https:\/\/[^\s"<>\]]*vix\.com[^\s"<>\]]*(?:reset|password|account|verify|email|confirm)[^\s"<>\]]*/i,
     /https:\/\/[^\s"<>\]]*vix[^\s"<>\]]*(?:reset|password|cuenta|correo|verificar|confirmar)[^\s"<>\]]*/i,
+    // R201 · Viki
+    /https:\/\/[^\s"<>\]]*viki[^\s"<>\]]*(?:reset|password|token|recover)[^\s"<>\]]*/i,
   ];
   for (const f of fuentes) {
     for (const p of pats) {
@@ -524,6 +533,26 @@ function extraerLink(text="", html="") {
     }
   }
   return null;
+}
+
+// R201 · Respaldo: muchos correos (Viki, Spotify, HBO Max) traen el botón con un link de seguimiento (click.mail…,
+// sendgrid, braze) que no lleva «reset» en la dirección. Se toma el href del BOTÓN cuyo texto dice restablecer /
+// cambiar contraseña. Solo se usa cuando el ASUNTO ya es un restablecimiento (esReset), nunca para avisos.
+const TXT_BOTON_RESET = /(restablec|reset|recupera|cambia(?:r)? (?:tu |la |su )?contrase|nueva contrase|set (?:a )?new password|change (?:your )?password|choose a new password|crear contrase)/i;
+function extraerLinkBotonReset(html="") {
+  const re = /<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(String(html || "")))) {
+    const href = m[1].replace(/&amp;/g, "&").trim();
+    const txt = normalizarTextoBusqueda(String(m[2]).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim());
+    if (!/^https:\/\//i.test(href) || !txt || txt.length > 80) continue;
+    if (/unsubscribe|darse de baja|privacy|privacidad|terminos|terms|help|ayuda|centro de ayuda/.test(txt)) continue;
+    if (TXT_BOTON_RESET.test(txt)) return href;
+  }
+  return null;
+}
+function linkResetDe(e = {}) {
+  return extraerLink(e.text, e.html) || (esReset(e.subject, e.text) ? extraerLinkBotonReset(e.html) : null);
 }
 
 function extraerLinkObtenerCodigo(html="") {
@@ -629,7 +658,7 @@ async function buscarEmails(correo, limite = 15, opts = {}) {
 // ===============================
 const PLAT = Object.freeze({
   netflix: 'Netflix', disney: 'Disney+', hbo: 'HBO Max', prime: 'Prime Video', paramount: 'Paramount+',
-  universal: 'Universal+', spotify: 'Spotify', vix: 'ViX', cuenta: 'Cuenta',
+  universal: 'Universal+', spotify: 'Spotify', vix: 'ViX', viki: 'Viki Rakuten', cuenta: 'Cuenta',
 });
 function plataformaDe(e = {}) {
   const f = e.from || '', s = e.subject || '';
@@ -641,6 +670,7 @@ function plataformaDe(e = {}) {
   if (esUniversal(f, s)) return 'universal';
   if (esSpotify(f, s)) return 'spotify';
   if (esVix(f, s)) return 'vix';
+  if (esViki(f, s)) return 'viki'; // R201
   return 'cuenta';
 }
 function base(e, correo, plataforma) {
@@ -659,7 +689,7 @@ async function resolverCodigo(emails, correo, { yaEntregadoDisney = () => '', sc
     const subjL = String(e.subject || '').toLowerCase();
     if (esReset(e.subject, e.text)) {
       if (!emailCodigoVigente(e, 120)) continue;
-      const link = extraerLink(e.text, e.html);
+      const link = linkResetDe(e); // R201 · también el botón «Restablecer» con link de seguimiento
       if (link && esLinkSeguro(link)) return { ...base(e, correo, plataformaDe(e)), tipo: 'link', motivo: 'reset', link };
       continue;
     }
@@ -741,14 +771,15 @@ function resolverLink(emails, correo) {
   for (const e of emails) {
     const isN = esNetflixReset(e.from, e.subject), isD = esDisney(e.from, e.subject), isH = esHBO(e.from, e.subject);
     const isP = esParamount(e.from, e.subject), isU = esUniversal(e.from, e.subject), isV = esVix(e.from, e.subject), isS = esSpotify(e.from, e.subject);
-    if (!isN && !isD && !isH && !isP && !isU && !isV && !isS) continue;
-    const link = extraerLink(e.text, e.html);
+    const isK = esViki(e.from, e.subject); // R201
+    if (!isN && !isD && !isH && !isP && !isU && !isV && !isS && !isK) continue;
+    const link = linkResetDe(e);
     if (!link || !esLinkSeguro(link)) continue;
     const fromL = String(e.from || '').toLowerCase();
     const plataforma = (isN || fromL.includes('netflix')) ? 'netflix' : (isD || fromL.includes('disney')) ? 'disney'
       : (fromL.includes('amazon') || fromL.includes('prime')) ? 'prime' : (isP || fromL.includes('paramount')) ? 'paramount'
       : (isU || fromL.includes('universal')) ? 'universal' : (isS || fromL.includes('spotify')) ? 'spotify'
-      : (isV || fromL.includes('vix')) ? 'vix' : 'hbo';
+      : (isV || fromL.includes('vix')) ? 'vix' : isK ? 'viki' : 'hbo';
     return { ...base(e, correo, plataforma), tipo: 'link', motivo: 'reset', link };
   }
   return { tipo: 'sin_link', correo };
