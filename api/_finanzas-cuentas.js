@@ -53,7 +53,13 @@ function filaCuenta(c, cfg = null, lotes = [], tarjeta = null, hoy = "") {
   const ult = lotes[0] || null;
   const frecuencia = (cfg && cfg.frecuencia) || (P.defecto || {}).frecuencia || "mensual";
   const dias = ult && Number(ult.duracionDias) > 0 ? Number(ult.duracionDias) : FRECUENCIAS[frecuencia]?.dias || 0;
-  const proximo = (cfg && cfg.proximoPago) || (ult ? ult.vigenciaHasta || sumarDias(ult.fecha, dias) : "");
+  // R201 · La fecha anotada a mano en «Cómo se paga» manda SOLO si se anotó después de la última compra. Si después se
+  // registró un pago, manda la compra: su «cubre hasta» o fecha de pago + frecuencia (antes una fecha vieja tapaba el pago nuevo
+  // y salía «vencido» con una compra de ayer).
+  const desdeCompra = ult ? ult.vigenciaHasta || sumarDias(ult.fecha, dias) : "";
+  const manual = (cfg && cfg.proximoPago) || "";
+  const manualVigente = !!manual && (!ult || (cfg.proximoPagoAt ? String(cfg.proximoPagoAt) > String(ult.createdAt || "") : manual > String(ult.fecha || "")));
+  const proximo = manualVigente ? manual : desdeCompra || manual;
   const en7 = sumarDias(hoy, 7);
   const conCosto = !!ult; // solo una compra real cuenta como costo; la configuración sola no es costo
   return {

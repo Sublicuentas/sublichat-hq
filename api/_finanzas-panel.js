@@ -756,7 +756,11 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const pedida = String(body.plataforma || "");
       const plats = pedida === "pendientes" || pedida === "proximos" ? Object.keys(finCuentas.PLATAFORMAS) : finCuentas.PLATAFORMAS[pedida] ? [pedida] : null; // R200h · «proximos» = pagos a proveedor en 7 días o vencidos (dashboard)
       if (!plats) throw errUsuario("Plataforma no administrada aquí.");
-      const [inv, cfgs, tarjetas, productos] = await Promise.all([todos("inventario"), todos("fin_cuentas_costo"), todos("fin_tarjetas"), todos("fin_productos")]);
+      const [inv, cfgs0, tarjetas, productos, hboViejas] = await Promise.all([todos("inventario"), todos("fin_cuentas_costo"), todos("fin_tarjetas"), todos("fin_productos"), plats.includes("hbomax") ? todos("fin_hbo_cuentas") : []]);
+      // R201 · HBO Max usa esta misma vista: si una cuenta aún no tiene configuración aquí, se toma la que tenía en la lista vieja
+      // de HBO (tarjeta o activación). Solo lectura: no se escribe nada hasta que el usuario guarde «Cómo se paga».
+      const conCfg = new Set(cfgs0.map((x) => x.id));
+      const cfgs = cfgs0.concat(hboViejas.filter((h) => !conCfg.has(h.id)).map((h) => ({ id: h.id, modalidad: h.modalidad === "tarjeta" ? "tarjeta" : "binance", moneda: h.modalidad === "tarjeta" ? "USD" : "USDT", frecuencia: h.periodicidad === "mensual" ? "mensual" : "puntual", tarjetaId: h.modalidad === "tarjeta" ? h.tarjetaId || "" : "", proximoPago: h.proximoCobro || "", proximoPagoAt: h.actualizadoAt || "", origen: "hbo_anterior" })));
       const cuentas = inv.filter((c) => finCuentas.activa(c) && plats.includes(finCuentas.plataformaDe(c.plataforma)));
       const ids = new Set(cuentas.map((c) => c.id));
       const prodIds = productos.filter((p) => plats.includes(finCuentas.plataformaDe(p.plataformaKey))).map((p) => p.id);
@@ -797,7 +801,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
           tarjetaId = id;
         } else if (tarjetaId) { const ts = await tx.get(col("fin_tarjetas").doc(tarjetaId)); if (!ts.exists) throw errUsuario("Esa tarjeta ya no existe."); }
         if (lc.config.modalidad === "tarjeta" && !tarjetaId) throw errUsuario("Elija o agregue la tarjeta (banco, titular y últimos 4).");
-        const n = { ...lc.config, tarjetaId: lc.config.modalidad === "tarjeta" ? tarjetaId : "", ...(lc.config.saldoSar !== undefined ? { saldoAl: hoy } : {}) };
+        const n = { ...lc.config, tarjetaId: lc.config.modalidad === "tarjeta" ? tarjetaId : "", ...(lc.config.saldoSar !== undefined ? { saldoAl: hoy } : {}), ...(lc.config.proximoPago !== (a.proximoPago || "") ? { proximoPagoAt: ahora } : {}) }; // R201 · cuándo se anotó a mano
         const antes = { modalidad: a.modalidad || "", moneda: a.moneda || "", frecuencia: a.frecuencia || "", tarjetaId: a.tarjetaId || "", proximoPago: a.proximoPago || "" };
         tx.set(ref, { ...a, ...n, cuentaId: cid, plataforma: plat, correo: String((sc.data() || {}).correo || "").toLowerCase(), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor }),
           historial: [...(a.historial || []), { at: ahora, por: actor, antes, despues: n }].slice(-30) });
