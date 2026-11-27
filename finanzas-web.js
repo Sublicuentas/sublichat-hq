@@ -778,25 +778,36 @@
     var cab = '<div class="fz-card"><div class="fz-cab">' + logo('Spotify') + '<h3>Spotify Familiar · cuentas principales</h3></div><p class="fz-sub">Se agregan solas desde /spotifyf o Control Maestro. Aquí solo anote cuánto paga al mes y la renovación de la cuenta principal. «Registrar pago» crea UNA compra del mes (la tasa y el costo quedan guardados).</p>';
     if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
     if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
-    var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + r.filas.length + '</b></div><div><small>Pago mensual total</small><b>' + L(r.totalMensualHnl) + '</b></div><div><small>Sin datos</small><b>' + r.sinDatos + '</b></div><div><small>Renuevan en 7 días</small><b>' + r.pronto + '</b></div></div>';
+    var mini = '<div class="fz-mini"><div><small>Cuentas</small><b>' + r.filas.length + '</b></div><div><small>Pago mensual total</small><b>' + L(r.totalMensualHnl) + '</b></div><div><small>Sin datos</small><b>' + r.sinDatos + '</b></div><div><small>Renuevan en 7 días</small><b>' + r.pronto + '</b></div><div><small>Sin tarjeta anotada</small><b>' + (r.sinTarjeta || 0) + '</b></div></div>';
     var rows = r.filas.map(function (f) {
       var ren = f.proximaRenovacion ? fecha(f.proximaRenovacion) + (f.vencida ? ' <span class="fz-pill warn">vencida</span>' : f.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '<span class="fz-pend">Pendiente</span>';
-      return '<tr><td><b>' + esc(f.codigo) + '</b></td><td>' + esc(f.madreCorreo) + '</td><td class="n">' + f.ocupados + '/' + f.capacidad + '</td><td class="n">' + (f.costoMensualHnl == null ? '<span class="fz-pend">Pendiente</span>' : L(f.costoMensualHnl, true)) + '</td><td>' + ren + '</td><td>' + (f.ultimoPago ? fecha(f.ultimoPago) : '—') + '</td>' +
+      var tj = f.tarjeta ? '<b>' + esc(f.tarjeta.banco) + ' •••• ' + esc(f.tarjeta.ultimos4) + '</b><small>' + esc(f.tarjeta.titular) + '</small>' : '<span class="fz-pend">Sin tarjeta</span>'; // R201
+      return '<tr><td><b>' + esc(f.codigo) + '</b></td><td>' + esc(f.madreCorreo) + '</td><td>' + tj + '</td><td class="n">' + f.ocupados + '/' + f.capacidad + '</td><td class="n">' + (f.costoMensualHnl == null ? '<span class="fz-pend">Pendiente</span>' : L(f.costoMensualHnl, true)) + '</td><td>' + ren + '</td><td>' + (f.ultimoPago ? fecha(f.ultimoPago) : '—') + '</td>' +
         '<td class="c"><button type="button" class="fz-btn sm" data-fz-spf="pago" data-id="' + esc(f.familiaId) + '">Registrar pago</button> <button type="button" class="fz-btn sec sm" data-fz-spf="editar" data-id="' + esc(f.familiaId) + '">Editar</button> <button type="button" class="fz-btn sec sm" data-fz-hist="spotify" data-id="' + esc(f.familiaId) + '" data-titulo="' + esc(f.codigo + ' · ' + f.madreCorreo) + '">Historial</button></td></tr>';
     }).join('');
-    return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta</th><th>Correo principal</th><th class="n">Invitados</th><th class="n">Pago mensual</th><th>Renovación</th><th>Último pago</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" class="fz-vacio-s">Aún no hay cuentas. Créelas con /spotifyf en el bot.</td></tr>') + '</tbody></table></div></div>';
+    return cab + mini + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta</th><th>Correo principal</th><th>Tarjeta</th><th class="n">Invitados</th><th class="n">Pago mensual</th><th>Renovación</th><th>Último pago</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="8" class="fz-vacio-s">Aún no hay cuentas. Créelas con /spotifyf en el bot.</td></tr>') + '</tbody></table></div></div>';
   }
   function masUnMes(ymd) { var p = String(ymd || '').split('-').map(Number); if (p.length !== 3) return ''; var d = new Date(Date.UTC(p[0], p[1], p[2], 12)); if (d.getUTCDate() !== p[2]) d = new Date(Date.UTC(p[0], p[1] + 1, 0, 12)); return d.toISOString().slice(0, 10); }
   function abrirSpf(acc, id) {
     var f = ((st.spf && st.spf.filas) || []).find(function (x) { return x.familiaId === id; }); if (!f) return;
     var d = st.data, hoy = d.hoy;
     if (acc === 'editar') {
-      modal('Editar · ' + f.codigo, '<div class="fz-form"><label>Pago mensual (L)<input type="number" step="any" min="0" name="costo" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Renovación cuenta principal<input type="date" name="ren" value="' + esc(f.proximaRenovacion || '') + '"></label></div><p class="fz-sub">Solo guarda los datos; no registra una compra.</p>',
-        async function (m) { await api('finp_spf_guardar', { familiaId: id, costoMensualHnl: val(m, 'costo'), proximaRenovacion: val(m, 'ren') }); toast('Guardado.'); st.spf = null; pintar(); });
+      // R201 · tarjeta que paga la cuenta (banco, titular y últimos 4) — se elige una ya guardada o se agrega una nueva
+      var ops = ((st.spf && st.spf.tarjetas) || []).map(function (t) { return '<option value="' + esc(t.id) + '"' + (f.tarjeta && f.tarjeta.id === t.id ? ' selected' : '') + '>' + esc(t.banco + ' · ' + t.titular + ' · •••• ' + t.ultimos4) + '</option>'; }).join('');
+      var htmlE = '<div class="fz-form"><label>Pago mensual (L)<input type="number" step="any" min="0" name="costo" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Renovación cuenta principal<input type="date" name="ren" value="' + esc(f.proximaRenovacion || '') + '"></label>' +
+        '<label class="w2">Tarjeta con que se paga<select name="tarjetaId"><option value="">— sin tarjeta —</option>' + ops + '<option value="__nueva">+ Agregar otra tarjeta</option></select></label>' +
+        '<label data-si="tjn">Banco<input name="banco" maxlength="60" placeholder="Ej. BAC, Ficohsa, Atlántida"></label><label data-si="tjn">Titular<input name="titular" maxlength="80"></label><label data-si="tjn">Últimos 4 dígitos<input name="ultimos4" inputmode="numeric" maxlength="4" placeholder="1234"></label></div>' +
+        '<p class="fz-sub">Solo guarda los datos; no registra una compra. De la tarjeta solo se guarda banco, titular y últimos 4: nunca el número completo, CVV ni claves.</p>';
+      var ajE = function (m) { var nueva = val(m, 'tarjetaId') === '__nueva'; m.querySelectorAll('[data-si="tjn"]').forEach(function (l) { l.hidden = !nueva; }); };
+      modal('Editar · ' + f.codigo, htmlE, async function (m) {
+        var b = { familiaId: id, costoMensualHnl: val(m, 'costo'), proximaRenovacion: val(m, 'ren') };
+        if (val(m, 'tarjetaId') === '__nueva') b.tarjetaNueva = { banco: val(m, 'banco'), titular: val(m, 'titular'), ultimos4: val(m, 'ultimos4') }; else b.tarjetaId = val(m, 'tarjetaId');
+        await api('finp_spf_guardar', b); toast('Guardado.'); st.spf = null; pintar();
+      }, 'Guardar', { alAbrir: function (m) { ajE(m); m.addEventListener('change', function () { ajE(m); }); } });
       return;
     }
     var prod = (d.productosCatalogo || []).find(function (p) { return p.id === 'SPOTIFY-FAM' || (/spotify/i.test(p.nombre) && p.modelo === 'cuenta_madre'); });
-    var html = '<div class="fz-form"><label>Monto pagado (L)<input type="number" step="any" min="0" name="monto" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Fecha del pago<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '"></label>' +
+    var html = '<div class="fz-form">' + (f.tarjeta ? '<div class="fz-cuenta-ro w2"><small>Tarjeta que paga esta cuenta</small><b>' + esc(f.tarjeta.banco) + ' •••• ' + esc(f.tarjeta.ultimos4) + '</b><span>' + esc(f.tarjeta.titular) + '</span></div>' : '') + '<label>Monto pagado (L)<input type="number" step="any" min="0" name="monto" value="' + esc(f.costoMensualHnl == null ? '' : f.costoMensualHnl) + '"></label><label>Fecha del pago<input type="date" name="fecha" value="' + esc(hoy) + '" max="' + esc(hoy) + '"></label>' +
       '<label>Pagado con<select name="bancoId"><option value="">— elegir banco/tarjeta —</option>' + (d.metodos || []).map(function (b) { return '<option value="' + esc(b.id) + '">' + esc(b.nombre) + '</option>'; }).join('') + '</select></label>' +
       '<label>Próxima renovación<input type="date" name="ren" value="' + esc(masUnMes(f.proximaRenovacion && f.proximaRenovacion >= hoy ? f.proximaRenovacion : hoy)) + '"></label></div>' +
       '<p class="fz-sub">' + (prod ? 'Se registra UNA compra de «' + esc(prod.nombre) + '» (1 cuenta, este mes). Las invitaciones no se pagan aparte.' : 'No hay producto «Spotify Familiar» en el catálogo: se guarda el pago y la renovación, sin compra. Créelo en Productos para que cuente en Ganancias.') + '</p>';
@@ -806,7 +817,7 @@
       var loteId = '';
       if (prod) {
         if (!val(m, 'bancoId')) throw new Error('Elija con qué banco o tarjeta se pagó.');
-        var r = await api('fin_compra_registrar', { operationId: opid, compra: { productoId: prod.id, fecha: val(m, 'fecha'), cantidad: 1, costoTotal: monto, moneda: 'HNL', pago: 'banco', bancoId: val(m, 'bancoId'), referencia: 'Spotify Familiar ' + f.codigo + ' · ' + f.madreCorreo } });
+        var r = await api('fin_compra_registrar', { operationId: opid, compra: { productoId: prod.id, fecha: val(m, 'fecha'), cantidad: 1, costoTotal: monto, moneda: 'HNL', pago: 'banco', bancoId: val(m, 'bancoId'), referencia: 'Spotify Familiar ' + f.codigo + ' · ' + f.madreCorreo + (f.tarjeta ? ' · ' + f.tarjeta.banco + ' •••• ' + f.tarjeta.ultimos4 : '') } });
         loteId = r.loteId || '';
       }
       await api('finp_spf_guardar', { familiaId: id, costoMensualHnl: monto, proximaRenovacion: val(m, 'ren'), ultimoPago: val(m, 'fecha'), loteId: loteId });
