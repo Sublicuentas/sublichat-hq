@@ -20,7 +20,7 @@ const PLATAFORMAS = Object.freeze({
   hbomax: { id: "hbomax", nombre: "HBO Max", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["puntual", "mensual"], defecto: { modalidad: "binance", moneda: "USDT", frecuencia: "puntual" } },
   disneyp: { id: "disneyp", nombre: "Disney Premium", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } }, // generalmente por link
   disneys: { id: "disneys", nombre: "Disney Standard", monedas: ["USDT", "USD", "HNL"], modalidades: TODAS_MOD, frecuencias: ["mensual", "trimestral", "puntual"], defecto: { modalidad: "link", moneda: "USDT", frecuencia: "mensual" } },
-  viki: { id: "viki", nombre: "Viki Rakuten", monedas: ["USD", "HNL", "USDT"], modalidades: TODAS_MOD, frecuencias: ["mensual", "anual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
+  viki: { id: "viki", nombre: "Viki Rakuten", monedas: ["USD", "PHP", "HNL", "USDT"] /* R202 · + PHP */, modalidades: TODAS_MOD, frecuencias: ["mensual", "anual", "puntual"], defecto: { modalidad: "tarjeta", moneda: "USD", frecuencia: "mensual" } },
 });
 const MODALIDADES = Object.freeze({ tarjeta: "Tarjeta bancaria", gift_card: "Saldo / gift card", link: "Link / activación", binance: "Activación USDT · Binance", paypal: "PayPal", otro: "Otro método" });
 const FRECUENCIAS = Object.freeze({ mensual: { label: "Mensual", dias: 30 }, trimestral: { label: "Cada 3 meses", dias: 90 }, anual: { label: "Anual", dias: 365 }, puntual: { label: "Por activación / puntual", dias: 0 } });

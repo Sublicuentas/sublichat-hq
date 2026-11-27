@@ -782,7 +782,10 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const cfgs = cfgs0.concat(hboViejas.filter((h) => !conCfg.has(h.id)).map((h) => ({ id: h.id, modalidad: h.modalidad === "tarjeta" ? "tarjeta" : "binance", moneda: h.modalidad === "tarjeta" ? "USD" : "USDT", frecuencia: h.periodicidad === "mensual" ? "mensual" : "puntual", tarjetaId: h.modalidad === "tarjeta" ? h.tarjetaId || "" : "", proximoPago: h.proximoCobro || "", proximoPagoAt: h.actualizadoAt || "", origen: "hbo_anterior" })));
       const cuentas = inv.filter((c) => finCuentas.activa(c) && plats.includes(finCuentas.plataformaDe(c.plataforma)));
       const ids = new Set(cuentas.map((c) => c.id));
-      const prodIds = productos.filter((p) => plats.includes(finCuentas.plataformaDe(p.plataformaKey))).map((p) => p.id);
+      // R202 · Un producto sin «plataforma (clave)» también cuenta si su nombre es de la plataforma (ej. «Viki Rakuten · cuenta madre»):
+      // antes quedaba fuera, la cuenta pedía «Crear producto» otra vez y al crearlo chocaba con «Ya existe un producto con el código…».
+      const platProd = (p) => finCuentas.plataformaDe(p.plataformaKey) || finCuentas.plataformaDe(p.nombre);
+      const prodIds = productos.filter((p) => plats.includes(platProd(p))).map((p) => p.id);
       const lotes = (await Promise.all(prodIds.map((pid) => col("fin_lotes").where("productoId", "==", pid).get().then((sn) => sn.docs.map((x) => ({ id: x.id, ...(x.data() || {}) })))))).flat()
         .filter((l) => l.estado !== "anulado" && ids.has(String(l.cuentaInventarioId || ""))).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
       const porCuenta = new Map(); for (const l of lotes) { const k = l.cuentaInventarioId; (porCuenta.get(k) || porCuenta.set(k, []).get(k)).push(l); }
@@ -794,7 +797,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const resumen = { cuentas: filas.length, conCosto: filas.filter((f) => f.estadoCosto === "con_costo").length, pendientes: filas.filter((f) => f.estadoCosto === "pendiente").length, proximos: filas.filter((f) => f.pronto).length };
       return ok({ hoy, plataforma: pedida, filas, resumen, plataformas: finCuentas.PLATAFORMAS, modalidades: finCuentas.MODALIDADES, frecuencias: finCuentas.FRECUENCIAS,
         tarjetas: tarjetas.map((x) => ({ id: x.id, banco: x.banco, titular: x.titular, ultimos4: x.ultimos4 })),
-        productos: productos.filter((p) => p.activo !== false && plats.includes(finCuentas.plataformaDe(p.plataformaKey))).map((p) => ({ id: p.id, nombre: p.nombre, modelo: p.modelo, plataforma: finCuentas.plataformaDe(p.plataformaKey) })) });
+        productos: productos.filter((p) => p.activo !== false && plats.includes(platProd(p))).map((p) => ({ id: p.id, nombre: p.nombre, modelo: p.modelo, plataforma: platProd(p) })) });
     }
     if (accion === "finp_cuenta_config") { // solo Finanzas: modalidad, moneda, frecuencia, tarjeta mínima y próximo pago
       const cid = txt(body.cuentaId, 120); if (!cid) throw errUsuario("Falta la cuenta.");
