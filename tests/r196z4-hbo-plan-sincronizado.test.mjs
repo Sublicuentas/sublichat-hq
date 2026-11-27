@@ -81,5 +81,5 @@ test('Web, API y APK: después de guardar se actualiza la copia local, Control M
   assert.match(app, /accion:"hboCapacidad",capacidad:Number\(v\)/, '«👥 Editar capacidad» de HBO usa la misma regla');
   assert.match(web, /if \(r\.ok && cb\) cb\(r\);/);
   assert.match(inv, /hboPlanes\.sincronizarPlanVentas\(db, \{ inventarioId: docId/); assert.match(mc, /hboPlanes\.sincronizarPlanVentas\(db, \{ inventarioId: id/);
-  assert.match(R('index.html'), /bodega-vip-web\.js\?v=20261117-r196z4/); assert.match(R('index.html'), /sublichat-app\.js\?v=202611(17-r196z4|2\d-r(19[7-9]|2\d\d)[a-z])/);
+  assert.match(R('index.html'), /bodega-vip-web\.js\?v=(20261117-r196z4|202611(2[7-9]|30)-r2\d\d)/); assert.match(R('index.html'), /sublichat-app\.js\?v=202611(17-r196z4|2\d-r(19[7-9]|2\d\d)[a-z])/);
 });

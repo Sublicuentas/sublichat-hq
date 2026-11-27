@@ -73,5 +73,5 @@ test('Web, APK y Telegram usan la misma regla y ofrecen «Editar capacidad»', (
   assert.match(mc, /if \(action === 'hboPlan'\) return hboPlanAccion/); assert.match(mc, /accessFor\(user\)\.sublicuentas\) return res\.status\(403\)/);
   assert.match(web, /data-hbo-cap="1">Editar capacidad/); assert.match(web, /capacidad excepcional de/);
   assert.match(app, /k!==p\[1\]\?" · Capacidad personalizada"/);
-  assert.match(R('index.html'), /bodega-vip-web\.js\?v=20261117-r196z[34]/);
+  assert.match(R('index.html'), /bodega-vip-web\.js\?v=(20261117-r196z[34]|202611(2[7-9]|30)-r2\d\d)/);
 });
