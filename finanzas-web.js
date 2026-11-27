@@ -935,11 +935,11 @@
     var rows = lista.map(function (x) {
       var modo = x.configurada ? esc(MOD[x.modalidad] || x.modalidad) + '<small>' + esc(x.moneda) + ' · ' + esc((FR[x.frecuencia] || {}).label || x.frecuencia) + (x.tarjeta ? ' · ' + esc(x.tarjeta.banco) + ' •••• ' + esc(x.tarjeta.ultimos4) : '') + '</small>' : '<span class="fz-pend">Sin configurar</span>';
       var prox = x.proximoPago ? fecha(x.proximoPago) + (x.vencido ? ' <span class="fz-pill warn">vencido</span>' : x.pronto ? ' <span class="fz-pill warn">pronto</span>' : '') : '—';
-      return '<tr><td><b>' + esc(x.correo) + '</b><small>' + (plat === 'pendientes' ? esc(x.plataformaNombre) + ' · ' : '') + (x.plan ? esc(x.plan) + ' · ' : '') + x.ocupados + '/' + x.capacidad + ' perfiles</small></td><td>' + modo + '</td><td class="n">' + costoTxt(x.costo) + '</td><td>' + (x.ultimaCompra ? fecha(x.ultimaCompra) + (x.compras > 1 ? '<small>' + x.compras + ' compras</small>' : '') : '—') + '</td><td>' + prox + '</td>' + (plat === 'primevideo' ? gcCelda(x) : '') +
+      return '<tr' + (x.extras ? ' data-busca="' + esc(x.extras.map(function (e) { return e.correo + ' ' + (e.cliente || ''); }).join(' ')) + '"' : '') + '><td><b>' + esc(x.correo) + '</b><small>' + (plat === 'pendientes' ? esc(x.plataformaNombre) + ' · ' : '') + (x.plan ? esc(x.plan) + ' · ' : '') + x.ocupados + '/' + x.capacidad + ' perfiles</small></td><td>' + modo + '</td><td class="n">' + costoTxt(x.costo) + '</td><td>' + (x.ultimaCompra ? fecha(x.ultimaCompra) + (x.compras > 1 ? '<small>' + x.compras + ' compras</small>' : '') : '—') + '</td><td>' + prox + '</td>' + (plat === 'primevideo' ? gcCelda(x) : '') + (plat === 'netflix' ? extrasCelda(x) : '') +
         '<td class="c"><button type="button" class="fz-btn sm" data-fz-cta="pago" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">' + (x.estadoCosto === 'pendiente' ? 'Registrar pago' : 'Nuevo pago') + '</button> <button type="button" class="fz-btn sec sm" data-fz-cta="config" data-plat="' + esc(plat) + '" data-id="' + esc(x.cuentaId) + '">Cómo se paga</button> <button type="button" class="fz-btn sec sm" data-fz-hist="cuenta" data-id="' + esc(x.cuentaId) + '" data-titulo="' + esc(x.correo) + '">Historial</button>' + (plat === 'primevideo' ? ' <button type="button" class="fz-btn sec sm" data-fz-gc="' + esc(x.cuentaId) + '">Gift cards</button>' : '') + '</td></tr>'; // R200g · historial en todas · R200i gift cards
     }).join('');
     var vacio = plat === 'pendientes' ? 'Todas las cuentas madre tienen su pago registrado.' : 'No hay cuentas de ' + esc(CUENTAS_SUB[plat]) + ' en Control Maestro.';
-    return cab + mini + filtros + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta madre</th><th>Cómo se paga</th><th class="n">Último costo</th><th>Última compra</th><th>Próximo pago</th>' + (plat === 'primevideo' ? '<th>Saldo gift card</th><th>Renovación</th><th>Vence gift card</th>' : '') + '<th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="fz-vacio-s">' + vacio + '</td></tr>') + '</tbody></table></div>' +
+    return cab + mini + filtros + '<div class="fz-tw" style="margin-top:12px"><table class="fz-t"><thead><tr><th>Cuenta madre</th><th>Cómo se paga</th><th class="n">Último costo</th><th>Última compra</th><th>Próximo pago</th>' + (plat === 'primevideo' ? '<th>Saldo gift card</th><th>Renovación</th><th>Vence gift card</th>' : '') + (plat === 'netflix' ? '<th>Miembros extra</th>' : '') + '<th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="fz-vacio-s">' + vacio + '</td></tr>') + '</tbody></table></div>' +
       '<p class="fz-pie">Los costos pendientes NO cuentan como L0: la ganancia de esas cuentas sale como «pendiente de costo» hasta registrar su pago.</p></div>';
   }
   // R200i · Prime Video con gift card SAR: tabla por cuenta (saldo SAR, renovación mensual/anual y su fecha, gift cards
@@ -949,6 +949,12 @@
     var ren = (x.planRenovacion ? (x.planRenovacion === 'anual' ? 'Anual' : 'Mensual') : '<span class="fz-pend">Plan sin anotar</span>') + (x.proximoPago ? '<small>renueva ' + fecha(x.proximoPago) + '</small>' : '');
     var vence = x.giftcardVence ? fecha(x.giftcardVence) + (x.giftcardVencida ? ' <span class="fz-pill mal">vencida</span>' : x.giftcardVencePronto ? ' <span class="fz-pill warn">vence pronto</span>' : '') : '<span class="fz-pend">Sin fecha</span>';
     return '<td>' + saldo + '</td><td>' + ren + '</td><td>' + vence + '</td>';
+  }
+  // R208 · Netflix Premium: miembros extra (VIP propios) de cada cuenta madre, con su costo en Lempiras.
+  function extrasCelda(x) {
+    var l = x.extras || []; if (!l.length) return '<td><span class="fz-sub">—</span></td>';
+    return '<td><details class="fz-extras"><summary><b>' + l.length + ' extra' + (l.length === 1 ? '' : 's') + '</b>' + (x.extrasCostoHnl ? ' · ' + L(x.extrasCostoHnl, true) + '/mes' : '') + '</summary>' +
+      l.map(function (e) { return '<div>' + esc(e.correo) + '<small>' + (e.cliente ? esc(e.cliente) + ' · ' : '') + (e.moneda === 'USD' && e.costoMensualUsd ? esc(e.costoMensualUsd) + ' USD · ' : '') + (e.costoMensualHnl != null ? L(e.costoMensualHnl, true) : 'costo pendiente') + (e.proximoPagoProveedor ? ' · cobra ' + fecha(e.proximoPagoProveedor) : '') + '</small></div>'; }).join('') + '</details></td>';
   }
   function abrirGiftcards(id) {
     var r = st.cta.primevideo || {}, x = (r.filas || []).find(function (y) { return y.cuentaId === id; }); if (!x) return;
@@ -1062,16 +1068,18 @@
     var tabs = [['trap', 'Trap'], ['deku', 'Deku'], ['propio', 'Propios'], ['sin', 'Sin proveedor']];
     var cab = '<div class="fz-card"><div class="fz-cab">' + logo('Netflix') + '<h3>Netflix VIP</h3><input class="fz-in" type="search" placeholder="Buscar correo, cliente o cuenta madre" data-fz-vipq value="' + esc(st.vip.q) + '"><button type="button" class="fz-btn sec sm" data-fz-vipbodega="1" title="Extras «sin unidad en Bodega»: los pasa a Bodega ya asignados a su cliente">' + ico('box') + 'Pasar a Bodega</button></div>' +
       '<div class="fz-subtabs in">' + tabs.map(function (t) { return '<button type="button" class="' + (st.vip.tab === t[0] ? 'on' : '') + '" data-fz-viptab="' + t[0] + '">' + t[1] + ' <span>' + (c[t[0]] || 0) + '</span></button>'; }).join('') + '</div>';
+    // R208 · Propios: miembros extra de NUESTRAS Netflix Premium, pagados en USD con tarjeta BAC (cargo real en Lempiras).
+    if (st.vip.tab === 'propio') cab += '<div class="fz-aviso-propio"><div><b>Extras propios</b><span>Miembro extra de una Netflix Premium de Sublicuentas, pagado en USD con tarjeta BAC. Cárguelos por Excel: correo del extra, cuenta madre, fecha de cobro, pago USD, cargo en Lempiras (BAC) y últimos 4 de la tarjeta. La cuenta madre también se ve en Compras › Netflix Premium.</span></div><button type="button" class="fz-btn sec sm" data-fz-plantpropio="1">' + ico('doc') + 'Descargar plantilla</button><button type="button" class="fz-btn sm" data-fz-sub="importar">' + ico('upload') + 'Cargar Excel</button></div>';
     if (!r) return cab + '<div class="fz-vacio-s"><span class="fz-spin"></span> Cargando…</div></div>';
     if (r.error) return cab + '<div class="fz-vacio-s">' + esc(r.error) + '</div></div>';
     var rows = r.filas.map(function (f) {
-      return '<tr><td><b>' + esc(f.correo) + '</b><small>' + esc(f.madre || '') + '</small></td><td>' + esc(f.cliente || '—') + (f.sinInventario ? '<small>' + (f.estadoCM === 'sin_asignacion' ? 'Sin asignación comercial' : 'Asignada en Telegram · sin unidad en Bodega') + '</small>' : '') + '</td><td>' + esc(f.proveedor || '—') + '</td><td class="n">' + U(f.costoMensualUsdt) + '<small>' + (f.costoMensualHnl ? L(f.costoMensualHnl, true) : '') + '</small></td>' +
+      return '<tr><td><b>' + esc(f.correo) + '</b>' + (f.madre ? '<small>Cuenta madre: ' + esc(f.madre) + '</small>' : '') + '</td><td>' + esc(f.cliente || '—') + (f.sinInventario ? '<small>' + (f.estadoCM === 'sin_asignacion' ? 'Sin asignación comercial' : 'Asignada en Telegram · sin unidad en Bodega') + '</small>' : '') + '</td><td>' + esc(f.proveedor || '—') + '</td><td class="n">' + (f.moneda === 'USD' ? (f.costoMensualUsd != null ? esc(f.costoMensualUsd) + ' USD' : '—') : U(f.costoMensualUsdt)) + '<small>' + (f.costoMensualHnl ? L(f.costoMensualHnl, true) : f.moneda === 'USD' ? 'L pendiente' : '') + (f.ultimos4 ? ' · BAC •••• ' + esc(f.ultimos4) : '') + '</small></td>' +
         '<td>' + fecha(f.proximoPagoProveedor) + '</td><td>' + esc(f.loteId || '—') + '</td><td class="c">' + pill(ESTADO_VIP, f.estado) + '</td><td class="c"><div class="fz-menu"><button type="button" class="fz-ib" data-fz-menu aria-label="Opciones">' + ico('dots') + '</button>' +
         '<div class="fz-menu-l"><button type="button" data-fz-vip="editar" data-id="' + esc(f.cmId) + '">Editar</button><button type="button" data-fz-vip="reemplazar" data-id="' + esc(f.cmId) + '">Reemplazar por correo nuevo</button><button type="button" data-fz-vip="baja" data-id="' + esc(f.cmId) + '"' + (f.estado === 'sin_registro' || f.estado === 'baja' ? ' disabled' : '') + '>Dar de baja</button><button type="button" data-fz-vip="historial" data-id="' + esc(f.cmId) + '">Historial</button></div></div></td></tr>';
     }).join('');
     var pag = '<div class="fz-pag"><span>' + r.total + ' extra(s) · página ' + r.pagina + ' de ' + r.paginas + '</span><button type="button" class="fz-btn sec sm" data-fz-pag="-1"' + (r.pagina <= 1 ? ' disabled' : '') + '>Anterior</button><button type="button" class="fz-btn sec sm" data-fz-pag="1"' + (r.pagina >= r.paginas ? ' disabled' : '') + '>Siguiente</button></div>';
     return cab + '<div class="fz-tw"><table class="fz-t"><thead><tr><th>Correo / ID extra</th><th>Cliente (Control Maestro)</th><th>Proveedor</th><th class="n">Costo mensual</th><th>Próximo cobro proveedor</th><th>Lote</th><th class="c">Estado</th><th></th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="8" class="fz-vacio-s">Sin extras en esta pestaña.</td></tr>') + '</tbody></table></div>' + pag + '<p class="fz-pie">El cliente y su vencimiento se leen de Control Maestro: Finanzas no los cambia. «Reemplazar» mueve solo el vínculo financiero a otro acceso VIP existente.</p></div>';
+      (rows || '<tr><td colspan="8" class="fz-vacio-s">Sin extras en esta pestaña.</td></tr>') + '</tbody></table></div>' + pag + '<p class="fz-pie">El cliente y su vencimiento se leen de Control Maestro: Finanzas no los cambia. «Reemplazar por correo nuevo» quita el correo caído de Bodega y pasa al cliente al correo nuevo con su propio costo.</p></div>';
   }
   function filaVip(id) { return ((st.vip.res && st.vip.res.filas) || []).find(function (f) { return f.cmId === id; }); }
 
@@ -1134,10 +1142,10 @@
         var aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[hojas[0]], { header: 1, raw: true, defval: null, blankrows: false });
         var enc = (aoa[0] || []).map(function (h) { return h == null ? '' : String(h).trim(); });
         var tipo = tipoSimple(enc);
-        if (!tipo) throw new Error('No reconozco el Excel. VIP: CORREO DEL EXTRA VIP · PROVEEDOR · FECHA DE RENOVACIÓN · PAGO POR CUENTA (USDT). Premium: CORREO NETFLIX PREMIUM · BANCO HONDUREÑO · NOMBRE TITULAR TARJETA · ÚLTIMOS 4 DÍGITOS TARJETA · FECHA DE COBRO / RENOVACIÓN · PAGO POR CUENTA (USD).');
+        if (!tipo) throw new Error('No reconozco el Excel. VIP: CORREO DEL EXTRA VIP · PROVEEDOR · FECHA DE RENOVACIÓN · PAGO POR CUENTA (USDT). Premium: CORREO NETFLIX PREMIUM · BANCO HONDUREÑO · NOMBRE TITULAR TARJETA · ÚLTIMOS 4 DÍGITOS TARJETA · FECHA DE COBRO / RENOVACIÓN · PAGO POR CUENTA (USD). Extras propios: descargue la plantilla en Netflix VIP › Propios.');
         var filas = aoa.slice(1).map(function (f, i) { return { _fila: i + 2, v: (f || []).slice(0, tipo === 'vip' ? 4 : 6) }; }).filter(function (f) { return f.v.some(function (x) { return x != null && String(x).trim() !== ''; }); });
         st.imp = { simple: true, tipo: tipo, payload: { encabezados: enc, filas: filas, archivo: { nombre: file.name, bytes: file.size } }, archivo: { nombre: file.name }, res: {}, tasa: '' };
-        if (tipo === 'premium') await previaSimple(); else pintar(); // VIP pide primero la tasa Binance
+        if (tipo === 'premium' || tipo === 'vip_propio') await previaSimple(); else pintar(); // VIP pide primero la tasa Binance
         return;
       }
       var payload = { hojas: hojas, extras: leerHoja(wb.Sheets.EXTRAS_VIP, COLS_EXTRAS), lotes: leerHoja(wb.Sheets.LOTES_COMPRAS, COLS_LOTES), archivo: { nombre: file.name, bytes: file.size, hash: await hashArchivo(buf) } };
@@ -1147,7 +1155,8 @@
   }
   // ---------------- R196i · Excel sencillo VIP (4 col.) / Premium (6 col.)
   function nh(h) { return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9/() ]/g, '').replace(/\s+/g, ' ').trim(); }
-  var SIMPLES = { vip: ['CORREO DEL EXTRA VIP', 'PROVEEDOR', 'FECHA DE RENOVACIÓN', 'PAGO POR CUENTA (USDT)'], premium: ['CORREO NETFLIX PREMIUM', 'BANCO HONDUREÑO', 'NOMBRE TITULAR TARJETA', 'ÚLTIMOS 4 DÍGITOS TARJETA', 'FECHA DE COBRO / RENOVACIÓN', 'PAGO POR CUENTA (USD)'] };
+  var PLANT_PROPIO = ['CORREO DEL EXTRA VIP', 'CUENTA MADRE NETFLIX PREMIUM', 'FECHA DE COBRO / RENOVACIÓN', 'PAGO POR EXTRA (USD)', 'CARGO EN LEMPIRAS (BAC)', 'ÚLTIMOS 4 DÍGITOS TARJETA']; // R208
+  var SIMPLES = { vip: ['CORREO DEL EXTRA VIP', 'PROVEEDOR', 'FECHA DE RENOVACIÓN', 'PAGO POR CUENTA (USDT)'], vip_propio: PLANT_PROPIO, premium: ['CORREO NETFLIX PREMIUM', 'BANCO HONDUREÑO', 'NOMBRE TITULAR TARJETA', 'ÚLTIMOS 4 DÍGITOS TARJETA', 'FECHA DE COBRO / RENOVACIÓN', 'PAGO POR CUENTA (USD)'] };
   function tipoSimple(enc) { var h = enc.map(nh); for (var k in SIMPLES) { if (SIMPLES[k].every(function (c, i) { return h[i] === nh(c); })) return k; } return null; }
   async function previaSimple() {
     var imp = st.imp; imp.cargando = true; imp.error = ''; pintar();
@@ -1162,9 +1171,10 @@
     catch (e) { toast(e.message, true); }
   }
   function vSimple(imp) {
-    var vip = imp.tipo === 'vip';
-    var html = '<div class="fz-cab sub"><h3>' + (vip ? 'Netflix EXTRA VIP · 4 columnas' : 'Netflix PREMIUM madre · 6 columnas') + ' · ' + esc(imp.archivo.nombre) + '</h3><span class="fz-sub r">' + imp.payload.filas.length + ' fila(s)</span></div>' +
-      '<div class="fz-form in"><label>' + (vip ? 'Tasa Binance HNL por USDT (obligatoria)' : 'Tipo de cambio HNL por USD (opcional: si falta, el costo en L queda pendiente)') + '<input type="number" step="any" min="0" data-fz-tasa value="' + esc(imp.tasa) + '"></label><button type="button" class="fz-btn sec" data-fz="previasimple">Revisar</button></div>';
+    var propio = imp.tipo === 'vip_propio'; // R208 · extras propios: USD con tarjeta BAC → Lempiras, con su cuenta madre
+    var vip = imp.tipo === 'vip' || propio;
+    var html = '<div class="fz-cab sub"><h3>' + (propio ? 'Netflix EXTRA VIP PROPIOS · 6 columnas' : vip ? 'Netflix EXTRA VIP · 4 columnas' : 'Netflix PREMIUM madre · 6 columnas') + ' · ' + esc(imp.archivo.nombre) + '</h3><span class="fz-sub r">' + imp.payload.filas.length + ' fila(s)</span></div>' +
+      '<div class="fz-form in"><label>' + (propio ? 'Tasa BAC HNL por USD (solo para filas sin «Cargo en Lempiras»)' : vip ? 'Tasa Binance HNL por USDT (obligatoria)' : 'Tipo de cambio HNL por USD (opcional: si falta, el costo en L queda pendiente)') + '<input type="number" step="any" min="0" data-fz-tasa value="' + esc(imp.tasa) + '"></label><button type="button" class="fz-btn sec" data-fz="previasimple">Revisar</button></div>';
     if (imp.error) html += '<div class="fz-err">' + esc(imp.error) + '</div>';
     var r = imp.pvs; if (!r) return html;
     var c = r.resumen;
@@ -1173,10 +1183,10 @@
     if (amb.length) html += '<h4 class="fz-h4">Correo repetido en Control Maestro: elija la cuenta</h4>' + amb.map(function (x) { return '<div class="fz-amb"><span>Fila ' + x.fila + ' · <b>' + esc(x.correo) + '</b></span><select data-fz-res="' + x.fila + '"><option value="">— elegir —</option>' + x.candidatos.map(function (k) { return '<option value="' + esc(k.id) + '"' + (imp.res[x.fila] === k.id ? ' selected' : '') + '>' + esc(k.id + ' · ' + (k.cliente || 'sin cliente')) + '</option>'; }).join('') + '</select></div>'; }).join('') + '<button type="button" class="fz-btn sec sm" data-fz="previasimple">Aplicar y revisar de nuevo</button>';
     var VINC = { control_maestro: 'Control Maestro', bodega: 'Bodega VIP', telegram: 'Asignada en Telegram (solo Finanzas)', sin_asignacion: 'Sin asignación comercial' };
     var est = { nuevo: ['Nuevo', 'ok'], actualiza: ['Actualiza', 'ok'], sin_cambios: ['Sin cambios', 'gris'], ambiguo: ['Ambiguo', 'warn'], sin_coincidencia: ['Sin coincidencia', 'pend'], duplicado: ['Duplicado', 'pend'], error: ['Error', 'pend'] };
-    html += '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Fila</th><th>Correo</th><th>' + (vip ? 'Vínculo / cliente' : 'Cliente (Control Maestro)') + '</th>' + (vip ? '<th>Proveedor</th><th>Renovación</th><th class="n">USDT</th><th class="n">L</th>' : '<th>Banco</th><th>Tarjeta</th><th>Cobro</th><th class="n">USD</th><th class="n">L</th>') + '<th>Estado</th><th>Detalle</th></tr></thead><tbody>' +
-      r.filas.slice(0, 200).map(function (x) { var d = x.datos || {}; return '<tr><td>' + x.fila + '</td><td>' + esc(x.correo) + '</td><td>' + (vip && x.vinculo ? '<b>' + esc(VINC[x.vinculo] || '') + (x.bodega ? ' · ' + esc(x.bodega) : '') + '</b>' + (x.cliente ? '<small>' + esc(x.cliente) + '</small>' : '') : esc(x.cliente || '—')) + '</td>' + (vip ? '<td>' + esc(d.proveedor || '—') + '</td><td>' + (d.proximoPagoProveedor ? fecha(d.proximoPagoProveedor) : '—') + '</td><td class="n">' + (d.costoMensualUsdt != null ? esc(d.costoMensualUsdt) : '—') + '</td><td class="n">' + (d.costoMensualHnl != null ? L(d.costoMensualHnl, true) : '—') + '</td>' : '<td>' + esc(d.banco || '—') + '</td><td>' + (d.ultimos4 ? '•••• ' + esc(d.ultimos4) : '—') + '</td><td>' + (d.fechaCobro ? fecha(d.fechaCobro) : '—') + '</td><td class="n">' + (d.pagoUsd != null ? esc(d.pagoUsd) : '—') + '</td><td class="n">' + (d.cargoHnl != null ? L(d.cargoHnl, true) : '<span class="fz-pend">Pendiente</span>') + '</td>') + '<td>' + pill(est, x.estado) + '</td><td>' + esc(x.errores.concat(x.avisos).join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    html += '<div class="fz-tw"><table class="fz-t sm"><thead><tr><th>Fila</th><th>Correo</th><th>' + (vip ? 'Vínculo / cliente' : 'Cliente (Control Maestro)') + '</th>' + (propio ? '<th>Cuenta madre</th><th>Cobro</th><th class="n">USD</th><th class="n">L</th>' : vip ? '<th>Proveedor</th><th>Renovación</th><th class="n">USDT</th><th class="n">L</th>' : '<th>Banco</th><th>Tarjeta</th><th>Cobro</th><th class="n">USD</th><th class="n">L</th>') + '<th>Estado</th><th>Detalle</th></tr></thead><tbody>' +
+      r.filas.slice(0, 200).map(function (x) { var d = x.datos || {}; return '<tr><td>' + x.fila + '</td><td>' + esc(x.correo) + '</td><td>' + (vip && x.vinculo ? '<b>' + esc(VINC[x.vinculo] || '') + (x.bodega ? ' · ' + esc(x.bodega) : '') + '</b>' + (x.cliente ? '<small>' + esc(x.cliente) + '</small>' : '') : esc(x.cliente || '—')) + '</td>' + (vip ? '<td>' + esc(propio ? (d.madreCorreo || '—') : (d.proveedor || '—')) + '</td><td>' + (d.proximoPagoProveedor ? fecha(d.proximoPagoProveedor) : '—') + '</td><td class="n">' + (propio ? (d.costoMensualUsd != null ? esc(d.costoMensualUsd) : '—') : (d.costoMensualUsdt != null ? esc(d.costoMensualUsdt) : '—')) + '</td><td class="n">' + (d.costoMensualHnl != null ? L(d.costoMensualHnl, true) : '—') + '</td>' : '<td>' + esc(d.banco || '—') + '</td><td>' + (d.ultimos4 ? '•••• ' + esc(d.ultimos4) : '—') + '</td><td>' + (d.fechaCobro ? fecha(d.fechaCobro) : '—') + '</td><td class="n">' + (d.pagoUsd != null ? esc(d.pagoUsd) : '—') + '</td><td class="n">' + (d.cargoHnl != null ? L(d.cargoHnl, true) : '<span class="fz-pend">Pendiente</span>') + '</td>') + '<td>' + pill(est, x.estado) + '</td><td>' + esc(x.errores.concat(x.avisos).join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     var hay = c.nuevos + c.actualizados;
-    html += '<label class="fz-check"><input type="checkbox" data-fz-confirmo' + (imp.confirmo ? ' checked' : '') + '> Confirmo: ' + (vip ? 'se guardan solo proveedor, renovación y costo USDT en Finanzas. Las cuentas que ya existen se vinculan sin duplicarse; las demás quedan como «Sin asignación comercial». No se crean clientes, ventas ni cuentas en Control Maestro.' : 'solo se guardan datos de Finanzas en cuentas que YA existen. No se crean clientes ni ventas y Control Maestro no cambia.') + '</label>' +
+    html += '<label class="fz-check"><input type="checkbox" data-fz-confirmo' + (imp.confirmo ? ' checked' : '') + '> Confirmo: ' + (propio ? 'se guardan en Finanzas la cuenta madre, el cobro, el pago USD y su cargo en Lempiras (BAC) de cada extra propio' : vip ? 'se guardan solo proveedor, renovación y costo USDT en Finanzas. Las cuentas que ya existen se vinculan sin duplicarse; las demás quedan como «Sin asignación comercial». No se crean clientes, ventas ni cuentas en Control Maestro.' : 'solo se guardan datos de Finanzas en cuentas que YA existen. No se crean clientes ni ventas y Control Maestro no cambia.') + '</label>' +
       '<div class="fz-acc"><button type="button" class="fz-btn" data-fz="importarsimple"' + (hay ? '' : ' disabled') + '>Confirmar (' + hay + ')</button><button type="button" class="fz-btn sec" data-fz="cancelarimp">Cancelar</button></div>';
     return html;
   }
@@ -1560,6 +1570,14 @@
     } });
     m.classList.add('ancho');
   }
+  // R208 · Plantilla Excel de extras propios (encabezados exactos + 1 fila de ejemplo ficticia).
+  function plantillaPropios() {
+    if (!window.XLSX) { toast('No cargó el lector de Excel. Recargue la página.', true); return; }
+    var ws = window.XLSX.utils.aoa_to_sheet([PLANT_PROPIO, ['extra.ejemplo@dominio.com', 'premium.madre@dominio.com', '2026-12-15', 5.99, 155.50, '1234']]);
+    ws['!cols'] = PLANT_PROPIO.map(function () { return { wch: 30 }; });
+    var wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, ws, 'EXTRAS_PROPIOS');
+    window.XLSX.writeFile(wb, 'Sublichat_Netflix_VIP_Propios.xlsx');
+  }
   // R207 · Extras «sin unidad en Bodega» que ya usa un cliente de Telegram → Bodega, ya asignados (nunca quedan libres para vender).
   function abrirPasarBodega() {
     var mm = modal('Pasar extras VIP a Bodega', '<div class="fz-vacio-s"><span class="fz-spin"></span> Revisando extras y clientes…</div>'); mm.classList.add('ancho');
@@ -1665,6 +1683,7 @@
       if ((t = e.target.closest('[data-fz-ganmes]'))) { var mg = t.dataset.fzGanmes, pg = mg.split('-'); st.ganR = { desde: mg + '-01', hasta: mg + '-' + String(new Date(Date.UTC(+pg[0], +pg[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); return; }
       if ((t = e.target.closest('[data-fz-gantri]'))) { var gm = (st.gan[ganClave()] || {}).meses || []; if (gm.length >= 3) { var u = gm[gm.length - 1].mes, pu = u.split('-'); st.ganR = { desde: gm[gm.length - 3].mes + '-01', hasta: u + '-' + String(new Date(Date.UTC(+pu[0], +pu[1], 0)).getUTCDate()).padStart(2, '0') }; pintar(); } return; }
       if ((t = e.target.closest('[data-fz-vipbodega]'))) { abrirPasarBodega(); return; } // R207
+      if ((t = e.target.closest('[data-fz-plantpropio]'))) { plantillaPropios(); return; } // R208
       if ((t = e.target.closest('[data-fz-rentplat]'))) { abrirRentPlat(t.dataset.fzRentplat); return; } // R198j
       if ((t = e.target.closest('[data-fz-rentre]'))) { cargarRent(true); return; }
       if ((t = e.target.closest('[data-fz-ganplat]'))) { abrirPlataforma(t.dataset.fzGanplat); return; } // R197b · antes solo filtraba la tabla de abajo (parecía no abrir)

@@ -1409,6 +1409,7 @@ function invAbrir(c){
   const ub=document.getElementById("invUrlBtn");if(ub)ub.addEventListener("click",()=>invEditarUrl(c));
   document.querySelectorAll("#invDisneyBox [data-inv-disney]").forEach(b=>b.addEventListener("click",()=>invCambiarTipoDisney(c,b.getAttribute("data-inv-disney")))); // R206
   try{window.SublichatHogar?.montar(document.getElementById("invHogarBox"));}catch(_){} // R196u · Hogar Netflix Premium
+  if(String(c.plataforma||"").toLowerCase()==="netflix")invExtrasMadre(c); // R208 · miembros extra de esta cuenta madre
   try{window.SublichatHbo?.montar(document.getElementById("invHboBox"),(r)=>invHboGuardado(c,r));}catch(_){} // R196u · plan HBO · R196z4: antes llamaba a invCargar (no existe) y la tarjeta/Control Maestro quedaban con el plan viejo
 }
 // R196z4 · Plan/capacidad HBO guardados: la copia local (tarjeta de Inventario, Control Maestro, selector de venta y fichas)
@@ -1469,6 +1470,16 @@ async function invEditarCapacidad(c){
     if(j.ok){mostrarToast(`✅ Capacidad: ${invCap(c)} → ${n} · ${n-ocu} libre${n-ocu===1?"":"s"}`);invCerrar();setTimeout(()=>load(),700);}
     else if(hint)hint.textContent="⚠️ "+(j.error||"Error");
   }catch(_){if(hint)hint.textContent="⚠️ No pude conectar.";}
+}
+// R208 · Netflix Premium: miembros extra (VIP propios) que pertenecen a esta cuenta madre (solo correos y clientes, sin costos).
+async function invExtrasMadre(c){
+  const hint=document.getElementById("invHint");if(!hint)return;
+  const box=document.createElement("div");box.className="iv-perfiles";box.id="invExtrasBox";box.innerHTML=`<div class="cr-label">⭐ Miembros extra de esta cuenta</div><p class="vip-muted">Buscando…</p>`;
+  hint.parentNode.insertBefore(box,hint);
+  try{const j=await invPost({accion:"extrasDeMadre",docId:c.id});if(invActual!==c)return;
+    const l=(j&&j.extras)||[];
+    box.innerHTML=`<div class="cr-label">⭐ Miembros extra de esta cuenta (${l.length})</div>`+(l.length?l.map(e=>`<div class="ivp"><span>${clienteEsc(e.correo)}</span><span style="color:var(--txt2)">${clienteEsc(e.cliente||"sin cliente")}${e.enBodega?"":" · sin unidad en Bodega"}</span></div>`).join(""):`<p class="vip-muted">Sin miembros extra registrados.</p>`);
+  }catch(_){box.remove();}
 }
 // R206 · Disney Premium con ESPN ↔ sin ESPN en la MISMA cuenta (mismo id): la cuenta y sus ventas ligadas cambian de tipo.
 function invTipoDisney(p){const t=String(p||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");if(!/^disney/.test(t))return "";return /sinespn|^disneys$|standard|estandar/.test(t)?"disneys":"disneyp";}

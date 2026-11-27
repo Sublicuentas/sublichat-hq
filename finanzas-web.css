@@ -211,3 +211,11 @@ html.fz-tv .fz-dash.tv .fz-sub{font-size:13.5px}
 .fz-busca-v{font-size:12px;font-weight:600;color:#B45309}
 .fz-t tr[hidden]{display:none!important}
 @media (max-width:640px){.fz-busca label{max-width:none;flex-basis:100%}}
+/* R208 · Extras VIP propios: aviso con plantilla y miembros extra por cuenta madre Netflix Premium */
+.fz-aviso-propio{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;padding:12px 14px;border:1px solid #E2E7EF;border-radius:12px;background:#fff}
+.fz-aviso-propio>div{flex:1 1 320px;display:flex;flex-direction:column;gap:3px}
+.fz-aviso-propio span{font-size:12px;color:#6B7684;line-height:1.45}
+.fz-extras summary{cursor:pointer;font-size:12.5px;white-space:nowrap}
+.fz-extras[open] summary{margin-bottom:6px}
+.fz-extras>div{font-size:12px;font-weight:600;padding:4px 0;border-top:1px solid #EEF1F5}
+.fz-extras>div small{display:block;font-weight:500;color:#6B7684}
