@@ -340,7 +340,7 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
   return { tipo, filas: out, resumen: { total: out.length, nuevos: n("nuevo"), actualizados: n("actualiza"), sinCambios: n("sin_cambios"), ambiguos: n("ambiguo"), sinCoincidencia: n("sin_coincidencia"), duplicados: n("duplicado"), conError: n("error"), ...(vipX ? { enControlMaestro: nv("control_maestro"), enBodega: nv("bodega"), enTelegram: nv("telegram"), sinAsignacion: nv("sin_asignacion") } : {}), ventasNuevas: 0, clientesNuevos: 0 } };
 }
 
-export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad", "finp_tasa_bac", "finp_giftcard_guardar"]); // R200g · tasa BAC Honduras // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
+export const ACCIONES_PANEL = Object.freeze(["finp_simple_preview", "finp_simple_confirmar", "finp_panel", "finp_costear", "finp_config", "finp_vip_preview", "finp_vip_confirmar", "finp_vip_deshacer", "finp_vip_lista", "finp_vip_editar", "finp_vip_reemplazar", "finp_vip_bodega_preview", "finp_vip_bodega_pasar", "finp_vip_reemplazo_nuevo", "finp_reporte", "finp_importaciones", "finp_spf_lista", "finp_spf_guardar", "finp_hbo_lista", "finp_hbo_guardar", "finp_cuentas_lista", "finp_cuenta_config", "finp_cuenta_historial", "finp_ganancias", "finp_ganancias_cuenta", "finp_ganancias_excel", "finp_excel_financiero", "finp_ganancias_plataforma", "finp_auditoria_cartera", "finp_costo_conciliar", "finp_costo_conciliar_quitar", "finp_rentabilidad", "finp_tasa_bac", "finp_giftcard_guardar"]); // R200g · tasa BAC Honduras // R196n · HBO Max: tarjeta o activación // R196f · Spotify Familiar
 
 // ---------------- R200g · Tasa del dólar de BAC Honduras (compra/venta) para convertir pagos en USD a Lempiras.
 // Fuente pública de BAC Credomatic (XML por país). Se guarda una vez por día en `fin_tasas/bac_{fecha}` para que el
@@ -628,6 +628,117 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         tx.set(ref, { ...fin, cmId: soloFin ? a.cmId || "" : cmId, correo: soloFin ? a.correo : normEmail(invS.data().correo), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor, estadoSeguimiento: fin.estadoSeguimiento || "activo" }), historial: [...(a.historial || []), { at: ahora, por: actor, origen: "edicion", antes, despues: n }].slice(-30) });
         audit(tx, { accion: "editar_extra_vip", targetType: "fin_vip_extra", targetId: cmId, before: antes, after: n });
         return { cmId };
+      });
+      return ok(r);
+    }
+
+    // ---------------- R207 · Netflix VIP «sin unidad en Bodega» → Bodega, YA asignado a su cliente de Telegram (nunca queda libre).
+    // Solo crea la unidad en `inventario` (vipnetflix, capacidad 1) con el cliente que ya la usa y la liga a su registro de
+    // Finanzas. No crea ventas, no cambia precios, fechas, PIN ni la ficha del cliente. La clave queda pendiente (Finanzas no la
+    // tiene): se completa con la carga masiva de Bodega VIP (correo | clave).
+    if (accion === "finp_vip_bodega_preview" || accion === "finp_vip_bodega_pasar") {
+      const activoFin = (x) => x && x.sinInventario === true && !["reemplazado", "vinculado", "baja"].includes(String(x.estadoSeguimiento || ""));
+      const exs = (await todos("fin_vip_extras")).filter(activoFin);
+      const qc = typeof col("clientes").select === "function" ? col("clientes").select("nombre", "nombreCliente", "servicios") : col("clientes");
+      const porCorreo = new Map();
+      for (const c of (await qc.get()).docs) { const cd = c.data() || {}; (Array.isArray(cd.servicios) ? cd.servicios : []).forEach((sv, i) => {
+        if (!sv || !esPlataformaVip(sv.plataforma)) return; const k = normCorreoVip(sv.correo); if (!k) return;
+        const l = porCorreo.get(k) || porCorreo.set(k, []).get(k); if (!l.some((y) => y.clienteId === c.id)) l.push({ clienteId: c.id, nombre: txt(cd.nombre || cd.nombreCliente || "", 80), compraId: String(sv.compraId || sv.id || ""), idx: i });
+      }); }
+      const invVip = new Map(); for (const pl of PLATAFORMAS_VIP_LEGADO) for (const x of (await col("inventario").where("plataforma", "==", pl).get()).docs) invVip.set(normCorreoVip((x.data() || {}).correo), x.id);
+      const filas = exs.map((x) => { const correo = normCorreoVip(x.correo); const cl = porCorreo.get(correo) || [];
+        const estado = invVip.has(correo) ? "ya_en_bodega" : !cl.length ? "sin_cliente" : cl.length > 1 ? "varios_clientes" : "listo";
+        return { finId: x.id, correo, proveedor: x.proveedor || "", grupo: x.grupo || "otro", costoMensualUsdt: x.costoMensualUsdt ?? null, proximoPagoProveedor: x.proximoPagoProveedor || "", clientes: cl, estado }; });
+      const conteo = filas.reduce((a, f) => ((a[f.estado] = (a[f.estado] || 0) + 1), a), { listo: 0, varios_clientes: 0, sin_cliente: 0, ya_en_bodega: 0 });
+      if (accion === "finp_vip_bodega_preview") return ok({ conteo, total: filas.length, filas: filas.map((f) => ({ finId: f.finId, correo: f.correo, proveedor: f.proveedor, estado: f.estado, clientes: f.clientes.map((c) => c.nombre || c.clienteId) })) });
+      const pedidos = new Set((Array.isArray(body.ids) ? body.ids : []).slice(0, 60).map(String));
+      if (!pedidos.size) throw errUsuario("Elija qué extras pasar (máximo 60 por envío).");
+      const iso = ahora; const hechos = [], saltados = [];
+      for (const f of filas.filter((y) => pedidos.has(y.finId))) {
+        if (f.estado !== "listo") { saltados.push({ correo: f.correo, motivo: f.estado }); continue; }
+        const cl = f.clientes[0]; const unitId = docIdVipCorreo(f.correo);
+        try {
+          await db.runTransaction(async (tx) => {
+            const uRef = col("inventario").doc(unitId), fRef = col("fin_vip_extras").doc(f.finId), fuRef = col("fin_vip_extras").doc(unitId), cRef = col("clientes").doc(cl.clienteId);
+            const [us, fs1, fsu, cs] = [await tx.get(uRef), await tx.get(fRef), unitId !== f.finId ? await tx.get(fuRef) : null, await tx.get(cRef)];
+            if (us.exists) throw errUsuario("ya existe en Bodega");
+            if (!fs1.exists || !activoFin(fs1.data())) throw errUsuario("el registro de Finanzas cambió");
+            const sv = cs.exists ? ((cs.data() || {}).servicios || []).find((y) => y && esPlataformaVip(y.plataforma) && normCorreoVip(y.correo) === f.correo) : null;
+            if (!sv) throw errUsuario("el cliente ya no tiene ese correo");
+            const fx = fs1.data(); const [yy, mm, dd] = String(fx.proximoPagoProveedor || "").split("-");
+            tx.set(uRef, { accountId: unitId, plataforma: "vipnetflix", correo: f.correo, ident: f.correo, clave: "", claveFaltante: true,
+              capacidad: 1, ocupados: 1, disponibles: 0, disp: 0, estado: "activa", estadoBodega: "asignado",
+              clientes: [{ clienteId: cl.clienteId, compraId: String(sv.compraId || sv.id || ""), nombre: cl.nombre, asignadoAt: iso, asignadoPor: actor }],
+              proveedor: fx.proveedor || "sin proveedor", lote: "Desde Finanzas", costoUsdt: fx.costoMensualUsdt ?? null, vencimientoProveedor: yy ? `${dd}/${mm}/${yy}` : "sin confirmar", tienePin: false, pin: "",
+              historialBodega: [{ tipo: "alta_desde_finanzas", at: iso, por: actor, origen: "finanzas" }, { tipo: "asignada", at: iso, por: actor, origen: "finanzas", clienteId: cl.clienteId }], createdAt: iso, updatedAt: iso });
+            const vinculo = { clienteId: cl.clienteId, compraId: String(sv.compraId || sv.id || ""), asignadoAt: iso, origen: "finanzas" };
+            const h = [...(fx.historial || []), { at: iso, por: actor, origen: "pasar_a_bodega", inventarioId: unitId, clienteId: cl.clienteId }].slice(-30);
+            const base = fsu && fsu.exists && activoFin(fsu.data()) ? fsu.data() : fx;
+            tx.set(fuRef, { ...base, cmId: unitId, correo: f.correo, sinInventario: false, sinAsignacionComercial: false, vinculoComercial: vinculo, historial: h, actualizadoAt: iso, actualizadoPor: actor });
+            if (unitId !== f.finId) tx.set(fRef, { estadoSeguimiento: "vinculado", vinculadoA: unitId, actualizadoAt: iso, actualizadoPor: actor }, { merge: true });
+            audit(tx, { accion: "vip_pasar_a_bodega", targetType: "inventario", targetId: unitId, detalle: `${f.correo} → Bodega asignado a ${cl.nombre || cl.clienteId}` });
+          });
+          hechos.push(f.correo);
+        } catch (e) { saltados.push({ correo: f.correo, motivo: e.userError ? e.message : "no se pudo guardar" }); }
+      }
+      return ok({ pasados: hechos.length, saltados });
+    }
+
+    // ---------------- R207 · Reemplazar el extra A por un correo NUEVO B (A murió: sin membresía, caído, etc.).
+    // · B entra a Bodega asignado a los MISMOS clientes de A; la ficha del cliente pasa del correo A al B (con historial).
+    // · A desaparece de inmediato de Bodega, Control Maestro, bot y APK: su documento se archiva en `inventario_bajas` (no se
+    //   borra la historia) y su registro de Finanzas queda «reemplazado».
+    // · B pide proveedor, costo USDT y tasa Binance: entra a Finanzas con su propio costo mensual y próximo cobro.
+    if (accion === "finp_vip_reemplazo_nuevo") {
+      const de = String(body.de || ""); const correoB = normCorreoVip(body.correo); const claveB = String(body.clave || "").trim();
+      if (!de) throw errUsuario("Falta el extra actual.");
+      if (!/^[^\s@]+@[^\s@]+\.[a-z0-9-]{2,}$/i.test(correoB)) throw errUsuario("Escriba el correo nuevo del extra.");
+      if (claveB && (claveB.length < 3 || claveB.length > 80)) throw errUsuario("La clave debe tener de 3 a 80 caracteres.");
+      const proveedores = await todos("fin_proveedores"); const prov = proveedorVip(body.proveedor, proveedores); if (!prov) throw errUsuario("Elija el proveedor.");
+      const usdt = num(body.costoUsdt); if (!(usdt > 0 && usdt < 1000)) throw errUsuario("Escriba el costo en USDT.");
+      const tasa = num(body.tasa); if (!(tasa > 0)) throw errUsuario("Escriba la tasa Binance (Lempiras por USDT).");
+      const prox = fechaExcel(body.proximoPagoProveedor); if (!prox) throw errUsuario("Escriba la fecha del próximo cobro del proveedor.");
+      const motivo = txt(body.motivo, 160) || "Reemplazo de extra";
+      const prem = (await col("inventario").where("plataforma", "==", "netflix").get()).docs.some((x) => normCorreoVip((x.data() || {}).correo) === correoB);
+      if (prem) throw errUsuario("Ese correo ya es una cuenta Netflix Premium.");
+      const unitB = docIdVipCorreo(correoB);
+      const r = await db.runTransaction(async (tx) => {
+        const iaRef = col("inventario").doc(de), faRef = col("fin_vip_extras").doc(de), ubRef = col("inventario").doc(unitB), fbRef = col("fin_vip_extras").doc(unitB);
+        const [ia, fa, ub, fb] = [await tx.get(iaRef), await tx.get(faRef), await tx.get(ubRef), await tx.get(fbRef)];
+        if (!ia.exists && !fa.exists) throw errUsuario("Ese extra ya no existe.");
+        const A = ia.exists ? ia.data() || {} : {}; const FA = fa.exists ? fa.data() || {} : {};
+        if (ia.exists && !esPlataformaVip(A.plataforma)) throw errUsuario("Ese acceso no es un Netflix VIP.");
+        const correoA = normCorreoVip(A.correo || FA.correo);
+        if (correoA === correoB) throw errUsuario("El correo nuevo es el mismo que el actual.");
+        if (unitB === de) throw errUsuario("El correo nuevo es el mismo que el actual.");
+        const B = ub.exists ? ub.data() || {} : null;
+        if (B && (!esPlataformaVip(B.plataforma) || (Array.isArray(B.clientes) && B.clientes.length) || Number(B.ocupados || 0) > 0)) throw errUsuario("Ese correo nuevo ya existe en Bodega y está asignado a otro cliente.");
+        if (fb.exists && !["reemplazado", "vinculado", "baja"].includes(String((fb.data() || {}).estadoSeguimiento || ""))) throw errUsuario("Ese correo nuevo ya tiene un registro activo en Finanzas.");
+        // clientes que usan A: los de la unidad de Bodega; si A no estaba en Bodega, los de Telegram guardados en Finanzas
+        let clientesA = (Array.isArray(A.clientes) ? A.clientes : []).filter((c) => c && c.clienteId).map((c) => ({ ...c }));
+        if (!clientesA.length) clientesA = (FA.asignacionesTelegram || []).filter((c) => c && c.clienteId).map((c) => ({ clienteId: String(c.clienteId), nombre: c.nombre || "" }));
+        const cRefs = [...new Set(clientesA.map((c) => c.clienteId))].slice(0, 5).map((id) => col("clientes").doc(id)); const cSnaps = await Promise.all(cRefs.map((x) => tx.get(x)));
+        // escrituras
+        let fichas = 0;
+        cSnaps.forEach((cs, i) => { if (!cs.exists) return; const cd = cs.data() || {}; if (String(cd.consolidadoEn || "").trim()) return; let k = 0;
+          const servicios = (Array.isArray(cd.servicios) ? cd.servicios : []).map((sv) => { if (!sv || !esPlataformaVip(sv.plataforma) || normCorreoVip(sv.correo) !== correoA) return sv; k++;
+            return { ...sv, correo: correoB, ...(claveB && "clave" in sv ? { clave: claveB } : {}), historialCorreo: [...(Array.isArray(sv.historialCorreo) ? sv.historialCorreo : []), { at: ahora, de: correoA, a: correoB, por: actor, origen: "finanzas_reemplazo", motivo }].slice(-10) }; });
+          if (k) { tx.update(cRefs[i], { servicios }); fichas += k; } });
+        const [yy, mm, dd] = prox.split("-");
+        const unidad = { ...(B || {}), accountId: unitB, plataforma: "vipnetflix", correo: correoB, ident: correoB, clave: claveB || (B && B.clave) || "", claveFaltante: !(claveB || (B && B.clave)),
+          capacidad: 1, ocupados: clientesA.length ? 1 : 0, disponibles: clientesA.length ? 0 : 1, disp: clientesA.length ? 0 : 1, estado: "activa", estadoBodega: clientesA.length ? "asignado" : "disponible",
+          clientes: clientesA.slice(0, 1).map((c) => ({ ...c, asignadoAt: ahora, asignadoPor: actor, reemplazoDe: correoA })), proveedor: prov.alias, lote: "Reemplazo", costoUsdt: r6(usdt), vencimientoProveedor: `${dd}/${mm}/${yy}`,
+          tienePin: !!A.tienePin, pin: A.pin || "", reemplazoDe: correoA,
+          historialBodega: [...((B && B.historialBodega) || []), { tipo: "alta_reemplazo", at: ahora, por: actor, origen: "finanzas", de: correoA, motivo }].slice(-50), createdAt: (B && B.createdAt) || ahora, updatedAt: ahora };
+        tx.set(ubRef, unidad);
+        if (ia.exists) { tx.set(col("inventario_bajas").doc(de), { ...A, bajaAt: ahora, bajaPor: actor, bajaMotivo: motivo, reemplazadoPor: unitB, correoNuevo: correoB }); tx.delete(iaRef); }
+        if (fa.exists) tx.set(faRef, { estadoSeguimiento: "reemplazado", reemplazadoPor: unitB, actualizadoAt: ahora, actualizadoPor: actor, historial: [...(FA.historial || []), { at: ahora, por: actor, origen: "reemplazo", a: unitB, motivo }].slice(-30) }, { merge: true });
+        tx.set(fbRef, { cmId: unitB, correo: correoB, proveedorId: prov.id, proveedor: prov.alias, grupo: prov.grupo, costoMensualUsdt: r6(usdt), tasa: r6(tasa), costoMensualHnl: r2(usdt * tasa), proximoPagoProveedor: prox,
+          estadoSeguimiento: "activo", sinInventario: false, sinAsignacionComercial: false, reemplazoDe: de, notas: motivo, creadoAt: ahora, creadoPor: actor, actualizadoAt: ahora, actualizadoPor: actor,
+          ...(clientesA[0] ? { vinculoComercial: { clienteId: clientesA[0].clienteId, compraId: String(clientesA[0].compraId || ""), asignadoAt: ahora, origen: "reemplazo" } } : {}),
+          historial: [{ at: ahora, por: actor, origen: "reemplazo", de, motivo }] });
+        audit(tx, { accion: "reemplazar_extra_vip_nuevo", targetType: "inventario", targetId: unitB, detalle: `${correoA} → ${correoB} · ${prov.alias} · ${r6(usdt)} USDT · ${fichas} ficha(s)` });
+        return { de, a: unitB, correoA, correoB, fichas, clientes: clientesA.map((c) => c.nombre || c.clienteId), claveFaltante: unidad.claveFaltante, costoHnl: r2(usdt * tasa) };
       });
       return ok(r);
     }
