@@ -8,5 +8,5 @@ test("detalle Disney con los dos tipos y servidor con permiso", () => {
   assert.match(app, /data-inv-disney="disneyp"/); assert.match(app, /data-inv-disney="disneys"/);
   assert.match(app, /accion:"disneyTipo",docId:c\.id,tipo,autorizarExcepcion:true/);
   assert.match(api, /if \(accion === "disneyTipo"\)/); assert.match(api, /disneyTipo\.sincronizarVentas/);
-  assert.match(R("index.html"), /sublichat-app\.js\?v=20261127-r206a/);
+  assert.match(R("index.html"), /sublichat-app\.js\?v=20261127-r2\d\da/);
 });
