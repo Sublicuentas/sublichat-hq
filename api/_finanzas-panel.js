@@ -957,7 +957,9 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         }
         const plat = txt(body.plataforma, 40);
         const r = rentabilidadCuentas(ctx, { hoy, plataforma: plat, altas, cobradoCiclo: plat ? await ciclosDe((c) => String(c.plataforma).replace(/^hbomax.*/, "hbomax") === String(plat).replace(/^hbomax.*/, "hbomax")) : null });
-        return ok({ hoy, desdeControl: r.desdeControl, plataforma: plat, nombre: plat ? nombrePlataforma(plat) : "", plataformas: r.plataformas, total: r.total, cuentas: plat ? r.filas : undefined });
+        // R205 · Índice liviano para el buscador de Ganancias: correo de cada cuenta madre y nombres de sus clientes, por plataforma.
+        const indice = plat ? undefined : r.filas.map((f) => ({ p: f.base, c: f.correo, cl: (f.perfiles || []).map((x) => x.cliente).filter(Boolean).join(" · ").slice(0, 400) }));
+        return ok({ hoy, desdeControl: r.desdeControl, plataforma: plat, nombre: plat ? nombrePlataforma(plat) : "", plataformas: r.plataformas, total: r.total, cuentas: plat ? r.filas : undefined, indice });
       }
       if (accion === "finp_ganancias_cuenta") {
         const cid = txt(body.cuentaId, 160);
