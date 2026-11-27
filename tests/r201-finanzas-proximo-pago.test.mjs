@@ -42,3 +42,13 @@ test('web: HBO Max en la vista de cuentas madre, próximo pago editable en la co
   const panel = fs.readFileSync(new URL('../api/_finanzas-panel.js', import.meta.url), 'utf8');
   assert.match(panel, /todos\("fin_hbo_cuentas"\)/); assert.match(panel, /proximoPagoAt: ahora/);
 });
+test('Spotify Familiar: tarjeta (banco, titular, últimos 4) por cuenta en lista, edición y pago', () => {
+  const web = fs.readFileSync(new URL('../finanzas-web.js', import.meta.url), 'utf8');
+  assert.match(web, /<th>Correo principal<\/th><th>Tarjeta<\/th>/);
+  assert.match(web, /Tarjeta con que se paga/); assert.match(web, /\+ Agregar otra tarjeta/);
+  assert.match(web, /Tarjeta que paga esta cuenta/);
+  const panel = fs.readFileSync(new URL('../api/_finanzas-panel.js', import.meta.url), 'utf8');
+  const spf = panel.slice(panel.indexOf('accion === "finp_spf_lista"'), panel.indexOf('R196n · HBO Max: modalidad por CUENTA'));
+  assert.match(spf, /todos\("fin_tarjetas"\)/); assert.match(spf, /tarjeta: tjPub/); assert.match(spf, /Escriba SOLO los últimos 4 dígitos/);
+  assert.doesNotMatch(spf, /cvv\s*:/i);
+});
