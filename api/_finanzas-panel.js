@@ -237,6 +237,8 @@ export function previsualizarVip({ extras = [], lotes = [] }, { inventarioVip = 
 const normHead = (h) => normTxt(h).replace(/[^a-z0-9/() ]/g, "").replace(/\s+/g, " ").trim();
 export const PLANTILLAS_SIMPLES = Object.freeze({
   vip: ["CORREO DEL EXTRA VIP", "PROVEEDOR", "FECHA DE RENOVACIÓN", "PAGO POR CUENTA (USDT)"],
+  // R208 · Extras VIP PROPIOS: miembro extra de una Netflix Premium nuestra, pagado en USD con tarjeta (BAC) y pasado a Lempiras.
+  vip_propio: ["CORREO DEL EXTRA VIP", "CUENTA MADRE NETFLIX PREMIUM", "FECHA DE COBRO / RENOVACIÓN", "PAGO POR EXTRA (USD)", "CARGO EN LEMPIRAS (BAC)", "ÚLTIMOS 4 DÍGITOS TARJETA"],
   premium: ["CORREO NETFLIX PREMIUM", "BANCO HONDUREÑO", "NOMBRE TITULAR TARJETA", "ÚLTIMOS 4 DÍGITOS TARJETA", "FECHA DE COBRO / RENOVACIÓN", "PAGO POR CUENTA (USD)"],
 });
 export function detectarPlantilla(encabezados = []) {
@@ -270,10 +272,11 @@ export function asignacionesVipDeClientes(clientes = []) {
 }
 const igualCampo = (a, b) => (typeof a === "object" || typeof b === "object" ? JSON.stringify(a ?? null) === JSON.stringify(b ?? null) : String(a ?? "") === String(b ?? ""));
 
-export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes = new Map(), proveedores = [], tasa = null, resoluciones = {}, asignacionesTelegram = [] } = {}) {
+export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes = new Map(), proveedores = [], tasa = null, resoluciones = {}, asignacionesTelegram = [], premium = [] } = {}) {
   if (!PLANTILLAS_SIMPLES[tipo]) throw errUsuario("Formato de Excel no reconocido.");
   if (filas.length > MAX_FILAS) throw errUsuario(`Más de ${MAX_FILAS} filas: divida el archivo.`);
-  const vipX = tipo === "vip"; const nc = vipX ? normCorreoVip : normEmail;
+  const vipX = tipo === "vip" || tipo === "vip_propio"; const nc = vipX ? normCorreoVip : normEmail;
+  const premPorCorreo = new Map(premium.map((c) => [normEmail(c.correo), c])); // R208 · cuentas madre Netflix Premium
   const porCorreo = new Map(); for (const c of cuentas) { const k = nc(c.correo); if (k) (porCorreo.get(k) || porCorreo.set(k, []).get(k)).push(c); }
   const tgPorCorreo = new Map(); if (vipX) for (const a of asignacionesTelegram) { const k = normCorreoVip(a.correo); if (!k) continue; const l = tgPorCorreo.get(k) || tgPorCorreo.set(k, []).get(k); if (!l.some((x) => x.clienteId === a.clienteId)) l.push({ clienteId: a.clienteId, nombre: a.nombre }); }
   const exPorCorreo = new Map(); if (vipX) for (const [id, x] of existentes) { if (!x || x.estadoSeguimiento === "reemplazado" || x.estadoSeguimiento === "vinculado") continue; const k = normCorreoVip(x.correo); if (k && !exPorCorreo.has(k)) exPorCorreo.set(k, { id, ...x }); }
@@ -303,6 +306,22 @@ export function previsualizarSimple(tipo, filas = [], { cuentas = [], existentes
       if (!(Number(tasa) > 0)) errores.push("Falta la tasa Binance HNL por USDT de la operación");
       if (!errores.length && (match || sinAsignacion)) {
         datos = { cmId: match ? match.id : "", correo, proveedorId: prov.id, proveedor: prov.alias, grupo: prov.grupo, proximoPagoProveedor: fecha, costoMensualUsdt: r6(usdt), tasa: r6(tasa), costoMensualHnl: r2(usdt * tasa), estadoSeguimiento: "activo" };
+        if (match) { datos.sinInventario = false; datos.sinAsignacionComercial = false; }
+        else { datos.sinInventario = true; datos.sinAsignacionComercial = !telegram.length; datos.asignacionesTelegram = telegram.slice(0, 5); }
+      }
+    } else if (tipo === "vip_propio") { // R208 · pagado en USD con tarjeta BAC; el cargo real en Lempiras manda (o la tasa BAC del día)
+      const madreC = normEmail(v[1]); const madre = madreC ? premPorCorreo.get(madreC) : null;
+      if (!madreC) errores.push("Falta la cuenta madre Netflix Premium");
+      else if (!madre) errores.push("Esa cuenta madre no está registrada en Netflix Premium (Control Maestro)");
+      const fecha = fechaExcel(v[2]); if (!fecha) errores.push("Fecha de cobro inválida");
+      const usd = num(v[3]); if (!(usd > 0 && usd < 1000)) errores.push("Pago USD inválido");
+      const cargo = num(v[4]); if (cargo != null && !(cargo > 0 && cargo < 100000)) errores.push("Cargo en Lempiras inválido");
+      const dig = String(v[5] ?? "").replace(/\D/g, ""); if (dig.length > 4) errores.push("La celda de tarjeta trae más de 4 dígitos: no se guarda (solo los 4 últimos)");
+      const tc = cargo > 0 && usd > 0 ? cargo / usd : Number(tasa) > 0 ? Number(tasa) : null;
+      if (!tc) avisos.push("Sin cargo en Lempiras ni tasa BAC: el costo en L queda pendiente");
+      if (!errores.length && (match || sinAsignacion)) {
+        datos = { cmId: match ? match.id : "", correo, proveedorId: "propio", proveedor: "VIP propio", grupo: "propio", proximoPagoProveedor: fecha, moneda: "USD", costoMensualUsd: r2(usd), costoMensualUsdt: null,
+          tasa: tc ? r6(tc) : null, costoMensualHnl: tc ? r2(cargo > 0 ? cargo : usd * tc) : null, madreCorreo: madreC, madreId: madre.id, banco: "BAC", ...(dig ? { ultimos4: dig.padStart(4, "0") } : {}), estadoSeguimiento: "activo" };
         if (match) { datos.sinInventario = false; datos.sinAsignacionComercial = false; }
         else { datos.sinInventario = true; datos.sinAsignacionComercial = !telegram.length; datos.asignacionesTelegram = telegram.slice(0, 5); }
       }
@@ -514,9 +533,11 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const tipo = detectarPlantilla(enc);
       if (!tipo) throw errUsuario("Encabezados no reconocidos. VIP: CORREO DEL EXTRA VIP · PROVEEDOR · FECHA DE RENOVACIÓN · PAGO POR CUENTA (USDT). Premium: CORREO NETFLIX PREMIUM · BANCO HONDUREÑO · NOMBRE TITULAR TARJETA · ÚLTIMOS 4 DÍGITOS TARJETA · FECHA DE COBRO / RENOVACIÓN · PAGO POR CUENTA (USD).");
       const filas = (Array.isArray(body.filas) ? body.filas : []).slice(0, MAX_FILAS + 1).map((f, i) => ({ _fila: Number(f && f._fila) || i + 2, v: (Array.isArray(f && f.v) ? f.v : []).slice(0, 6).map((x) => (typeof x === "number" ? x : x == null ? null : String(x).slice(0, 200))) }));
-      const plat = tipo === "vip" ? "vipnetflix" : "netflix"; const colF = tipo === "vip" ? "fin_vip_extras" : "fin_premium_cuentas";
-      let cuentas, asignacionesTelegram = [];
-      if (tipo === "vip") { // R196y · Control Maestro + Bodega (misma colección, incluye nombres de plataforma antiguos) + Telegram
+      const esVipT = tipo === "vip" || tipo === "vip_propio"; // R208
+      const plat = esVipT ? "vipnetflix" : "netflix"; const colF = esVipT ? "fin_vip_extras" : "fin_premium_cuentas";
+      let cuentas, asignacionesTelegram = [], premium = [];
+      if (tipo === "vip_propio") premium = (await col("inventario").where("plataforma", "==", "netflix").get()).docs.map((x) => ({ id: x.id, correo: (x.data() || {}).correo || "" }));
+      if (esVipT) { // R196y · Control Maestro + Bodega (misma colección, incluye nombres de plataforma antiguos) + Telegram
         const vistos = new Map();
         for (const pl of PLATAFORMAS_VIP_LEGADO) for (const x of (await col("inventario").where("plataforma", "==", pl).get()).docs) if (!vistos.has(x.id)) vistos.set(x.id, { id: x.id, ...(x.data() || {}) });
         cuentas = [...vistos.values()];
@@ -524,7 +545,7 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         asignacionesTelegram = asignacionesVipDeClientes((await qc.get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) })));
       } else cuentas = (await col("inventario").where("plataforma", "==", plat).get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }));
       const ex = await todos(colF); const proveedores = await todos("fin_proveedores");
-      const pv = previsualizarSimple(tipo, filas, { cuentas, asignacionesTelegram, existentes: new Map(ex.map((x) => [x.id, x])), proveedores, tasa: Number(body.tasa) || null, resoluciones: body.resoluciones && typeof body.resoluciones === "object" ? body.resoluciones : {} });
+      const pv = previsualizarSimple(tipo, filas, { cuentas, asignacionesTelegram, premium, existentes: new Map(ex.map((x) => [x.id, x])), proveedores, tasa: Number(body.tasa) || null, resoluciones: body.resoluciones && typeof body.resoluciones === "object" ? body.resoluciones : {} });
       const hash = hashFilas(filas, [tipo, Number(body.tasa) || 0]);
       if (accion === "finp_simple_preview") return ok({ hash, ...pv });
       if (body.confirmo !== true) throw errUsuario("Confirme la importación.");
@@ -592,10 +613,10 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const exMap = new Map(ex.filter((x) => x.estadoSeguimiento !== "reemplazado" && x.estadoSeguimiento !== "vinculado").map((x) => [x.id, x]));
       const tab = ["trap", "deku", "propio", "otro", "sin", "todos"].includes(body.tab) ? body.tab : "todos";
       const q = normTxt(body.q);
-      let filas = inv.map((c) => { const x = exMap.get(c.id) || null; return { cmId: c.id, correo: normEmail(c.correo), madre: madreDe(c), cliente: clienteDeInv(c), estadoCM: c.estado || "", grupo: x ? x.grupo || "otro" : "sin", proveedor: x ? x.proveedor : "", costoMensualUsdt: x ? x.costoMensualUsdt : null, costoMensualHnl: x ? x.costoMensualHnl : null, tasa: x ? x.tasa : null, proximoPagoProveedor: x ? x.proximoPagoProveedor : "", ultimoPagoProveedor: x ? x.ultimoPagoProveedor : "", estado: x ? x.estadoSeguimiento : "sin_registro", loteId: x ? x.loteId : "", renovarProximoMes: x ? x.renovarProximoMes : null, notas: x ? x.notas || "" : "", historial: x ? (x.historial || []).slice(-10) : [] }; });
+      let filas = inv.map((c) => { const x = exMap.get(c.id) || null; return { cmId: c.id, correo: normEmail(c.correo), madre: madreDe(c) || (x && x.madreCorreo) || "", moneda: (x && x.moneda) || "USDT", costoMensualUsd: x ? x.costoMensualUsd ?? null : null, ultimos4: (x && x.ultimos4) || "", cliente: clienteDeInv(c), estadoCM: c.estado || "", grupo: x ? x.grupo || "otro" : "sin", proveedor: x ? x.proveedor : "", costoMensualUsdt: x ? x.costoMensualUsdt : null, costoMensualHnl: x ? x.costoMensualHnl : null, tasa: x ? x.tasa : null, proximoPagoProveedor: x ? x.proximoPagoProveedor : "", ultimoPagoProveedor: x ? x.ultimoPagoProveedor : "", estado: x ? x.estadoSeguimiento : "sin_registro", loteId: x ? x.loteId : "", renovarProximoMes: x ? x.renovarProximoMes : null, notas: x ? x.notas || "" : "", historial: x ? (x.historial || []).slice(-10) : [] }; });
       // R196y · registros solo financieros (aún sin unidad en Control Maestro/Bodega): se listan como «Sin asignación comercial»
       const invIds = new Set(inv.map((c) => c.id));
-      for (const x of exMap.values()) if (!invIds.has(x.id) && !(x.cmId && invIds.has(x.cmId))) filas.push({ cmId: x.id, correo: normCorreoVip(x.correo), madre: "", cliente: (x.asignacionesTelegram || []).map((t) => t.nombre).filter(Boolean).join(", "), estadoCM: x.sinInventario ? (x.sinAsignacionComercial ? "sin_asignacion" : "telegram") : "", sinInventario: !!x.sinInventario, grupo: x.grupo || "otro", proveedor: x.proveedor, costoMensualUsdt: x.costoMensualUsdt ?? null, costoMensualHnl: x.costoMensualHnl ?? null, tasa: x.tasa ?? null, proximoPagoProveedor: x.proximoPagoProveedor || "", ultimoPagoProveedor: x.ultimoPagoProveedor || "", estado: x.estadoSeguimiento || "activo", loteId: x.loteId || "", renovarProximoMes: x.renovarProximoMes ?? null, notas: x.notas || "", historial: (x.historial || []).slice(-10) });
+      for (const x of exMap.values()) if (!invIds.has(x.id) && !(x.cmId && invIds.has(x.cmId))) filas.push({ cmId: x.id, correo: normCorreoVip(x.correo), madre: x.madreCorreo || "", moneda: x.moneda || "USDT", costoMensualUsd: x.costoMensualUsd ?? null, ultimos4: x.ultimos4 || "", cliente: (x.asignacionesTelegram || []).map((t) => t.nombre).filter(Boolean).join(", "), estadoCM: x.sinInventario ? (x.sinAsignacionComercial ? "sin_asignacion" : "telegram") : "", sinInventario: !!x.sinInventario, grupo: x.grupo || "otro", proveedor: x.proveedor, costoMensualUsdt: x.costoMensualUsdt ?? null, costoMensualHnl: x.costoMensualHnl ?? null, tasa: x.tasa ?? null, proximoPagoProveedor: x.proximoPagoProveedor || "", ultimoPagoProveedor: x.ultimoPagoProveedor || "", estado: x.estadoSeguimiento || "activo", loteId: x.loteId || "", renovarProximoMes: x.renovarProximoMes ?? null, notas: x.notas || "", historial: (x.historial || []).slice(-10) });
       const conteo = filas.reduce((a, f) => ((a[f.grupo] = (a[f.grupo] || 0) + 1), a), { trap: 0, deku: 0, propio: 0, otro: 0, sin: 0 });
       if (tab !== "todos") filas = filas.filter((f) => f.grupo === tab);
       if (q) filas = filas.filter((f) => normTxt(`${f.correo} ${f.madre} ${f.cliente} ${f.cmId}`).includes(q));
@@ -615,14 +636,14 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
         if (!soloFin && (!invS.exists || String(invS.data().plataforma || "") !== "vipnetflix")) throw errUsuario("Ese acceso no es un Netflix VIP de Control Maestro.");
         const n = {};
         if (c.proveedor !== undefined) { const p = proveedorVip(c.proveedor, proveedores); if (!p) throw errUsuario("Proveedor desconocido."); Object.assign(n, { proveedorId: p.id, proveedor: p.alias, grupo: p.grupo }); }
-        if (c.costoMensualUsdt !== undefined) { const v = num(c.costoMensualUsdt); if (!(v > 0 && v < 1000)) throw errUsuario("Costo USDT inválido."); n.costoMensualUsdt = r6(v); }
+        if (c.costoMensualUsdt !== undefined) { const v = num(c.costoMensualUsdt); if (!(v > 0 && v < 1000)) throw errUsuario("Costo inválido."); if (a.moneda === "USD") n.costoMensualUsd = r2(v); else n.costoMensualUsdt = r6(v); } // R208 · propios en USD
         if (c.tasa !== undefined) { const v = num(c.tasa); if (!(v > 0)) throw errUsuario("Tasa inválida."); n.tasa = r6(v); }
         if (c.proximoPagoProveedor !== undefined) { const f = fechaExcel(c.proximoPagoProveedor); if (!f) throw errUsuario("Fecha inválida."); n.proximoPagoProveedor = f; }
         if (c.ultimoPagoProveedor !== undefined) { const f = fechaExcel(c.ultimoPagoProveedor); if (f === null) throw errUsuario("Fecha inválida."); n.ultimoPagoProveedor = f || ""; }
         if (c.estadoSeguimiento !== undefined) { const e = ESTADOS_VIP[normTxt(c.estadoSeguimiento)]; if (!e) throw errUsuario("Estado inválido."); n.estadoSeguimiento = e; }
         if (c.notas !== undefined) n.notas = txt(c.notas, 300);
         if (!Object.keys(n).length) throw errUsuario("Nada que cambiar.");
-        const fin = { ...a, ...n }; if (fin.costoMensualUsdt && fin.tasa) fin.costoMensualHnl = r2(fin.costoMensualUsdt * fin.tasa);
+        const fin = { ...a, ...n }; if (fin.moneda === "USD") { if (fin.costoMensualUsd && fin.tasa && (n.costoMensualUsd !== undefined || n.tasa !== undefined)) fin.costoMensualHnl = r2(fin.costoMensualUsd * fin.tasa); } else if (fin.costoMensualUsdt && fin.tasa) fin.costoMensualHnl = r2(fin.costoMensualUsdt * fin.tasa);
         if (!fin.proveedorId) throw errUsuario("Elija el proveedor.");
         const antes = Object.fromEntries(Object.keys(n).map((k) => [k, a[k] ?? null]));
         tx.set(ref, { ...fin, cmId: soloFin ? a.cmId || "" : cmId, correo: soloFin ? a.correo : normEmail(invS.data().correo), actualizadoAt: ahora, actualizadoPor: actor, ...(s.exists ? {} : { creadoAt: ahora, creadoPor: actor, estadoSeguimiento: fin.estadoSeguimiento || "activo" }), historial: [...(a.historial || []), { at: ahora, por: actor, origen: "edicion", antes, despues: n }].slice(-30) });
@@ -902,6 +923,18 @@ export async function handlePanel(db, accion, body, identity, authUser, res, d) 
       const porCuenta = new Map(); for (const l of lotes) { const k = l.cuentaInventarioId; (porCuenta.get(k) || porCuenta.set(k, []).get(k)).push(l); }
       const cfgDe = new Map(cfgs.map((x) => [x.id, x])), tDe = new Map(tarjetas.map((x) => [x.id, x]));
       let filas = cuentas.map((c) => { const cfg = cfgDe.get(c.id) || null; return finCuentas.filaCuenta(c, cfg, porCuenta.get(c.id) || [], cfg && cfg.tarjetaId ? tDe.get(cfg.tarjetaId) : null, hoy); });
+      // R208 · Netflix Premium: miembros extra (VIP propios) de cada cuenta madre: por Finanzas (madreId / madreCorreo) o por la
+      // cuenta madre anotada en la unidad VIP de Control Maestro / Bodega. Solo lectura.
+      if (plats.includes("netflix")) {
+        const exVip = (await todos("fin_vip_extras")).filter((x) => !["reemplazado", "vinculado", "baja"].includes(String(x.estadoSeguimiento || "")));
+        const porMadre = new Map(); const add = (k, e) => { if (!k) return; const l = porMadre.get(k) || porMadre.set(k, []).get(k); if (!l.some((y) => y.correo === e.correo)) l.push(e); };
+        const exDe = new Map(exVip.map((x) => [x.cmId || x.id, x]));
+        for (const x of exVip) { const e = { correo: normCorreoVip(x.correo), costoMensualHnl: x.costoMensualHnl ?? null, costoMensualUsd: x.costoMensualUsd ?? null, moneda: x.moneda || "USDT", proximoPagoProveedor: x.proximoPagoProveedor || "", cliente: (x.asignacionesTelegram || []).map((t) => t.nombre).filter(Boolean).join(", ") }; add(x.madreId, e); add("c:" + normEmail(x.madreCorreo), e); }
+        for (const u of inv) { if (!esPlataformaVip(u.plataforma) || !finCuentas.activa(u)) continue; const m = madreDe(u); if (!m) continue; const x = exDe.get(u.id) || {};
+          add("c:" + m, { correo: normCorreoVip(u.correo), costoMensualHnl: x.costoMensualHnl ?? null, costoMensualUsd: x.costoMensualUsd ?? null, moneda: x.moneda || "USDT", proximoPagoProveedor: x.proximoPagoProveedor || "", cliente: clienteDeInv(u) }); }
+        filas = filas.map((f) => { if (f.plataforma !== "netflix") return f; const l = [...(porMadre.get(f.cuentaId) || [])]; for (const e of porMadre.get("c:" + normEmail(f.correo)) || []) if (!l.some((y) => y.correo === e.correo)) l.push(e);
+          return l.length ? { ...f, extras: l, extrasCostoHnl: r2(l.reduce((a, e) => a + (Number(e.costoMensualHnl) || 0), 0)) } : f; });
+      }
       if (pedida === "pendientes") filas = filas.filter((f) => f.estadoCosto === "pendiente");
       if (pedida === "proximos") filas = filas.filter((f) => f.pronto || f.vencido);
       filas.sort((a, b) => a.plataforma.localeCompare(b.plataforma) || (a.estadoCosto === b.estadoCosto ? 0 : a.estadoCosto === "pendiente" ? -1 : 1) || String(a.proximoPago || "9999").localeCompare(String(b.proximoPago || "9999")) || a.correo.localeCompare(b.correo));

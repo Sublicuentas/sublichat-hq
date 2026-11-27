@@ -632,6 +632,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: false, error: "Acción HBO desconocida." });
     }
 
+    // R208 · Netflix Premium: correos de los miembros extra (VIP propios) de esta cuenta madre y a quién están asignados.
+    // Solo lectura y SIN costos (lo financiero se ve en Finanzas).
+    if (accion === "extrasDeMadre") {
+      try {
+        const m = await db.collection("inventario").doc(String(docId || "")).get(); if (!m.exists) return res.status(200).json({ ok: true, extras: [] });
+        const correoM = String((m.data() || {}).correo || "").trim().toLowerCase();
+        const nc = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+        const fin = (await db.collection("fin_vip_extras").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }))
+          .filter((x) => !["reemplazado", "vinculado", "baja"].includes(String(x.estadoSeguimiento || "")) && (x.madreId === m.id || (correoM && nc(x.madreCorreo) === correoM)));
+        const vip = (await db.collection("inventario").where("plataforma", "==", "vipnetflix").get()).docs.map((x) => ({ id: x.id, ...(x.data() || {}) }))
+          .filter((u) => correoM && nc(u.cuentaMadre || u.madre || u.correoMadre || u.madreCorreo) === correoM);
+        const out = new Map();
+        for (const x of fin) out.set(nc(x.correo), { correo: nc(x.correo), cliente: (x.asignacionesTelegram || []).map((t) => t.nombre).filter(Boolean).join(", "), enBodega: !x.sinInventario });
+        for (const u of vip) { const cl = (Array.isArray(u.clientes) ? u.clientes : []).map((c) => c && c.nombre).filter(Boolean).join(", "); out.set(nc(u.correo), { correo: nc(u.correo), cliente: cl || (out.get(nc(u.correo)) || {}).cliente || "", enBodega: true }); }
+        for (const x of fin) { const u = vip.find((y) => nc(y.correo) === nc(x.correo)); if (!u && x.cmId) { const s2 = await db.collection("inventario").doc(x.cmId).get(); if (s2.exists) { const cl = ((s2.data() || {}).clientes || []).map((c) => c && c.nombre).filter(Boolean).join(", "); const e = out.get(nc(x.correo)); if (e && cl) e.cliente = cl; } } }
+        return res.status(200).json({ ok: true, extras: [...out.values()].sort((a, b) => a.correo.localeCompare(b.correo)) });
+      } catch (e) { return res.status(200).json({ ok: false, error: String(e?.message || e).slice(0, 200) }); }
+    }
+
     // R206 · Disney Premium con ESPN ↔ sin ESPN (misma cuenta, mismo id). Mismo permiso que el plan HBO.
     if (accion === "disneyTipo") {
       const usr = String(authUser.usuario || authUser.uid || "");
