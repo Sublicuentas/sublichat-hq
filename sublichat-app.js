@@ -1,4 +1,4 @@
-import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261115-r196u4"; // R112
+import { CATEGORIAS as R112_CATS, ORDEN_CATEGORIAS as R112_ORDEN, CUENTA_COMPLETA_PLATAFORMAS as R112_CC, clasificarServicio as r112Clasificar } from "./catalogo-categorias.js?v=20261127-r203a"; // R112
 const CONFIG = {
   firebase: {
     apiKey: "AIzaSyA_b1a0Zo4OIAj4KayD5ChtPWToANQ1nrA",
