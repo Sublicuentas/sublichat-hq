@@ -89,5 +89,5 @@ test('H-03 · histórico: editar la tarjeta o el próximo importe no cambia los 
   const f = (await panel(db, 'finp_hbo_lista', {})).filas.find((x) => x.cuentaId === 'hbo-1');
   assert.deepEqual(f.cargos.map((c) => [c.fecha, c.tarjetaId.includes('1111') || c.tarjetaId.includes('4321') ? 'ok' : 'x']), [['2026-11-12', 'ok'], ['2026-10-12', 'ok']]);
   const web = fs.readFileSync(new URL('../finanzas-web.js', import.meta.url), 'utf8');
-  assert.match(web, /\['hbo', 'HBO Max'\]/); assert.match(web, /Nunca escriba el número completo, el CVV ni claves/);
+  assert.match(web, /\['hbomax', 'HBO Max'\]/ /* R201 · HBO usa la vista de cuentas madre */); assert.match(web, /Nunca escriba el número completo, el CVV ni claves/);
 });
