@@ -1551,10 +1551,12 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <!-- PELIS -->
   <section class="screen" id="screen-pelis">
     <div class="card">
-      <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5"/></svg></span> ¿Dónde la veo?</h2>
+      <h2><span class="ico"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5"/></svg></span> Pelis y estrenos</h2>
       <div class="toolbar"><div class="search">🔎 <input id="mq" type="text" placeholder="Buscar película o serie… (ej: X-Men)"></div></div>
       <div class="count" style="margin-bottom:14px">Te digo en qué plataforma está disponible en Honduras.</div>
       <div id="movieResults"></div>
+      <div class="plr-upd-web"><span id="pelisRecUpd" hidden></span></div>
+      <div id="pelisRec" class="plr" aria-live="polite"></div>
     </div>
   </section>
 
@@ -1742,7 +1744,7 @@ html.sublichat-no-intro #intro{display:none!important;opacity:0!important;pointe
   <button class="nav-btn" data-screen="chat"><span class="nico">🤖</span><span>Subli</span></button>
 </nav>
 <div id="sidebarWrap" class="sidebar-wrap"></div>
-<script type="module" src="./sublichat-app.js?v=20261127-r209a"></script>
+<script type="module" src="./sublichat-app.js?v=20261128-r210a"></script>
 <!-- MODAL MENSAJE DE COBRO -->
 <div id="cobroModal" class="cobro-overlay">
   <div class="cobro-sheet">
@@ -2862,8 +2864,10 @@ function activeImport(){const scr=document.getElementById('screen-importar');ret
 <script defer src="./finanzas-excel.js?v=20261123-r200h"></script>
 <script defer src="./finanzas-web.js?v=20261127-r208"></script>
 <link rel="stylesheet" href="./finanzas-web.css?v=20261127-r208">
-<script defer src="./comercial-web.js?v=20261127-r209b"></script>
-<link rel="stylesheet" href="./comercial-web.css?v=20261127-r209b">
+<script defer src="./comercial-web.js?v=20261128-r210"></script>
+<script defer src="./pelis-rec.js?v=20261128-r210"></script>
+<link rel="stylesheet" href="./pelis-rec.css?v=20261128-r210">
+<link rel="stylesheet" href="./comercial-web.css?v=20261128-r210">
 
 <!-- FIX LIC 20260706 · edición sin salto a fila 1 -->
 <!-- MODO WEB (escritorio) · sidebar de navegación + rediseño de Inicio.

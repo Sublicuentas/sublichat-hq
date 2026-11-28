@@ -3097,6 +3097,13 @@ async function buscarPeli(text){
   }catch(e){movieResults.innerHTML=`<div class="empty">⚠️ No pude buscar. Verificá /api/tmdb en Vercel.</div>`;}
 }
 
+// R210 · Recomendaciones del día (pelis-rec.js): se cargan al abrir Pelis, no antes; un fallo no bloquea el buscador.
+(function(){const sc=document.getElementById("screen-pelis");if(!sc)return;
+  const montar=()=>{if(!sc.classList.contains("active")||!window.SublichatPelisRec)return;
+    window.SublichatPelisRec.montar(document.getElementById("pelisRec"),{post:async(b)=>{const r=await fetch(CONFIG.tmdbEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});return r.json();},actualizado:document.getElementById("pelisRecUpd")});};
+  new MutationObserver(montar).observe(sc,{attributes:true,attributeFilter:["class"]});
+  window.addEventListener("load",montar);})();
+
 /* ===== PARTIDOS ===== */
 const matchResults=document.getElementById("matchResults");
 const tq=document.getElementById("tq");

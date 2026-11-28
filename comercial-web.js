@@ -38,8 +38,12 @@
     var actual = st.vista === 'lista' ? st.cat : (st.vista === 'agenda' || st.vista === 'rendimiento') ? 'panel' : st.vista;
     h.innerHTML = '<div class="gc">' +
       (st.vista === 'lista' || st.vista === 'biblioteca' ? '' : '<div class="gc-head"><img class="gc-head-ico" src="' + IMG('megafono') + '" alt=""><span class="gc-div"></span><div><h1>Gestión comercial</h1><p>Crecimiento y fidelización · ' + esc((st.panel && st.panel.nombreUsuario) || '') + '</p></div><img class="gc-bot" src="' + IMG('robot') + '" alt="Sublirobot"></div>') +
-      '<nav class="gc-tabs" role="tablist">' + tabs.map(function (t) { var n = st.panel && st.panel.conteos && st.panel.conteos[t[0]]; return '<button type="button" role="tab" aria-selected="' + (actual === t[0]) + '" class="' + (actual === t[0] ? 'on' : '') + '" data-gc-ir="' + t[0] + '">' + esc(t[1]) + (n != null ? ' <span>' + n + '</span>' : '') + '</button>'; }).join('') + '</nav>' +
+      '<nav class="gc-tabs" role="tablist">' + tabs.map(function (t) { var n = st.panel && st.panel.conteos && st.panel.conteos[t[0]]; return '<button type="button" role="tab" aria-selected="' + (actual === t[0]) + '" class="' + (actual === t[0] ? 'on' : '') + '" data-gc-ir="' + t[0] + '">' + (t[0] === 'biblioteca' ? 'Biblioteca<span class="gc-lg"> de mensajes</span>' : esc(t[1])) + (n != null ? ' <span>' + n + '</span>' : '') + '</button>'; }).join('') + '</nav>' +
       '<div class="gc-cuerpo">' + cuerpo() + '</div></div>';
+    // R210 · la barra «Pendientes hoy» va fija al fondo, por encima de la barra de navegación de la Web si existe
+    var nav = document.querySelector('nav.nav'), enApk = !!h.closest('.gc-apk'), navH = 0;
+    if (!enApk && nav) { var cs = getComputedStyle(nav); if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.position === 'fixed') navH = Math.round(nav.getBoundingClientRect().height); }
+    h.style.setProperty('--gc-pie-b', navH + 'px');
     var tb = h.querySelector('.gc-tabs'), on = tb && tb.querySelector('.on'); if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = Math.max(0, on.offsetLeft - tb.offsetLeft - 16);
   }
   function cuerpo() {
@@ -59,9 +63,9 @@
   function tareasHoy(p) { return p.agenda.filter(function (x) { var l = Math.min(x.meta, x.pendientes + x.hechos); return l > 0 && x.hechos < l; }).length; }
   function vPanel() {
     var p = st.panel; if (!p) return cargando();
-    var m = p.meta || {}, pct = m.objetivo ? Math.min(100, Math.round((m.actual / m.objetivo) * 100)) : 0, r = p.hoyRend || {};
+    var m = p.meta || {}, pct = m.pct != null ? Math.min(100, m.pct) : (m.objetivo ? Math.min(100, Math.round((m.actual / m.objetivo) * 100)) : 0), r = p.hoyRend || {};
     var avance = r.metaDisponible ? Math.min(100, Math.round((r.contactos / r.metaDisponible) * 100)) : null;
-    return '<section class="gc-meta"><img src="' + IMG('diana') + '" alt=""><span class="gc-div"></span><div class="gc-meta-t"><b>Meta ' + esc(mesNombre(m.mes)) + '</b><div class="gc-meta-n"><strong>' + m.actual + '</strong> / ' + (m.objetivo || '—') + ' clientes vigentes</div><div class="gc-bar"><i style="width:' + pct + '%"></i></div><small>' + (m.referencia ? 'Referencia ' + m.referencia + ' · ' : '') + 'Faltan ' + Math.max(0, (m.objetivo || 0) - m.actual) + ' · La meta no es un resultado: se cuenta con las fichas reales de hoy.</small>' + (p.esAdmin ? '<button type="button" class="gc-btn sec sm" data-gc="meta">Editar meta</button>' : '') + '</div></section>' +
+    return '<section class="gc-meta"><img src="' + IMG('diana') + '" alt=""><span class="gc-div"></span><div class="gc-meta-t"><b>Meta ' + esc(mesNombre(m.mes)) + '</b><div class="gc-meta-n"><strong>' + m.actual + '</strong> / ' + (m.objetivo || '—') + ' clientes vigentes</div><div class="gc-bar"><i style="width:' + pct + '%"></i></div><small>' + (m.referencia ? 'Referencia ' + m.referencia + ' · ' : '') + 'Faltan ' + (m.faltan != null ? m.faltan : Math.max(0, (m.objetivo || 0) - m.actual)) + ' · ' + (m.pct != null ? String(m.pct).replace('.', ',') + '% · ' : '') + 'La meta no es un resultado: se cuenta con las fichas reales de hoy.</small>' + (p.esAdmin ? '<button type="button" class="gc-btn sec sm" data-gc="meta">Editar meta</button>' : '') + '</div></section>' +
       '<section class="gc-cards">' + ORD.map(function (k) { return '<button type="button" class="gc-card ' + CAT[k].tono + '" data-gc-ir="' + k + '"><img src="' + IMG(CAT[k].ico) + '" alt=""><span class="gc-div"></span><span class="gc-card-t"><b>' + CAT[k].n + '</b><small>' + CAT[k].c + '</small></span><strong>' + (p.conteos[k] || 0) + '</strong></button>'; }).join('') + '</section>' +
       '<section class="gc-dos">' +
       '<button type="button" class="gc-mini a" data-gc-ir="agenda"><img src="' + IMG('agenda') + '" alt=""><span class="gc-div"></span><span class="gc-mini-t"><b>Agenda comercial de hoy</b><span><img src="' + IMG('m_cal') + '" alt=""><strong>' + seguimientosHoy(p) + '</strong> seguimientos</span><span><img src="' + IMG('m_campana') + '" alt=""><strong>' + tareasHoy(p) + '</strong> tareas</span></span><i class="gc-chev">›</i></button>' +
@@ -101,7 +105,7 @@
     var chips4 = '<div class="gc-chips">' + chips.slice(0, cat === 'vencidos' ? 4 : 3).map(chipH).join('') + '</div>';
     var h = '<header class="gc-ph' + (cat === 'vencidos' ? ' solo' : '') + '"><div>' + (cat === 'vencidos' ? '' : '<em>Gestión comercial</em>') + '<h1>' + titulo + '</h1><p>' + (cat === 'fidelizar' ? 'Una sola compra verificable' : cat === 'vencidos' ? 'Recuperar renovaciones' : 'Cotizaciones pendientes') + '</p></div><img src="' + IMG('megafono') + '" alt=""></header>' +
       (cat === 'vencidos' ? chips4 : '') +
-      '<section class="gc-lhead ' + CAT[cat].tono + '"><img src="' + IMG(cat === 'vencidos' ? 'cal_alerta' : CAT[cat].ico) + '" alt=""><span class="gc-div"></span><div><b>' + (r ? r.total : '…') + (cat === 'potenciales' ? ' oportunidades' : ' clientes') + '</b><small>' + DESC[cat] + '</small></div>' + (cat === 'potenciales' ? '<button type="button" class="gc-btn" data-gc="nuevo-pot">+ Nuevo potencial</button>' : cat === 'vencidos' ? '<img class="gc-lh-bot" src="' + IMG('robot') + '" alt="">' : '') + '</section>' +
+      '<section class="gc-lhead ' + CAT[cat].tono + '"><img src="' + IMG(cat === 'vencidos' ? 'cal_alerta' : CAT[cat].ico) + '" alt=""><span class="gc-div"></span><div><b>' + (r ? r.total : '…') + (filtrada(r, cat) ? ' <span class="gc-de">de ' + r.conteosCat[cat] + '</span>' : '') + (cat === 'potenciales' ? ' oportunidades' : ' clientes') + '</b>' + (filtrada(r, cat) ? '<small class="gc-filtrado">Con los filtros elegidos · la pestaña cuenta toda la categoría</small>' : '') + '<small>' + DESC[cat] + '</small></div>' + (cat === 'potenciales' ? '<button type="button" class="gc-btn" data-gc="nuevo-pot">+ Nuevo potencial</button>' : cat === 'vencidos' ? '<img class="gc-lh-bot" src="' + IMG('robot') + '" alt="">' : '') + '</section>' +
       (cat === 'vencidos' ? '' : chips4) +
       '<label class="gc-busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" data-gc-f="q" value="' + esc(st.f.q) + '" placeholder="Buscar nombre, número o plataforma"></label>' +
       (cat === 'vencidos' ? '' : selsH()) +
@@ -118,7 +122,8 @@
       '<div class="gc-pag"><span>' + r.total + ' en total · página ' + r.pagina + ' de ' + r.paginas + '</span><button type="button" class="gc-btn sec sm" data-gc-pag="-1"' + (r.pagina <= 1 ? ' disabled' : '') + '>Anterior</button><button type="button" class="gc-btn sec sm" data-gc-pag="1"' + (r.pagina >= r.paginas ? ' disabled' : '') + '>Siguiente</button></div>' + pie(pendientes);
     return h;
   }
-  function pie(n) { return '<div class="gc-pie"><div class="gc-pie-n"><img src="' + IMG('m_cal_rojo') + '" alt=""><b>Pendientes hoy</b><span class="gc-div"></span><strong>' + n + '</strong></div><button type="button" class="gc-btn gc-iniciar" data-gc="iniciar"' + (n ? '' : ' disabled') + '><img src="' + IMG('megafono') + '" alt="">Iniciar seguimiento</button></div>'; }
+  function filtrada(r, cat) { return !!(r && r.conteosCat && r.total !== r.conteosCat[cat]); }
+  function pie(n) { return '<div class="gc-pie"><div class="gc-pie-n"><img src="' + IMG('m_cal_rojo') + '" alt=""><b>Pendientes hoy</b><span class="gc-div"></span><strong>' + n + '</strong></div><button type="button" class="gc-btn gc-iniciar" data-gc="iniciar"' + (n ? '' : ' disabled') + '><img src="' + IMG('megafono') + '" alt="">Iniciar seguimiento</button></div><div class="gc-pie-esp" aria-hidden="true"></div>'; }
   function sel_(k, t, ops) { return '<select data-gc-f="' + k + '" aria-label="' + t + '"><option value="">' + t + '</option>' + ops.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (st.f[k] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function svcChips(f) {
     return f.servicios.concat(f.archivados || []).map(function (s) {
@@ -168,7 +173,10 @@
   }
   async function cargarLista() {
     st.lista = null; pintar();
-    try { st.lista = await api('lista', Object.assign({ cat: st.cat, pagina: st.pagina, porPagina: 30 }, st.f)); } catch (e) { st.error = e.message; }
+    try { st.lista = await api('lista', Object.assign({ cat: st.cat, pagina: st.pagina, porPagina: 30 }, st.f));
+      // R210 · pestañas y lista con la MISMA foto de datos (antes: 159 en la pestaña y 158 en la lista)
+      if (st.panel && st.lista.conteosCat) { st.panel.conteos = Object.assign({}, st.panel.conteos, st.lista.conteosCat); }
+    } catch (e) { st.error = e.message; }
     pintar();
   }
   function elegibleMio(f) { var u = st.panel && st.panel.usuario; return f.ciclo && f.ciclo.elegible && !f.noContactar && f.telefono && (!f.responsable || f.responsable === u); }
@@ -460,10 +468,36 @@
     });
     h.addEventListener('click', clicGlobal);
   }
+  // R210 · Editar meta: período (mes/año), meta actual, nuevo entero positivo, Guardar/Cancelar, historial.
+  // Solo se avisa «guardada» cuando el servidor lo confirma; si falla la red, se conserva la meta anterior.
   function editarMeta() {
-    var p = st.panel, mt = p.meta || {};
-    var m = modal('Meta comercial', '<div class="gc-form"><label>Mes (AAAA-MM)<input data-m="mes" value="' + esc(mt.mes || '') + '"></label><label>Referencia (vigentes al empezar)<input type="number" data-m="referencia" value="' + esc(mt.referencia || '') + '"></label><label>Objetivo de clientes vigentes<input type="number" data-m="objetivo" value="' + esc(mt.objetivo || '') + '"></label>' + p.agenda.map(function (a) { return '<label>Meta diaria · ' + esc(a.nombre) + '<input type="number" min="0" data-md="' + a.cat + '" value="' + a.meta + '"></label>'; }).join('') + '</div><div class="gc-acc-row"><button type="button" class="gc-btn" data-m-ok>Guardar</button></div>');
-    m.querySelector('[data-m-ok]').onclick = async function () { var md = {}; m.querySelectorAll('[data-md]').forEach(function (i) { md[i.dataset.md] = Number(i.value); }); try { await api('meta_guardar', { mes: m.querySelector('[data-m="mes"]').value, referencia: m.querySelector('[data-m="referencia"]').value, objetivo: m.querySelector('[data-m="objetivo"]').value, metasDiarias: md }); toast('Meta guardada.'); cerrar(m); cargarPanel(true); } catch (e) { toast(e.message, true); } };
+    var p = st.panel, mt = p.meta || {}, MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    var mesAct = (mt.mes || hoy().slice(0, 7)).split('-'), anioHoy = +hoy().slice(0, 4);
+    var m = modal('Editar meta comercial', '<p class="gc-sub">La meta es una sola para toda la empresa: la ven igual en la Web y en la APK. Cambiarla no toca fichas ni ventas.</p>' +
+      '<div class="gc-meta-act"><span>Meta actual</span><b>' + (mt.objetivo || '—') + '</b><small>' + esc(mesNombre(mt.mes)) + ' · ' + mt.actual + ' vigentes hoy · faltan ' + (mt.faltan != null ? mt.faltan : '—') + '</small></div>' +
+      '<div class="gc-form"><label>Mes<select data-m="mes">' + MESES.map(function (n, k) { var v = String(k + 1).padStart(2, '0'); return '<option value="' + v + '"' + (v === mesAct[1] ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>' +
+      '<label>Año<select data-m="anio">' + [anioHoy - 1, anioHoy, anioHoy + 1].map(function (a) { return '<option' + (String(a) === mesAct[0] ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></label>' +
+      '<label>Nueva meta (clientes vigentes)<input type="number" inputmode="numeric" min="1" step="1" data-m="objetivo" value="' + esc(mt.objetivo || '') + '" required></label>' +
+      '<label>Referencia al empezar (opcional)<input type="number" inputmode="numeric" min="0" step="1" data-m="referencia" value="' + esc(mt.referencia == null ? '' : mt.referencia) + '"></label></div>' +
+      '<details class="gc-mas"><summary>Metas diarias por categoría</summary><div class="gc-form">' + p.agenda.map(function (a) { return '<label>' + esc(a.nombre) + '<input type="number" min="0" step="1" data-md="' + a.cat + '" value="' + a.meta + '"></label>'; }).join('') + '</div></details>' +
+      '<p class="gc-meta-err" data-m-err hidden></p>' +
+      '<div class="gc-acc-row"><button type="button" class="gc-btn sec" data-m-cancel>Cancelar</button><button type="button" class="gc-btn" data-m-ok>Guardar</button></div>' +
+      '<div class="gc-meta-hist" data-m-hist><small>Cargando historial…</small></div>');
+    var err = m.querySelector('[data-m-err]'), btn = m.querySelector('[data-m-ok]');
+    m.querySelector('[data-m-cancel]').onclick = function () { cerrar(m); };
+    api('meta_historial').then(function (r) { var hh = m.querySelector('[data-m-hist]'); if (!hh) return; hh.innerHTML = '<h4>Historial de cambios</h4>' + ((r.historial || []).length ? '<ul>' + r.historial.map(function (x) { return '<li><b>' + esc(USU[x.por] || x.por) + '</b> · ' + esc(String(x.at).slice(0, 16).replace('T', ' ')) + ' · ' + esc(mesNombre(x.mes)) + ': ' + (x.antes && x.antes.objetivo ? x.antes.objetivo : '—') + ' → <b>' + x.despues.objetivo + '</b></li>'; }).join('') + '</ul>' : '<small>Sin cambios registrados todavía.</small>'); }).catch(function () { var hh = m.querySelector('[data-m-hist]'); if (hh) hh.innerHTML = '<small>No se pudo cargar el historial.</small>'; });
+    btn.onclick = async function () {
+      var obj = m.querySelector('[data-m="objetivo"]').value.trim(), rf = m.querySelector('[data-m="referencia"]').value.trim();
+      err.hidden = true;
+      if (!/^\d+$/.test(obj) || +obj <= 0) { err.textContent = 'La meta debe ser un número entero positivo.'; err.hidden = false; return; }
+      if (rf && !/^\d+$/.test(rf)) { err.textContent = 'La referencia debe ser un número entero o quedar vacía.'; err.hidden = false; return; }
+      var md = {}; m.querySelectorAll('[data-md]').forEach(function (i) { if (/^\d+$/.test(i.value)) md[i.dataset.md] = Number(i.value); });
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        await api('meta_guardar', { mes: m.querySelector('[data-m="anio"]').value + '-' + m.querySelector('[data-m="mes"]').value, objetivo: Number(obj), referencia: rf === '' ? null : Number(rf), metasDiarias: md });
+        cerrar(m); toast('Meta guardada para todos.'); cargarPanel(true);
+      } catch (e) { err.textContent = (e && e.message ? e.message : 'No se pudo guardar') + ' · Se mantiene la meta anterior.'; err.hidden = false; btn.disabled = false; btn.textContent = 'Reintentar'; }
+    };
   }
   async function cargarPanel(fresco) { try { st.panel = await api('panel', fresco ? { fresco: true } : {}); st.error = ''; } catch (e) { st.error = e.message; } pintar(); }
   function open() { var h = host(); if (!h) return; var sc = document.getElementById('screen-comercial'); if (sc) sc.classList.add('gc-screen'); enlazar(h); pintar(); cargarPanel(); }

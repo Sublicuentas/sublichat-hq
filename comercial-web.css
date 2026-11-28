@@ -405,3 +405,32 @@ html body #screen-comercial.gc-screen,.gc-apk{background:var(--fondo,#EEF4FB)}
 .gc-xl svg{width:24px;height:24px;flex:none}
 @media (max-width:640px){.gc-tj-seg{grid-template-columns:1fr}.gc-tj-seg span:first-child{border-right:0}}
 @media (min-width:900px){.gc-pie{max-width:760px;margin-left:auto;width:100%}}
+/* R210 · Editar meta / z-index sobre la capa de la APK */
+.gc-modal-w{z-index:9500}
+.gc-meta-act{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;background:var(--rs);border-radius:14px;padding:10px 14px}
+.gc-meta-act span{font-weight:700;color:var(--m)}.gc-meta-act b{font-size:26px;font-weight:900;color:var(--r)}.gc-meta-act small{flex-basis:100%;color:var(--m)}
+.gc-meta-err{margin:0;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:12px;padding:9px 12px;font-weight:600}
+.gc-meta-hist h4{margin:4px 0 6px}.gc-meta-hist ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--m)}
+.gc-toast{z-index:9600}
+/* R210 · Pestañas accesibles (sin recortes) y barra de seguimiento anclada al fondo, sin tapar fichas */
+@media (max-width:640px){
+ .gc-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible!important;margin:0!important;padding:0!important;gap:6px!important}
+ .gc-tabs button{flex:initial;min-width:0;padding:8px 6px!important;font-size:12.5px!important;white-space:normal;line-height:1.15;text-align:center}
+ .gc-tabs button span{display:inline-block;margin-left:2px}
+ .gc-tabs .gc-lg{display:none}
+}
+@media (max-width:899px){
+ .gc-pie{position:fixed!important;left:0;right:0;bottom:calc(var(--gc-pie-b,0px));z-index:40;border-radius:20px 20px 0 0!important;border:0;border-top:1px solid var(--b);box-shadow:0 -6px 18px rgba(20,33,61,.08);padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important;margin:0}
+ .gc-apk .gc-pie{z-index:9100}
+ .gc-cuerpo:has(.gc-pie){padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+ .gc-tj{overflow-wrap:anywhere}
+ .gc-tj-id>span{white-space:normal!important;overflow:visible!important}
+ .gc-tj-l span,.gc-tj-g b{white-space:normal!important;overflow:visible!important}
+}
+@media (min-width:900px){.gc-pie{position:static!important;max-width:none}}
+.gc-de{font-size:.6em;font-weight:700;color:var(--m)}
+.gc-filtrado{display:block;color:var(--m);font-size:12px}
+@media (max-width:374px){.gc-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gc-pie-esp{display:none}
+@media (max-width:899px){.gc-pie-esp{display:block;height:calc(78px + env(safe-area-inset-bottom))}.gc-cuerpo:has(.gc-pie){padding-bottom:0}}
+.gc-tabs button .gc-lg{background:none!important;padding:0!important;margin:0!important;font:inherit!important;color:inherit!important;border-radius:0!important;min-width:0!important}
