@@ -18,6 +18,7 @@ import { costosProveedor as costosProvPanel, rentabilidad as rentPanel } from ".
 import { revAdminGet } from "./_rev-api.js"; // R158 · Excel central de finanzas (backend del bot)
 import { periodoHN, resumenMes, diagnosticarDuplicados, evidenciaNecesaria } from "./_finanzas-mes.js"; // R186 · mes calendario Honduras
 import { PRODUCTOS, normAlias, resolverProducto } from "./_productos-canonicos.js"; // R193 · productos canónicos
+import { planPago, vistaPrevia, previaGeisell, periodoOrigen, fechaHistoricaValida } from "./_obligaciones.js"; // R210 · pagos masivos y vista previa
 import {
   PLANILLA_CONCEPTOS, PLANILLA_SUBTIPOS, SIN_BANCO, money, ymd, addDaysYmd, daysBetweenYmd,
   movementYmd, publicMethods, resolveBankId, movementKind, movementBankId, cycleTotals, bankBalances, validatePlanilla, estadoPago, anuladoOReversa,
@@ -527,6 +528,7 @@ async function handleLibro(db, accion, body, identity, authUser, res) {
 // transferencias · anular/corregir con REVERSA (nunca se borra un movimiento confirmado) · auditoría detallada.
 const CXC = "cuentas_por_cobrar";
 const ACCIONES_CORRECCION = ["anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"];
+function carteraDe(docs) { let clientes = 0, vendedores = 0; for (const c of docs) { if (c.deudorTipo === "vendedor") vendedores += money(c.saldoPendiente); else clientes += money(c.saldoPendiente); } return { pendienteClientes: money(clientes), pendienteVendedores: money(vendedores), pendienteTotal: money(clientes + vendedores), cuentas: docs.length }; }
 async function resumenCartera(db) {
   const snap = await db.collection(CXC).where("estado", "in", ["pendiente", "parcial"]).get().catch(() => ({ docs: [] }));
   let clientes = 0, vendedores = 0, n = 0;
@@ -614,13 +616,92 @@ async function handleCentro(db, accion, body, identity, authUser, res) {
   }
 
   // ---- cartera por cobrar (filtrable por cliente / vendedor)
+  // R210 · (orden 28/11/2026, punto 05) UNA sola lectura: el resumen de cartera sale de los mismos documentos
+  // (antes se leía la colección 2 veces); filtro por tipo de deudor y texto en el servidor; paginado; tiempos medidos.
   if (accion === "listar_pendientes") {
-    let rows = (await db.collection(CXC).where("estado", "in", body.incluirPagadas ? ["pendiente", "parcial", "pagado"] : ["pendiente", "parcial"]).get()).docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    const t0 = Date.now();
+    const estados = body.incluirPagadas ? ["pendiente", "parcial", "pagado"] : ["pendiente", "parcial"];
+    const todas = (await db.collection(CXC).where("estado", "in", estados).get()).docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    const tLectura = Date.now() - t0;
+    const cartera = carteraDe(todas.filter((c) => c.estado === "pendiente" || c.estado === "parcial"));
+    let rows = todas;
     if (["cliente", "vendedor"].includes(body.deudorTipo)) rows = rows.filter((c) => c.deudorTipo === body.deudorTipo);
     const t = String(body.texto || "").toLowerCase().trim();
     if (t) rows = rows.filter((c) => [c.deudorNombre, c.clienteNombre, c.plataforma].join(" ").toLowerCase().includes(t));
     rows.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    return res.status(200).json({ ok: true, accion, cuentas: rows.slice(0, 300), cartera: await resumenCartera(db) });
+    const porPagina = Math.min(Math.max(Number(body.porPagina) || 300, 20), 300), pagina = Math.max(1, Math.floor(Number(body.pagina) || 1));
+    const total = rows.length, importeFiltro = money(rows.reduce((a, c) => a + money(c.saldoPendiente), 0));
+    console.log(JSON.stringify({ evt: "fin_timing", accion, ms: Date.now() - t0, lecturaMs: tLectura, docs: todas.length, filtro: body.deudorTipo || "todos", uid: authUser.uid }));
+    return res.status(200).json({ ok: true, accion, cuentas: rows.slice((pagina - 1) * porPagina, pagina * porPagina), total, pagina, paginas: Math.max(1, Math.ceil(total / porPagina)), importeFiltro, cartera, ms: Date.now() - t0 });
+  }
+
+  // ---- R210 · vista previa de obligaciones (SOLO LECTURA): por deudor y período de origen, con posibles pagos ya
+  // registrados que no están vinculados; y la regla del 50 % de Geisell en modo vista previa (no cambia saldos).
+  if (accion === "listar_obligaciones_previa") {
+    const t0 = Date.now();
+    const cuentas = rowsOf(await db.collection(CXC).where("estado", "in", ["pendiente", "parcial", "pagado"]).get());
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(cleanText(body.desde)) ? cleanText(body.desde) : "2026-09-01";
+    const movs = rowsOf(await movementsQuery(db, desde).get());
+    const previa = vistaPrevia(cuentas, movs, { deudor: cleanText(body.deudor) });
+    const geisell = identity.admin || identity.role === "sublicuentas" ? previaGeisell(cuentas) : null;
+    console.log(JSON.stringify({ evt: "fin_timing", accion, ms: Date.now() - t0, docs: cuentas.length + movs.length, uid: authUser.uid }));
+    return res.status(200).json({ ok: true, accion, ...previa, geisell, soloLectura: true });
+  }
+
+  // ---- R210 · pago masivo: varias obligaciones, UNA fecha real de pago, transacción e idempotencia.
+  //   modo "nuevo": crea UN ingreso en el banco elegido y lo reparte (más antigua primero).
+  //   modo "vincular": el pago YA está en movimientos → se concilia con ese movimiento, NO se crea otro ingreso.
+  if (accion === "registrar_pago_masivo") {
+    if (!(identity.admin || identity.role === "sublicuentas" || identity.role === "relojes")) return res.status(403).json({ ok: false, error: "Solo administración registra pagos masivos." });
+    // fecha histórica autorizada (solo administración): la real del pago, hasta 180 días atrás, nunca futura
+    const fechaPago = cleanText(body.fechaPago), fp = fechaHistoricaValida(fechaPago, hoy);
+    if (fp) return res.status(200).json({ ok: false, error: fp });
+    const ids = [...new Set((Array.isArray(body.cuentas) ? body.cuentas : []).map((x) => cleanText(x)).filter(Boolean))];
+    if (!ids.length || ids.length > 100) return res.status(200).json({ ok: false, error: "Elija de 1 a 100 obligaciones." });
+    const vincular = cleanText(body.vincularMovimientoId), banco = vincular ? null : bancoDe(body.bancoId);
+    if (!vincular && !banco) return res.status(200).json({ ok: false, error: "Elija el banco donde entró el pago (o vincule el pago ya registrado)." });
+    const opId = libroOpDocId("pagomasivo", body, authUser.uid);
+    if (!opId) return res.status(200).json({ ok: false, error: "Falta operationId (actualice la app)." });
+    const ref = fmov(opId), registro = isoNow(), referencia = cleanText(body.referencia).slice(0, 80), obs = cleanText(body.observaciones).slice(0, 300);
+    const r = await run(async (tx) => {
+      const ya = await tx.get(ref); if (ya.exists) return { duplicado: true, movimientoId: ref.id, resultados: ya.data().aplicaciones || [] };
+      const cs = await Promise.all(ids.map((id) => tx.get(db.collection(CXC).doc(id))));
+      const cuentas = cs.map((x) => (x.exists ? { id: x.id, ...(x.data() || {}) } : null));
+      if (cuentas.some((c) => !c)) throw userErr("Una de las obligaciones ya no existe. Actualice la lista.");
+      if (cuentas.some((c) => !(money(c.saldoPendiente) > 0) || !["pendiente", "parcial"].includes(c.estado))) throw userErr("Una de las obligaciones ya está pagada. Actualice la lista.");
+      const deudores = new Set(cuentas.map((c) => `${c.deudorTipo}|${String(c.deudorId || c.deudorNombre).toLowerCase()}`));
+      if (deudores.size > 1) throw userErr("Elija obligaciones de un solo cliente o vendedor por pago.");
+      let mov = null;
+      if (vincular) {
+        const ms = await tx.get(fmov(vincular)); mov = ms.exists ? { id: ms.id, ...(ms.data() || {}) } : null;
+        if (!mov || mov.tipo !== "ingreso" || anuladoOReversa(mov)) throw userErr("Ese movimiento no es un ingreso válido.");
+        if (mov.cuentaId || (mov.conciliaCuentas || []).length) throw userErr("Ese pago ya está vinculado a otra obligación.");
+      }
+      const monto = vincular ? money(body.monto || mov.monto) : money(body.monto);
+      if (vincular && monto > money(mov.monto) + 0.001) throw userErr(`El importe (L${monto}) es mayor que el pago registrado (L${money(mov.monto)}).`);
+      const plan = planPago(cuentas, monto); if (!plan.ok) throw userErr(plan.error);
+      const libroSnap = await tx.get(libroRef(db)); const libro = libroFrom(libroSnap.exists ? libroSnap.data() : {});
+      const c0 = cuentas[0], hoy2 = hoy;
+      const aplicaciones = plan.detalle.filter((d) => d.aplica > 0);
+      if (vincular) {
+        tx.set(fmov(mov.id), { conciliaCuentas: aplicaciones.map((d) => d.cuentaId), conciliadoPor: identity.usuario, conciliadoAt: registro, conciliacionId: ref.id, updatedAt: registro }, { merge: true });
+        // registro administrativo SIN dinero (no suma a bancos): deja la trazabilidad del lote
+        tx.set(ref, { movimientoId: ref.id, tipo: "conciliacion", subtipo: "pago_masivo_vinculado", monto: 0, montoConciliado: monto, movimientoVinculado: mov.id, deudorTipo: c0.deudorTipo, deudorNombre: c0.deudorNombre || "", aplicaciones, fechaPagoEfectiva: fechaPago, registradoAt: registro, registradoPor: identity.usuario, referencia, observaciones: obs, operationId: cleanText(body.operationId), cicloId: libro.cicloId, sinEfectoBancario: true, createdAt: registro });
+      } else {
+        tx.set(ref, { ...baseMov(identity, authUser, body), movimientoId: ref.id, tipo: "ingreso", subtipo: c0.deudorTipo === "vendedor" ? "cobro_pendiente_vendedor" : "cobro_pendiente_cliente", pagoMasivo: true, monto, bancoId: banco.id, banco: banco.nombre, metodoPago: banco.nombre, cobradoPor: identity.usuario, deudorTipo: c0.deudorTipo, deudorNombre: c0.deudorNombre || "", conciliaCuentas: aplicaciones.map((d) => d.cuentaId), aplicaciones, periodosOrigen: [...new Set(aplicaciones.map((d) => d.periodo))], fechaPagoEfectiva: fechaPago, registradoAt: registro, referencia, observaciones: obs, cicloId: libro.cicloId, operationId: cleanText(body.operationId), ...canonicalFinanceDate(fechaPago, hoy2) });
+      }
+      for (const d of aplicaciones) {
+        const c = cuentas.find((x) => x.id === d.cuentaId);
+        tx.set(db.collection(CXC).doc(c.id), { saldoPendiente: d.queda, montoRecibidoPosterior: money((c.montoRecibidoPosterior || 0) + d.aplica), estado: d.queda <= 0 ? "pagado" : "parcial", periodoOrigen: d.periodo || periodoOrigen(c),
+          abonos: [...(c.abonos || []), { movimientoId: vincular ? mov.id : ref.id, loteId: ref.id, monto: d.aplica, bancoId: banco ? banco.id : (mov.bancoId || ""), banco: banco ? banco.nombre : (mov.banco || ""), fecha: fechaPago, fechaEfectiva: fechaPago, registradoAt: registro, por: identity.usuario, vinculado: !!vincular, referencia }], updatedAt: registro }, { merge: true });
+      }
+      auditar(tx, db, identity, { origen: body.origen, modulo: "cartera", accion: vincular ? "pago_masivo_vinculado" : "pago_masivo", targetType: "lote_pago", targetId: ref.id, movimientoId: vincular ? mov.id : ref.id, operationId: cleanText(body.operationId), monto,
+        before: { saldos: plan.detalle.map((d) => ({ cuentaId: d.cuentaId, saldo: d.antes })) }, after: { saldos: plan.detalle.map((d) => ({ cuentaId: d.cuentaId, saldo: d.queda })) },
+        detalle: `${c0.deudorNombre || ""} (${c0.deudorTipo}) · ${aplicaciones.length} obligación(es) · L${monto} · pago real ${fechaPago} · ${vincular ? "vinculado al movimiento " + mov.id + " (sin ingreso nuevo)" : banco.nombre}${referencia ? " · ref " + referencia : ""}`,
+        ...(vincular ? {} : { bancos: [{ bancoId: banco.id, monto, direccion: "entrada" }] }) });
+      return { duplicado: false, movimientoId: ref.id, vinculado: !!vincular, monto, parcial: plan.parcial, fechaPagoEfectiva: fechaPago, registradoAt: registro, resultados: plan.detalle };
+    });
+    return reply(r);
   }
 
   // ---- abono / cobro posterior (también después de un cierre: entra en su fecha real, el cierre no se toca)
@@ -902,7 +983,7 @@ export default async function handler(req, res) {
         costeoDeps: (dbx) => ({ R: { movementYmd, movementKind, money, anuladoOReversa, bankBalances }, normPlataformaKey, leerMovimientos: async (desde) => rowsOf(await movementsQuery(dbx, desde).get()) }) }); // R137
       if (handled !== null) return handled;
     }
-    if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
+    if (["registrar_operacion_pago", "listar_pagos_socios_sin_ficha", "socio_ficha_lista", "listar_pendientes", "listar_obligaciones_previa", "registrar_pago_masivo", "registrar_abono", "registrar_transferencia", "ajustar_fecha_movimiento", "anular_movimiento", "anular_pago_planilla", "corregir_pago_planilla", "corregir_movimiento"].includes(accion)) {
       const handled = await handleCentro(db, accion, body, identity, authUser, res);
       if (handled !== null) return handled;
     }

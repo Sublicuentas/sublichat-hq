@@ -42,6 +42,12 @@ async function leerSeg(db) { const s = await db.collection(C.SEG).get(); return 
 async function leerOps(db) { const s = await db.collection(C.OP).get(); return s.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })); }
 async function leerCfg(db) { try { const s = await db.collection(C.CFG).doc("general").get(); return { meta: { ...G.META_DEFECTO }, metasDiarias: { vencidos: 15, fidelizar: 10, potenciales: 5 }, ...(s.exists ? s.data() : {}) }; } catch (_) { return { meta: { ...G.META_DEFECTO }, metasDiarias: { vencidos: 15, fidelizar: 10, potenciales: 5 } }; } }
 
+// Meta del mes en curso si existe; si no, la última guardada (con su mes, para no aparentar otra cosa).
+// R210 · Un SOLO conteo por categoría (pestañas, tarjetas y lista salen de la misma foto de datos).
+export function conteosCategorias(fichas) { const c = (cat) => fichas.filter((f) => f.categorias.includes(cat) && !(cat === "potenciales" && f.estadoOportunidad !== "abierta")).length; return { vencidos: c("vencidos"), fidelizar: c("fidelizar"), potenciales: c("potenciales") }; }
+export function metaDelMes(cfg, hoy) { const mes = String(hoy).slice(0, 7); return { ...((cfg.metas && cfg.metas[mes]) || cfg.meta || G.META_DEFECTO) }; }
+export function conAvance(meta, actual) { const objetivo = Number(meta.objetivo) || 0; return { ...meta, actual, faltan: Math.max(0, objetivo - actual), pct: objetivo ? Math.round((actual / objetivo) * 1000) / 10 : null }; }
+
 async function todasLasFichas(db, { fresco = false } = {}) {
   const [b, seg, ops] = await Promise.all([leerBase(db, fresco), leerSeg(db), leerOps(db)]);
   const hoy = G.hoyHN();
@@ -53,7 +59,7 @@ async function todasLasFichas(db, { fresco = false } = {}) {
     if (f.estadoOportunidad === "abierta") { const cands = [o.clienteId, ...(porTel.get(f.telefono) || []).map((c) => c.id)].filter(Boolean);
       for (const cid of cands) { const v = (ventas.get(cid) || []).find((x) => x.subtipo === "compra_nueva" && x.fecha >= (G.ymdDe(o.creadoAt) || "")); if (v) { f.ventaSugerida = { ...v, clienteId: cid }; break; } } }
     return f; });
-  return { hoy, base: b, seg, fichas: [...fichas, ...opsF], ventas, porTel };
+  return { hoy, base: b, seg, fichas: [...fichas, ...opsF], ventas, porTel, datosAt: new Date(b.at).toISOString() };
 }
 async function asegurarFoto(db, hoy, clientes) {
   const ref = db.collection(C.SNAP).doc(hoy);
@@ -127,18 +133,19 @@ export async function handleComercial(db, user, b, res) {
       const eq = yo.reduce((a, r) => ({ enviados: a.enviados + r.enviados, ventas: a.ventas + r.ventas }), { enviados: 0, ventas: 0 });
       const nuevosHoy = new Set(); for (const [cid, v] of G.ventasPorCliente(bb.movs)) if (v[0] && v[0].subtipo === "compra_nueva" && v[0].fecha === hoy) nuevosHoy.add(cid);
       const mov = foto ? G.movimientosCartera(foto.activos || [], activos, nuevosHoy) : null;
-      const cnt = (cat) => fichas.filter((f) => f.categorias.includes(cat) && !(cat === "potenciales" && f.estadoOportunidad !== "abierta")).length;
+      const cc = conteosCategorias(fichas); const cnt = (cat) => cc[cat];
       const toca = (cat) => fichas.filter((f) => f.categorias.includes(cat) && f.ciclos[cat] && f.ciclos[cat].elegible && (!f.responsable || f.responsable === usuario)).length;
       const agenda = G.ORDEN_CAT.map((cat) => ({ cat, nombre: G.CATEGORIAS[cat].nombre, hora: G.CATEGORIAS[cat].hora, meta: cfg.metasDiarias[cat] ?? G.CATEGORIAS[cat].meta, pendientes: toca(cat), hechos: mio.porCat[cat] || 0 }));
       const metaDia = agenda.reduce((a, x) => a + Math.min(x.meta, x.pendientes + x.hechos), 0);
-      return ok({ hoy, usuario, nombreUsuario: G.USUARIOS[usuario] || usuario, esAdmin, meta: { ...cfg.meta, actual: activos.length }, conteos: { vencidos: cnt("vencidos"), fidelizar: cnt("fidelizar"), potenciales: cnt("potenciales"), activos: activos.length },
+      return ok({ datosAt: new Date(bb.at).toISOString(), hoy, usuario, nombreUsuario: G.USUARIOS[usuario] || usuario, esAdmin, meta: conAvance(metaDelMes(cfg, hoy), activos.length), conteos: { vencidos: cnt("vencidos"), fidelizar: cnt("fidelizar"), potenciales: cnt("potenciales"), activos: activos.length },
         agenda, hoyRend: { contactos: mio.enviados, metaNominal: agenda.reduce((a, x) => a + x.meta, 0), metaDisponible: metaDia, recuperados: mov ? mov.recuperados.length : null, nuevos: mov ? mov.nuevos.length : null, perdidos: mov ? mov.perdidos.length : null, ventas: mio.ventas, equipo: eq },
         fotoApertura: foto ? { fecha: foto.fecha, total: foto.total, creadoAt: foto.creadoAt } : null, desdeVerificable: G.DESDE_VERIFICABLE, estados: G.ESTADOS, categorias: G.CATEGORIAS, usuarios: G.USUARIOS });
     }
     // ---------------------------------------------------------------- LISTAS (Vencidos / Por fidelizar / Potenciales)
     if (accion === "lista") {
       const cat = G.CATEGORIAS[b.cat] ? b.cat : "vencidos";
-      const { hoy, fichas } = await todasLasFichas(db);
+      const { hoy, fichas, datosAt } = await todasLasFichas(db);
+      const conteosCat = conteosCategorias(fichas);
       let filas = fichas.filter((f) => f.categorias.includes(cat)).map((f) => filaLista(f, cat));
       if (cat === "potenciales" && b.filtro !== "cerrados" && b.filtro !== "todas") filas = filas.filter((f) => f.estadoOportunidad === "abierta");
       const conteo = { todos: filas.length, hoy: filas.filter((f) => f.ciclo.elegible).length, programados: filas.filter((f) => f.ciclo.estado === "programado").length, mios: filas.filter((f) => f.responsable === usuario).length,
@@ -147,7 +154,7 @@ export async function handleComercial(db, user, b, res) {
       const vendedores = [...new Set(filas.flatMap((f) => f.vendedores))].filter(Boolean).sort();
       filas = filtrar(filas, b, usuario).sort(ORDEN);
       const por = Math.min(Math.max(Number(b.porPagina) || 30, 10), 3000); const pag = Math.max(1, Number(b.pagina) || 1);
-      return ok({ hoy, cat, total: filas.length, pagina: pag, paginas: Math.max(1, Math.ceil(filas.length / por)), filas: filas.slice((pag - 1) * por, pag * por), conteo, plataformas, vendedores, usuario, esAdmin });
+      return ok({ hoy, cat, total: filas.length, pagina: pag, paginas: Math.max(1, Math.ceil(filas.length / por)), filas: filas.slice((pag - 1) * por, pag * por), conteo, conteosCat, datosAt, plataformas, vendedores, usuario, esAdmin });
     }
     // ---------------------------------------------------------------- FICHA + historial
     if (accion === "ficha") {
@@ -327,12 +334,30 @@ export async function handleComercial(db, user, b, res) {
       return ok(r);
     }
     // ---------------------------------------------------------------- META y REPORTES
+    // R210 · La meta es UNA configuración global de la empresa (gc_config/general), no del dispositivo.
+    // Solo administración la cambia (también vía API); se guarda el histórico de quién cambió qué y cuándo.
+    if (accion === "meta_historial") {
+      const cfg = await leerCfg(db);
+      return ok({ meta: metaDelMes(cfg, G.hoyHN()), historial: (cfg.historialMetas || []).slice(-20).reverse(), puedeEditar: esAdmin });
+    }
     if (accion === "meta_guardar") {
-      if (!esAdmin) throw errU("Solo Sublicuentas cambia la meta.");
-      const ref = Number(b.referencia), obj = Number(b.objetivo); if (!(obj > 0)) throw errU("Escriba la meta de clientes.");
-      const md = {}; for (const c of G.ORDEN_CAT) { const v = Number((b.metasDiarias || {})[c]); if (v >= 0 && v <= 200) md[c] = v; }
-      await db.collection(C.CFG).doc("general").set({ meta: { referencia: ref > 0 ? ref : null, objetivo: obj, mes: txt(b.mes, 7) }, ...(Object.keys(md).length ? { metasDiarias: md } : {}), actualizadoAt: ahora, actualizadoPor: usuario }, { merge: true });
-      return ok({});
+      if (!esAdmin) throw errU("Solo administración cambia la meta comercial.");
+      const obj = Number(b.objetivo), refN = b.referencia === "" || b.referencia == null ? null : Number(b.referencia), mes = String(b.mes || "");
+      if (!Number.isInteger(obj) || obj <= 0 || obj > 1000000) throw errU("La meta debe ser un número entero positivo.");
+      if (refN != null && (!Number.isInteger(refN) || refN < 0)) throw errU("La referencia debe ser un número entero (o déjela vacía).");
+      if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(mes)) throw errU("Elija el mes y el año de la meta.");
+      const md = {}; for (const c of G.ORDEN_CAT) { const v = Number((b.metasDiarias || {})[c]); if (Number.isInteger(v) && v >= 0 && v <= 200) md[c] = v; }
+      const ref = db.collection(C.CFG).doc("general");
+      const guardada = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref); const d = s.exists ? s.data() : {};
+        const antes = (d.metas && d.metas[mes]) || (d.meta && d.meta.mes === mes ? d.meta : null) || null;
+        const nueva = { objetivo: obj, referencia: refN, mes };
+        const metas = { ...(d.metas || {}), [mes]: nueva };
+        const hist = [...(d.historialMetas || []), { at: ahora, por: usuario, mes, antes: antes ? { objetivo: antes.objetivo || null, referencia: antes.referencia ?? null } : null, despues: { objetivo: obj, referencia: refN }, ...(Object.keys(md).length ? { metasDiarias: md } : {}) }].slice(-100);
+        tx.set(ref, { meta: nueva, metas, historialMetas: hist, ...(Object.keys(md).length ? { metasDiarias: md } : {}), actualizadoAt: ahora, actualizadoPor: usuario }, { merge: true });
+        return nueva;
+      });
+      return ok({ meta: guardada });
     }
     if (accion === "reporte") {
       const desde = G.ymdDe(b.desde), hasta = G.ymdDe(b.hasta); if (!desde || !hasta || desde > hasta) throw errU("Elija un período válido.");
@@ -363,7 +388,7 @@ export async function handleComercial(db, user, b, res) {
       const contactados = new Set(evs.filter((e) => e.etapa === "enviado").map((e) => e.sujeto));
       const totC = crecimiento.reduce((a, x) => ({ nuevos: a.nuevos + x.nuevos, recuperados: a.recuperados + x.recuperados, perdidos: a.perdidos + x.perdidos }), { nuevos: 0, recuperados: 0, perdidos: 0 });
       return ok({ generadoAt: ahora, zona: "America/Tegucigalpa", moneda: "HNL", filtros: { desde, hasta, usuario: filtroU, plataforma: filtroP, categoria: filtroC }, hoy,
-        resumen: { meta: { ...cfg.meta, actual: G.activosDe(bb.clientes, hoy).length }, ...totC, neto: totC.nuevos + totC.recuperados - totC.perdidos, contactosConfirmados: evs.filter((e) => e.etapa === "enviado").length, personasContactadas: contactados.size,
+        resumen: { meta: conAvance(metaDelMes(cfg, hoy), G.activosDe(bb.clientes, hoy).length), ...totC, neto: totC.nuevos + totC.recuperados - totC.perdidos, contactosConfirmados: evs.filter((e) => e.etapa === "enviado").length, personasContactadas: contactados.size,
           respondieron: new Set(evs.filter((e) => e.resultado && G.ESTADOS[e.resultado] && G.ESTADOS[e.resultado].respondio).map((e) => e.sujeto)).size, ventasVinculadas: ventasVinc.size, ingresosVinculados: [...ventasVinc.values()].reduce((a, v) => a + v.monto, 0),
           conversion: contactados.size ? Math.round((new Set([...ventasVinc.values()].map((v) => v.sujeto)).size / contactados.size) * 1000) / 10 : null, denominador: contactados.size, fotosDisponibles: fotos.length, desdeVerificable: G.DESDE_VERIFICABLE },
         vencidos: filtroC && filtroC !== "vencidos" ? [] : lista("vencidos"), fidelizar: filtroC && filtroC !== "fidelizar" ? [] : lista("fidelizar"), potenciales: filtroC && filtroC !== "potenciales" ? [] : lista("potenciales"),
