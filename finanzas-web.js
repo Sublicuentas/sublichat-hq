@@ -9,7 +9,7 @@
   'use strict';
   if (window.SublichatFinanzas) return;
   var HOST_ID = 'rbac-finanzas';
-  var TABS = [['resumen', 'Resumen', 'bar'], ['proveedores', 'Proveedores', 'users'], ['compras', 'Compras', 'cart'], ['ganancias', 'Ganancias', 'trend'], ['reportes', 'Reportes', 'doc']];
+  var TABS = [['resumen', 'Resumen', 'bar'], ['proveedores', 'Proveedores', 'users'], ['compras', 'Compras', 'cart'], ['ganancias', 'Ganancias', 'trend'], ['pendientes', 'Pendientes', 'coins'], ['reportes', 'Reportes', 'doc']]; // R211 · Pendientes (cobrar y liquidar)
   var I = {
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', // R205
     bar: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16v-4"/><path d="M12 16V8"/><path d="M17 16v-7"/>',
@@ -91,9 +91,10 @@
     var cuerpo;
     if (st.error && !d) cuerpo = '<div class="fz-card fz-vacio"><b>No se pudo abrir Finanzas</b><span>' + esc(st.error) + '</span><button type="button" class="fz-btn" data-fz="reintentar">Reintentar</button></div>';
     else if (!d) cuerpo = '<div class="fz-card fz-vacio"><span class="fz-spin"></span><b>Cargando Finanzas…</b></div>';
-    else cuerpo = ({ resumen: vResumen, proveedores: vProveedores, compras: vCompras, ganancias: vGanancias, reportes: vReportes }[st.tab] || vGanancias)(d);
+    else cuerpo = ({ resumen: vResumen, proveedores: vProveedores, compras: vCompras, ganancias: vGanancias, reportes: vReportes, pendientes: function () { return '<div id="fzPend"></div>'; } }[st.tab] || vGanancias)(d);
     var fallas = d && d.fallas && d.fallas.length ? '<div class="fz-err">Algunas partes no cargaron: ' + d.fallas.map(function (f) { return esc(f.seccion.replace(/_/g, ' ')); }).join(', ') + '. El resto está al día. <button type="button" class="fz-link" data-fz="reintentar">Reintentar</button></div>' : '';
     h.innerHTML = '<div class="fz">' + cab + (st.cargando && d ? '<div class="fz-cargando">Actualizando…</div>' : '') + fallas + cuerpo + '</div>';
+    if (d && st.tab === 'pendientes') { if (window.SublichatPendientesWeb) window.SublichatPendientesWeb.montar(document.getElementById('fzPend'), api); else document.getElementById('fzPend').innerHTML = '<div class="fz-card fz-vacio"><b>Recargue la página para ver Pendientes.</b></div>'; } // R211
     if (d && (st.tab === 'ganancias' || st.tab === 'resumen')) dibujarChart(d);
     if (d && st.tab === 'resumen') { var gg = st.gan[ganClave()]; if (gg && gg.graficos) dibujarGraficos(gg); } // R200b
     if (d && st.tab === 'compras' && st.sub === 'vip' && !st.vip.res) cargarVip();
