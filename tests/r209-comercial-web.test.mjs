@@ -19,3 +19,12 @@ test('pantalla: buscador, filtros, checklist, WhatsApp manual confirmado y Excel
   assert.doesNotMatch(c, /gradient/i);
   assert.doesNotMatch(w, /Naara|Libni/);
 });
+
+test('R209b · pantalla igual a los renders: tarjetas, pie «Iniciar seguimiento», agenda/rendimiento y generador', () => {
+  const js = R('comercial-web.js'), css = R('comercial-web.css');
+  for (const t of ['gc-mini', 'Agenda comercial de hoy', 'Iniciar seguimiento', 'Pendientes hoy', 'Generador de mensajes', 'Historial reciente', 'Enviar por WhatsApp', 'Última renovación: ', 'Más filtros y Excel']) assert.ok(js.includes(t), t);
+  assert.match(js, /\{\{\s\*precio\\s\*\\\}\\\}|\\\{\\\{\\s\*precio/);
+  assert.match(css, /\.gc-tarjetas\{display:flex\}/);
+  assert.ok(!/linear-gradient|radial-gradient/.test(css.split('R209b')[1] || ''), 'sin degradados');
+  assert.ok(!/Naara|Libni/.test(js));
+});

@@ -199,3 +199,18 @@ test('utilidades: teléfono internacional, saludo verificado y foto diaria', () 
   const m = G.movimientosCartera(['a', 'b', 'c'], ['b', 'c', 'd', 'e'], new Set(['e']));
   assert.deepEqual([m.nuevos, m.recuperados, m.perdidos, m.neto], [['e'], ['d'], ['a'], 1]);
 });
+
+test('R209b · tarjetas: última venta (fecha y tipo) y historial reciente de plantillas confirmadas', async () => {
+  const db = await nueva();
+  const l = await call(db, U.sub, { accion: 'lista', cat: 'vencidos', porPagina: 50 });
+  const b = l.filas.find((f) => f.nombre === 'Beto');
+  assert.deepEqual(b.ultimaVenta, { fecha: d(-40), subtipo: 'compra_nueva' });
+  await call(db, U.sub, { accion: 'plantillas_importar' });
+  const r1 = await call(db, U.rel, { accion: 'evento', key: b.key, categoria: 'vencidos', etapa: 'enviado', texto: 'Hola', plantillaId: 'GC-VENCIDOS-007', resultado: 'interesado' });
+  assert.ok(r1.ok, JSON.stringify(r1));
+  const p = await call(db, U.sub, { accion: 'plantillas' });
+  assert.equal(p.historial.length, 1);
+  assert.equal(p.historial[0].plantillaId, 'GC-VENCIDOS-007');
+  assert.equal(p.historial[0].resultado, 'interesado');
+  assert.ok(!/Naara|Libni/.test(JSON.stringify(p.historial)));
+});
