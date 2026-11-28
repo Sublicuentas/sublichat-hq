@@ -176,6 +176,9 @@
     },
     "api/codigos.js": {
       "maxDuration": 60
+    },
+    "api/comercial.js": {
+      "maxDuration": 60
     }
   }
 }

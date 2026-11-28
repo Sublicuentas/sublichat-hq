@@ -7698,6 +7698,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     pelis:['🎬','Pelis'], partidos:['⚽','Partidos'], chat:['🤖','Subli'], perfil:['🧑‍💼','Perfil'],
     permisos:['🛡️','Usuarios y permisos'], // R162 · solo Sublicuentas
     'sala-juntas':['🎥','Sala de Juntas'], // R179 · módulo de Permisos (fundadoras por defecto)
+    comercial:['📣','Gestión comercial'], // R209 · Sublicuentas, Relojes y Geisell por defecto
     finanzas:['💹','Finanzas'] // R196 · módulo «finanzas-panel» (solo Sublicuentas por defecto)
   };
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
@@ -7732,7 +7733,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
   // R162 · Módulos por usuario que define Sublicuentas (api/permisos.js). Si el servidor ya respondió para este
   // usuario, manda esa lista; si no (sin conexión o primera carga), quedan las reglas de siempre.
   const PERM_KEY='sublichat_permisos_v1';
-  const NAV_ORDEN=['inicio','clientes','agenda','control-cuentas','portal-cliente','catalogo-relojes','sala-juntas','finanzas','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
+  const NAV_ORDEN=['inicio','clientes','agenda','comercial','control-cuentas','portal-cliente','catalogo-relojes','sala-juntas','finanzas','sorteos','tickets','revendedores','importar','inventario','egresos','cierre','actividad','auditoria','crm-master','estadisticas','permisos','objetivos','chat','pelis','partidos','perfil'];
   let permisosSrv=null, permisosPidiendo=false, permisosAt=0;
   function claveActual(){const u=norm(currentUser());return u==='geissel'?'geisell':u;}
   function permisosVigentes(){
@@ -7770,6 +7771,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     const pv=permisosVigentes();
     if(screen==='finanzas')return pv?pv.pantallas.includes('finanzas'):isSublicuentasAccount(); // R196 · el servidor lo vuelve a validar
     if(screen==='sala-juntas')return pv?pv.pantallas.includes('sala-juntas'):esFundadoraSala(); // R179 · módulo seleccionable en Permisos (el servidor lo vuelve a validar)
+    if(screen==='comercial')return pv?pv.pantallas.includes('comercial'):esFundadoraSala(); // R209 · Gestión comercial (el servidor lo vuelve a validar)
     if(pv)return pv.pantallas.includes(screen);
     return canHoy(screen);
   }
@@ -8109,6 +8111,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     ensureScreen('estadisticas','Métricas y rendimiento','Resumen por plataforma, vendedor y cartera.','');
     ensureScreen('sala-juntas','Sala de Juntas','SubliStudio 3D · Reuniones, convocatorias y acuerdos del equipo','');
     ensureScreen('finanzas','Finanzas','Ganancias, proveedores, compras y reportes · no modifica Control Maestro','');
+    ensureScreen('comercial','Gestión comercial','Vencidos, por fidelizar y potenciales · seguimiento, mensajes y reportes','');
     ensureScreen('permisos','Usuarios y permisos','Sublicuentas define qué módulos tiene cada usuario. Sublicuentas siempre tiene todos.','');
     ensureScreen('objetivos','Objetivos y metas','Módulo nuevo: metas de ventas diarias, semanales y mensuales con progreso en vivo. Las metas se guardan en este navegador y las puede editar Relojes, Sublicuentas o Magdiel.','');
   }
@@ -8121,7 +8124,7 @@ _No se puede usar en dos dispositivos al mismo tiempo._
     document.body.classList.toggle('role-auditor',role==='auditor');
     // El menú usa el mismo permiso que abre el módulo para incluir a Geisell en Control Maestro.
     const pv=permisosVigentes();
-    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'sala-juntas','finanzas','permisos'].filter(can); // R162 · R167 · R196
+    const screens=pv?NAV_ORDEN.filter(can):[...(ROLE_NAV[role]||ROLE_NAV.admin),'comercial','sala-juntas','finanzas','permisos'].filter(can); // R162 · R167 · R196 · R209
     setTimeout(()=>cargarPermisos(false),0);
     try{window.dispatchEvent(new CustomEvent('sublichat:nav',{detail:{screens:screens.slice(),role}}));}catch(_){}
     nav.innerHTML=screens.map((s,i)=>{const meta=NAV_META[s]||['•',s];const label=(s==='portal-cliente'&&role==='finanzas')?'Promociones':((s==='tickets'&&['admin','geisell_admin'].includes(role))?'Tickets y Avisos':((s==='importar'&&role==='admin')?'Mesas de Trabajo':((s==='importar'&&role==='auditor')?'Auditoría':(meta[1]||s))));return `<button class="nav-btn ${i===0?'active':''}" data-screen="${s}"><span class="nico">${meta[0]||'•'}</span><span>${label}</span></button>`;}).join('');

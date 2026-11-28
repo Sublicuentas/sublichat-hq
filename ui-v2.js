@@ -18,13 +18,13 @@
 
   // Mapa de navegación (guía p. 7). Los grupos son visuales: cada destino abre su pantalla de siempre.
   var NAV = [
-    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'sala-juntas' }, { s: 'finanzas' }, // R199c · Catálogo (proyecto Relojes) fuera del menú por decisión del dueño; su pantalla y datos siguen intactos
+    { s: 'inicio' }, { s: 'clientes' }, { s: 'agenda' }, { s: 'comercial' }, { s: 'control-cuentas' }, { s: 'portal-cliente' }, { s: 'sala-juntas' }, { s: 'finanzas' }, // R199c · Catálogo (proyecto Relojes) fuera del menú por decisión del dueño; su pantalla y datos siguen intactos
     { g: 'Operación', items: ['importar', 'inventario', 'egresos', 'cierre'] },
     { g: 'Supervisión', items: ['actividad', 'auditoria', 'crm-master', 'estadisticas', 'permisos'] },
     { g: 'Más', items: ['sorteos', 'tickets', 'revendedores', 'chat', 'objetivos', 'pelis', 'partidos'] }
   ];
   var NOMBRE = {
-    inicio: 'Inicio', clientes: 'Clientes', agenda: 'Renovaciones', 'control-cuentas': 'Control Maestro', 'portal-cliente': 'Portal Cliente',
+    inicio: 'Inicio', clientes: 'Clientes', agenda: 'Renovaciones', comercial: 'Gestión comercial', 'control-cuentas': 'Control Maestro', 'portal-cliente': 'Portal Cliente',
     'catalogo-relojes': 'Catálogo', 'sala-juntas': 'Sala de Juntas', finanzas: 'Finanzas', sorteos: 'Sorteos', tickets: 'Tickets / Avisos', revendedores: 'Panel de Socios', perfil: 'Mi perfil',
     importar: 'Mesas de trabajo', inventario: 'Bodega', egresos: 'Egresos', cierre: 'Cierre', actividad: 'Actividad', auditoria: 'Auditoría',
     'crm-master': 'CRM Master', estadisticas: 'Métricas', permisos: 'Usuarios y permisos', objetivos: 'Objetivos', chat: 'Subli', pelis: 'Pelis', partidos: 'Partidos'
@@ -33,7 +33,7 @@
     importar: 'Documentos y flujo diario', inventario: 'Cuentas y cupos', egresos: 'Gastos del periodo', cierre: 'Cierre de caja',
     actividad: 'Bitácora del sistema', auditoria: 'Cuadre y revisiones', 'crm-master': 'Base maestra de clientes', estadisticas: 'Indicadores por periodo',
     permisos: 'Módulos por usuario', sorteos: 'Campañas y premios', tickets: 'Soporte interno y avisos', revendedores: 'Socios y entregas',
-    chat: 'Asistente', objetivos: 'Metas diarias, semanales y mensuales', pelis: 'Estrenos', partidos: 'Agenda deportiva'
+    comercial: 'Vencidos, fidelizar y potenciales', chat: 'Asistente', objetivos: 'Metas diarias, semanales y mensuales', pelis: 'Estrenos', partidos: 'Agenda deportiva'
   };
   var P = { // íconos de línea 24x24 (estilo Lucide, licencia ISC), mismo trazo en todo el menú
     inicio: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -61,6 +61,7 @@
     partidos: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
     'sala-juntas': '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
     finanzas: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>', // R196
+    comercial: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', // R209 · megáfono
     menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>', buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     campana: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
     mas: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
