@@ -7,7 +7,7 @@
   'use strict';
   var HOST_ID = 'rbac-comercial';
   var IMG = function (k) { return '/assets/comercial/' + k + '.webp'; };
-  var CAT = { vencidos: { n: 'Clientes vencidos', c: 'Recuperar renovaciones', ico: 'vencidos', tono: 'r' }, fidelizar: { n: 'Clientes por fidelizar', c: 'Convertir en recurrentes', ico: 'fidelizar', tono: 'a' }, potenciales: { n: 'Clientes potenciales', c: 'Cotizaciones pendientes', ico: 'potenciales', tono: 'y' } };
+  var CAT = { vencidos: { n: 'Clientes vencidos', c: 'Recuperar renovaciones', ico: 'vencidos', tono: 'y' }, fidelizar: { n: 'Clientes por fidelizar', c: 'Convertir en recurrentes', ico: 'fidelizar', tono: 'a' }, potenciales: { n: 'Clientes potenciales', c: 'Cotizaciones pendientes', ico: 'potenciales', tono: 'l' } };
   var ORD = ['vencidos', 'fidelizar', 'potenciales'];
   var USU = { sublicuentas: 'Sublicuentas', relojes: 'Relojes', geisell: 'Geisell' };
   var CICLO = { toca: ['Toca hoy', 'r'], programado: ['Programado', 'a'], vigente: ['Aún vigente', 'v'], cerrado: ['Cerrado', 'g'], revision: ['Revisión manual', 'y'], bloqueado: ['No contactar', 'g'], no_verificable: ['No verificable', 'y'] };
@@ -35,15 +35,18 @@
   function pintar() {
     var h = host(); if (!h) return;
     var tabs = [['panel', 'Panel'], ['vencidos', 'Vencidos'], ['fidelizar', 'Por fidelizar'], ['potenciales', 'Potenciales'], ['biblioteca', 'Biblioteca de mensajes'], ['reportes', 'Reportes']];
-    var actual = st.vista === 'lista' ? st.cat : st.vista;
+    var actual = st.vista === 'lista' ? st.cat : (st.vista === 'agenda' || st.vista === 'rendimiento') ? 'panel' : st.vista;
     h.innerHTML = '<div class="gc">' +
-      '<div class="gc-head"><img class="gc-head-ico" src="' + IMG('megafono') + '" alt=""><div><h1>Gestión comercial</h1><p>Crecimiento y fidelización · ' + esc((st.panel && st.panel.nombreUsuario) || '') + '</p></div><img class="gc-bot" src="/assets/sublirobot-96.webp" alt="Sublirobot"></div>' +
+      (st.vista === 'lista' || st.vista === 'biblioteca' ? '' : '<div class="gc-head"><img class="gc-head-ico" src="' + IMG('megafono') + '" alt=""><span class="gc-div"></span><div><h1>Gestión comercial</h1><p>Crecimiento y fidelización · ' + esc((st.panel && st.panel.nombreUsuario) || '') + '</p></div><img class="gc-bot" src="' + IMG('robot') + '" alt="Sublirobot"></div>') +
       '<nav class="gc-tabs" role="tablist">' + tabs.map(function (t) { var n = st.panel && st.panel.conteos && st.panel.conteos[t[0]]; return '<button type="button" role="tab" aria-selected="' + (actual === t[0]) + '" class="' + (actual === t[0] ? 'on' : '') + '" data-gc-ir="' + t[0] + '">' + esc(t[1]) + (n != null ? ' <span>' + n + '</span>' : '') + '</button>'; }).join('') + '</nav>' +
       '<div class="gc-cuerpo">' + cuerpo() + '</div></div>';
+    var tb = h.querySelector('.gc-tabs'), on = tb && tb.querySelector('.on'); if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = Math.max(0, on.offsetLeft - tb.offsetLeft - 16);
   }
   function cuerpo() {
     if (st.error) return '<div class="gc-vacio mal">' + esc(st.error) + ' <button type="button" class="gc-btn sec sm" data-gc="recargar">Reintentar</button></div>';
     if (st.vista === 'panel') return vPanel();
+    if (st.vista === 'agenda') return vAgenda();
+    if (st.vista === 'rendimiento') return vRendimiento();
     if (st.vista === 'lista') return vLista();
     if (st.vista === 'biblioteca') return vBiblioteca();
     if (st.vista === 'reportes') return vReportes();
@@ -51,49 +54,71 @@
   }
   function cargando() { return '<div class="gc-vacio"><span class="gc-spin"></span> Cargando…</div>'; }
 
-  // ------------------------------------------------------------------------------------------------ PANEL
+  // ------------------------------------------------------------------------------------------------ PANEL (render 02)
+  function seguimientosHoy(p) { return p.agenda.reduce(function (a, x) { return a + x.pendientes; }, 0); }
+  function tareasHoy(p) { return p.agenda.filter(function (x) { var l = Math.min(x.meta, x.pendientes + x.hechos); return l > 0 && x.hechos < l; }).length; }
   function vPanel() {
     var p = st.panel; if (!p) return cargando();
     var m = p.meta || {}, pct = m.objetivo ? Math.min(100, Math.round((m.actual / m.objetivo) * 100)) : 0, r = p.hoyRend || {};
-    return '<section class="gc-meta"><img src="' + IMG('diana') + '" alt=""><div class="gc-meta-t"><b>Meta ' + esc(mesNombre(m.mes)) + '</b><div class="gc-meta-n"><strong>' + m.actual + '</strong> / ' + (m.objetivo || '—') + ' clientes vigentes</div><div class="gc-bar"><i style="width:' + pct + '%"></i></div><small>' + (m.referencia ? 'Referencia ' + m.referencia + ' · ' : '') + 'Faltan ' + Math.max(0, (m.objetivo || 0) - m.actual) + ' · la meta no es un resultado: se cuenta con las fichas reales de hoy.</small></div>' + (p.esAdmin ? '<button type="button" class="gc-btn sec sm" data-gc="meta">Editar meta</button>' : '') + '</section>' +
-      '<section class="gc-cards">' + ORD.map(function (k) { return '<button type="button" class="gc-card ' + CAT[k].tono + '" data-gc-ir="' + k + '"><img src="' + IMG(CAT[k].ico) + '" alt=""><span><b>' + CAT[k].n + '</b><small>' + CAT[k].c + '</small></span><strong>' + (p.conteos[k] || 0) + '</strong></button>'; }).join('') + '</section>' +
-      '<section class="gc-box"><div class="gc-box-h"><h2>Agenda comercial de hoy</h2><button type="button" class="gc-ib" data-gc="recargar" title="Actualizar">↻</button></div><ul class="gc-agenda">' +
+    var avance = r.metaDisponible ? Math.min(100, Math.round((r.contactos / r.metaDisponible) * 100)) : null;
+    return '<section class="gc-meta"><img src="' + IMG('diana') + '" alt=""><span class="gc-div"></span><div class="gc-meta-t"><b>Meta ' + esc(mesNombre(m.mes)) + '</b><div class="gc-meta-n"><strong>' + m.actual + '</strong> / ' + (m.objetivo || '—') + ' clientes vigentes</div><div class="gc-bar"><i style="width:' + pct + '%"></i></div><small>' + (m.referencia ? 'Referencia ' + m.referencia + ' · ' : '') + 'Faltan ' + Math.max(0, (m.objetivo || 0) - m.actual) + ' · La meta no es un resultado: se cuenta con las fichas reales de hoy.</small>' + (p.esAdmin ? '<button type="button" class="gc-btn sec sm" data-gc="meta">Editar meta</button>' : '') + '</div></section>' +
+      '<section class="gc-cards">' + ORD.map(function (k) { return '<button type="button" class="gc-card ' + CAT[k].tono + '" data-gc-ir="' + k + '"><img src="' + IMG(CAT[k].ico) + '" alt=""><span class="gc-div"></span><span class="gc-card-t"><b>' + CAT[k].n + '</b><small>' + CAT[k].c + '</small></span><strong>' + (p.conteos[k] || 0) + '</strong></button>'; }).join('') + '</section>' +
+      '<section class="gc-dos">' +
+      '<button type="button" class="gc-mini a" data-gc-ir="agenda"><img src="' + IMG('agenda') + '" alt=""><span class="gc-div"></span><span class="gc-mini-t"><b>Agenda comercial de hoy</b><span><img src="' + IMG('m_cal') + '" alt=""><strong>' + seguimientosHoy(p) + '</strong> seguimientos</span><span><img src="' + IMG('m_campana') + '" alt=""><strong>' + tareasHoy(p) + '</strong> tareas</span></span><i class="gc-chev">›</i></button>' +
+      '<button type="button" class="gc-mini y" data-gc-ir="rendimiento"><img src="' + IMG('rendimiento') + '" alt=""><span class="gc-div"></span><span class="gc-mini-t"><b>Rendimiento</b><span><img src="' + IMG('m_personas') + '" alt=""><strong>' + (r.contactos || 0) + '</strong> avances</span><span><img src="' + IMG('m_diana') + '" alt=""><strong>' + (avance == null ? '—' : avance + '%') + '</strong> de la meta</span></span><i class="gc-chev">›</i></button>' +
+      '</section>';
+  }
+  function vAgenda() {
+    var p = st.panel; if (!p) return cargando();
+    return '<section class="gc-box"><div class="gc-box-h"><h2><img class="gc-h-ico" src="' + IMG('agenda') + '" alt="">Agenda comercial de hoy</h2><button type="button" class="gc-ib" data-gc="recargar" title="Actualizar">↻</button></div><ul class="gc-agenda">' +
       p.agenda.map(function (a) { var lista = Math.min(a.meta, a.pendientes + a.hechos), hecho = lista > 0 && a.hechos >= lista; return '<li class="' + CAT[a.cat].tono + (hecho ? ' hecho' : '') + '"><span class="gc-check" aria-label="' + (hecho ? 'Completado' : 'Pendiente') + '">' + (hecho ? '✓' : '') + '</span><time>' + hora12(a.hora) + '</time><b>' + esc(a.nombre) + '</b><span class="gc-ag-n">' + a.hechos + ' / ' + a.meta + ' contactos · ' + a.pendientes + ' por atender</span><button type="button" class="gc-btn sm" data-gc-ir="' + a.cat + '" data-gc-filtro="hoy">Abrir</button></li>'; }).join('') +
       '</ul><p class="gc-nota">Las metas dependen de los contactos elegibles: no obligan a escribir a quien no toca. 10–12 y 7 p.&nbsp;m. siguen en Cobros; el cierre de las 9 p.&nbsp;m. es provisional.</p></section>' +
-      '<section class="gc-accesos"><button type="button" class="gc-acc" data-gc-ir="biblioteca"><img src="' + IMG('mensajes') + '" alt=""><b>Biblioteca de mensajes</b></button><button type="button" class="gc-acc y" data-gc-ir="reportes"><img src="' + IMG('reportes') + '" alt=""><b>Reportes y Excel</b></button></section>' +
-      '<section class="gc-box"><h2>Rendimiento de hoy</h2><div class="gc-kpis">' +
+      '<button type="button" class="gc-btn sec" data-gc-ir="panel">‹ Volver al panel</button>';
+  }
+  function vRendimiento() {
+    var p = st.panel; if (!p) return cargando(); var r = p.hoyRend || {};
+    return '<section class="gc-box"><h2><img class="gc-h-ico" src="' + IMG('rendimiento') + '" alt="">Rendimiento de hoy</h2><div class="gc-kpis">' +
       kpi('contactos', 'Contactos confirmados', r.contactos + ' <small>/ ' + r.metaNominal + '</small>', 'Meta disponible hoy: ' + r.metaDisponible) +
       kpi('recuperados', 'Recuperados', r.recuperados == null ? '—' : r.recuperados, 'Desde la foto de apertura' + (p.fotoApertura ? ' (' + p.fotoApertura.total + ' vigentes)' : '')) +
       kpi('ventas', 'Ventas vinculadas', r.ventas, 'Equipo: ' + (r.equipo ? r.equipo.ventas : 0) + ' · contactos ' + (r.equipo ? r.equipo.enviados : 0)) +
-      '<div class="gc-kpi-mini"><span>Nuevos hoy <b>' + (r.nuevos == null ? '—' : r.nuevos) + '</b></span><span>Perdidos hoy <b>' + (r.perdidos == null ? '—' : r.perdidos) + '</b></span><span>Compras verificables desde <b>' + fecha(p.desdeVerificable) + '</b></span></div></div></section>';
+      '<div class="gc-kpi-mini"><span>Nuevos hoy <b>' + (r.nuevos == null ? '—' : r.nuevos) + '</b></span><span>Perdidos hoy <b>' + (r.perdidos == null ? '—' : r.perdidos) + '</b></span><span>Compras verificables desde <b>' + fecha(p.desdeVerificable) + '</b></span></div></div></section>' +
+      '<div class="gc-acc-row" style="justify-content:flex-start"><button type="button" class="gc-btn sec" data-gc-ir="panel">‹ Volver al panel</button><button type="button" class="gc-btn" data-gc-ir="reportes">Ver reportes y Excel</button></div>';
   }
   function kpi(ico, t, v, s) { return '<div class="gc-kpi"><img src="' + IMG(ico) + '" alt=""><div><small>' + esc(t) + '</small><b>' + v + '</b><em>' + esc(s) + '</em></div></div>'; }
   function hora12(h) { var p = String(h || '').split(':'), n = +p[0]; return (n % 12 || 12) + ':' + (p[1] || '00') + (n < 12 ? ' a. m.' : ' p. m.'); }
   function mesNombre(m) { var M = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']; var p = String(m || '').split('-'); return p.length === 2 ? M[+p[1] - 1] + ' ' + p[0] : ''; }
 
-  // ------------------------------------------------------------------------------------------------ LISTAS
+  // ------------------------------------------------------------------------------------------------ LISTAS (renders 03 y 04)
+  var DESC = { vencidos: 'Cualquier servicio vencido', fidelizar: 'Una sola compra verificable desde el 01/10/2026; el seguimiento empieza 7 días después de que termina.', potenciales: 'Cotizaron o pidieron datos de pago y aún no compran' };
   function vLista() {
     var r = st.lista, c = (r && r.conteo) || {}, cat = st.cat;
-    var chips = [['todos', 'Todos'], ['hoy', 'Toca hoy'], ['programados', 'Programados']].concat(cat === 'fidelizar' ? [['vigente', 'Aún vigentes']] : []).concat([['mios', 'Mis clientes'], ['sin_asignar', 'Sin asignar'], ['cerrados', 'Cerrados / revisión'], ['bloqueados', 'No contactar']]);
+    var chips = cat === 'vencidos' ? [['todos', 'Todos'], ['hoy', 'Hoy'], ['d3', '+3 días'], ['d15', '+15 días'], ['d30', '+30 días'], ['programados', 'Programados'], ['mios', 'Mis clientes'], ['sin_asignar', 'Sin asignar'], ['cerrados', 'Cerrados / revisión'], ['bloqueados', 'No contactar']]
+      : [['todos', 'Todos'], ['hoy', 'Toca hoy'], ['programados', 'Programados']].concat(cat === 'fidelizar' ? [['vigente', 'Aún vigentes']] : []).concat([['mios', 'Mis clientes'], ['sin_asignar', 'Sin asignar'], ['cerrados', 'Cerrados / revisión'], ['bloqueados', 'No contactar']]);
+    var chipOn = st.f.dias ? 'd' + st.f.dias : st.f.filtro;
     var sel = Object.keys(st.sel).filter(function (k) { return st.sel[k]; });
-    var h = '<section class="gc-lhead ' + CAT[cat].tono + '"><img src="' + IMG(cat === 'vencidos' ? 'cal_alerta' : CAT[cat].ico) + '" alt=""><div><b>' + (r ? r.total : '…') + (cat === 'potenciales' ? ' oportunidades' : ' clientes') + '</b><small>' + (cat === 'vencidos' ? 'Algún servicio vencido, o «No renovó» en los últimos 90 días sin nada vigente' : cat === 'fidelizar' ? 'Una sola compra verificable desde el ' + fecha((st.panel && st.panel.desdeVerificable) || '2026-10-01') + '; el seguimiento empieza 7 días después de que termina' : 'Cotizaron o pidieron datos de pago y aún no compran') + '</small></div>' + (cat === 'potenciales' ? '<button type="button" class="gc-btn" data-gc="nuevo-pot">+ Nuevo potencial</button>' : '') + '</section>' +
-      '<div class="gc-chips">' + chips.map(function (x) { return '<button type="button" class="' + (st.f.filtro === x[0] ? 'on' : '') + '" data-gc-filtro="' + x[0] + '">' + x[1] + (c[x[0]] != null ? ' <span>' + c[x[0]] + '</span>' : '') + '</button>'; }).join('') + '</div>' +
-      '<div class="gc-filtros"><label class="gc-busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" data-gc-f="q" value="' + esc(st.f.q) + '" placeholder="Buscar nombre, número o plataforma"></label>' +
-      sel_('plataforma', 'Plataforma', (r && r.plataformas || []).map(function (p) { return [p, p]; })) +
-      (cat !== 'potenciales' ? sel_('vendedor', 'Atendido por', (r && r.vendedores || []).map(function (v) { return [v, v]; })) : '') +
-      sel_('responsable', 'Responsable', [['_sin', 'Sin asignar']].concat(Object.keys(USU).map(function (k) { return [k, USU[k]]; }))) +
-      (cat === 'vencidos' ? sel_('dias', 'Días vencido', [['3', '+3 días'], ['15', '+15 días'], ['30', '+30 días'], ['90', '+90 días']]) : '') +
-      sel_('estado', 'Último resultado', Object.keys((st.panel && st.panel.estados) || {}).map(function (k) { return [k, estLabel(k)]; })) +
-      '<button type="button" class="gc-btn sec sm" data-gc="excel-lista">Excel de esta lista</button></div>' +
+    var titulo = { vencidos: 'Clientes vencidos', fidelizar: 'Clientes por fidelizar', potenciales: 'Clientes potenciales' }[cat];
+    var pendientes = c.hoy || 0;
+    var chips4 = '<div class="gc-chips">' + chips.slice(0, cat === 'vencidos' ? 4 : 3).map(chipH).join('') + '</div>';
+    var h = '<header class="gc-ph' + (cat === 'vencidos' ? ' solo' : '') + '"><div>' + (cat === 'vencidos' ? '' : '<em>Gestión comercial</em>') + '<h1>' + titulo + '</h1><p>' + (cat === 'fidelizar' ? 'Una sola compra verificable' : cat === 'vencidos' ? 'Recuperar renovaciones' : 'Cotizaciones pendientes') + '</p></div><img src="' + IMG('megafono') + '" alt=""></header>' +
+      (cat === 'vencidos' ? chips4 : '') +
+      '<section class="gc-lhead ' + CAT[cat].tono + '"><img src="' + IMG(cat === 'vencidos' ? 'cal_alerta' : CAT[cat].ico) + '" alt=""><span class="gc-div"></span><div><b>' + (r ? r.total : '…') + (cat === 'potenciales' ? ' oportunidades' : ' clientes') + '</b><small>' + DESC[cat] + '</small></div>' + (cat === 'potenciales' ? '<button type="button" class="gc-btn" data-gc="nuevo-pot">+ Nuevo potencial</button>' : cat === 'vencidos' ? '<img class="gc-lh-bot" src="' + IMG('robot') + '" alt="">' : '') + '</section>' +
+      (cat === 'vencidos' ? '' : chips4) +
+      '<label class="gc-busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" data-gc-f="q" value="' + esc(st.f.q) + '" placeholder="Buscar nombre, número o plataforma"></label>' +
+      (cat === 'vencidos' ? '' : selsH()) +
+      '<details class="gc-mas"' + (st.masAbierto || chips.slice(cat === 'vencidos' ? 4 : 3).some(function (x) { return x[0] === chipOn; }) || st.f.estado || (cat === 'vencidos' && (st.f.plataforma || st.f.vendedor || st.f.responsable)) ? ' open' : '') + '><summary>Más filtros y Excel</summary><div class="gc-chips">' + chips.slice(cat === 'vencidos' ? 4 : 3).map(chipH).join('') + '</div>' + (cat === 'vencidos' ? selsH() : '') + '<div class="gc-filtros">' + sel_('estado', 'Último resultado', Object.keys((st.panel && st.panel.estados) || {}).map(function (k) { return [k, estLabel(k)]; })) + '<button type="button" class="gc-btn sec sm" data-gc="excel-lista">Excel de esta lista</button></div></details>' +
       (sel.length ? '<div class="gc-bulk"><b>' + sel.length + ' seleccionado(s)</b><button type="button" class="gc-btn sm" data-gc="tomar-sel">Tomarlos</button>' + (st.panel && st.panel.esAdmin ? '<select data-gc="asignar-sel"><option value="">Asignar a…</option>' + Object.keys(USU).map(function (k) { return '<option value="' + k + '">' + USU[k] + '</option>'; }).join('') + '<option value="_sin">Sin asignar</option></select>' : '') + '<button type="button" class="gc-btn sec sm" data-gc="excel-sel">Excel de la selección</button><button type="button" class="gc-link" data-gc="limpiar-sel">Quitar selección</button></div>' : '');
+    function chipH(x) { var n = /^d\d+$/.test(x[0]) ? null : c[x[0]]; return '<button type="button" class="' + (chipOn === x[0] ? 'on' : '') + '" data-gc-filtro="' + x[0] + '">' + x[1] + (n != null ? ' <span>' + n + '</span>' : '') + '</button>'; }
+    function selsH() { return '<div class="gc-filtros">' + sel_('plataforma', 'Plataforma', (r && r.plataformas || []).map(function (p) { return [p, p]; })) + (cat !== 'potenciales' ? sel_('vendedor', 'Atendido por', (r && r.vendedores || []).map(function (v) { return [v, v]; })) : '') + sel_('responsable', 'Responsable', [['_sin', 'Sin asignar']].concat(Object.keys(USU).map(function (k) { return [k, USU[k]]; }))) + '</div>'; }
     if (!r) return h + cargando();
-    if (!r.filas.length) return h + '<div class="gc-vacio">' + (st.f.filtro === 'hoy' ? 'No hay contactos que toquen hoy en esta categoría.' : 'Sin resultados con esos filtros.') + '</div>';
+    if (!r.filas.length) return h + '<div class="gc-vacio">' + (st.f.filtro === 'hoy' ? 'No hay contactos que toquen hoy en esta categoría.' : 'Sin resultados con esos filtros.') + '</div>' + pie(pendientes);
     var todos = r.filas.every(function (f) { return st.sel[f.key]; });
     h += '<div class="gc-tw"><table class="gc-t"><thead><tr><th class="ck"><input type="checkbox" data-gc="sel-todos" ' + (todos ? 'checked' : '') + ' aria-label="Seleccionar la página"></th><th>Cliente</th><th>Servicios</th>' + (cat === 'potenciales' ? '<th>Cotización</th>' : '<th>Compras</th><th>Atendido por</th>') + '<th>Responsable</th><th>Seguimiento</th><th>Último contacto</th><th></th></tr></thead><tbody>' +
       r.filas.map(fila).join('') + '</tbody></table></div>' +
-      '<div class="gc-pag"><span>' + r.total + ' en total · página ' + r.pagina + ' de ' + r.paginas + '</span><button type="button" class="gc-btn sec sm" data-gc-pag="-1"' + (r.pagina <= 1 ? ' disabled' : '') + '>Anterior</button><button type="button" class="gc-btn sec sm" data-gc-pag="1"' + (r.pagina >= r.paginas ? ' disabled' : '') + '>Siguiente</button></div>';
+      '<div class="gc-tarjetas">' + r.filas.map(tarjeta).join('') + '</div>' +
+      '<div class="gc-pag"><span>' + r.total + ' en total · página ' + r.pagina + ' de ' + r.paginas + '</span><button type="button" class="gc-btn sec sm" data-gc-pag="-1"' + (r.pagina <= 1 ? ' disabled' : '') + '>Anterior</button><button type="button" class="gc-btn sec sm" data-gc-pag="1"' + (r.pagina >= r.paginas ? ' disabled' : '') + '>Siguiente</button></div>' + pie(pendientes);
     return h;
   }
+  function pie(n) { return '<div class="gc-pie"><div class="gc-pie-n"><img src="' + IMG('m_cal_rojo') + '" alt=""><b>Pendientes hoy</b><span class="gc-div"></span><strong>' + n + '</strong></div><button type="button" class="gc-btn gc-iniciar" data-gc="iniciar"' + (n ? '' : ' disabled') + '><img src="' + IMG('megafono') + '" alt="">Iniciar seguimiento</button></div>'; }
   function sel_(k, t, ops) { return '<select data-gc-f="' + k + '" aria-label="' + t + '"><option value="">' + t + '</option>' + ops.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (st.f[k] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function svcChips(f) {
     return f.servicios.concat(f.archivados || []).map(function (s) {
@@ -101,6 +126,34 @@
       return '<span class="gc-svc"><b>' + esc(s.servicio || s.plataforma) + '</b>' + (s.precio ? ' · ' + L(s.precio) : '') + est + '</span>';
     }).join('');
   }
+  // Insignia propia (sin logos de terceros): inicial de la plataforma en su color.
+  var COLOR = { netflix: '#E50914', vipnetflix: '#B20710', disneyp: '#113CCF', disneys: '#3B5BDB', hbomax: '#5B2BD6', primevideo: '#1A98FF', paramount: '#0064FF', spotify: '#1DB954', youtube: '#FF0000', crunchyroll: '#F47521', vix: '#F05A28', viki: '#1EB7E5', iptv: '#334155', canva: '#00C4CC', deezer: '#A238FF', gemini: '#4C8DF6', oleada: '#0EA5E9' };
+  function insignia(s) { var k = s.plataforma || ''; return '<i class="gc-ins" style="background:' + (COLOR[k] || '#64748B') + '">' + esc(String(s.servicio || k || '?').charAt(0).toUpperCase()) + '</i>'; }
+  function iniciales(n) { var p = String(n || '').trim().split(/\s+/); return esc(((p[0] || '?').charAt(0) + (p[1] ? p[1].charAt(0) : '')).toUpperCase()); }
+  function seguimientoTxt(f) { var ci = f.ciclo || {}; return f.noContactar ? 'No contactar' : ci.estado === 'toca' ? 'Toca hoy' : ci.estado === 'programado' ? 'Próximo ' + fecha(ci.sugerida) : (CICLO[ci.estado] || [ci.estado || '—'])[0]; }
+  function tarjeta(f) {
+    var cat = st.cat, ci = f.ciclo || {};
+    var svcs = f.servicios.concat(f.archivados || []);
+    var acc = '<button type="button" class="gc-btn wa" data-gc-contactar="' + esc(f.key) + '"' + (f.noContactar || !f.telefono ? ' disabled' : '') + '>' + SVG_CHAT + 'WhatsApp</button><button type="button" class="gc-btn az" data-gc-registrar="' + esc(f.key) + '">' + SVG_EDIT + 'Registrar</button>';
+    var ck = '<input type="checkbox" class="gc-tck" data-gc-sel="' + esc(f.key) + '" ' + (st.sel[f.key] ? 'checked' : '') + ' aria-label="Seleccionar ' + esc(f.nombre || 'cliente') + '">';
+    var chips = function (lista) { return lista.length ? '<div class="gc-tchips">' + lista.map(function (s) { var malo = s.estado === 'vencido' || s.estado === 'no_renovo'; return '<span class="gc-tchip' + (malo ? ' r' : '') + '">' + insignia(s) + '<b>' + esc(s.servicio || s.plataforma) + '</b>' + (s.precio ? '<span class="gc-sep"></span>' + L(s.precio) : '') + (s.estado === 'no_renovo' ? ' · <em>No renovó' + (s.dias > 0 ? ' · ' + s.dias + ' días' : '') + '</em>' : s.estado === 'vencido' && cat !== 'vencidos' ? ' · <em>' + s.dias + ' días vencido</em>' : '') + '</span>'; }).join('') + '</div>' : ''; };
+    if (cat === 'vencidos') {
+      var ult = f.ultimaVenta;
+      return '<article class="gc-tj v' + (st.sel[f.key] ? ' sel' : '') + '">' + ck + '<div class="gc-tj-top"><span class="gc-av">' + iniciales(f.nombre) + '</span><div class="gc-tj-id"><button type="button" class="gc-nom" data-gc-ficha="' + esc(f.key) + '">' + esc(f.nombre || 'Sin nombre') + '</button><span><img src="' + IMG('m_telefono') + '" alt="">' + esc(f.telefono || 'Sin teléfono válido') + '</span><span><img src="' + IMG('m_grupo') + '" alt="">Atendido por <b>' + esc((f.vendedores || []).join(', ') || 'Sin asignar') + '</b></span></div>' +
+        (f.diasMax > 0 ? '<span class="gc-dias"><img src="' + IMG('m_cal_rojo') + '" alt="">' + f.diasMax + ' día' + (f.diasMax === 1 ? '' : 's') + ' vencido</span>' : '') + '</div>' +
+        chips(svcs.filter(function (s) { return s.estado !== 'vigente'; })) +
+        '<div class="gc-tj-pie"><span class="gc-ult">↻ ' + (ult ? (ult.subtipo === 'compra_nueva' ? 'Última contratación: ' : 'Última renovación: ') + '<b>' + fechaLarga(ult.fecha) + '</b>' : 'Seguimiento: <b>' + esc(seguimientoTxt(f)) + '</b>') + '</span>' + acc + '</div></article>';
+    }
+    return '<article class="gc-tj f' + (st.sel[f.key] ? ' sel' : '') + '">' + ck + '<div class="gc-tj-top"><div class="gc-tj-id"><button type="button" class="gc-nom" data-gc-ficha="' + esc(f.key) + '">' + esc(f.nombre || 'Sin nombre') + '</button><span>' + esc(f.telefono || 'Sin teléfono válido') + '</span></div><div class="gc-tj-acc">' + acc + '</div></div>' +
+      chips(cat === 'potenciales' ? svcs : svcs.filter(function (s) { return s.estado !== 'vigente'; })) +
+      '<div class="gc-tj-g">' + (cat === 'potenciales' ? '<span><img src="' + IMG('m_carrito') + '" alt=""><small>Cotizado</small><b>' + (f.precioCotizado ? L(f.precioCotizado) : '—') + '</b></span><span><img src="' + IMG('m_calendario') + '" alt=""><small>Registrado</small><b>' + fecha(String(f.creadoAt).slice(0, 10)) + '</b></span>'
+        : '<span><img src="' + IMG('m_carrito') + '" alt=""><small>Compras</small><b>' + (f.compras == null ? 'No verificable' : f.compras) + '</b></span><span><img src="' + IMG('m_calendario') + '" alt=""><small>1.ª compra</small><b>' + (f.primeraCompra ? fecha(f.primeraCompra.fecha) : '—') + '</b></span>') + '</div>' +
+      '<div class="gc-tj-g gc-tj-l2"><span><img src="' + IMG('m_persona') + '" alt=""><small>' + (cat === 'potenciales' ? 'Registró' : 'Atendido por') + '</small><b>' + esc(cat === 'potenciales' ? (f.creadoPor || '—') : ((f.vendedores || []).join(', ') || 'Sin asignar')) + '</b></span><span><img src="' + IMG('m_grupo') + '" alt=""><small>Responsable</small><b>' + esc(USU[f.responsable] || f.responsable || 'Sin asignar') + '</b></span></div>' +
+      '<div class="gc-tj-seg"><span><img src="' + IMG('m_seguimiento') + '" alt=""><b>Seguimiento:</b> <i class="gc-pill ' + (ci.elegible ? 'r' : 'a') + '">' + esc(seguimientoTxt(f)) + '</i></span><span><img src="' + IMG('m_telefono') + '" alt=""><b>Último contacto:</b> ' + (f.ultimoContacto ? fecha(f.ultimoContacto) : 'Nunca') + '</span></div></article>';
+  }
+  function fechaLarga(ymd) { var M = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']; var p = String(ymd || '').split('-'); return p.length === 3 ? (+p[2]) + ' ' + M[+p[1] - 1] + ' ' + p[0] : '—'; }
+  var SVG_CHAT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4.1A8 8 0 1 1 20 11.5z"/><path d="M9 10.5c.5 2 2 3.5 4 4l1.2-1.2 1.8.8-.4 1.6c-3.6.2-7-3.2-6.8-6.8l1.6-.4.8 1.8z"/></svg>';
+  var SVG_EDIT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m14 6 4 4"/></svg>';
   function fila(f) {
     var ci = f.ciclo || {}, cat = st.cat;
     var seg = pill(CICLO, f.noContactar ? 'bloqueado' : ci.estado) + '<small>' + (ci.estado === 'cerrado' ? esc(estLabel(ci.motivo)) : ci.sugerida ? (ci.acordada ? 'Acordado ' : ci.elegible && ci.sugerida < hoy() ? 'Toca desde ' : 'Próximo ') + fecha(ci.sugerida) : '') + (ci.total ? ' · contacto ' + Math.min(ci.paso + (ci.elegible ? 1 : 0), ci.total) + ' de ' + ci.total : '') + '</small>';
@@ -118,6 +171,7 @@
     try { st.lista = await api('lista', Object.assign({ cat: st.cat, pagina: st.pagina, porPagina: 30 }, st.f)); } catch (e) { st.error = e.message; }
     pintar();
   }
+  function elegibleMio(f) { var u = st.panel && st.panel.usuario; return f.ciclo && f.ciclo.elegible && !f.noContactar && f.telefono && (!f.responsable || f.responsable === u); }
   function filaDe(key) { return ((st.lista && st.lista.filas) || []).find(function (f) { return f.key === key; }); }
 
   // ------------------------------------------------------------------------------------------------ FICHA
@@ -235,15 +289,33 @@
   // ------------------------------------------------------------------------------------------------ BIBLIOTECA
   function vBiblioteca() {
     var r = st.pl; if (!r) return cargando();
-    var q = st.plF.q.toLowerCase(), adm = st.panel && st.panel.esAdmin;
+    var adm = st.panel && st.panel.esAdmin, g = st.gen || (st.gen = { cat: 'fidelizar', id: '', nombre: '', servicio: '', precio: '' });
+    var deCat = r.plantillas.filter(function (p) { return p.categoria === g.cat && p.activa !== false; });
+    if (!deCat.some(function (p) { return p.id === g.id; })) g.id = deCat[0] ? deCat[0].id : '';
+    var pl = r.plantillas.find(function (p) { return p.id === g.id; }) || {};
+    var q = st.plF.q.toLowerCase();
     var lista = r.plantillas.filter(function (p) { return (!st.plF.cat || p.categoria === st.plF.cat) && (!st.plF.sit || p.situacion === st.plF.sit) && (!q || (p.id + ' ' + p.mensaje + ' ' + p.situacion_label).toLowerCase().indexOf(q) >= 0); });
     var sits = r.situaciones.filter(function (x) { return !st.plF.cat || x.categoria === st.plF.cat; });
-    return '<section class="gc-lhead b"><img src="' + IMG('sobre') + '" alt=""><div><b>Generador de mensajes</b><small>' + r.plantillas.length + ' plantillas · ' + (r.importadas ? 'importadas a Sublichat' : 'biblioteca original (todavía no importada)') + ' · variables {{saludo}} y {{servicio}}</small></div>' +
-      (adm ? '<button type="button" class="gc-btn sec" data-gc="importar">' + (r.importadas ? 'Revisar importación' : 'Importar las ' + r.totalOrigen) + '</button><button type="button" class="gc-btn" data-gc="pl-nueva">+ Nueva plantilla</button>' : '') + '</section>' +
+    var EST = function (e) { return e.resultado === 'compra_concretada' ? ['Venta concretada', 'r', 'carrito'] : e.resultado && (st.panel.estados[e.resultado] || {}).respondio ? ['Respondió', 'v', 'chat'] : ['Usado', 'a', 'm_personas']; };
+    return '<header class="gc-ph"><div><em>Gestión comercial</em><h1>Biblioteca de mensajes</h1><p>Plantillas dinámicas y generador · ' + r.plantillas.length + ' plantillas' + (r.importadas ? '' : ' (aún sin importar)') + '</p></div><img src="' + IMG('robot') + '" alt="Sublirobot"></header>' +
+      (adm ? '<div class="gc-bib-acc"><button type="button" class="gc-btn sec gc-xl" data-gc="importar"><img src="' + IMG('descargar') + '" alt="">' + (r.importadas ? 'Revisar importación' : 'Importar las ' + r.totalOrigen) + '</button><button type="button" class="gc-btn gc-xl" data-gc="pl-nueva">+ Nueva plantilla</button></div>' : '') +
+      '<section class="gc-gen-box"><h2><img src="' + IMG('chat') + '" alt="">Generador de mensajes</h2><div class="gc-gen-in">' +
+      '<div class="gc-form"><label>Categoría comercial<select data-gen="cat">' + ORD.map(function (c) { return '<option value="' + c + '"' + (g.cat === c ? ' selected' : '') + '>' + CAT[c].n + '</option>'; }).join('') + '</select></label>' +
+      '<label>Plantilla<select data-gen="id">' + deCat.map(function (p) { return '<option value="' + esc(p.id) + '"' + (g.id === p.id ? ' selected' : '') + '>' + esc(p.id) + ' · ' + esc(p.situacion_label || p.situacion) + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="gc-gen-chips"><label><img src="' + IMG('m_persona') + '" alt=""><span>Nombre del cliente:<input data-gen="nombre" value="' + esc(g.nombre) + '" placeholder="(opcional)"></span></label><label><img src="' + IMG('doc') + '" alt=""><span>Servicio:<input data-gen="servicio" value="' + esc(g.servicio) + '" placeholder="(escriba)" list="gcSvcList"></span></label><label><img src="' + IMG('m_carrito') + '" alt=""><span>Precio (L):<input data-gen="precio" type="number" min="0" step="any" value="' + esc(g.precio) + '" placeholder="opcional"></span></label></div>' +
+      '<datalist id="gcSvcList">' + ['Netflix', 'Netflix VIP', 'Disney Premium', 'HBO Max', 'Prime Video', 'Paramount+', 'Spotify', 'YouTube Premium', 'Crunchyroll', 'ViX', 'Viki Rakuten', 'IPTV', 'Canva'].map(function (x) { return '<option value="' + x + '">'; }).join('') + '</datalist>' +
+      '<div class="gc-burbuja"><span class="gc-burbuja-ico">' + SVG_CHAT + '</span><textarea data-gen="texto" rows="6" aria-label="Mensaje">' + esc(resolverTxt(pl.mensaje, g)) + '</textarea></div>' +
+      '<p class="gc-nota">Para escribirle a un cliente use el botón WhatsApp de su ficha: así queda registrado. Desde aquí solo se prueba el mensaje.</p>' +
+      '<div class="gc-gen-acc"><button type="button" class="gc-btn sec gc-xl" data-gc="gen-copiar"><img src="' + IMG('copiar') + '" alt="">Copiar mensaje</button><button type="button" class="gc-btn wa gc-xl" data-gc="gen-wa">' + SVG_CHAT + 'Enviar por WhatsApp</button></div></div></section>' +
+      '<section class="gc-histr"><h2><span class="gc-h-r"><img src="' + IMG('reloj') + '" alt=""></span>Historial reciente</h2>' +
+      ((r.historial || []).length ? r.historial.map(function (e) { var x = EST(e); return '<div class="gc-hr ' + x[1] + '"><img src="' + IMG(x[2]) + '" alt=""><span class="gc-div"></span><div><b>' + esc(e.plantillaId) + '</b><small>' + esc(CAT[e.categoria] ? CAT[e.categoria].n : e.categoria) + '</small><small>' + esc(e.nombre || 'Sin nombre') + (e.servicio ? ' · ' + esc(e.servicio) : '') + '</small></div><span class="gc-pill ' + x[1] + '">' + x[0] + '</span></div>'; }).join('') : '<p class="gc-sub">Todavía no se ha confirmado ningún mensaje.</p>') + '</section>' +
+      '<details class="gc-todas"' + (st.plF.abierta ? ' open' : '') + '><summary>Todas las plantillas (' + r.plantillas.length + ')</summary>' +
       '<div class="gc-filtros"><select data-gc-pl="cat"><option value="">Todas las categorías</option>' + ORD.map(function (c) { return '<option value="' + c + '"' + (st.plF.cat === c ? ' selected' : '') + '>' + CAT[c].n + '</option>'; }).join('') + '</select><select data-gc-pl="sit"><option value="">Todas las situaciones</option>' + sits.map(function (x) { return '<option value="' + esc(x.situacion) + '"' + (st.plF.sit === x.situacion ? ' selected' : '') + '>' + esc(x.label) + ' (' + x.n + ')</option>'; }).join('') + '</select><label class="gc-busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" data-gc-pl="q" value="' + esc(st.plF.q) + '" placeholder="Buscar en los mensajes"></label></div>' +
-      '<div class="gc-pls">' + lista.map(function (p) { return '<article class="gc-pl ' + CAT[p.categoria].tono + (p.activa === false ? ' off' : '') + '"><header><b>' + esc(p.id) + '</b><span>' + esc(p.situacion_label || p.situacion) + '</span><em>v' + (p.version || 1) + (p.activa === false ? ' · inactiva' : '') + (p.editadaLocal ? ' · editada' : '') + '</em></header><pre>' + esc(p.mensaje) + '</pre>' + (adm ? '<footer><button type="button" class="gc-link" data-gc-pled="' + esc(p.id) + '">Editar</button><button type="button" class="gc-link" data-gc-pldup="' + esc(p.id) + '">Duplicar</button><button type="button" class="gc-link" data-gc-plact="' + esc(p.id) + '">' + (p.activa === false ? 'Activar' : 'Desactivar') + '</button></footer>' : '') + '</article>'; }).join('') + '</div>' +
+      '<div class="gc-pls">' + lista.map(function (p) { return '<article class="gc-pl ' + CAT[p.categoria].tono + (p.activa === false ? ' off' : '') + '"><header><b>' + esc(p.id) + '</b><span>' + esc(p.situacion_label || p.situacion) + '</span><em>v' + (p.version || 1) + (p.activa === false ? ' · inactiva' : '') + (p.editadaLocal ? ' · editada' : '') + '</em></header><pre>' + esc(p.mensaje) + '</pre><footer><button type="button" class="gc-link" data-gc-plusar="' + esc(p.id) + '">Usar en el generador</button>' + (adm ? '<button type="button" class="gc-link" data-gc-pled="' + esc(p.id) + '">Editar</button><button type="button" class="gc-link" data-gc-pldup="' + esc(p.id) + '">Duplicar</button><button type="button" class="gc-link" data-gc-plact="' + esc(p.id) + '">' + (p.activa === false ? 'Activar' : 'Desactivar') + '</button>' : '') + '</footer></article>'; }).join('') + '</div></details>' +
       '<p class="gc-nota">La biblioteca reduce la monotonía; no es para evadir filtros de WhatsApp. Nada se envía solo.</p>';
   }
+  function resolverTxt(t, g) { var n = String(g.nombre || '').trim().split(/\s+/)[0] || ''; n = /^[\p{L}'-]{2,}$/u.test(n) ? n.charAt(0).toUpperCase() + n.slice(1).toLowerCase() : '';
+    return String(t || '').replace(/\{\{\s*saludo\s*\}\}/g, n ? '¡Hola, ' + n + '! 👋' : '¡Hola! 👋').replace(/\{\{\s*servicio\s*\}\}/g, g.servicio || '{{servicio}}').replace(/\{\{\s*precio\s*\}\}/g, g.precio ? L(g.precio) : '{{precio}}'); }
   function editarPlantilla(p, dup) {
     p = p || { categoria: st.plF.cat || 'vencidos', situacion: '', situacion_label: '', mensaje: '{{saludo}}\n\n' };
     if (!r_importadas() && p.id && !dup) return toast('Primero importe la biblioteca para poder editarla.', true);
@@ -345,7 +417,8 @@
       if ((t = e.target.closest('[data-gc-ir]'))) { var k = t.dataset.gcIr; st.error = '';
         if (CAT[k]) { st.vista = 'lista'; st.cat = k; st.pagina = 1; st.sel = {}; st.f = { filtro: t.dataset.gcFiltro || 'todos', q: '', plataforma: '', vendedor: '', responsable: '', dias: '', estado: '' }; cargarLista(); return; }
         st.vista = k; pintar(); if (k === 'biblioteca' && !st.pl) { await plantillas().catch(function (er) { st.error = er.message; }); pintar(); } return; }
-      if ((t = e.target.closest('[data-gc-filtro]'))) { st.f.filtro = t.dataset.gcFiltro; st.pagina = 1; cargarLista(); return; }
+      if ((t = e.target.closest('[data-gc-filtro]'))) { var fv = t.dataset.gcFiltro, dm = fv.match(/^d(\d+)$/); st.f.dias = dm ? dm[1] : ''; st.f.filtro = dm ? 'todos' : fv; st.pagina = 1; cargarLista(); return; }
+      if ((t = e.target.closest('[data-gc-plusar]'))) { var pu = st.pl.plantillas.find(function (x) { return x.id === t.dataset.gcPlusar; }); st.gen = Object.assign(st.gen || {}, { cat: pu.categoria, id: pu.id }); pintar(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
       if ((t = e.target.closest('[data-gc-pag]'))) { st.pagina += Number(t.dataset.gcPag); cargarLista(); return; }
       if ((t = e.target.closest('[data-gc-per]'))) { st.rep.periodo = t.dataset.gcPer; if (st.rep.periodo !== 'rango') cargarReporte(); else pintar(); return; }
       if ((t = e.target.closest('[data-gc-pled],[data-gc-pldup]'))) { var id = t.dataset.gcPled || t.dataset.gcPldup; editarPlantilla(st.pl.plantillas.find(function (p) { return p.id === id; }), !!t.dataset.gcPldup); return; }
@@ -360,11 +433,16 @@
         if (a === 'excel-sel') return excelLista(true);
         if (a === 'importar') { try { var r = await api('plantillas_importar'); toast(r.nuevas + ' nuevas · ' + r.iguales + ' iguales' + (r.conCambiosLocales.length ? ' · ' + r.conCambiosLocales.length + ' con cambios locales (no se tocaron)' : '') + (r.pendientesActualizar ? ' · ' + r.pendientesActualizar + ' distintas al original' : '')); await plantillas(); pintar(); } catch (er) { toast(er.message, true); } return; }
         if (a === 'pl-nueva') return editarPlantilla(null);
+        if (a === 'gen-copiar' || a === 'gen-wa') { var tx = host().querySelector('[data-gen="texto"]').value; if (/\{\{/.test(tx)) return toast('Complete los datos: el mensaje tiene variables sin resolver.', true);
+          if (a === 'gen-copiar') { try { await navigator.clipboard.writeText(tx); toast('Mensaje copiado.'); } catch (_) { host().querySelector('[data-gen="texto"]').select(); } return; }
+          var u = 'https://wa.me/?text=' + encodeURIComponent(tx); var cc = cfg(); if (cc && cc.abrir) cc.abrir(u); else window.open(u, '_blank', 'noopener'); return; }
+        if (a === 'iniciar') { try { var lr = (st.lista && st.lista.filas || []).find(elegibleMio) ? st.lista : await api('lista', { cat: st.cat, filtro: 'hoy', porPagina: 30 }); var f0 = (lr.filas || []).find(elegibleMio); if (!f0) return toast('No hay seguimientos libres para hoy en esta categoría.'); abrirContacto(f0.key); } catch (er) { toast(er.message, true); } return; }
         if (a === 'rep') return cargarReporte();
         if (a === 'excel') return excelReporte();
         if (a === 'meta') return editarMeta();
       }
     });
+    h.addEventListener('toggle', function (e) { if (e.target.matches && e.target.matches('.gc-todas')) st.plF.abierta = e.target.open; if (e.target.matches && e.target.matches('.gc-mas')) st.masAbierto = e.target.open; }, true);
     h.addEventListener('change', async function (e) {
       var t = e.target;
       if (t.matches('[data-gc-sel]')) { st.sel[t.dataset.gcSel] = t.checked; pintar(); return; }
@@ -373,9 +451,11 @@
       if (t.matches('select[data-gc-f]')) { st.f[t.dataset.gcF] = t.value; st.pagina = 1; cargarLista(); return; }
       if (t.matches('[data-gc-pl]') && t.tagName === 'SELECT') { st.plF[t.dataset.gcPl] = t.value; if (t.dataset.gcPl === 'cat') st.plF.sit = ''; pintar(); return; }
       if (t.matches('[data-gc-rep]')) { st.rep[t.dataset.gcRep] = t.value; return; }
+      if (t.matches('select[data-gen]')) { st.gen[t.dataset.gen] = t.value; if (t.dataset.gen === 'cat') st.gen.id = ''; pintar(); return; }
     });
     var tq; h.addEventListener('input', function (e) { var t = e.target;
       if (t.matches('input[data-gc-f="q"]')) { clearTimeout(tq); tq = setTimeout(function () { st.f.q = t.value; st.pagina = 1; cargarLista().then(function () { var i = host().querySelector('input[data-gc-f="q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 350); }
+      if (t.matches('input[data-gen]')) { st.gen[t.dataset.gen] = t.value; var ta = host().querySelector('[data-gen="texto"]'); var plx = st.pl.plantillas.find(function (x) { return x.id === st.gen.id; }) || {}; if (ta) ta.value = resolverTxt(plx.mensaje, st.gen); return; }
       if (t.matches('input[data-gc-pl="q"]')) { clearTimeout(tq); tq = setTimeout(function () { st.plF.q = t.value; pintar(); var i = host().querySelector('input[data-gc-pl="q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); }
     });
     h.addEventListener('click', clicGlobal);
