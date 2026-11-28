@@ -22,6 +22,7 @@ const MODULOS = Object.freeze([
   { id: 'portal-cliente', label: 'Portal Cliente', grupo: 'Principal', pantallas: ['portal-cliente'], servidor: true },
   { id: 'catalogo', label: 'Catálogo', grupo: 'Principal', pantallas: ['catalogo-relojes'], servidor: true },
   { id: 'sala-juntas', label: 'Sala de Juntas (SubliStudio 3D)', grupo: 'Principal', pantallas: ['sala-juntas'], servidor: true }, // R179 · antes ACL fija
+  { id: 'comercial', label: 'Gestión comercial (vencidos, fidelizar, potenciales)', grupo: 'Principal', pantallas: ['comercial'], servidor: true }, // R209 · Sublicuentas, Relojes y Geisell por defecto
   { id: 'sorteos', label: 'Sorteos', grupo: 'Principal', pantallas: ['sorteos'], servidor: true },
   { id: 'tickets', label: 'Tickets / Avisos', grupo: 'Principal', pantallas: ['tickets'] },
   { id: 'panel-socios', label: 'Panel de Socios', grupo: 'Principal', pantallas: ['revendedores'], servidor: true },
@@ -88,6 +89,7 @@ function porDefecto(user = {}) {
     if (m.id === 'bodega') v = false;
     if (m.id === 'finanzas-panel') v = false; // R196 · Sublicuentas (supervisor) lo tiene; a los demás lo activa él
     if (m.id === 'sala-juntas') v = SALA_DEFECTO.includes(u); // las fundadoras la tienen; a los demás la activa Sublicuentas
+    if (m.id === 'comercial') v = ['relojes', 'libni', 'geisell'].includes(u); // R209 · decisión del dueño 27/11/2026
     out[m.id] = !!v;
   }
   return out;
@@ -157,6 +159,7 @@ function pantallasVisibles(user = {}, config = {}) {
     if (!mods[m.id]) continue;
     if (m.id === 'sala-juntas') { out.push('sala-juntas'); continue; } // R179 · módulo seleccionable: activo = se ve
     if (m.id === 'finanzas-panel') { out.push('finanzas'); continue; } // R196 · igual que la Sala
+    if (m.id === 'comercial') { out.push('comercial'); continue; } // R209 · módulo seleccionable: activo = se ve
     const todas = ov[m.id] === true && !base[m.id];
     for (const p of m.pantallas) if (todas || m.fijo || menu.has(p) || ov[m.id] === true) out.push(p);
   }
