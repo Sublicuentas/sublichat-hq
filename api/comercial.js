@@ -67,7 +67,7 @@ function filaLista(f, cat) {
   return { key: f.key, tipo: f.tipo, id: f.id, nombre: f.nombre, saludo: f.saludo, telefono: f.telefono, categorias: f.categorias, servicios: f.servicios, archivados: f.archivados || [],
     vigentes: f.vigentes, compras: f.compras, vendedores: f.vendedores, responsable: f.responsable, estado: f.estado, noContactar: f.noContactar, ultimoContacto: f.ultimoContacto, contactos: f.contactos,
     ciclo: ci, inactivo: f.inactivo || "", primeraCompra: f.primeraCompra || null, precioCotizado: f.precioCotizado ?? null, estadoOportunidad: f.estadoOportunidad || "", creadoAt: f.creadoAt || "", creadoPor: f.creadoPor || "",
-    ventaSugerida: f.ventaSugerida || null, notas: f.notas || "",
+    ventaSugerida: f.ventaSugerida || null, notas: f.notas || "", ultimaVenta: (f.ventas && f.ventas.length) ? { fecha: f.ventas[f.ventas.length - 1].fecha, subtipo: f.ventas[f.ventas.length - 1].subtipo } : null,
     diasMax: Math.max(-1, ...[...(f.servicios || []), ...(f.archivados || [])].filter((s) => s.estado === "vencido" || s.estado === "no_renovo").map((s) => s.dias ?? -1)) };
 }
 function filtrar(filas, b = {}, usuario) {
@@ -284,7 +284,16 @@ export async function handleComercial(db, user, b, res) {
       const lista = loc.length ? loc : BIBLIOTECA.plantillas.map((p) => ({ ...p, version: 1, origen: "biblioteca", importada: false }));
       // variantes usadas recientemente con este cliente (para ofrecer otra)
       let recientes = []; if (b.key) recientes = (await db.collection(C.EV).where("sujeto", "==", txt(b.key, 120)).get()).docs.map((d) => d.data()).filter((e) => e.plantillaId && e.etapa === "enviado").map((e) => ({ id: e.plantillaId, fecha: e.fecha }));
-      return ok({ plantillas: lista.sort((a, z) => a.id.localeCompare(z.id)), importadas: loc.length > 0, totalOrigen: BIBLIOTECA.plantillas.length, recientes, situaciones: situaciones(lista) });
+      // historial reciente de la biblioteca (render 05): últimos mensajes CONFIRMADOS y lo que pasó después con ese contacto
+      let historial = [];
+      if (!b.key) {
+        const evs = (await db.collection(C.EV).where("fecha", ">=", G.sumarDias(G.hoyHN(), -30)).get()).docs.map((d) => d.data()).sort((a, z) => String(z.at).localeCompare(String(a.at)));
+        const env = evs.filter((e) => e.etapa === "enviado" && e.plantillaId).slice(0, 10);
+        historial = env.map((e) => { const desp = evs.filter((x) => x.sujeto === e.sujeto && String(x.at) >= String(e.at) && x.resultado);
+          const res = desp.some((x) => x.resultado === "compra_concretada") ? "compra_concretada" : (desp.find((x) => G.ESTADOS[x.resultado] && G.ESTADOS[x.resultado].respondio) || {}).resultado || "";
+          return { plantillaId: e.plantillaId, categoria: e.categoria, nombre: e.nombre || "", servicio: e.servicio || "", fecha: e.fecha, resultado: res, autor: G.USUARIOS[G.claveUsuario(e.autor)] || e.autor }; });
+      }
+      return ok({ plantillas: lista.sort((a, z) => a.id.localeCompare(z.id)), importadas: loc.length > 0, totalOrigen: BIBLIOTECA.plantillas.length, recientes, historial, situaciones: situaciones(lista) });
     }
     if (accion === "plantillas_importar") {
       if (!esAdmin) throw errU("Solo Sublicuentas importa la biblioteca.");
