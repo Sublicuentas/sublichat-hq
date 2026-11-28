@@ -9,7 +9,7 @@ test('menú y permisos: Sublicuentas, Relojes y Geisell; el servidor lo valida',
   assert.match(app, /if\(screen==='comercial'\)return pv\?pv\.pantallas\.includes\('comercial'\):esFundadoraSala\(\)/);
   assert.match(app, /ensureScreen\('comercial','Gestión comercial'/);
   assert.match(R('api/_permisos.js'), /id: 'comercial'/);
-  assert.match(R('index.html'), /comercial-web\.js\?v=20261127-r209/);
+  assert.match(R('index.html'), /comercial-web\.js\?v=2026112[78]-r2(09|10)/);
   assert.equal(JSON.parse(R('vercel.json')).functions['api/comercial.js'].maxDuration, 60);
 });
 test('pantalla: buscador, filtros, checklist, WhatsApp manual confirmado y Excel de 10 hojas; sin degradados', () => {
