@@ -4,6 +4,7 @@
 // Mismos documentos y campos que /api/finanzas · registrar_operacion_pago (mismo operationId ⇒ nunca se duplica).
 import { estadoPago, publicMethods, money, repartoPagos } from "./_finanzas-libro.js";
 import { financeMetadata } from "./_finance-schema.js";
+import reglaVend from "./_regla-vendedor.js"; // R211 · Geisell 50 % (misma regla en APK, Web y bot)
 import { clasificarServicio, CATEGORIAS } from "./_catalogo-categorias.js";
 // R112: la venta lleva su categoría y tipo GUARDADOS (no se adivinan en Finanzas por el nombre).
 function clasificacionVenta(rel = {}, prep = {}) {
@@ -82,7 +83,7 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   const pagos = reparto.pagos;
   const banco = pagos.length ? methods.find((m) => m.id === pagos[0].bancoId) : null;
   const deudorTipo = clean(pago.responsable) === "vendedor" ? "vendedor" : "cliente";
-  const vendedorNombre = clean(pago.vendedorNombre || pago.vendedor, 60);
+  const vendedorNombre = clean(pago.vendedorNombre || pago.vendedor, 60), vendedorId = clean(pago.vendedorId, 80);
   if (ep.saldo > 0 && deudorTipo === "vendedor" && vendedorNombre.length < 2) throw errorUsuario("Escriba el vendedor responsable del pendiente.");
   const op = clean(pago.operationId, 80);
   if (!OP_RE.test(op)) throw errorUsuario("Falta operationId del pago (actualice la app).");
@@ -90,7 +91,7 @@ export async function prepararPago(db, pago, user, tipoOrigen) {
   const opId = `oper_op_${uid}_${op}`; // mismo esquema que registrar_operacion_pago
   // R111: un solo pago para varios servicios del cliente (renovación múltiple de la APK) conserva la lista completa.
   const grupo = { compraIds: Array.isArray(pago.compraIds) ? pago.compraIds.map((x) => clean(x)).filter(Boolean).slice(0, 30) : [], servicios: Array.isArray(pago.servicios) ? pago.servicios.slice(0, 30).map((x) => ({ compraId: clean(x?.compraId), plataforma: clean(x?.plataforma, 40), fechaAnterior: clean(x?.fechaAnterior), fechaNueva: clean(x?.fechaNueva) })) : [], plataforma: clean(pago.plataforma, 200) };
-  return { categoria: clean(pago.categoria, 40), tipoVenta: clean(pago.tipoVenta, 40), grupo, ep, banco, pagos, deudorTipo, vendedorNombre, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
+  return { categoria: clean(pago.categoria, 40), tipoVenta: clean(pago.tipoVenta, 40), grupo, ep, banco, pagos, deudorTipo, vendedorNombre, vendedorId, operationId: op, opId, tipoOrigen, fechaPago: fechaPagoValida(pago.fechaPago), origen: clean(pago.origen || "web", 20), usuario: String(user.usuario || user.uid || "sublichat").toLowerCase(), rol: String(user.role || ""), uid: user.uid || "" };
 }
 
 // 2) Leer al inicio de la transacción (antes de cualquier escritura).
@@ -143,12 +144,13 @@ export function escribirPago(transaction, db, prep, lectura, rel = {}) {
   const ingRef = db.collection("finanzas_movimientos").doc(`${opId}_cobro`);
   const cxcRef = db.collection("cuentas_por_cobrar").doc(opId);
   const dividido = pagos.length > 1;
-  transaction.set(ventaRef, { ...base, movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: ep.saldo, estadoPago: ep.estado, ...(dividido ? { pagosDetalle: pagos, pagoDividido: true } : {}), ...r });
+  const oblV = reglaVend.obligacionVendedor({ deudorTipo, vendedorId: prep.vendedorId || "", vendedorNombre, saldo: ep.saldo }), deuda = oblV.obligacion; // R211
+  transaction.set(ventaRef, { ...base, movimientoId: ventaRef.id, tipo: "venta", subtipo: tipoOrigen === "compra" ? "compra_nueva" : "renovacion", monto: ep.total, montoRecibido: ep.recibido, saldoPendiente: deuda, estadoPago: ep.estado, ...reglaVend.camposRegla(oblV), ...(dividido ? { pagosDetalle: pagos, pagoDividido: true } : {}), ...r });
   // Oct-2026 · un ingreso por banco: _cobro (1.º), _cobro_2, _cobro_3… → cada banco suma solo lo suyo.
   pagos.forEach((pg, i) => { const ref = i ? db.collection("finanzas_movimientos").doc(`${opId}_cobro_${i + 1}`) : ingRef; transaction.set(ref, { ...base, movimientoId: ref.id, tipo: "ingreso", subtipo: tipoOrigen === "compra" ? "cobro_compra" : "cobro_renovacion", monto: pg.monto, bancoId: pg.bancoId, banco: pg.banco, metodoPago: pg.banco, cobradoPor: prep.usuario, ...(dividido ? { pagoDividido: true, parte: i + 1, partes: pagos.length } : {}), ...(ep.saldo > 0 ? { cuentaId: cxcRef.id } : {}), ...r }); });
-  if (ep.saldo > 0) transaction.set(cxcRef, { cuentaId: cxcRef.id, deudorTipo, deudorId: deudorTipo === "cliente" ? r.clienteId : vendedorNombre, deudorNombre: deudorTipo === "cliente" ? r.clienteNombre : vendedorNombre, ...r, montoTotalOperacion: ep.total, montoRecibidoInicial: ep.recibido, montoOriginalPendiente: ep.saldo, montoRecibidoPosterior: 0, saldoPendiente: ep.saldo, estado: ep.recibido > 0 ? "parcial" : "pendiente", cicloOrigen: lectura.cicloId, abonos: [], creadoPor: prep.usuario, createdAt: now, updatedAt: now });
+  if (ep.saldo > 0) transaction.set(cxcRef, { cuentaId: cxcRef.id, deudorTipo, deudorId: deudorTipo === "cliente" ? r.clienteId : vendedorNombre, deudorNombre: deudorTipo === "cliente" ? r.clienteNombre : vendedorNombre, ...r, montoTotalOperacion: ep.total, montoRecibidoInicial: ep.recibido, montoOriginalPendiente: deuda, montoRecibidoPosterior: 0, saldoPendiente: deuda, ...reglaVend.camposRegla(oblV), estado: ep.recibido > 0 ? "parcial" : "pendiente", cicloOrigen: lectura.cicloId, abonos: [], creadoPor: prep.usuario, createdAt: now, updatedAt: now });
   transaction.set(db.collection("auditoria_eventos").doc(), { actorUsuario: prep.usuario, rol: prep.rol, origen: prep.origen, modulo: tipoOrigen === "compra" ? "compras" : "renovaciones", accion: tipoOrigen === "compra" ? "compra_pago" : "renovacion_pago", targetType: "operacion", targetId: opId, clienteId: r.clienteId, compraId: r.compraId, operationId: prep.operationId, monto: ep.total, after: { total: ep.total, recibido: ep.recibido, saldo: ep.saldo, estado: ep.estado, banco: pagos.map((x) => x.banco).join(" + "), pagos, responsable: ep.saldo > 0 ? deudorTipo : "" }, detalle: `${r.clienteNombre} · ${r.plataforma} · total ${ep.total} · recibido ${ep.recibido}${pagos.length ? ` en ${pagos.map((x) => `${x.banco} ${x.monto}`).join(" + ")}` : ""}${ep.saldo > 0 ? ` · pendiente ${ep.saldo} (${deudorTipo})` : ""} · guardado junto con la ${tipoOrigen}`, bancos: ep.recibido > 0 ? [{ bancoId: banco.id, monto: ep.recibido, direccion: "entrada" }] : [], resultado: "ok", tipo: `finanzas_${tipoOrigen}_pago`, createdAt: now });
-  return { duplicado: false, ...ep, cuentaId: ep.saldo > 0 ? cxcRef.id : "", operacionId: opId };
+  return { duplicado: false, ...ep, saldo: deuda, saldoBruto: ep.saldo, reglaVendedor: oblV.regla, cuentaId: ep.saldo > 0 ? cxcRef.id : "", operacionId: opId };
 }
 // R186 · Renovación por lote: UN pago (cabecera) + N asignaciones por servicio (solo explican el desglose; no son ingresos).
 function asignacionesDe(rel = {}) {

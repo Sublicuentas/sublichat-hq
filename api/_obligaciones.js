@@ -65,18 +65,24 @@ export function vistaPrevia(cuentas, movimientos, { deudor = "" } = {}) {
  * válidos, nunca negativo. Si el registro ya parece neto al 50 % no se vuelve a dividir. No escribe nada.
  */
 export function previaGeisell(cuentas, { claveGeisell = "geisell", porcentaje = 0.5 } = {}) {
+  // R211 · base elegible = lo que quedó en manos de Geisell (pendiente original, bruto). Las deudas creadas con la
+  // regla (reglaVendedor) ya son netas: no se vuelven a dividir. Pagos = lo que ella entregó después.
   const suyas = cuentas.filter((c) => c.deudorTipo === "vendedor" && (claveVendedor(c.deudorId) === claveGeisell || claveVendedor(c.deudorNombre) === claveGeisell));
   const filas = suyas.map((c) => {
-    const base = r2(c.montoTotalOperacion), pagado = r2((Number(c.montoRecibidoInicial) || 0) + (Number(c.montoRecibidoPosterior) || 0));
-    const original = r2(c.montoOriginalPendiente != null ? c.montoOriginalPendiente : base - (Number(c.montoRecibidoInicial) || 0));
-    const yaNeto = base > 0 && Math.abs(r2(original + (Number(c.montoRecibidoInicial) || 0)) - r2(base * porcentaje)) < 0.01;
-    const obligacion = yaNeto ? r2(original + (Number(c.montoRecibidoInicial) || 0)) : r2(base * porcentaje);
+    const inicial = Number(c.montoRecibidoInicial) || 0, pagado = r2(c.montoRecibidoPosterior);
+    const original = r2(c.montoOriginalPendiente != null ? c.montoOriginalPendiente : (Number(c.montoTotalOperacion) || 0) - inicial);
+    const conRegla = !!c.reglaVendedor;
+    // registro viejo que alguien ya cargó al 50 % a mano: original + inicial = mitad del total
+    const netoManual = !conRegla && Number(c.montoTotalOperacion) > 0 && Math.abs(r2(original + inicial) - r2(Number(c.montoTotalOperacion) * porcentaje)) < 0.01;
+    const yaNeto = conRegla || netoManual;
+    const base = conRegla ? r2(c.montoBaseVendedor ?? c.reglaVendedor.base) : netoManual ? r2(Number(c.montoTotalOperacion) - inicial) : original;
+    const obligacion = yaNeto ? original : r2(base * porcentaje);
     const propuesto = r2(Math.max(0, obligacion - pagado));
-    return { cuentaId: c.id, periodo: periodoOrigen(c), cliente: c.clienteNombre || "", plataforma: c.plataforma || "", estado: c.estado, base, obligacion, pagado, saldoActual: r2(c.saldoPendiente), saldoPropuesto: propuesto, diferencia: r2(propuesto - r2(c.saldoPendiente)), yaNeto, excedente: r2(Math.max(0, pagado - obligacion)) };
+    return { cuentaId: c.id, periodo: periodoOrigen(c), cliente: c.clienteNombre || "", plataforma: c.plataforma || "", estado: c.estado, base, obligacion, pagado, saldoActual: r2(c.saldoPendiente), saldoPropuesto: propuesto, diferencia: r2(propuesto - r2(c.saldoPendiente)), yaNeto, conRegla, excedente: r2(Math.max(0, pagado - obligacion)) };
   });
   const tot = (k) => r2(filas.reduce((a, f) => a + f[k], 0));
-  return { clave: claveGeisell, porcentaje, filas, totales: { base: tot("base"), obligacion: tot("obligacion"), pagado: tot("pagado"), saldoActual: tot("saldoActual"), saldoPropuesto: tot("saldoPropuesto"), diferencia: tot("diferencia") },
-    preguntas: ["¿Qué registros cuentan como ingresos elegibles de Geisell (venta total, sin devoluciones ni anulaciones)?", "¿Desde qué fecha aplica el 50 % (incluye octubre y anteriores)?", "¿Algún saldo actual ya está calculado al 50 %?"] };
+  return { clave: claveGeisell, porcentaje, filas, porAjustar: filas.filter((f) => !f.yaNeto && Math.abs(f.diferencia) > 0.009).length, totales: { base: tot("base"), obligacion: tot("obligacion"), pagado: tot("pagado"), saldoActual: tot("saldoActual"), saldoPropuesto: tot("saldoPropuesto"), diferencia: tot("diferencia") },
+    preguntas: ["¿Desde qué fecha se ajustan los saldos VIEJOS de Geisell (incluye octubre)? Las deudas nuevas ya nacen al 50 %.", "¿Algún saldo viejo ya estaba calculado al 50 % aunque el sistema no lo marque?"] };
 }
 
 // Fecha real del pago para registros históricos autorizados: AAAA-MM-DD válida, no futura, máximo 180 días atrás.
