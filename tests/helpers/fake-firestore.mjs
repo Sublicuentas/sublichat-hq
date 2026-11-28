@@ -17,14 +17,17 @@ export function fakeFirestore(seed = {}) {
       set: async (v, o) => write(path, o && o.merge ? { ...(data.get(path)?.data || {}), ...v } : v),
       update: async (v) => { if (!data.get(path)) throw new Error('NOT_FOUND ' + path); write(path, { ...data.get(path).data, ...v }); },
       delete: async () => { data.delete(path); },
+      create: async (v) => { if (data.get(path)) throw new Error('ALREADY_EXISTS ' + path); write(path, v); },
     };
   }
+  // R209 · operadores de rango (== por defecto, como antes)
+  const cmp = (a, op, v) => op === '>=' ? a >= v : op === '<=' ? a <= v : op === '>' ? a > v : op === '<' ? a < v : a === v;
   function query(col, filters = []) {
     return {
       where: (f, op, v) => query(col, [...filters, [f, op, v]]),
       get: async () => {
         const docs = [...data.entries()].filter(([p]) => p.startsWith(col + '/') && p.split('/').length === 2)
-          .filter(([, r]) => filters.every(([f, , v]) => r.data[f] === v)).map(([p, r]) => snap(p, r));
+          .filter(([, r]) => filters.every(([f, op, v]) => cmp(r.data[f], op, v))).map(([p, r]) => snap(p, r));
         return { docs, size: docs.length, empty: !docs.length, forEach: (fn) => docs.forEach(fn) };
       },
     };
@@ -32,11 +35,12 @@ export function fakeFirestore(seed = {}) {
   const db = {
     _data: data,
     collection: (col) => ({ ...query(col), doc: (id) => docRef(col, id ?? `auto${++auto}`), add: async (v) => { const id = `auto${++auto}`; write(`${col}/${id}`, v); return docRef(col, id); } }),
+    batch() { const w = []; return { set: (ref, v, o) => w.push(() => write(ref._path, o && o.merge ? { ...(data.get(ref._path)?.data || {}), ...v } : v)), commit: async () => w.forEach((f) => f()) }; },
     async runTransaction(fn) {
       for (let intento = 0; intento < 8; intento++) {
         const leidos = new Map(), escrituras = [];
         const tx = {
-          get: async (ref) => { const rec = data.get(ref._path); leidos.set(ref._path, rec ? rec.v : 0); await new Promise((r) => setTimeout(r, 1)); return snap(ref._path, rec); },
+          get: async (ref) => { if (!ref._path) return ref.get(); const rec = data.get(ref._path); leidos.set(ref._path, rec ? rec.v : 0); await new Promise((r) => setTimeout(r, 1)); return snap(ref._path, rec); },
           set: (ref, v, o) => escrituras.push(() => write(ref._path, o && o.merge ? { ...(data.get(ref._path)?.data || {}), ...v } : v)),
           update: (ref, v) => escrituras.push(() => { if (!data.get(ref._path)) throw new Error('NOT_FOUND ' + ref._path); write(ref._path, { ...data.get(ref._path).data, ...v }); }),
           delete: (ref) => escrituras.push(() => data.delete(ref._path)),
